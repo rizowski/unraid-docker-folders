@@ -43,6 +43,7 @@ Pre-install cleanup script - Remove old versions
 -->
 <FILE Run="/bin/bash">
 <INLINE>
+<![CDATA[
 #!/bin/bash
 
 PLUGIN_NAME="unraid-docker-folders-modern"
@@ -70,6 +71,7 @@ if [ -d "$CONFIG_DIR" ]; then
 fi
 
 echo "Pre-install cleanup complete."
+]]>
 </INLINE>
 </FILE>
 
@@ -86,12 +88,13 @@ Post-install script
 -->
 <FILE Run="/bin/bash">
 <INLINE>
+<![CDATA[
 #!/bin/bash
 
 PLUGIN_NAME="unraid-docker-folders-modern"
 PLUGIN_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
 CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
-VERSION="&version;"
+VERSION="]]>&version;<![CDATA["
 LOG_FILE="${CONFIG_DIR}/install.log"
 
 echo "========================================="
@@ -256,6 +259,7 @@ else
   echo ""
   echo "Try reinstalling the plugin or contact support."
 fi
+]]>
 </INLINE>
 </FILE>
 
@@ -264,6 +268,7 @@ Remove script
 -->
 <FILE Run="/bin/bash" Method="remove">
 <INLINE>
+<![CDATA[
 #!/bin/bash
 
 PLUGIN_NAME="unraid-docker-folders-modern"
@@ -334,6 +339,7 @@ echo ""
 echo "To completely remove all plugin data, run:"
 echo "  rm -rf ${CONFIG_DIR}"
 echo ""
+]]>
 </INLINE>
 </FILE>
 
