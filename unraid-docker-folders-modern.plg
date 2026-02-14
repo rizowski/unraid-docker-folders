@@ -7,7 +7,7 @@
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-<!ENTITY md5 "2479efd52f580c5f1f709e5085031f95">
+<!ENTITY md5 "256bc89e4d2b41a4069db15dbe35df8a">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
