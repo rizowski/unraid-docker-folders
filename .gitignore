@@ -4,7 +4,6 @@ vendor/
 
 # Build outputs
 dist/
-build/
 archive/*.txz
 src/backend/usr/local/emhttp/plugins/unraid-docker-modern/assets/
 
