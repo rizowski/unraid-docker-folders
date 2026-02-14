@@ -1,0 +1,110 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name "unraid-docker-modern">
+<!ENTITY author "rizowski">
+<!ENTITY version "2026.02.14">
+<!ENTITY launch "Docker">
+<!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
+<!ENTITY github "rizowski/unraid-docker">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY md5 "TO_BE_CALCULATED">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;"
+        launch="&launch;" pluginURL="&pluginURL;"
+        icon="view-grid" support="https://github.com/&github;/issues"
+        min="7.0.0">
+
+<CHANGES>
+###2026.02.14
+- Initial release (Phase 1)
+- Basic Docker container listing with Vue 3 UI
+- SQLite database for future folder management
+- Real-time connection status indicator
+- Container start/stop/restart controls
+- Modern, responsive interface
+
+###Future
+- Phase 2: Folder organization with drag-and-drop
+- Phase 3: Real-time WebSocket updates
+- Phase 4: UI/UX polish and accessibility
+- Phase 5: Advanced features (search, filtering, bulk operations)
+</CHANGES>
+
+<!--
+Download and install plugin package
+-->
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>https://github.com/&github;/releases/download/v&version;/&name;-&version;.txz</URL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<!--
+Post-install script
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+
+PLUGIN_NAME="unraid-docker-modern"
+PLUGIN_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
+CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
+
+echo "Installing ${PLUGIN_NAME}..."
+
+# Create necessary directories
+mkdir -p "${CONFIG_DIR}/backups"
+mkdir -p "${CONFIG_DIR}/data"
+
+# Initialize database if it doesn't exist
+if [ ! -f "${CONFIG_DIR}/data.db" ]; then
+  echo "Initializing database..."
+  php "${PLUGIN_DIR}/scripts/migrate.php"
+
+  if [ $? -ne 0 ]; then
+    echo "Error: Database initialization failed"
+    exit 1
+  fi
+fi
+
+# Set proper permissions
+chmod -R 755 "${PLUGIN_DIR}"
+chmod 644 "${CONFIG_DIR}/data.db" 2>/dev/null || true
+
+# Clean up old package files
+rm -f /boot/config/plugins/${PLUGIN_NAME}/${PLUGIN_NAME}-*.txz 2>/dev/null
+
+echo "${PLUGIN_NAME} installed successfully!"
+echo "Navigate to Docker tab to see the new interface."
+</INLINE>
+</FILE>
+
+<!--
+Remove script
+-->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+#!/bin/bash
+
+PLUGIN_NAME="unraid-docker-modern"
+CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
+
+echo "Removing ${PLUGIN_NAME}..."
+
+# Remove package
+removepkg "${PLUGIN_NAME}"
+
+# Backup data before removal (optional)
+if [ -f "${CONFIG_DIR}/data.db" ]; then
+  BACKUP_FILE="${CONFIG_DIR}/backups/data-backup-$(date +%Y%m%d-%H%M%S).db"
+  cp "${CONFIG_DIR}/data.db" "${BACKUP_FILE}"
+  echo "Database backed up to: ${BACKUP_FILE}"
+fi
+
+echo "${PLUGIN_NAME} removed successfully."
+echo "Your data has been preserved in ${CONFIG_DIR}"
+echo "To completely remove all data, manually delete: ${CONFIG_DIR}"
+</INLINE>
+</FILE>
+
+</PLUGIN>
