@@ -16,7 +16,14 @@ require_once dirname(__DIR__) . '/classes/Database.php';
 function runMigrations() {
     echo "Starting database migrations...\n";
 
-    $db = Database::getInstance();
+    try {
+        $db = Database::getInstance();
+    } catch (Exception $e) {
+        echo "Error: Failed to initialize database: " . $e->getMessage() . "\n";
+        echo "Database path: " . DB_PATH . "\n";
+        return false;
+    }
+
     $migrationsDir = dirname(__DIR__) . '/migrations';
 
     // Ensure migrations directory exists
@@ -26,16 +33,26 @@ function runMigrations() {
     }
 
     // Create migrations tracking table if it doesn't exist
-    $db->query("
-        CREATE TABLE IF NOT EXISTS migrations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            filename TEXT NOT NULL UNIQUE,
-            executed_at INTEGER NOT NULL
-        )
-    ");
+    try {
+        $db->query("
+            CREATE TABLE IF NOT EXISTS migrations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename TEXT NOT NULL UNIQUE,
+                executed_at INTEGER NOT NULL
+            )
+        ");
+    } catch (Exception $e) {
+        echo "Error: Failed to create migrations table: " . $e->getMessage() . "\n";
+        return false;
+    }
 
     // Get list of migration files
     $files = glob($migrationsDir . '/*.sql');
+    if ($files === false) {
+        echo "Error: Failed to read migrations directory\n";
+        return false;
+    }
+
     sort($files);
 
     if (empty($files)) {
@@ -43,11 +60,23 @@ function runMigrations() {
         return true;
     }
 
+    echo "Found " . count($files) . " migration file(s)\n";
+
     // Get already executed migrations
     $executed = [];
-    $result = $db->fetchAll("SELECT filename FROM migrations");
-    foreach ($result as $row) {
-        $executed[] = $row['filename'];
+    try {
+        $result = $db->fetchAll("SELECT filename FROM migrations");
+        foreach ($result as $row) {
+            $executed[] = $row['filename'];
+        }
+
+        if (!empty($executed)) {
+            echo "Already executed: " . count($executed) . " migration(s)\n";
+        }
+    } catch (Exception $e) {
+        echo "Warning: Could not read migrations table: " . $e->getMessage() . "\n";
+        echo "Assuming fresh database...\n";
+        $executed = [];
     }
 
     // Execute pending migrations
@@ -74,7 +103,7 @@ function runMigrations() {
             $db->beginTransaction();
 
             // Execute SQL statements
-            $db->getPdo()->exec($sql);
+            $db->exec($sql);
 
             // Record migration
             $db->insert('migrations', [
@@ -90,6 +119,17 @@ function runMigrations() {
         } catch (Exception $e) {
             $db->rollback();
             echo "Error executing migration $filename: " . $e->getMessage() . "\n";
+            echo "SQL Error Code: " . $e->getCode() . "\n";
+
+            // Try to provide helpful context
+            if (file_exists(DB_PATH)) {
+                echo "Database file exists at: " . DB_PATH . "\n";
+                echo "Database file size: " . filesize(DB_PATH) . " bytes\n";
+                echo "Database file permissions: " . substr(sprintf('%o', fileperms(DB_PATH)), -4) . "\n";
+            } else {
+                echo "Database file does not exist at: " . DB_PATH . "\n";
+            }
+
             return false;
         }
     }

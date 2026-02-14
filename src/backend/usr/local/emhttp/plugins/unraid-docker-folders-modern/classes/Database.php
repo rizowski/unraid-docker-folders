@@ -2,14 +2,15 @@
 /**
  * Unraid Docker Modern - Database Class
  *
- * PDO wrapper for SQLite database operations
+ * SQLite3 wrapper for database operations
+ * Uses native SQLite3 extension instead of PDO for better compatibility
  *
  * @package UnraidDockerModern
  */
 
 class Database {
     private static $instance = null;
-    private $pdo;
+    private $db;
     private $dbPath;
 
     /**
@@ -36,6 +37,11 @@ class Database {
      * Connect to SQLite database
      */
     private function connect() {
+        // Check if SQLite3 extension is available
+        if (!class_exists('SQLite3')) {
+            throw new Exception('SQLite3 extension is not available. Please install php-sqlite3.');
+        }
+
         try {
             // Ensure directory exists
             $dir = dirname($this->dbPath);
@@ -44,29 +50,35 @@ class Database {
             }
 
             // Connect to database
-            $this->pdo = new PDO('sqlite:' . $this->dbPath);
-            $this->pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-            $this->pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+            $this->db = new SQLite3($this->dbPath);
+            $this->db->busyTimeout(5000); // 5 second timeout
 
             // Enable foreign keys
-            $this->pdo->exec('PRAGMA foreign_keys = ON');
+            $this->db->exec('PRAGMA foreign_keys = ON');
 
             // Set journal mode to WAL for better concurrency
-            $this->pdo->exec('PRAGMA journal_mode = WAL');
+            $this->db->exec('PRAGMA journal_mode = WAL');
 
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             error_log('Database connection error: ' . $e->getMessage());
             throw $e;
         }
     }
 
     /**
-     * Get PDO instance
+     * Get SQLite3 instance (for direct access if needed)
      *
-     * @return PDO
+     * @return SQLite3
+     */
+    public function getDb() {
+        return $this->db;
+    }
+
+    /**
+     * Backwards compatibility - return self for PDO-style calls
      */
     public function getPdo() {
-        return $this->pdo;
+        return $this;
     }
 
     /**
@@ -74,18 +86,50 @@ class Database {
      *
      * @param string $sql SQL query
      * @param array $params Parameters
-     * @return PDOStatement
+     * @return SQLite3Result|bool
      */
     public function query($sql, $params = []) {
         try {
-            $stmt = $this->pdo->prepare($sql);
-            $stmt->execute($params);
-            return $stmt;
-        } catch (PDOException $e) {
+            $stmt = $this->db->prepare($sql);
+
+            if ($stmt === false) {
+                throw new Exception('Failed to prepare statement: ' . $this->db->lastErrorMsg());
+            }
+
+            // Bind parameters
+            foreach ($params as $i => $value) {
+                $index = is_int($i) ? $i + 1 : $i;
+                $type = $this->getSQLite3Type($value);
+                $stmt->bindValue($index, $value, $type);
+            }
+
+            $result = $stmt->execute();
+
+            if ($result === false) {
+                throw new Exception('Query execution failed: ' . $this->db->lastErrorMsg());
+            }
+
+            return $result;
+
+        } catch (Exception $e) {
             error_log('Database query error: ' . $e->getMessage());
             error_log('SQL: ' . $sql);
             throw $e;
         }
+    }
+
+    /**
+     * Execute a statement (for non-SELECT queries like CREATE, INSERT, etc.)
+     *
+     * @param string $sql SQL query
+     * @return bool
+     */
+    public function exec($sql) {
+        $result = $this->db->exec($sql);
+        if ($result === false) {
+            throw new Exception('Exec failed: ' . $this->db->lastErrorMsg());
+        }
+        return $result;
     }
 
     /**
@@ -96,8 +140,14 @@ class Database {
      * @return array
      */
     public function fetchAll($sql, $params = []) {
-        $stmt = $this->query($sql, $params);
-        return $stmt->fetchAll();
+        $result = $this->query($sql, $params);
+        $rows = [];
+
+        while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+            $rows[] = $row;
+        }
+
+        return $rows;
     }
 
     /**
@@ -108,8 +158,8 @@ class Database {
      * @return array|false
      */
     public function fetchOne($sql, $params = []) {
-        $stmt = $this->query($sql, $params);
-        return $stmt->fetch();
+        $result = $this->query($sql, $params);
+        return $result->fetchArray(SQLITE3_ASSOC);
     }
 
     /**
@@ -120,8 +170,9 @@ class Database {
      * @return mixed
      */
     public function fetchValue($sql, $params = []) {
-        $stmt = $this->query($sql, $params);
-        return $stmt->fetchColumn();
+        $result = $this->query($sql, $params);
+        $row = $result->fetchArray(SQLITE3_NUM);
+        return $row ? $row[0] : false;
     }
 
     /**
@@ -143,7 +194,7 @@ class Database {
         );
 
         $this->query($sql, array_values($data));
-        return $this->pdo->lastInsertId();
+        return $this->db->lastInsertRowID();
     }
 
     /**
@@ -169,8 +220,8 @@ class Database {
         );
 
         $params = array_merge(array_values($data), $whereParams);
-        $stmt = $this->query($sql, $params);
-        return $stmt->rowCount();
+        $this->query($sql, $params);
+        return $this->db->changes();
     }
 
     /**
@@ -183,29 +234,29 @@ class Database {
      */
     public function delete($table, $where, $params = []) {
         $sql = sprintf('DELETE FROM %s WHERE %s', $table, $where);
-        $stmt = $this->query($sql, $params);
-        return $stmt->rowCount();
+        $this->query($sql, $params);
+        return $this->db->changes();
     }
 
     /**
      * Begin transaction
      */
     public function beginTransaction() {
-        $this->pdo->beginTransaction();
+        $this->db->exec('BEGIN TRANSACTION');
     }
 
     /**
      * Commit transaction
      */
     public function commit() {
-        $this->pdo->commit();
+        $this->db->exec('COMMIT');
     }
 
     /**
      * Rollback transaction
      */
     public function rollback() {
-        $this->pdo->rollBack();
+        $this->db->exec('ROLLBACK');
     }
 
     /**
@@ -236,7 +287,7 @@ class Database {
      * Vacuum database (optimize and reclaim space)
      */
     public function vacuum() {
-        $this->pdo->exec('VACUUM');
+        $this->db->exec('VACUUM');
     }
 
     /**
@@ -248,5 +299,39 @@ class Database {
     public function getRowCount($table) {
         $sql = "SELECT COUNT(*) FROM $table";
         return (int) $this->fetchValue($sql);
+    }
+
+    /**
+     * Get SQLite3 type constant for a value
+     *
+     * @param mixed $value
+     * @return int SQLite3 type constant
+     */
+    private function getSQLite3Type($value) {
+        if (is_int($value)) {
+            return SQLITE3_INTEGER;
+        } elseif (is_float($value)) {
+            return SQLITE3_FLOAT;
+        } elseif (is_null($value)) {
+            return SQLITE3_NULL;
+        } else {
+            return SQLITE3_TEXT;
+        }
+    }
+
+    /**
+     * Close database connection
+     */
+    public function close() {
+        if ($this->db) {
+            $this->db->close();
+        }
+    }
+
+    /**
+     * Destructor - close connection
+     */
+    public function __destruct() {
+        $this->close();
     }
 }
