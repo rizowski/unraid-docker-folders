@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.14">
-<!ENTITY md5 "3c7fb1c4b8ddce0d7c959ce8f8842131">
+<!ENTITY version "2026.02.14-3">
+<!ENTITY md5 "bf4314658a9a60336bfe175ade986761">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -12,24 +12,66 @@
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
         launch="&launch;" pluginURL="&pluginURL;"
-        icon="view-grid" support="https://github.com/&github;/issues"
+        support="https://github.com/&github;/issues"
         min="7.0.0">
 
 <CHANGES>
 ###2026.02.14
-- Initial release (Phase 1)
+- Phase 2: Folder organization with drag-and-drop
+- Create, edit, and delete folders with custom icons and colors
+- Drag-and-drop containers between folders
+- Reorder containers within folders
+- Import/export folder configuration
+- Persistent folder state (collapsed/expanded)
+- Improved installation/uninstallation hooks
+- Automatic database backups on uninstall
+
+###Previous (Phase 1)
 - Basic Docker container listing with Vue 3 UI
-- SQLite database for future folder management
-- Real-time connection status indicator
+- SQLite database for folder management
 - Container start/stop/restart controls
 - Modern, responsive interface
 
 ###Future
-- Phase 2: Folder organization with drag-and-drop
 - Phase 3: Real-time WebSocket updates
 - Phase 4: UI/UX polish and accessibility
 - Phase 5: Advanced features (search, filtering, bulk operations)
 </CHANGES>
+
+<!--
+Pre-install cleanup script - Remove old versions
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+#!/bin/bash
+
+PLUGIN_NAME="unraid-docker-folders-modern"
+CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
+
+echo "Preparing to install ${PLUGIN_NAME}..."
+
+# Check for and remove any existing versions
+INSTALLED_PKGS=$(ls /var/log/packages/${PLUGIN_NAME}-* 2>/dev/null)
+
+if [ -n "$INSTALLED_PKGS" ]; then
+  echo "Found existing installation(s), removing..."
+  for pkg in $INSTALLED_PKGS; do
+    PKG_NAME=$(basename "$pkg")
+    echo "  Removing: $PKG_NAME"
+    removepkg "$PKG_NAME" 2>&1 | grep -v "Skipping" || true
+  done
+  echo "Old versions removed."
+fi
+
+# Clean up old downloaded packages
+if [ -d "$CONFIG_DIR" ]; then
+  echo "Cleaning up old package files..."
+  find "$CONFIG_DIR" -name "${PLUGIN_NAME}-*.txz" -mtime +7 -delete 2>/dev/null || true
+fi
+
+echo "Pre-install cleanup complete."
+</INLINE>
+</FILE>
 
 <!--
 Download and install plugin package
@@ -49,33 +91,171 @@ Post-install script
 PLUGIN_NAME="unraid-docker-folders-modern"
 PLUGIN_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
 CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
+VERSION="&version;"
+LOG_FILE="${CONFIG_DIR}/install.log"
 
-echo "Installing ${PLUGIN_NAME}..."
+echo "========================================="
+echo "Installing ${PLUGIN_NAME} v${VERSION}"
+echo "========================================="
+
+# Create log file
+mkdir -p "${CONFIG_DIR}"
+echo "Installation started at $(date)" > "${LOG_FILE}"
+
+# Verify plugin directory exists
+if [ ! -d "${PLUGIN_DIR}" ]; then
+  echo "ERROR: Plugin directory not found: ${PLUGIN_DIR}"
+  echo "ERROR: Plugin directory not found: ${PLUGIN_DIR}" >> "${LOG_FILE}"
+  echo "Installation may have failed. Check package integrity."
+  exit 1
+fi
 
 # Create necessary directories
+echo "Creating configuration directories..."
 mkdir -p "${CONFIG_DIR}/backups"
 mkdir -p "${CONFIG_DIR}/data"
 
-# Initialize database if it doesn't exist
-if [ ! -f "${CONFIG_DIR}/data.db" ]; then
-  echo "Initializing database..."
-  php "${PLUGIN_DIR}/scripts/migrate.php"
+# Handle existing database
+DB_EXISTS=0
+if [ -f "${CONFIG_DIR}/data.db" ]; then
+  DB_EXISTS=1
+  echo "Existing database found."
+  echo "Existing database found at: ${CONFIG_DIR}/data.db" >> "${LOG_FILE}"
 
-  if [ $? -ne 0 ]; then
-    echo "Error: Database initialization failed"
-    exit 1
+  # Create backup of existing database before migration
+  BACKUP_FILE="${CONFIG_DIR}/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S).db"
+  echo "Creating backup: ${BACKUP_FILE}"
+  cp "${CONFIG_DIR}/data.db" "${BACKUP_FILE}"
+
+  if [ $? -eq 0 ]; then
+    echo "Backup created successfully." >> "${LOG_FILE}"
+  else
+    echo "WARNING: Failed to create backup. Continuing anyway..."
+    echo "WARNING: Failed to create backup" >> "${LOG_FILE}"
   fi
 fi
 
+# Run database migrations (works for both new and existing databases)
+echo "Running database migrations..."
+echo "Running migrations..." >> "${LOG_FILE}"
+
+if [ ! -f "${PLUGIN_DIR}/scripts/migrate.php" ]; then
+  echo "ERROR: Migration script not found: ${PLUGIN_DIR}/scripts/migrate.php"
+  echo "ERROR: Migration script not found" >> "${LOG_FILE}"
+  exit 1
+fi
+
+# Run migration and capture output
+MIGRATION_OUTPUT=$(php "${PLUGIN_DIR}/scripts/migrate.php" 2>&1)
+MIGRATION_STATUS=$?
+
+echo "$MIGRATION_OUTPUT" >> "${LOG_FILE}"
+
+if [ $MIGRATION_STATUS -ne 0 ]; then
+  echo "ERROR: Database migration failed!"
+  echo "ERROR: Migration failed with status $MIGRATION_STATUS" >> "${LOG_FILE}"
+  echo ""
+  echo "Migration output:"
+  echo "$MIGRATION_OUTPUT"
+  echo ""
+
+  # Restore backup if this was an upgrade
+  if [ $DB_EXISTS -eq 1 ] && [ -f "${BACKUP_FILE}" ]; then
+    echo "Restoring database from backup..."
+    cp "${BACKUP_FILE}" "${CONFIG_DIR}/data.db"
+    echo "Database restored from backup." >> "${LOG_FILE}"
+  fi
+
+  echo "See log file for details: ${LOG_FILE}"
+  exit 1
+fi
+
+echo "Migration completed successfully."
+echo "Migration completed successfully" >> "${LOG_FILE}"
+
 # Set proper permissions
-chmod -R 755 "${PLUGIN_DIR}"
-chmod 644 "${CONFIG_DIR}/data.db" 2>/dev/null || true
+echo "Setting permissions..."
+chmod -R 755 "${PLUGIN_DIR}" 2>/dev/null || true
 
-# Clean up old package files
-rm -f /boot/config/plugins/${PLUGIN_NAME}/${PLUGIN_NAME}-*.txz 2>/dev/null
+if [ -f "${CONFIG_DIR}/data.db" ]; then
+  chmod 644 "${CONFIG_DIR}/data.db"
+  echo "Database permissions set." >> "${LOG_FILE}"
+fi
 
-echo "${PLUGIN_NAME} installed successfully!"
-echo "Navigate to Docker tab to see the new interface."
+# Verify installation
+echo "Verifying installation..."
+VERIFY_FAIL=0
+
+if [ ! -f "${PLUGIN_DIR}/pages/Settings.page" ]; then
+  echo "  ✗ Settings page not found."
+  echo "WARNING: Settings page not found" >> "${LOG_FILE}"
+  VERIFY_FAIL=1
+else
+  echo "  ✓ Settings page found"
+fi
+
+if [ ! -f "${PLUGIN_DIR}/pages/Docker.page" ]; then
+  echo "  ✗ Docker page not found."
+  echo "WARNING: Docker page not found" >> "${LOG_FILE}"
+  VERIFY_FAIL=1
+else
+  echo "  ✓ Docker page found"
+fi
+
+if [ ! -f "${CONFIG_DIR}/data.db" ]; then
+  echo "  ✗ Database file not created."
+  echo "WARNING: Database file not created" >> "${LOG_FILE}"
+  VERIFY_FAIL=1
+else
+  echo "  ✓ Database file created"
+fi
+
+if [ ! -f "${PLUGIN_DIR}/assets/index.html" ]; then
+  echo "  ✗ Frontend assets not found."
+  echo "WARNING: Frontend assets not found" >> "${LOG_FILE}"
+  VERIFY_FAIL=1
+else
+  echo "  ✓ Frontend assets found"
+fi
+
+if [ ! -f "${PLUGIN_DIR}/api/folders.php" ]; then
+  echo "  ✗ API endpoints not found."
+  echo "WARNING: API endpoints not found" >> "${LOG_FILE}"
+  VERIFY_FAIL=1
+else
+  echo "  ✓ API endpoints found"
+fi
+
+# List installed files for debugging
+echo "" >> "${LOG_FILE}"
+echo "Installed files:" >> "${LOG_FILE}"
+ls -la "${PLUGIN_DIR}/" >> "${LOG_FILE}" 2>&1
+echo "" >> "${LOG_FILE}"
+echo "Page files:" >> "${LOG_FILE}"
+ls -la "${PLUGIN_DIR}/pages/" >> "${LOG_FILE}" 2>&1
+
+echo "Installation finished at $(date)" >> "${LOG_FILE}"
+
+if [ $VERIFY_FAIL -eq 0 ]; then
+  echo "========================================="
+  echo "${PLUGIN_NAME} v${VERSION} installed successfully!"
+  echo "========================================="
+  echo ""
+  echo "Access the plugin:"
+  echo "  • Docker > Folders (Modern)"
+  echo "  • Settings > Utilities > Docker Folders Modern"
+  echo ""
+  echo "Installation log: ${LOG_FILE}"
+else
+  echo "========================================="
+  echo "Installation completed with warnings!"
+  echo "========================================="
+  echo ""
+  echo "Some files may be missing. Check the log file:"
+  echo "${LOG_FILE}"
+  echo ""
+  echo "Try reinstalling the plugin or contact support."
+fi
 </INLINE>
 </FILE>
 
@@ -87,23 +267,73 @@ Remove script
 #!/bin/bash
 
 PLUGIN_NAME="unraid-docker-folders-modern"
+PLUGIN_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
 CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
 
-echo "Removing ${PLUGIN_NAME}..."
+echo "========================================="
+echo "Removing ${PLUGIN_NAME}"
+echo "========================================="
 
-# Remove package
-removepkg "${PLUGIN_NAME}"
-
-# Backup data before removal (optional)
+# Backup data before removal
 if [ -f "${CONFIG_DIR}/data.db" ]; then
+  echo "Backing up database..."
+  mkdir -p "${CONFIG_DIR}/backups"
   BACKUP_FILE="${CONFIG_DIR}/backups/data-backup-$(date +%Y%m%d-%H%M%S).db"
   cp "${CONFIG_DIR}/data.db" "${BACKUP_FILE}"
   echo "Database backed up to: ${BACKUP_FILE}"
 fi
 
+# Export configuration as JSON backup
+if [ -f "${CONFIG_DIR}/data.db" ] && [ -f "${PLUGIN_DIR}/api/folders.php" ]; then
+  echo "Exporting configuration..."
+  EXPORT_FILE="${CONFIG_DIR}/backups/export-$(date +%Y%m%d-%H%M%S).json"
+  curl -s "http://localhost/plugins/${PLUGIN_NAME}/api/folders.php?action=export" > "${EXPORT_FILE}" 2>/dev/null || true
+
+  if [ -s "${EXPORT_FILE}" ]; then
+    echo "Configuration exported to: ${EXPORT_FILE}"
+  else
+    rm -f "${EXPORT_FILE}" 2>/dev/null
+  fi
+fi
+
+# Find and remove all installed versions
+echo "Removing installed packages..."
+REMOVED=0
+for pkg in /var/log/packages/${PLUGIN_NAME}-*; do
+  if [ -f "$pkg" ]; then
+    PKG_NAME=$(basename "$pkg")
+    echo "  Removing: $PKG_NAME"
+    removepkg "$PKG_NAME" 2>&1 | grep -v "Skipping" || true
+    REMOVED=1
+  fi
+done
+
+if [ $REMOVED -eq 0 ]; then
+  echo "  No packages found to remove."
+fi
+
+# Clean up plugin directory if it still exists
+if [ -d "${PLUGIN_DIR}" ]; then
+  echo "Cleaning up plugin directory..."
+  rm -rf "${PLUGIN_DIR}"
+fi
+
+# Clean up downloaded packages (keep backups)
+if [ -d "${CONFIG_DIR}" ]; then
+  echo "Cleaning up old package files..."
+  rm -f ${CONFIG_DIR}/${PLUGIN_NAME}-*.txz 2>/dev/null || true
+fi
+
+echo "========================================="
 echo "${PLUGIN_NAME} removed successfully."
-echo "Your data has been preserved in ${CONFIG_DIR}"
-echo "To completely remove all data, manually delete: ${CONFIG_DIR}"
+echo "========================================="
+echo ""
+echo "Your data has been preserved in: ${CONFIG_DIR}"
+echo "Database backups are in: ${CONFIG_DIR}/backups/"
+echo ""
+echo "To completely remove all plugin data, run:"
+echo "  rm -rf ${CONFIG_DIR}"
+echo ""
 </INLINE>
 </FILE>
 
