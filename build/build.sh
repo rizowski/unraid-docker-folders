@@ -15,7 +15,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 # Configuration
-PLUGIN_NAME="unraid-docker-modern"
+PLUGIN_NAME="unraid-docker-folders-modern"
 VERSION=$(date +%Y.%m.%d)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"

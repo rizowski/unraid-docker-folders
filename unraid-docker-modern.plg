@@ -1,11 +1,11 @@
 <?xml version='1.0' standalone='yes'?>
 <!DOCTYPE PLUGIN [
-<!ENTITY name "unraid-docker-modern">
+<!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
 <!ENTITY version "2026.02.14">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-<!ENTITY github "rizowski/unraid-docker">
+<!ENTITY github "rizowski/unraid-docker-folders">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
 <!ENTITY md5 "2479efd52f580c5f1f709e5085031f95">
 ]>
@@ -46,7 +46,7 @@ Post-install script
 <INLINE>
 #!/bin/bash
 
-PLUGIN_NAME="unraid-docker-modern"
+PLUGIN_NAME="unraid-docker-folders-modern"
 PLUGIN_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
 CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
 
@@ -86,7 +86,7 @@ Remove script
 <INLINE>
 #!/bin/bash
 
-PLUGIN_NAME="unraid-docker-modern"
+PLUGIN_NAME="unraid-docker-folders-modern"
 CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
 
 echo "Removing ${PLUGIN_NAME}..."

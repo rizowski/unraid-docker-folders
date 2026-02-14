@@ -5,7 +5,7 @@ vendor/
 # Build outputs
 dist/
 archive/*.txz
-src/backend/usr/local/emhttp/plugins/unraid-docker-modern/assets/
+src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/assets/
 
 # Environment files
 .env

@@ -6,7 +6,7 @@
  */
 
 // Plugin information
-define('PLUGIN_NAME', 'unraid-docker-modern');
+define('PLUGIN_NAME', 'unraid-docker-folders-modern');
 define('PLUGIN_VERSION', '1.0.0');
 define('PLUGIN_AUTHOR', 'rizowski');
 
@@ -29,37 +29,43 @@ define('NCHAN_SUB_PATH', '/sub/docker-modern');
 
 // Error reporting (disable in production)
 if (defined('DEBUG') && DEBUG) {
-    error_reporting(E_ALL);
-    ini_set('display_errors', '1');
+  error_reporting(E_ALL);
+  ini_set('display_errors', '1');
 } else {
-    error_reporting(0);
-    ini_set('display_errors', '0');
+  error_reporting(0);
+  ini_set('display_errors', '0');
 }
 
 // Timezone
 date_default_timezone_set('UTC');
 
 // CORS headers for API (if needed)
-function setCorsHeaders() {
-    // Only allow same-origin for security
-    header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN'] ?? '*');
-    header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization');
-    header('Access-Control-Allow-Credentials: true');
+function setCorsHeaders()
+{
+  // Only allow same-origin for security
+  header('Access-Control-Allow-Origin: ' . $_SERVER['HTTP_ORIGIN'] ?? '*');
+  header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+  header('Access-Control-Allow-Headers: Content-Type, Authorization');
+  header('Access-Control-Allow-Credentials: true');
 }
 
 // JSON response helper
-function jsonResponse($data, $statusCode = 200) {
-    http_response_code($statusCode);
-    header('Content-Type: application/json');
-    echo json_encode($data);
-    exit;
+function jsonResponse($data, $statusCode = 200)
+{
+  http_response_code($statusCode);
+  header('Content-Type: application/json');
+  echo json_encode($data);
+  exit();
 }
 
 // Error response helper
-function errorResponse($message, $statusCode = 500) {
-    jsonResponse([
-        'error' => true,
-        'message' => $message
-    ], $statusCode);
+function errorResponse($message, $statusCode = 500)
+{
+  jsonResponse(
+    [
+      'error' => true,
+      'message' => $message,
+    ],
+    $statusCode,
+  );
 }

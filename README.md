@@ -35,7 +35,7 @@ This plugin is a modern replacement for the outdated folderview2 plugin, address
 
 ### Manual Installation
 
-1. Download the latest `.plg` file from [Releases](https://github.com/rizowski/unraid-docker/releases)
+1. Download the latest `.plg` file from [Releases](https://github.com/rizowski/unraid-docker-folders/releases)
 2. Install via Unraid's plugin installer:
    - Navigate to **Plugins** → **Install Plugin**
    - Paste the URL to the `.plg` file
@@ -85,7 +85,7 @@ See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup instructions and contributio
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/rizowski/unraid-docker/issues)
+- **Issues**: [GitHub Issues](https://github.com/rizowski/unraid-docker-folders/issues)
 - **Forum**: [Unraid Community Forums](https://forums.unraid.net)
 
 ## License

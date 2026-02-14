@@ -1,5 +1,5 @@
 <template>
-  <div id="unraid-docker-modern">
+  <div id="unraid-docker-folders-modern">
     <header class="header">
       <h1>Docker Containers</h1>
       <div class="connection-status">
@@ -23,11 +23,7 @@
       </div>
 
       <div v-else class="container-list">
-        <div
-          v-for="container in containers"
-          :key="container.id"
-          class="container-card"
-        >
+        <div v-for="container in containers" :key="container.id" class="container-card">
           <div class="container-header">
             <h3>{{ container.name }}</h3>
             <span class="container-status" :class="container.state">
@@ -39,23 +35,9 @@
             <p class="container-id">{{ container.id.substring(0, 12) }}</p>
           </div>
           <div class="container-actions">
-            <button
-              v-if="container.state === 'running'"
-              @click="stopContainer(container.id)"
-              class="btn btn-stop"
-            >
-              Stop
-            </button>
-            <button
-              v-else
-              @click="startContainer(container.id)"
-              class="btn btn-start"
-            >
-              Start
-            </button>
-            <button @click="restartContainer(container.id)" class="btn btn-restart">
-              Restart
-            </button>
+            <button v-if="container.state === 'running'" @click="stopContainer(container.id)" class="btn btn-stop">Stop</button>
+            <button v-else @click="startContainer(container.id)" class="btn btn-start">Start</button>
+            <button @click="restartContainer(container.id)" class="btn btn-restart">Restart</button>
           </div>
         </div>
       </div>
@@ -64,115 +46,103 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue';
 
 interface Container {
-  id: string
-  name: string
-  image: string
-  state: string
-  status: string
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
 }
 
-const containers = ref<Container[]>([])
-const loading = ref(true)
-const error = ref<string | null>(null)
-const connected = ref(false)
+const containers = ref<Container[]>([]);
+const loading = ref(true);
+const error = ref<string | null>(null);
+const connected = ref(false);
 
 const connectionStatus = computed(() => ({
   connected: connected.value,
-  disconnected: !connected.value
-}))
+  disconnected: !connected.value,
+}));
 
-const connectionStatusText = computed(() =>
-  connected.value ? 'Connected' : 'Disconnected'
-)
+const connectionStatusText = computed(() => (connected.value ? 'Connected' : 'Disconnected'));
 
 async function loadContainers() {
-  loading.value = true
-  error.value = null
+  loading.value = true;
+  error.value = null;
 
   try {
-    const response = await fetch('/plugins/unraid-docker-modern/api/containers.php')
+    const response = await fetch('/plugins/unraid-docker-folders-modern/api/containers.php');
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    const data = await response.json()
-    containers.value = data.containers || []
-    connected.value = true
+    const data = await response.json();
+    containers.value = data.containers || [];
+    connected.value = true;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Unknown error'
-    connected.value = false
+    error.value = e instanceof Error ? e.message : 'Unknown error';
+    connected.value = false;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function startContainer(id: string) {
   try {
-    const response = await fetch(
-      `/plugins/unraid-docker-modern/api/containers.php?action=start&id=${id}`,
-      { method: 'POST' }
-    )
+    const response = await fetch(`/plugins/unraid-docker-folders-modern/api/containers.php?action=start&id=${id}`, { method: 'POST' });
 
     if (!response.ok) {
-      throw new Error(`Failed to start container`)
+      throw new Error(`Failed to start container`);
     }
 
-    await loadContainers()
+    await loadContainers();
   } catch (e) {
-    console.error('Error starting container:', e)
+    console.error('Error starting container:', e);
   }
 }
 
 async function stopContainer(id: string) {
   try {
-    const response = await fetch(
-      `/plugins/unraid-docker-modern/api/containers.php?action=stop&id=${id}`,
-      { method: 'POST' }
-    )
+    const response = await fetch(`/plugins/unraid-docker-folders-modern/api/containers.php?action=stop&id=${id}`, { method: 'POST' });
 
     if (!response.ok) {
-      throw new Error(`Failed to stop container`)
+      throw new Error(`Failed to stop container`);
     }
 
-    await loadContainers()
+    await loadContainers();
   } catch (e) {
-    console.error('Error stopping container:', e)
+    console.error('Error stopping container:', e);
   }
 }
 
 async function restartContainer(id: string) {
   try {
-    const response = await fetch(
-      `/plugins/unraid-docker-modern/api/containers.php?action=restart&id=${id}`,
-      { method: 'POST' }
-    )
+    const response = await fetch(`/plugins/unraid-docker-folders-modern/api/containers.php?action=restart&id=${id}`, { method: 'POST' });
 
     if (!response.ok) {
-      throw new Error(`Failed to restart container`)
+      throw new Error(`Failed to restart container`);
     }
 
-    await loadContainers()
+    await loadContainers();
   } catch (e) {
-    console.error('Error restarting container:', e)
+    console.error('Error restarting container:', e);
   }
 }
 
 onMounted(() => {
-  loadContainers()
-})
+  loadContainers();
+});
 </script>
 
 <style scoped>
 /* Basic styling for Phase 1 */
 /* Will be replaced with design system in Phase 4 */
 
-#unraid-docker-modern {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, sans-serif;
+#unraid-docker-folders-modern {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
