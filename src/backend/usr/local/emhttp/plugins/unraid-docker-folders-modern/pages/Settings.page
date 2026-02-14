@@ -1,0 +1,225 @@
+Menu="Utilities"
+Title="Docker Folders Modern"
+Icon="unraid-docker-folders-modern.png"
+---
+<?php
+require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
+?>
+
+<style>
+.settings-container {
+  max-width: 800px;
+  margin: 20px auto;
+  padding: 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.settings-header {
+  margin-bottom: 30px;
+  padding-bottom: 20px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.settings-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 28px;
+  color: #333;
+}
+
+.settings-header p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.info-box {
+  background: #f5f5f5;
+  border-left: 4px solid #2196f3;
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+}
+
+.info-box h3 {
+  margin: 0 0 10px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.info-box p {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #666;
+}
+
+.info-box code {
+  background: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+}
+
+.action-buttons {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+}
+
+.btn-primary {
+  background: #2196f3;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: #1976d2;
+}
+
+.btn-secondary {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.btn-secondary:hover {
+  background: #d0d0d0;
+}
+
+.phase-status {
+  margin-top: 30px;
+}
+
+.phase-status h2 {
+  font-size: 20px;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.phase {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+.phase-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 15px;
+}
+
+.phase-complete {
+  background: #4caf50;
+  color: white;
+}
+
+.phase-pending {
+  background: #e0e0e0;
+  color: #999;
+}
+
+.phase-content h3 {
+  margin: 0 0 5px 0;
+  font-size: 16px;
+  color: #333;
+}
+
+.phase-content p {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+}
+</style>
+
+<div class="settings-container">
+  <div class="settings-header">
+    <h1>Docker Folders Modern</h1>
+    <p>A modern plugin for organizing Docker containers with folders and real-time updates</p>
+  </div>
+
+  <div class="info-box">
+    <h3>📦 Plugin Information</h3>
+    <p><strong>Version:</strong> <?= PLUGIN_VERSION ?></p>
+    <p><strong>Author:</strong> <?= PLUGIN_AUTHOR ?></p>
+    <p><strong>Status:</strong> Phase 1 Complete - Basic Infrastructure</p>
+  </div>
+
+  <div class="info-box">
+    <h3>🚀 Access the Interface</h3>
+    <p>The Docker Folders interface is currently accessible at:</p>
+    <p><code>http://<?= $_SERVER['SERVER_NAME'] ?>/plugins/unraid-docker-folders-modern/assets/index.html</code></p>
+    <p style="margin-top: 10px;"><em>Note: Docker tab integration will be added in Phase 2</em></p>
+  </div>
+
+  <div class="action-buttons">
+    <a href="/plugins/unraid-docker-folders-modern/assets/index.html" class="btn btn-primary" target="_blank">
+      Open Docker Folders UI
+    </a>
+    <a href="https://github.com/rizowski/unraid-docker-folders" class="btn btn-secondary" target="_blank">
+      View on GitHub
+    </a>
+  </div>
+
+  <div class="phase-status">
+    <h2>Development Roadmap</h2>
+
+    <div class="phase">
+      <div class="phase-number phase-complete">✓</div>
+      <div class="phase-content">
+        <h3>Phase 1: Core Infrastructure</h3>
+        <p>Basic Docker container listing, Vue 3 UI, SQLite database</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-number phase-pending">2</div>
+      <div class="phase-content">
+        <h3>Phase 2: Folder Management</h3>
+        <p>Create folders, drag-and-drop organization, import/export</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-number phase-pending">3</div>
+      <div class="phase-content">
+        <h3>Phase 3: Real-Time Updates</h3>
+        <p>WebSocket integration for live container status updates</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-number phase-pending">4</div>
+      <div class="phase-content">
+        <h3>Phase 4: UI/UX Polish</h3>
+        <p>Modern design, accessibility, dark/light themes</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-number phase-pending">5</div>
+      <div class="phase-content">
+        <h3>Phase 5: Advanced Features</h3>
+        <p>Search, filtering, bulk operations, container insights</p>
+      </div>
+    </div>
+  </div>
+</div>

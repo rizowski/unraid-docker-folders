@@ -16,7 +16,16 @@ NC='\033[0m' # No Color
 
 # Configuration
 PLUGIN_NAME="unraid-docker-folders-modern"
-VERSION=$(date +%Y.%m.%d)
+
+# Check for --release flag
+if [ "$1" == "--release" ]; then
+  VERSION=$(date +%Y.%m.%d)
+  BUILD_TYPE="release"
+else
+  VERSION=$(date +%Y.%m.%d-%H%M)
+  BUILD_TYPE="development"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="/tmp/${PLUGIN_NAME}-build"
@@ -26,6 +35,7 @@ BACKEND_DIR="${PROJECT_ROOT}/src/backend"
 
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Building ${PLUGIN_NAME} v${VERSION}${NC}"
+echo -e "${BLUE}  Build Type: ${BUILD_TYPE}${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -109,13 +119,28 @@ echo -e "${BLUE}========================================${NC}"
 echo -e "${GREEN}Build complete!${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
+echo "Build Type: ${BUILD_TYPE}"
 echo "Package: ${ARCHIVE_PATH}"
 echo "Size: ${ARCHIVE_SIZE}"
 echo "MD5: ${MD5}"
 echo ""
-echo "Update the PLG file with:"
-echo -e "  ${YELLOW}<!ENTITY version \"${VERSION}\">${NC}"
-echo -e "  ${YELLOW}<!ENTITY md5 \"${MD5}\">${NC}"
+
+if [ "$BUILD_TYPE" == "release" ]; then
+  echo -e "${YELLOW}Release Build${NC}"
+  echo "Update the PLG file with:"
+  echo -e "  ${YELLOW}<!ENTITY version \"${VERSION}\">${NC}"
+  echo -e "  ${YELLOW}<!ENTITY md5 \"${MD5}\">${NC}"
+  echo ""
+  echo "Then create GitHub release:"
+  echo "  Tag: v${VERSION}"
+  echo "  Upload: ${PLUGIN_NAME}-${VERSION}.txz"
+else
+  echo -e "${YELLOW}Development Build${NC}"
+  echo "For testing only - not for release"
+  echo ""
+  echo "To create a release build, run:"
+  echo -e "  ${YELLOW}./build/build.sh --release${NC}"
+fi
 echo ""
 
 # Clean up build directory
