@@ -74,6 +74,10 @@ cd "$PROJECT_ROOT"
 # Copy the entire backend structure
 cp -r "${BACKEND_DIR}/usr" "${BUILD_DIR}/"
 
+# Remove macOS metadata files
+find "${BUILD_DIR}" -name "._*" -delete
+find "${BUILD_DIR}" -name ".DS_Store" -delete
+
 # Ensure proper permissions
 find "${BUILD_DIR}" -type f -name "*.php" -exec chmod 644 {} \;
 find "${BUILD_DIR}" -type f -name "*.sh" -exec chmod 755 {} \;
@@ -86,8 +90,14 @@ echo ""
 echo -e "${YELLOW}[4/5]${NC} Creating .txz archive..."
 cd "$BUILD_DIR"
 
+# Remove macOS resource forks and metadata files
+find . -name "._*" -delete
+find . -name ".DS_Store" -delete
+
 ARCHIVE_PATH="${ARCHIVE_DIR}/${PLUGIN_NAME}-${VERSION}.txz"
-tar -cJf "$ARCHIVE_PATH" usr/
+
+# Create archive excluding macOS files and setting ownership to root
+COPYFILE_DISABLE=1 tar --exclude='._*' --exclude='.DS_Store' --owner=root --group=root -cJf "$ARCHIVE_PATH" usr/
 
 if [ ! -f "$ARCHIVE_PATH" ]; then
     echo -e "${RED}✗${NC} Failed to create archive"
