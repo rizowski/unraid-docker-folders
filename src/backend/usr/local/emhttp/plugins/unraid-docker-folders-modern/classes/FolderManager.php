@@ -77,6 +77,7 @@ class FolderManager
       'color' => $data['color'] ?? null,
       'position' => $maxPosition + 1,
       'collapsed' => 0,
+      'compose_project' => $data['compose_project'] ?? null,
       'created_at' => $now,
       'updated_at' => $now,
     ]);
@@ -357,6 +358,79 @@ class FolderManager
     }
 
     return $result;
+  }
+
+  /**
+   * Sync Docker Compose stacks into folders automatically.
+   *
+   * Groups containers by their com.docker.compose.project label,
+   * creates missing folders, and assigns unassigned containers.
+   *
+   * @param array $containers List of container data from DockerClient
+   * @return bool True if any changes were made
+   */
+  public function syncComposeStacks($containers)
+  {
+    $changed = false;
+
+    // Group containers by compose project
+    $projects = [];
+    foreach ($containers as $container) {
+      $labels = $container['labels'] ?? [];
+      $project = $labels['com.docker.compose.project'] ?? null;
+      if ($project === null) {
+        continue;
+      }
+      $projects[$project][] = $container;
+    }
+
+    if (empty($projects)) {
+      return false;
+    }
+
+    // Get existing compose folders keyed by project name
+    $existingFolders = $this->db->fetchAll(
+      'SELECT * FROM folders WHERE compose_project IS NOT NULL'
+    );
+    $foldersByProject = [];
+    foreach ($existingFolders as $folder) {
+      $foldersByProject[$folder['compose_project']] = $folder;
+    }
+
+    // Get all current container-folder assignments
+    $assignedContainers = $this->db->fetchAll('SELECT container_id, folder_id FROM container_folders');
+    $assignmentMap = [];
+    foreach ($assignedContainers as $row) {
+      $assignmentMap[$row['container_id']] = (int) $row['folder_id'];
+    }
+
+    foreach ($projects as $projectName => $projectContainers) {
+      // Create folder if it doesn't exist for this compose project
+      if (!isset($foldersByProject[$projectName])) {
+        $folder = $this->createFolder([
+          'name' => $projectName,
+          'icon' => 'layer-group',
+          'compose_project' => $projectName,
+        ]);
+        $folderId = $folder['id'];
+        $changed = true;
+      } else {
+        $folderId = (int) $foldersByProject[$projectName]['id'];
+      }
+
+      // Assign unassigned containers to the compose folder
+      foreach ($projectContainers as $container) {
+        $containerId = $container['id'];
+        if (!isset($assignmentMap[$containerId])) {
+          $containerName = ltrim($container['name'], '/');
+          $this->addContainerToFolder($folderId, $containerId, $containerName);
+          $assignmentMap[$containerId] = $folderId;
+          $changed = true;
+        }
+      }
+    }
+
+    return $changed;
   }
 
   /**

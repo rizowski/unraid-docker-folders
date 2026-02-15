@@ -24,6 +24,7 @@ const containers = [
       { Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.2' } },
+    labels: {},
   },
   {
     id: 'bcd234efg567', name: 'sonarr', image: 'linuxserver/sonarr:latest', state: 'running',
@@ -36,6 +37,7 @@ const containers = [
       { Source: '/mnt/user/downloads', Destination: '/downloads', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.3' } },
+    labels: { 'com.docker.compose.project': 'media-stack' },
   },
   {
     id: 'cde345fgh678', name: 'radarr', image: 'linuxserver/radarr:latest', state: 'running',
@@ -47,6 +49,7 @@ const containers = [
       { Source: '/mnt/user/media/movies', Destination: '/movies', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.4' } },
+    labels: { 'com.docker.compose.project': 'media-stack' },
   },
   {
     id: 'def456ghi789', name: 'sabnzbd', image: 'linuxserver/sabnzbd:latest', state: 'running',
@@ -55,6 +58,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 8080, PublicPort: 8080, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/sabnzbd', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.5' } },
+    labels: { 'com.docker.compose.project': 'media-stack' },
   },
   {
     id: 'efg567hij890', name: 'nginx-proxy', image: 'jwilder/nginx-proxy:latest', state: 'running',
@@ -66,6 +70,7 @@ const containers = [
     ],
     mounts: [{ Source: '/var/run/docker.sock', Destination: '/tmp/docker.sock', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.6' } },
+    labels: {},
   },
   {
     id: 'fgh678ijk901', name: 'mariadb', image: 'linuxserver/mariadb:latest', state: 'running',
@@ -74,6 +79,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 3306, PublicPort: 3306, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/mariadb', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.7' } },
+    labels: { 'com.docker.compose.project': 'db-stack' },
   },
   {
     id: 'ghi789jkl012', name: 'redis', image: 'redis:7-alpine', state: 'exited',
@@ -82,6 +88,7 @@ const containers = [
     ports: [{ IP: '', PrivatePort: 6379, Type: 'tcp' }],
     mounts: [],
     networkSettings: {},
+    labels: { 'com.docker.compose.project': 'db-stack' },
   },
   {
     id: 'hij890klm123', name: 'minecraft', image: 'itzg/minecraft-server:latest', state: 'exited',
@@ -90,6 +97,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 25565, PublicPort: 25565, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/minecraft', Destination: '/data', Type: 'bind', RW: true }],
     networkSettings: {},
+    labels: {},
   },
   {
     id: 'ijk901lmn234', name: 'homeassistant', image: 'ghcr.io/home-assistant/home-assistant:stable', state: 'running',
@@ -98,6 +106,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 8123, PublicPort: 8123, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/homeassistant', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { host: { IPAddress: '' } },
+    labels: {},
   },
   {
     id: 'jkl012mno345', name: 'grafana', image: 'grafana/grafana:latest', state: 'running',
@@ -106,6 +115,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 3000, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/grafana', Destination: '/var/lib/grafana', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.10' } },
+    labels: {},
   },
 ];
 

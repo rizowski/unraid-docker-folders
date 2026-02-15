@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/DockerClient.php';
+require_once dirname(__DIR__) . '/classes/FolderManager.php';
 require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 // Set JSON content type
@@ -68,6 +69,13 @@ function handleGet($dockerClient)
   } else {
     // List all containers
     $containers = $dockerClient->listContainers(true);
+
+    // Auto-group Docker Compose stacks into folders
+    $folderManager = new FolderManager();
+    $changed = $folderManager->syncComposeStacks($containers);
+    if ($changed) {
+      WebSocketPublisher::publish('folders', 'updated');
+    }
 
     jsonResponse([
       'containers' => $containers,
