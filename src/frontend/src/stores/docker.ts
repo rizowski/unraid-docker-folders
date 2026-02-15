@@ -25,6 +25,7 @@ export const useDockerStore = defineStore('docker', () => {
   const error = ref<string | null>(null);
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
+  let initialLoadDone = false;
 
   // Getters
   const containerCount = computed(() => containers.value.length);
@@ -68,7 +69,10 @@ export const useDockerStore = defineStore('docker', () => {
     }
     lastFetchTime = now;
 
-    loading.value = true;
+    // Only show loading spinner on initial load
+    if (!initialLoadDone) {
+      loading.value = true;
+    }
     error.value = null;
 
     try {
@@ -80,6 +84,7 @@ export const useDockerStore = defineStore('docker', () => {
 
       const data = await response.json();
       containers.value = data.containers || [];
+      initialLoadDone = true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
       console.error('Error fetching containers:', e);

@@ -3,12 +3,13 @@
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
     <div v-if="!folder.collapsed" class="px-4">
-      <div class="container-list grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4 mb-4 min-h-[60px]" :data-folder-id="folder.id">
+      <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4'" :data-folder-id="folder.id">
         <ContainerCard
           v-for="assoc in folderContainers"
           :key="assoc.container_id"
           :container="getContainer(assoc.container_id)!"
           :action-in-progress="actionInProgress === assoc.container_id"
+          :view="view"
           @start="handleStart"
           @stop="handleStop"
           @restart="handleRestart"
@@ -33,9 +34,12 @@ import ContainerCard from '@/components/docker/ContainerCard.vue';
 
 interface Props {
   folder: Folder;
+  view?: 'grid' | 'list';
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  view: 'grid',
+});
 
 // Note: emit is used in template via $emit
 defineEmits<{

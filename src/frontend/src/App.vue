@@ -1,11 +1,29 @@
 <template>
-  <div id="unraid-docker-folders-modern" class="max-w-[1400px] mx-auto p-6 font-sans text-text bg-bg">
+  <div id="unraid-docker-folders-modern" class="px-6 py-4 font-sans text-text">
     <header class="flex justify-between items-center mb-8 pb-6 border-b-2 border-border">
       <div class="flex items-baseline gap-4">
         <span class="text-sm text-text-secondary">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
         <ConnectionStatus />
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 items-center">
+        <div class="flex border border-border rounded overflow-hidden">
+          <button
+            @click="viewMode = 'grid'"
+            class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
+            :class="viewMode === 'grid' ? 'bg-primary text-primary-text' : 'bg-bg-card text-text hover:bg-border'"
+            title="Grid view"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          </button>
+          <button
+            @click="viewMode = 'list'"
+            class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
+            :class="viewMode === 'list' ? 'bg-primary text-primary-text' : 'bg-bg-card text-text hover:bg-border'"
+            title="List view"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </button>
+        </div>
         <button @click="openCreateFolderModal" class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors">+ Create Folder</button>
       </div>
     </header>
@@ -23,7 +41,7 @@
       <div v-else>
         <!-- Folders -->
         <div v-if="folderStore.sortedFolders.length > 0" class="mb-8">
-          <FolderContainer v-for="folder in folderStore.sortedFolders" :key="folder.id" :folder="folder" @edit="openEditFolderModal" @delete="deleteFolder" />
+          <FolderContainer v-for="folder in folderStore.sortedFolders" :key="folder.id" :folder="folder" :view="viewMode" @edit="openEditFolderModal" @delete="deleteFolder" />
         </div>
 
         <!-- Unfoldered Containers -->
@@ -33,12 +51,13 @@
             <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{ dockerStore.unfolderedContainers.length }}</span>
           </div>
 
-          <div class="container-list grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4" id="unfoldered-containers">
+          <div class="container-list" :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4'" id="unfoldered-containers">
             <ContainerCard
               v-for="container in dockerStore.unfolderedContainers"
               :key="container.id"
               :container="container"
               :action-in-progress="actionInProgress === container.id"
+              :view="viewMode"
               @start="handleStart"
               @stop="handleStop"
               @restart="handleRestart"
@@ -75,6 +94,8 @@ const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 
 const actionInProgress = ref<string | null>(null);
+const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
+watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 const isModalOpen = ref(false);
 const editingFolder = ref<Folder | null>(null);
 
