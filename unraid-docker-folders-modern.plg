@@ -196,12 +196,12 @@ fi
 echo "Verifying installation..."
 VERIFY_FAIL=0
 
-if [ ! -f "${PLUGIN_DIR}/Settings.page" ]; then
-  echo "  ✗ Settings page not found."
-  echo "WARNING: Settings page not found" >> "${LOG_FILE}"
+if [ ! -f "${PLUGIN_DIR}/DockerFoldersSettings.page" ]; then
+  echo "  ✗ DockerFoldersSettings page not found."
+  echo "WARNING: DockerFoldersSettings page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
 else
-  echo "  ✓ Settings page found"
+  echo "  ✓ DockerFoldersSettings page found"
 fi
 
 if [ ! -f "${PLUGIN_DIR}/DockerFoldersMain.page" ]; then
