@@ -2,8 +2,9 @@
 /**
  * Unraid Docker Folders - Authentication
  *
- * CSRF tokens are validated by Unraid's local_prepend.php for POST requests.
- * For PUT/DELETE, we validate manually against the system token from var.ini.
+ * CSRF for POST requests is validated by Unraid's local_prepend.php
+ * (auto-prepended via php.ini) against the system token in state/var.ini.
+ * For PUT/DELETE, we validate manually.
  *
  * @package UnraidDockerModern
  */
@@ -15,13 +16,10 @@
  */
 function validateSession()
 {
-  // Start session if not already started
   if (session_status() === PHP_SESSION_NONE) {
     session_start();
   }
 
-  // Check if user is logged in to Unraid
-  // Unraid sets $_SESSION['csrf_token'] when user is authenticated
   if (!isset($_SESSION['csrf_token'])) {
     return false;
   }
@@ -31,7 +29,7 @@ function validateSession()
 
 /**
  * Get the system CSRF token from Unraid's var.ini.
- * This is the same token that local_prepend.php validates against.
+ * This is the same token that local_prepend.php validates POST requests against.
  *
  * @return string|null The system CSRF token
  */
@@ -46,11 +44,10 @@ function getSystemCsrfToken()
 }
 
 /**
- * Validate CSRF token for PUT/DELETE requests.
+ * Validate CSRF token for state-changing requests.
  *
- * POST requests are already validated by Unraid's local_prepend.php
- * (auto-prepended to all PHP via php.ini). We only need to handle
- * PUT and DELETE ourselves.
+ * POST: Already validated by Unraid's local_prepend.php before our code runs.
+ * PUT/DELETE: We validate manually against the system token from var.ini.
  *
  * @return bool True if CSRF token is valid
  */
@@ -58,24 +55,23 @@ function validateCsrfToken()
 {
   $method = $_SERVER['REQUEST_METHOD'];
 
-  // GET and OPTIONS don't need CSRF validation
   if (in_array($method, ['GET', 'OPTIONS'])) {
     return true;
   }
 
-  // POST is validated by local_prepend.php before our code runs
+  // POST is already validated by local_prepend.php
   if ($method === 'POST') {
     return true;
   }
 
-  // PUT/DELETE: validate manually against the system token
+  // PUT/DELETE: validate manually
   $systemToken = getSystemCsrfToken();
   if (!$systemToken) {
     return false;
   }
 
-  // Accept token from X-CSRF-Token header or query string
   $token = $_SERVER['HTTP_X_CSRF_TOKEN']
+    ?? $_POST['csrf_token']
     ?? $_GET['csrf_token']
     ?? null;
 

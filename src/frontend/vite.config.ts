@@ -17,9 +17,14 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['vue', 'pinia'],
-          utils: ['sortablejs'],
+        // Predictable filenames so the .page file can reference them directly
+        entryFileNames: 'js/app.js',
+        chunkFileNames: 'js/[name].js',
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name?.endsWith('.css')) {
+            return 'css/app.css';
+          }
+          return 'assets/[name][extname]';
         },
       },
     },

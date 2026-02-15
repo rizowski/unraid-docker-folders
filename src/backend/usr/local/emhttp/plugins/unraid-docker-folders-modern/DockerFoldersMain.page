@@ -6,41 +6,17 @@ Cond="is_file('/var/run/dockerd.pid')"
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
 
-// $var is populated by the Unraid framework from state/var.ini
-// It contains the csrf_token that emhttpd's local_prepend.php validates against
-$csrfToken = $var['csrf_token'] ?? '';
 $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 ?>
-<style>
-.docker-folders-wrapper {
-    width: 100%;
-    min-height: 600px;
-}
-.docker-folders-wrapper iframe {
-    width: 100%;
-    height: calc(100vh - 200px);
-    min-height: 600px;
-    border: none;
-}
-.docker-folders-error {
-    background: #f0f0f0;
-    padding: 20px;
-    margin: 20px;
-    border: 2px solid #f44336;
-    border-radius: 8px;
-}
-</style>
 
-<div class="docker-folders-wrapper">
 <?php if ($dbStatus === 'missing'): ?>
-    <div class="docker-folders-error">
-        <h3>Database Not Found</h3>
-        <p>The plugin database has not been initialized. Please reinstall the plugin or run migrations.</p>
-        <p>Expected path: <code><?= DB_PATH ?></code></p>
-    </div>
-<?php endif; ?>
-    <iframe
-        src="/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=<?= urlencode($csrfToken) ?>"
-        title="Docker Folders Modern">
-    </iframe>
+<div style="background:#f0f0f0;padding:20px;margin:20px;border:2px solid #f44336;border-radius:8px;">
+    <h3>Database Not Found</h3>
+    <p>The plugin database has not been initialized. Please reinstall the plugin or run migrations.</p>
+    <p>Expected path: <code><?= DB_PATH ?></code></p>
 </div>
+<?php endif; ?>
+
+<link rel="stylesheet" href="<?autov('/plugins/unraid-docker-folders-modern/assets/css/app.css')?>">
+<div id="app"></div>
+<script type="module" src="<?autov('/plugins/unraid-docker-folders-modern/assets/js/app.js')?>"></script>

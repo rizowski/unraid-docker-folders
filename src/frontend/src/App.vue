@@ -81,42 +81,7 @@ const editingFolder = ref<Folder | null>(null);
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
 
-function inheritParentTheme() {
-  try {
-    const parentStyles = window.parent.document.documentElement
-      ? getComputedStyle(window.parent.document.documentElement)
-      : null;
-    if (!parentStyles) return;
-
-    const varsToInherit = [
-      'text-color',
-      'background-color',
-      'content-background',
-      'border-color',
-      'header-background',
-      'header-text-color',
-      'button-background',
-      'button-hover',
-      'button-text-color',
-      'input-background',
-      'input-border',
-      'text-color-secondary',
-    ];
-
-    const root = document.documentElement;
-    for (const varName of varsToInherit) {
-      const value = parentStyles.getPropertyValue(`--${varName}`).trim();
-      if (value) {
-        root.style.setProperty(`--${varName}`, value);
-      }
-    }
-  } catch {
-    // Cross-origin or no parent frame — use fallback values from @theme
-  }
-}
-
 onMounted(async () => {
-  inheritParentTheme();
   await loadData();
   initializeDragAndDrop();
   initWebSocket();
