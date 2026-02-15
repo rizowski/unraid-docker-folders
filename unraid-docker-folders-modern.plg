@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.14-11">
-<!ENTITY md5 "501397d6fb4dacbf76e6dfbdbe13824e">
+<!ENTITY version "2026.02.15">
+<!ENTITY md5 "f13cac9604b89e5c8f4ce66f28d0a6a7">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -197,12 +197,12 @@ else
   echo "  ✓ Settings page found"
 fi
 
-if [ ! -f "${PLUGIN_DIR}/pages/Docker.page" ]; then
-  echo "  ✗ Docker page not found."
-  echo "WARNING: Docker page not found" >> "${LOG_FILE}"
+if [ ! -f "${PLUGIN_DIR}/pages/DockerFolders.page" ]; then
+  echo "  ✗ DockerFolders page not found."
+  echo "WARNING: DockerFolders page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
 else
-  echo "  ✓ Docker page found"
+  echo "  ✓ DockerFolders page found"
 fi
 
 if [ ! -f "${CONFIG_DIR}/data.db" ]; then
