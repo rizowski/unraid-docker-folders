@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.15-2">
-<!ENTITY md5 "5f1b8033384a9d5082aae559c49d8723">
+<!ENTITY version "2026.02.15-3">
+<!ENTITY md5 "62d4445dbb9a17af8701ad9b51a7ed0a">
 <!ENTITY launch "DockerFolders">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -178,7 +178,14 @@ echo "Migration completed successfully" >> "${LOG_FILE}"
 
 # Set proper permissions
 echo "Setting permissions..."
-chmod -R 755 "${PLUGIN_DIR}" 2>/dev/null || true
+find "${PLUGIN_DIR}" -type d -exec chmod 755 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.page" -exec chmod 644 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.php" -exec chmod 644 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.sql" -exec chmod 644 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.sh" -exec chmod 755 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.js" -exec chmod 644 {} \;
+find "${PLUGIN_DIR}" -type f -name "*.css" -exec chmod 644 {} \;
 
 if [ -f "${CONFIG_DIR}/data.db" ]; then
   chmod 644 "${CONFIG_DIR}/data.db"
@@ -189,7 +196,7 @@ fi
 echo "Verifying installation..."
 VERIFY_FAIL=0
 
-if [ ! -f "${PLUGIN_DIR}/pages/Settings.page" ]; then
+if [ ! -f "${PLUGIN_DIR}/Settings.page" ]; then
   echo "  ✗ Settings page not found."
   echo "WARNING: Settings page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
@@ -197,7 +204,7 @@ else
   echo "  ✓ Settings page found"
 fi
 
-if [ ! -f "${PLUGIN_DIR}/pages/DockerFolders.page" ]; then
+if [ ! -f "${PLUGIN_DIR}/DockerFolders.page" ]; then
   echo "  ✗ DockerFolders page not found."
   echo "WARNING: DockerFolders page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
@@ -205,7 +212,7 @@ else
   echo "  ✓ DockerFolders page found"
 fi
 
-if [ ! -f "${PLUGIN_DIR}/pages/DockerFoldersMain.page" ]; then
+if [ ! -f "${PLUGIN_DIR}/DockerFoldersMain.page" ]; then
   echo "  ✗ DockerFoldersMain page not found."
   echo "WARNING: DockerFoldersMain page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
@@ -243,7 +250,7 @@ echo "Installed files:" >> "${LOG_FILE}"
 ls -la "${PLUGIN_DIR}/" >> "${LOG_FILE}" 2>&1
 echo "" >> "${LOG_FILE}"
 echo "Page files:" >> "${LOG_FILE}"
-ls -la "${PLUGIN_DIR}/pages/" >> "${LOG_FILE}" 2>&1
+ls -la "${PLUGIN_DIR}"/*.page >> "${LOG_FILE}" 2>&1
 
 echo "Installation finished at $(date)" >> "${LOG_FILE}"
 
