@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border transition" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:brightness-[1.03] transition" :data-container-id="container.id">
     <div class="flex items-center gap-2 p-6 pb-0">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -21,14 +21,14 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-10 h-10 object-contain shrink-0" />
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-8 h-8 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
-      <h3 class="flex-1 text-lg font-semibold text-text truncate">{{ container.name }}</h3>
+      <h3 class="flex-1 text-base font-semibold text-text truncate">{{ container.name }}</h3>
     </div>
 
     <!-- Clickable summary row -->
     <div class="flex items-center gap-2 px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
-      <p class="flex-1 text-sm text-text-secondary font-mono truncate">
+      <p class="flex-1 text-xs text-text-secondary font-mono truncate">
         <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
         <span v-else>{{ container.image }}</span>
       </p>
@@ -48,6 +48,11 @@
       >
         <polyline points="6 9 12 15 18 9" />
       </svg>
+    </div>
+
+    <!-- Compact ports (collapsed) -->
+    <div v-if="compactPorts && !expanded" class="px-6 pb-0.5">
+      <span class="text-[11px] text-muted font-mono">Ports: {{ compactPorts }}</span>
     </div>
 
     <!-- Compact stats bars (always visible for running containers) -->
@@ -188,6 +193,7 @@
         </svg>
       </button>
       <button
+        v-if="isRunning"
         @click="confirmRestart"
         class="p-2 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
@@ -209,7 +215,7 @@
         </svg>
       </button>
       <button
-        v-if="container.state !== 'running'"
+        v-if="!isRunning"
         @click="confirmRemove"
         class="p-2 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
@@ -252,7 +258,7 @@
               :href="item.href"
               :target="item.target"
               rel="noopener"
-              class="flex items-center gap-2.5 px-3 py-2 text-sm text-text hover:bg-border/50 transition no-underline"
+              class="kebab-menu-item flex items-center gap-2.5 px-3 py-2 text-sm text-text transition no-underline"
               @click="closeMenu"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -267,7 +273,7 @@
   </div>
 
   <!-- List view -->
-  <div v-else class="rounded hover:bg-bg-card transition border-b border-border/50" :data-container-id="container.id">
+  <div v-else class="container-row rounded transition border-b border-border/50" :data-container-id="container.id">
     <div class="flex items-center gap-4 px-4 py-3">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -289,12 +295,12 @@
         <circle cx="15" cy="19" r="1" />
       </svg>
       <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-12 h-12 object-contain shrink-0" />
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-9 h-9 object-contain shrink-0" />
 
       <!-- Clickable name/image area toggles accordion -->
       <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
-        <span class="font-semibold text-text min-w-[140px]">{{ container.name }}</span>
-        <span class="text-sm text-text-secondary font-mono truncate">
+        <span class="text-sm font-semibold text-text min-w-[120px]">{{ container.name }}</span>
+        <span class="text-xs text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
@@ -315,6 +321,9 @@
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
+
+      <!-- Compact ports (list collapsed) -->
+      <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-muted font-mono">{{ compactPorts }}</span>
 
       <!-- Inline compact stats (list view) -->
       <div v-if="isRunning && containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
@@ -372,6 +381,7 @@
           </svg>
         </button>
         <button
+          v-if="isRunning"
           @click="confirmRestart"
           class="p-1.5 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
@@ -383,7 +393,7 @@
           </svg>
         </button>
         <button
-          v-if="container.state !== 'running'"
+          v-if="!isRunning"
           @click="confirmRemove"
           class="p-1.5 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
@@ -410,7 +420,7 @@
                 :href="item.href"
                 :target="item.target"
                 rel="noopener"
-                class="flex items-center gap-2.5 px-3 py-2 text-sm text-text hover:bg-border/50 transition no-underline"
+                class="kebab-menu-item flex items-center gap-2.5 px-3 py-2 text-sm text-text transition no-underline"
                 @click="closeMenu"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -764,6 +774,16 @@ const displayPorts = computed(() => {
     }
     return `${p.PrivatePort}/${p.Type}`;
   });
+});
+
+const compactPorts = computed(() => {
+  const ports = props.container.ports;
+  if (!ports?.length) return '';
+  return ports
+    .filter((p) => p.PublicPort)
+    .slice(0, 3)
+    .map((p) => String(p.PublicPort))
+    .join(', ');
 });
 
 const displayMounts = computed(() => {
