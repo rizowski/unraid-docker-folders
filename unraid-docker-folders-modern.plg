@@ -2,9 +2,9 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.15">
-<!ENTITY md5 "f13cac9604b89e5c8f4ce66f28d0a6a7">
-<!ENTITY launch "Docker">
+<!ENTITY version "2026.02.15-2">
+<!ENTITY md5 "5f1b8033384a9d5082aae559c49d8723">
+<!ENTITY launch "DockerFolders">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
 <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
@@ -203,6 +203,14 @@ if [ ! -f "${PLUGIN_DIR}/pages/DockerFolders.page" ]; then
   VERIFY_FAIL=1
 else
   echo "  ✓ DockerFolders page found"
+fi
+
+if [ ! -f "${PLUGIN_DIR}/pages/DockerFoldersMain.page" ]; then
+  echo "  ✗ DockerFoldersMain page not found."
+  echo "WARNING: DockerFoldersMain page not found" >> "${LOG_FILE}"
+  VERIFY_FAIL=1
+else
+  echo "  ✓ DockerFoldersMain page found"
 fi
 
 if [ ! -f "${CONFIG_DIR}/data.db" ]; then
