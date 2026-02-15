@@ -1,87 +1,66 @@
-# Unraid Docker Modern
+# Unraid Docker Folders Modern
 
-A modern Unraid plugin that redesigns the Docker tab with real-time updates, improved organization, and a clean interface.
+A modern Unraid plugin that adds folder organization to the Docker tab with real-time updates and a clean Vue 3 interface. Replaces the outdated folderview2 plugin.
 
 ## Features
 
-- **Folder Organization**: Organize your Docker containers into customizable folders
-- **Real-Time Updates**: See container status changes instantly via WebSocket (no page reloads!)
-- **Modern UI**: Clean, responsive interface built with Vue 3
-- **Drag & Drop**: Easily organize containers by dragging them into folders
-- **Import/Export**: Backup and share your folder configurations
-- **Better Performance**: SQLite database for fast queries and reliable data storage
-
-## Why This Plugin?
-
-This plugin is a modern replacement for the outdated folderview2 plugin, addressing key pain points:
-
-- ✅ **Real-time updates** instead of page reloads
-- ✅ **Modern UI/UX** with smooth animations and responsive design
-- ✅ **Reliable data storage** using SQLite instead of flat JSON files
-- ✅ **Better organization** with upcoming search, filtering, and bulk operations
+- **Folder Organization**: Group Docker containers into customizable folders with icons and colors
+- **Real-Time Updates**: WebSocket integration via Unraid's nchan server - all open tabs update instantly
+- **Drag & Drop**: Organize containers by dragging them between folders (SortableJS)
+- **Container Actions**: Start, stop, restart, and remove containers directly from the folder view
+- **Import/Export**: Backup and share folder configurations as JSON
+- **Polling Fallback**: 30-second polling catches external changes (CLI, Portainer, etc.)
+- **CSRF Integration**: Properly authenticated against Unraid's webGUI security
 
 ## Technology Stack
 
-- **Frontend**: Vue 3 + TypeScript + Vite
-- **Backend**: PHP 8.0+
-- **Database**: SQLite
-- **Real-time**: nchan WebSocket
-- **State Management**: Pinia
+- **Frontend**: Vue 3 + TypeScript + Vite + Pinia
+- **Backend**: PHP 8.0+ with SQLite3
+- **Real-time**: nchan WebSocket pub/sub
+- **Drag & Drop**: SortableJS
 
 ## Installation
-
-### Via Community Applications (Recommended)
-*Coming soon - Plugin will be available in Community Applications after v1.0 release*
 
 ### Manual Installation
 
 1. Download the latest `.plg` file from [Releases](https://github.com/rizowski/unraid-docker-folders/releases)
-2. Install via Unraid's plugin installer:
-   - Navigate to **Plugins** → **Install Plugin**
-   - Paste the URL to the `.plg` file
-   - Click **Install**
+2. Navigate to **Plugins** > **Install Plugin** in Unraid
+3. Paste the URL to the `.plg` file and click **Install**
+4. The "Folders" tab appears under **Docker** in the Unraid menu
 
-## Development
+### Build from Source
 
-See [DEVELOPMENT.md](docs/DEVELOPMENT.md) for setup instructions and contribution guidelines.
+```bash
+# Frontend build
+cd src/frontend && npm ci && npm run build
 
-## Documentation
+# Release build (auto-increments version, tags, pushes)
+./build/build.sh --release
 
-- [User Guide](docs/USER_GUIDE.md) - How to use the plugin
-- [API Documentation](docs/API.md) - API endpoints reference
-- [Migration Guide](docs/MIGRATION.md) - Migrating from folderview2
+# Output: archive/unraid-docker-folders-modern-<version>.txz
+```
+
+After release build, manually create a GitHub release and upload the `.txz` file.
 
 ## Roadmap
 
-### Phase 1: Core Infrastructure ✅ (In Progress)
-- Basic Docker container display
-- Plugin installer
-- Database setup
+### Phase 1: Core Infrastructure - COMPLETE
+- Docker container display, plugin installer, database setup, build system
 
-### Phase 2: Folder Management (Planned)
-- Create, edit, delete folders
-- Drag & drop organization
-- Import/export configurations
+### Phase 2: Folder Management - COMPLETE
+- Folder CRUD, drag-and-drop, container assignment, import/export, menu integration
 
-### Phase 3: Real-Time Updates (Planned)
-- WebSocket integration
-- Live container status updates
-- Multi-tab synchronization
+### Phase 3: Real-Time Updates - COMPLETE (code written, pending on-device testing)
+- WebSocket publisher (nchan), frontend composable with reconnection, connection status indicator, polling fallback, CSRF token handling, container remove action
 
 ### Phase 4: UI/UX Polish (Planned)
-- Modern, accessible design
-- Dark/light theme support
-- Mobile responsive layout
+- Dark/light theme, responsive design, animations, loading skeletons
 
 ### Phase 5: Testing & Release (Planned)
-- Comprehensive testing
-- Performance optimization
-- v1.0 release
+- Unit tests, integration tests, documentation, v1.0 release
 
-### Future Features
-- Advanced filtering & search
-- Container statistics & insights
-- Bulk operations
+### Future
+- Container update detection, CPU/memory stats, port/volume display, search & filtering
 
 ## Support
 
@@ -96,12 +75,4 @@ MIT License - See [LICENSE](LICENSE) for details
 
 Developed by [rizowski](https://github.com/rizowski)
 
-Inspired by and improving upon [folderview2](https://github.com/VladoPortos/folder.view2) by VladoPortos
-
-## Contributing
-
-Contributions are welcome! Please see [DEVELOPMENT.md](docs/DEVELOPMENT.md) for guidelines.
-
----
-
-**Note**: This plugin is currently in active development. Phase 1 is in progress.
+Inspired by [folderview2](https://github.com/VladoPortos/folder.view2) by VladoPortos

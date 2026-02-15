@@ -1,87 +1,50 @@
-# Current Issue - Page Rendering RESOLVED
+# Current Issue - CSRF Token Fix Applied
 
 **Date**: 2026-02-15
-**Previous Status**: BLOCKED
-**Current Status**: FIX APPLIED - Awaiting rebuild and test
+**Status**: Fix applied, pending on-device testing
 
 ---
 
-## Root Cause Found
+## Issue
 
-**The `.page` file was named `Docker.page`, which collides with Unraid's built-in `Docker.page`.**
+POST/PUT/DELETE requests to the API returned empty responses, causing:
+```
+Error: Failed to execute 'json' on 'Response': Unexpected end of JSON input
+```
 
-Unraid's `PageBuilder.php` indexes pages by filename (without `.page` extension) in a `$site` array. Our `Docker.page` was overwriting the built-in Docker xmenu page, which:
-1. Broke the entire Docker menu (our page had `Type="php"` instead of `Type="xmenu"`)
-2. Prevented any sub-pages from rendering under Docker since the xmenu parent was replaced
+Unraid syslog showed:
+```
+error: /plugins/unraid-docker-folders-modern/api/folders.php - missing csrf_token
+```
 
-Additionally, several header attributes were wrong:
-- `Icon="folder"` should be `Tag="folder"` for tab pages (Icon is for Settings panels)
-- Missing `Cond=` attribute (should only show when Docker is running)
-- Missing `Markdown="false"` attribute
-- No rank number in `Menu="Docker"` (should be `Menu="Docker:3"`)
+## Root Cause
+
+Unraid's webGUI (emhttpd) requires a `csrf_token` parameter on all state-changing HTTP requests. Without it, the request is rejected at the web server level with an empty response body - before PHP even runs.
+
+The frontend runs inside an iframe, so it has no access to the parent page's CSRF token unless explicitly passed.
 
 ## Fix Applied
 
-### DockerFolders.page (renamed from Docker.page)
-```
-Menu="Docker:3"
-Title="Folders"
-Tag="folder"
-Cond="is_file('/var/run/dockerd.pid')"
-Markdown="false"
-```
+1. **`DockerFoldersMain.page`** - Reads CSRF token from PHP session, passes to iframe via query parameter:
+   ```php
+   $csrfToken = getCsrfToken();
+   // ...
+   <iframe src="...index.html?csrf_token=<?= urlencode($csrfToken) ?>">
+   ```
 
-This will appear as a "Folders" tab in the Docker menu, after the existing Docker tabs.
+2. **`src/frontend/src/utils/csrf.ts`** - New utility that reads the token from `window.location.search` and provides `withCsrf(url)` to append it to any URL.
 
-### Settings.page
-```
-Menu="OtherSettings"
-Title="Docker Folders Modern"
-Icon="folder"
-Tag="folder"
-Markdown="false"
-```
+3. **`stores/docker.ts`** and **`stores/folders.ts`** - All POST/PUT/DELETE fetch calls wrapped with `withCsrf()`.
 
-Changed from `Menu="Utilities"` to `Menu="OtherSettings"` and added `Tag` attribute.
+## Previous Issues (Resolved)
 
-## Key Learnings About Unraid .page Files
+- **Page rendering blank**: `Docker.page` filename collided with Unraid's built-in page. Renamed to `DockerFoldersMain.page`.
+- **PDOException catch**: `FolderManager.php` line 178 caught `PDOException` but codebase uses SQLite3 native. Changed to `Exception`.
 
-### How Unraid Parses .page Files
-- `PageBuilder.php` uses `parse_ini_string()` on the header section
-- Pages are indexed by filename: `Docker.page` -> `$site['Docker']`
-- **NEVER use a filename that matches a built-in page** (Docker, VMs, Main, Settings, etc.)
+## Verification Steps
 
-### Valid Attributes
-| Attribute | Purpose | Used By |
-|-----------|---------|---------|
-| `Menu` | Menu location (supports `Menu:rank` for ordering) | All pages |
-| `Title` | Display title | All pages |
-| `Type` | `xmenu` = top-level nav, `menu` = dropdown, `php` = content page | All pages |
-| `Tag` | FontAwesome icon for tabs/sub-pages | Sub-pages |
-| `Icon` | Icon for Settings panel pages | Settings pages |
-| `Code` | Unicode code point for sidebar icon (hex) | xmenu pages |
-| `Cond` | Conditional display expression | Optional |
-| `Markdown` | Enable/disable markdown processing | Optional |
-| `Tabs` | Enable tabbed interface | Optional |
-
-### Valid Menu Values
-- `Tasks` - Top-level header bar (used by Docker, VMs, etc.)
-- `Docker` - Sub-pages under Docker (as tabs)
-- `VMs` - Sub-pages under VMs
-- `Settings` - Settings menu
-- `OtherSettings` - Settings sub-category
-- `Utilities` - Utilities menu
-- `UserPreferences` - User preference pages
-
-## Next Steps
-
-1. Run `./build/build.sh --release` to build new package
-2. Create GitHub release, upload .txz
-3. Install on Unraid
-4. Verify "Folders" tab appears under Docker menu
-5. Verify Settings page renders under Settings > Other Settings
-6. If working, proceed to Phase 2 testing
-
-## Previous Investigation (Archived)
-
-See git history for the previous CURRENT_ISSUE.md content documenting the investigation process.
+1. Build and install: `./build/build.sh --release`
+2. Open Docker > Folders tab
+3. Click "+ Create Folder" - should create successfully (no more empty response error)
+4. Check Unraid syslog - should have no `missing csrf_token` errors
+5. Test all mutation operations: create/edit/delete folder, start/stop/restart/remove container

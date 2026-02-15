@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Unraid Docker Folders Modern** - A modern Unraid plugin to replace the outdated folderview2 plugin with Vue 3 frontend, real-time WebSocket updates, and SQLite persistence. Allows organizing Docker containers into folders with drag-and-drop.
 
-**Current Status**: Phase 1 complete, Phase 2 blocked on menu integration issue (see CURRENT_ISSUE.md)
+**Current Status**: Phases 1-3 code complete, pending on-device testing. See STATUS.md for details.
 
 ---
 
@@ -65,17 +65,20 @@ This is a **split frontend/backend architecture** with an unusual build output l
 ```
 src/frontend/              # Vue 3 application
   ├── src/
-  │   ├── components/
-  │   ├── stores/          # Pinia state management
-  │   └── types/           # TypeScript definitions
+  │   ├── components/      # Vue components (ConnectionStatus, ContainerCard, Folder*)
+  │   ├── composables/     # useWebSocket.ts
+  │   ├── stores/          # Pinia state management (docker.ts, folders.ts)
+  │   ├── types/           # TypeScript definitions (folder.ts, websocket.ts)
+  │   └── utils/           # csrf.ts
   └── vite.config.ts       # Build output: ../backend/.../assets/
 
 src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/
-  ├── api/                 # PHP REST endpoints
-  ├── classes/             # PHP business logic (Database, DockerClient, FolderManager)
+  ├── api/                 # PHP REST endpoints (containers.php, folders.php)
+  ├── classes/             # PHP business logic (Database, DockerClient, FolderManager, WebSocketPublisher)
   ├── include/             # config.php, auth.php
   ├── migrations/          # SQL migration files
-  ├── pages/               # Unraid .page files (DockerFolders.page, Settings.page)
+  ├── DockerFoldersMain.page      # Menu="Docker:0" - Folders tab
+  ├── DockerFoldersSettings.page  # Menu="OtherSettings" - Settings
   └── assets/              # ← Frontend build output goes here
 ```
 
@@ -202,15 +205,19 @@ Key="Value"
 
 ---
 
-## Real-Time Updates (Phase 3 - Planned)
+## Real-Time Updates (Phase 3 - Implemented)
 
-**Architecture** (not yet implemented):
-1. Unraid Docker events trigger hooks in `events/` directory
-2. Event scripts call `api/events.php`
-3. PHP publishes to nchan WebSocket (`http://localhost:4433/pub/docker-modern`)
-4. Frontend subscribes to `/sub/docker-modern`
-5. Vue composable `useWebSocket.ts` updates Pinia stores
-6. UI updates reactively
+**Architecture** (code complete, pending on-device testing):
+1. PHP API endpoints publish events to nchan after each successful mutation
+2. `WebSocketPublisher.php` POSTs JSON to `NCHAN_PUB_URL` (fire-and-forget, 2s timeout)
+3. Frontend connects to `ws://<host>/sub/docker-modern` via `useWebSocket.ts` composable
+4. On event received, stores call `fetchContainers()` or `fetchFolders()` (full refetch, not patching)
+5. Exponential backoff reconnection (1s base, 30s max)
+6. 30s polling fallback catches external changes (CLI, Portainer, etc.)
+7. Fetch debounce (500ms) prevents redundant calls when UI action already refreshed
+8. `ConnectionStatus.vue` shows live/connecting/offline/error state in header
+
+**CSRF flow**: `.page` file passes token to iframe via query param, `utils/csrf.ts` reads it, `withCsrf()` appends to all POST/PUT/DELETE URLs.
 
 **nchan integration**: Unraid has built-in nchan server for pub/sub.
 
@@ -301,12 +308,16 @@ Key="Value"
 
 ## Next Steps for Development
 
-**Immediate priority**: Rebuild, install, and verify .page fix works
+**Immediate priority**: Build, install, and verify Phase 2-3 features on Unraid
 1. Run `./build/build.sh --release`
 2. Create GitHub release, upload .txz
-3. Install on Unraid and verify Folders tab appears under Docker
-4. Proceed to Phase 2 testing
+3. Install on Unraid and verify:
+   - Folders tab appears under Docker
+   - CSRF fix works (create/edit/delete folder)
+   - WebSocket connects to `/sub/docker-modern`
+   - Multi-tab sync works
+   - Container remove action works
 
-**After verifying**: Complete Phase 2 testing, then proceed to Phase 3 (WebSocket real-time updates).
+**After verifying**: Proceed to Phase 4 (UI/UX polish).
 
-**See**: STATUS.md for complete phase breakdown and CURRENT_ISSUE.md for detailed blocker analysis.
+**See**: STATUS.md for complete phase breakdown, CURRENT_ISSUE.md for CSRF fix details.

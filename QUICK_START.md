@@ -1,139 +1,96 @@
 # Quick Start - Resuming Development
 
-**Last Session**: 2026-02-14
-**Current Version**: v2026.02.14-11
-**Status**: Blocked on page rendering issue
+**Last Session**: 2026-02-15
+**Status**: Phase 3 code complete, pending on-device testing
 
 ---
 
-## TL;DR - Where We're At
+## TL;DR
 
-✅ **What's Done**: Phase 1 complete, Phase 2 code complete
-❌ **Blocker**: `.page` files don't render (blank pages)
-💡 **Theory**: Unraid doesn't support `Menu="Docker"` sub-routes
-🎯 **Next**: Test top-level menu or find working example
-
----
-
-## Current Blocker
-
-**Problem**: `/Docker/Folders` shows blank page (only Unraid header/footer)
-
-**Direct URL works**: `/plugins/unraid-docker-folders-modern/assets/index.html` ✅
-
-**Suspect**: Using `Menu="Docker"` to add sub-menu under Docker doesn't work. Need top-level menu instead.
+- Phases 1-3 code is complete and builds cleanly
+- CSRF token fix applied (was causing all POST/PUT/DELETE to fail)
+- WebSocket real-time updates implemented (nchan pub/sub)
+- Container remove action added to UI
+- **Next**: Build, install on Unraid, verify everything works
 
 ---
 
-## Quick Test to Try
-
-### Option 1: Top-Level Menu (Most Likely Fix)
-
-Edit `src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/pages/Docker.page`:
-
-```diff
--Menu="Docker"
--Title="Folders"
-+Menu="DockerFolders"
-+Title="Docker Folders"
- Icon="folder"
- Type="php"
-```
-
-Then build and test:
-```bash
-./build/build.sh --release
-# Install on Unraid and check if menu appears
-```
-
-### Option 2: Research First
-
-On Unraid system:
-```bash
-# Find working plugins' .page files
-find /usr/local/emhttp/plugins -name "*.page" -type f
-
-# Check what Menu values they use
-grep "^Menu=" /usr/local/emhttp/plugins/*/*.page
-```
-
-Study a working example and copy its approach.
-
----
-
-## File Structure
-
-```
-/Users/rizowski/git/personal/unraid-docker/
-├── STATUS.md              ← Full project status, phases, architecture
-├── CURRENT_ISSUE.md       ← Detailed analysis of current blocker
-├── QUICK_START.md         ← This file
-├── src/
-│   ├── frontend/          ← Vue 3 app (working)
-│   └── backend/.../pages/ ← .page files (broken)
-├── build/build.sh         ← Run this to build
-└── archive/               ← Built .txz packages
-```
-
----
-
-## Build & Release
+## Immediate Next Steps
 
 ```bash
-# Development build
-./build/build.sh
-
-# Release build (auto-increments, tags, pushes)
+# 1. Build release
 ./build/build.sh --release
 
-# Creates: archive/unraid-docker-folders-modern-<version>.txz
-# Updates: unraid-docker-folders-modern.plg (version & MD5)
-# Creates: Git tag and pushes to GitHub
-```
+# 2. Create GitHub release, upload .txz from archive/
 
-Then manually create GitHub release and upload .txz:
-https://github.com/rizowski/unraid-docker-folders/releases
+# 3. Install on Unraid and test:
+#    - Create a folder (verifies CSRF fix)
+#    - Start/stop a container
+#    - Check for WebSocket connection in browser DevTools
+#    - Open two tabs, action in one should update the other
+```
 
 ---
 
 ## What's Working
 
-- ✅ Vue 3 frontend builds successfully
-- ✅ Frontend works when accessed directly
-- ✅ Backend API endpoints implemented
-- ✅ Database schema and migrations work
-- ✅ Build system fully automated
-- ✅ PLG installer works
-- ✅ Plugin installs without errors
+- Vue 3 frontend builds and type-checks cleanly
+- "Folders" tab under Docker menu (DockerFoldersMain.page)
+- Settings page under Other Settings
+- Container listing via Docker socket API
+- Folder CRUD with SQLite persistence
+- Drag-and-drop container organization
+- Import/export folder configurations
+- CSRF token passed from .page to iframe to all API requests
+- WebSocket publisher (PHP) and subscriber (Vue composable)
+- Connection status indicator in UI header
+- Container remove action with confirmation dialog
+- Fetch debounce (500ms) to prevent redundant API calls
+- 30s polling fallback for external changes
+
+## What Needs Testing
+
+- CSRF token flow end-to-end (create/edit/delete folder)
+- WebSocket connection to nchan (`/sub/docker-modern`)
+- Multi-tab synchronization via WebSocket events
+- Container remove from UI
+- Polling fallback (change via native Docker tab, verify Folders updates)
+- nchan channel availability (may need Unraid-side configuration)
 
 ---
 
-## What's Not Working
+## Key Files Changed (Phase 3)
 
-- ❌ Menu integration (blank pages)
-- ❌ Can't test Phase 2 features until this is fixed
+### Backend
+| File | Change |
+|------|--------|
+| `classes/WebSocketPublisher.php` | NEW - nchan publisher |
+| `classes/FolderManager.php` | FIX - PDOException -> Exception |
+| `api/containers.php` | ADD - publish calls after actions |
+| `api/folders.php` | ADD - publish calls after mutations |
+| `DockerFoldersMain.page` | FIX - passes CSRF token to iframe |
+
+### Frontend
+| File | Change |
+|------|--------|
+| `utils/csrf.ts` | NEW - CSRF token utility |
+| `types/websocket.ts` | NEW - WebSocket event types |
+| `composables/useWebSocket.ts` | NEW - WebSocket manager |
+| `components/ConnectionStatus.vue` | NEW - status indicator |
+| `stores/docker.ts` | ADD - removeContainer, debounce, CSRF |
+| `stores/folders.ts` | ADD - debounce, CSRF |
+| `components/docker/ContainerCard.vue` | ADD - Remove button |
+| `components/folders/FolderContainer.vue` | ADD - remove handler |
+| `App.vue` | ADD - WebSocket init, status indicator, remove handler |
 
 ---
 
 ## Documentation
 
-- **STATUS.md**: Read this for complete overview
-- **CURRENT_ISSUE.md**: Read this for detailed blocker analysis
-- **QUICK_START.md**: This file (high-level summary)
-
----
-
-## When This is Fixed
-
-Once pages render, immediate tasks:
-
-1. Test folder creation
-2. Test drag-and-drop
-3. Test container assignment
-4. Test export/import
-5. Complete Phase 2 checklist
-
-Then move to Phase 3 (WebSocket real-time updates).
+- **CLAUDE.md** - Complete development reference (architecture, build, conventions)
+- **STATUS.md** - Phase-by-phase project status
+- **CURRENT_ISSUE.md** - Current issue details (CSRF fix)
+- **QUICK_START.md** - This file
 
 ---
 
@@ -143,19 +100,15 @@ Then move to Phase 3 (WebSocket real-time updates).
 # Build release
 ./build/build.sh --release
 
-# Check current version in PLG
-grep "<!ENTITY version" unraid-docker-folders-modern.plg
+# Frontend only (type-check + build)
+cd src/frontend && npm run build
 
-# View git tags
-git tag -l
+# Type-check only
+cd src/frontend && npm run type-check
 
-# Start frontend dev server (for testing Vue app in isolation)
+# Dev server (localhost:5173)
 cd src/frontend && npm run dev
 
-# View built archives
-ls -lh archive/
+# Check version in PLG
+grep "<!ENTITY version" unraid-docker-folders-modern.plg
 ```
-
----
-
-**Don't forget**: The frontend works perfectly when accessed directly. This is purely a menu integration issue. The actual application logic is complete and ready to test.
