@@ -1,6 +1,6 @@
 <?php
 /**
- * Unraid Docker Modern - Configuration
+ * Unraid Docker Folders - Configuration
  *
  * @package UnraidDockerModern
  */

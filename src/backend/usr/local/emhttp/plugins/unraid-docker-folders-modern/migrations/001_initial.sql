@@ -1,4 +1,4 @@
--- Unraid Docker Modern - Initial Database Schema
+-- Unraid Docker Folders - Initial Database Schema
 -- Migration 001: Create core tables for folder management
 
 -- Folders table

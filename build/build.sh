@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Unraid Docker Modern - Build Script
+# Unraid Docker Folders - Build Script
 #
 # Builds the frontend and packages the plugin into a .txz archive
 #

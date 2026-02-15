@@ -1,4 +1,4 @@
-/* CSS Reset and Base Styles for Unraid Docker Modern */
+/* CSS Reset and Base Styles for Unraid Docker Folders */
 
 *,
 *::before,
@@ -29,8 +29,7 @@
   --spacing-xl: 32px;
 
   /* Typography */
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
   --font-size-xs: 12px;
   --font-size-sm: 14px;
   --font-size-md: 16px;
