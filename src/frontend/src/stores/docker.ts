@@ -14,6 +14,8 @@ export interface Container {
   state: string;
   status: string;
   icon: string | null;
+  managed: string | null;
+  webui: string | null;
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
