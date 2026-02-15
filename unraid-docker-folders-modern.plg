@@ -13,29 +13,35 @@
 <PLUGIN name="&name;" author="&author;" version="&version;"
         launch="&launch;" pluginURL="&pluginURL;"
         support="https://github.com/&github;/issues"
+        project="https://github.com/&github;"
+        icon="folder"
         min="7.0.0">
 
 <CHANGES>
+**Docker Folders Modern** — Organize your Docker containers into drag-and-drop folders with a modern Vue 3 interface, live resource stats, and real-time updates.
+
+###2026.02.15
+- Auto-group Docker Compose stacks into folders
+- Live container resource stats (CPU, memory, network, I/O, PIDs)
+- Toggle stats polling on/off from plugin settings
+- Real-time updates via WebSocket (nchan)
+- Connection status indicator
+
 ###2026.02.14
-- Phase 2: Folder organization with drag-and-drop
+- Folder organization with drag-and-drop
 - Create, edit, and delete folders with custom icons and colors
-- Drag-and-drop containers between folders
-- Reorder containers within folders
+- Drag containers between folders and reorder within
 - Import/export folder configuration
+- Grid and list view modes with drag lock toggle
+- Health status distinction (green vs blue indicators)
 - Persistent folder state (collapsed/expanded)
-- Improved installation/uninstallation hooks
 - Automatic database backups on uninstall
 
-###Previous (Phase 1)
-- Basic Docker container listing with Vue 3 UI
-- SQLite database for folder management
-- Container start/stop/restart controls
-- Modern, responsive interface
-
-###Future
-- Phase 3: Real-time WebSocket updates
-- Phase 4: UI/UX polish and accessibility
-- Phase 5: Advanced features (search, filtering, bulk operations)
+###2026.02.13
+- Initial release
+- Docker container listing with start/stop/restart controls
+- SQLite database with automatic migrations
+- Modern responsive interface built with Vue 3 and Tailwind
 </CHANGES>
 
 <!--
