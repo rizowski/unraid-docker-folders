@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="border border-border/50 rounded-lg bg-bg-card hover:border-border transition" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border transition" :data-container-id="container.id">
     <div class="flex items-center gap-2 p-6 pb-0">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -24,22 +24,6 @@
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-10 h-10 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-lg font-semibold text-text truncate">{{ container.name }}</h3>
-      <a v-if="editUrl" :href="editUrl" class="shrink-0 text-text-secondary hover:text-text transition" title="Edit container" @click.stop>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      </a>
     </div>
 
     <!-- Clickable summary row -->
@@ -93,23 +77,34 @@
     </div>
 
     <!-- Accordion details -->
-    <div v-if="expanded" class="px-6 pb-2 space-y-1 text-sm border-t border-border pt-2">
-      <div v-if="networkInfo" class="flex gap-2 text-text-secondary font-mono">
-        <span class="text-muted shrink-0">Network</span>
-        <span class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
+    <div v-if="expanded" class="px-6 pb-2 space-y-3 text-sm border-t border-border pt-3">
+      <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+        <template v-if="container.image">
+          <span class="text-muted shrink-0">Image</span>
+          <span class="text-text-secondary font-mono truncate">
+            <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
+            <span v-else>{{ container.image }}</span>
+          </span>
+        </template>
+        <template v-if="networkInfo">
+          <span class="text-muted shrink-0">Network</span>
+          <span class="text-text-secondary font-mono truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
+        </template>
+        <template v-if="displayPorts.length">
+          <span class="text-muted shrink-0">Ports</span>
+          <span class="text-text-secondary font-mono truncate">{{ displayPorts.join(', ') }}</span>
+        </template>
+        <template v-if="displayMounts.length">
+          <span class="text-muted shrink-0">Volumes</span>
+          <div class="text-text-secondary font-mono space-y-0.5">
+            <p v-for="mount in displayMounts" :key="mount" class="truncate" :title="mount">{{ mount }}</p>
+          </div>
+        </template>
       </div>
-      <div v-if="displayPorts.length" class="space-y-0.5">
-        <p class="text-muted text-xs">Ports</p>
-        <p v-for="port in displayPorts" :key="port" class="text-text-secondary font-mono truncate pl-2">{{ port }}</p>
-      </div>
-      <div v-if="displayMounts.length" class="space-y-0.5">
-        <p class="text-muted text-xs">Volumes</p>
-        <p v-for="mount in displayMounts" :key="mount" class="text-text-secondary font-mono truncate pl-2" :title="mount">{{ mount }}</p>
-      </div>
-      <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
+      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
 
       <!-- Resource Usage Stats -->
-      <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
+      <div v-if="isRunning && containerStats" class="space-y-2 pt-2 border-t border-border">
         <p class="text-muted text-xs">Resource Usage</p>
         <!-- CPU Bar -->
         <div class="space-y-0.5">
@@ -144,7 +139,7 @@
           </div>
         </div>
         <!-- Numeric Stats -->
-        <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs pt-0.5">
+        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-1">
           <span class="text-muted">Block I/O</span>
           <span class="text-text-secondary font-mono"
             >Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span
@@ -163,11 +158,11 @@
           <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
         </div>
       </div>
-      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Loading stats...</div>
-      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Container not running</div>
+      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-2 border-t border-border">Loading stats...</div>
+      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-2 border-t border-border">Container not running</div>
     </div>
 
-    <div class="flex gap-1.5 px-6 pb-4 pt-2">
+    <div class="flex items-center gap-3 px-6 pb-4 pt-2 mt-auto border-t border-border/30">
       <button
         v-if="container.state === 'running'"
         @click="confirmStop"
@@ -235,6 +230,22 @@
           <line x1="14" y1="11" x2="14" y2="17" />
         </svg>
       </button>
+      <a v-if="editUrl" :href="editUrl" class="ml-auto shrink-0 text-text-secondary hover:text-text transition p-2" title="Edit container" @click.stop>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+      </a>
     </div>
   </div>
 
@@ -314,7 +325,7 @@
         </div>
       </div>
 
-      <div class="flex gap-0.5 ml-auto shrink-0 items-center">
+      <div class="flex gap-1.5 ml-auto shrink-0 items-center">
         <a v-if="editUrl" :href="editUrl" class="text-text-secondary hover:text-text transition p-1.5" title="Edit container">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -402,20 +413,31 @@
     </div>
 
     <!-- List accordion details -->
-    <div v-if="expanded" class="px-4 pb-3 pt-1 border-t border-border ml-[72px] space-y-1 text-sm">
-      <div v-if="networkInfo" class="flex gap-2 text-text-secondary font-mono">
-        <span class="text-muted shrink-0">Network</span>
-        <span class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
+    <div v-if="expanded" class="px-4 pb-4 pt-2 border-t border-border ml-[72px] space-y-3 text-sm">
+      <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+        <template v-if="container.image">
+          <span class="text-muted shrink-0">Image</span>
+          <span class="text-text-secondary font-mono truncate">
+            <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
+            <span v-else>{{ container.image }}</span>
+          </span>
+        </template>
+        <template v-if="networkInfo">
+          <span class="text-muted shrink-0">Network</span>
+          <span class="text-text-secondary font-mono truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
+        </template>
+        <template v-if="displayPorts.length">
+          <span class="text-muted shrink-0">Ports</span>
+          <span class="text-text-secondary font-mono truncate">{{ displayPorts.join(', ') }}</span>
+        </template>
+        <template v-if="displayMounts.length">
+          <span class="text-muted shrink-0">Volumes</span>
+          <div class="text-text-secondary font-mono space-y-0.5">
+            <p v-for="mount in displayMounts" :key="mount" class="truncate" :title="mount">{{ mount }}</p>
+          </div>
+        </template>
       </div>
-      <div v-if="displayPorts.length" class="space-y-0.5">
-        <p class="text-muted text-xs">Ports</p>
-        <p v-for="port in displayPorts" :key="port" class="text-text-secondary font-mono truncate pl-2">{{ port }}</p>
-      </div>
-      <div v-if="displayMounts.length" class="space-y-0.5">
-        <p class="text-muted text-xs">Volumes</p>
-        <p v-for="mount in displayMounts" :key="mount" class="text-text-secondary font-mono truncate pl-2" :title="mount">{{ mount }}</p>
-      </div>
-      <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
+      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
 
       <!-- Resource Usage Stats (list view) -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
@@ -453,7 +475,7 @@
           </div>
         </div>
         <!-- Numeric Stats -->
-        <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs pt-0.5">
+        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-0.5">
           <span class="text-muted">Block I/O</span>
           <span class="text-text-secondary font-mono"
             >Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span
@@ -472,8 +494,8 @@
           <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
         </div>
       </div>
-      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Loading stats...</div>
-      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Container not running</div>
+      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-2 border-t border-border">Loading stats...</div>
+      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-2 border-t border-border">Container not running</div>
     </div>
   </div>
 </template>
