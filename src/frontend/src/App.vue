@@ -1,5 +1,5 @@
 <template>
-  <div id="unraid-docker-folders-modern" class="px-6 py-4 font-sans text-text">
+  <div id="unraid-docker-folders-modern" class="unapi px-6 py-4 font-sans text-text">
     <header class="flex justify-between items-center mb-8 pb-6 border-b-2 border-border">
       <div class="flex items-baseline gap-4">
         <span class="text-sm text-text-secondary">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>

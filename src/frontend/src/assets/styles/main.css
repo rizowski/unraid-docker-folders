@@ -19,9 +19,99 @@
   --color-muted: #757575;
 }
 
-/* Override Unraid's global button border styles */
-#unraid-docker-folders-modern button.border-none {
-  border: none !important;
+/*
+ * Unraid CSS Reset
+ *
+ * Unraid's webgui sets html { font-size: 62.5% } (10px base) which breaks
+ * Tailwind's rem-based spacing/sizing (designed for 16px base). It also
+ * applies heavy global styles to button, input, p, a, and table elements.
+ *
+ * The "unapi" class on our root div opts out of Unraid's button/input
+ * styles (they use :where(:not(.unapi *)) selectors). This block handles
+ * the remaining conflicts.
+ */
+#unraid-docker-folders-modern {
+  /* Restore 16px base so Tailwind rem values work correctly.
+     Unraid sets html to 62.5% (10px), making 1rem = 10px instead of 16px.
+     This fixes text being too small, icons being too small, and
+     spacing/padding being compressed. */
+  font-size: 16px;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+/* Reset all elements inside our app to border-box */
+#unraid-docker-folders-modern *,
+#unraid-docker-folders-modern *::before,
+#unraid-docker-folders-modern *::after {
+  box-sizing: border-box;
+}
+
+/* Neutralize Unraid's button styles.
+   Even with .unapi, be explicit to beat any specificity edge cases. */
+#unraid-docker-folders-modern button {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Neutralize Unraid's input styles */
+#unraid-docker-folders-modern input,
+#unraid-docker-folders-modern select,
+#unraid-docker-folders-modern textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  border: none;
+  background: none;
+  min-height: 0;
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+
+/* Neutralize Unraid's p { text-align: justify } and p:empty { display: none } */
+#unraid-docker-folders-modern p {
+  text-align: left;
+  display: block;
+}
+
+/* Neutralize Unraid's link color override */
+#unraid-docker-folders-modern a {
+  color: inherit;
+  text-decoration: none;
+}
+
+#unraid-docker-folders-modern a:hover {
+  text-decoration: none;
+}
+
+/* Neutralize Unraid's table styles */
+#unraid-docker-folders-modern table {
+  width: auto;
+  background: none;
+}
+
+/* Ensure SVGs respect their explicit width/height attributes */
+#unraid-docker-folders-modern svg {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Ensure images don't get unexpected styles */
+#unraid-docker-folders-modern img {
+  border: none;
+  vertical-align: middle;
 }
 
 /* Drag and drop styles */
