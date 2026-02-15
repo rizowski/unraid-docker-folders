@@ -1,6 +1,7 @@
 Menu="Docker"
 Title="Folders"
-Icon="/plugins/unraid-docker-folders-modern/icon.png"
+Icon="folder"
+Type="php"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
