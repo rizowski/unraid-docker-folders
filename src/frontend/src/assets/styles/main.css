@@ -4,7 +4,7 @@
   --color-text: var(--text-color, #1a1a1a);
   --color-text-secondary: var(--text-color-secondary, #666666);
   --color-bg: var(--background-color, #f2f2f2);
-  --color-bg-card: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 5%);
+  --color-bg-card: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 3%);
   --color-border: var(--border-color, #e0e0e0);
   --color-primary: var(--header-background, #ff8c2f);
   --color-primary-text: var(--header-text-color, #ffffff);
@@ -48,8 +48,9 @@
 }
 
 /* Neutralize Unraid's button styles.
-   Even with .unapi, be explicit to beat any specificity edge cases. */
-#unraid-docker-folders-modern button {
+   Even with .unapi, be explicit to beat any specificity edge cases.
+   Excludes .nav-btn which should inherit Unraid's native look. */
+#unraid-docker-folders-modern button:not(.nav-btn) {
   font-family: inherit;
   font-size: inherit;
   font-weight: inherit;
@@ -63,6 +64,45 @@
   background: none;
   color: inherit;
   cursor: pointer;
+}
+
+/* Nav buttons: Unraid-native styling using Unraid's CSS variables */
+#unraid-docker-folders-modern button.nav-btn {
+  font-family: clear-sans, sans-serif;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  border: var(--button-border, 1px solid #e8e8e8);
+  border-radius: 4px;
+  color: var(--button-text-color, #303030);
+  background: var(--button-background, linear-gradient(#f0f0f0, #c8c8c8));
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+#unraid-docker-folders-modern button.nav-btn:hover {
+  color: var(--hover-button-text-color, #303030);
+  background: var(--hover-button-background, linear-gradient(#e0e0e0, #b0b0b0));
+}
+
+#unraid-docker-folders-modern button.nav-btn.active {
+  color: var(--header-text-color, #ffffff);
+  background: var(--header-background, #ff8c2f);
+  border-color: transparent;
+}
+
+#unraid-docker-folders-modern button.nav-btn.warning {
+  color: #ffffff;
+  background: #ff9800;
+  border-color: transparent;
 }
 
 /* Neutralize Unraid's input styles */

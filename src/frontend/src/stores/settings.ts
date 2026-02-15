@@ -10,7 +10,7 @@ const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 export const useSettingsStore = defineStore('settings', () => {
   const distinguishHealthy = ref(true);
-  const showStats = ref(false);
+  const showStats = ref(true);
   const loaded = ref(false);
 
   async function fetchSettings() {

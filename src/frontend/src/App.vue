@@ -6,11 +6,11 @@
         <ConnectionStatus />
       </div>
       <div class="flex gap-2 items-center">
-        <div class="flex overflow-hidden">
+        <div class="flex">
           <button
             @click="viewMode = 'grid'"
-            class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
-            :class="viewMode === 'grid' ? 'bg-primary text-primary-text' : 'bg-bg-card text-text hover:bg-border'"
+            class="nav-btn"
+            :class="{ active: viewMode === 'grid' }"
             title="Grid view"
           >
             <svg
@@ -32,8 +32,8 @@
           </button>
           <button
             @click="viewMode = 'list'"
-            class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
-            :class="viewMode === 'list' ? 'bg-primary text-primary-text' : 'bg-bg-card text-text hover:bg-border'"
+            class="nav-btn"
+            :class="{ active: viewMode === 'list' }"
             title="List view"
           >
             <svg
@@ -58,8 +58,8 @@
         </div>
         <button
           @click="dragLocked = !dragLocked"
-          class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
-          :class="dragLocked ? 'bg-warning text-white' : 'bg-bg-card text-text hover:bg-border'"
+          class="nav-btn"
+          :class="{ warning: dragLocked }"
           :title="dragLocked ? 'Unlock drag & drop' : 'Lock drag & drop'"
         >
           <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
@@ -67,7 +67,7 @@
         </button>
         <button
           @click="openCreateFolderModal"
-          class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors"
+          class="nav-btn active"
         >
           + Create Folder
         </button>

@@ -60,5 +60,5 @@ INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
     ('version', '1.0.0', strftime('%s', 'now')),
     ('default_view', 'folders', strftime('%s', 'now')),
     ('auto_collapse', '0', strftime('%s', 'now')),
-    ('show_stats', '0', strftime('%s', 'now')),
+    ('show_stats', '1', strftime('%s', 'now')),
     ('theme', 'auto', strftime('%s', 'now'));

@@ -335,7 +335,7 @@ const settings: Record<string, string> = {
   version: '1.0.0',
   default_view: 'folders',
   auto_collapse: '0',
-  show_stats: '0',
+  show_stats: '1',
   theme: 'auto',
   distinguish_healthy: '1',
 };

@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="border border-border rounded-lg bg-bg-card shadow-sm hover:shadow-md transition" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="border border-border/50 rounded-lg bg-bg-card hover:border-border transition" :data-container-id="container.id">
     <div class="flex items-center gap-2 p-6 pb-0">
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -239,7 +239,7 @@
   </div>
 
   <!-- List view -->
-  <div v-else class="bg-bg-card border border-border rounded hover:shadow-sm transition" :data-container-id="container.id">
+  <div v-else class="rounded hover:bg-bg-card transition border-b border-border/50" :data-container-id="container.id">
     <div class="flex items-center gap-4 px-4 py-3">
       <svg
         xmlns="http://www.w3.org/2000/svg"
