@@ -21,19 +21,6 @@
         </div>
 
         <div class="mb-6">
-          <label for="folder-icon" class="block mb-1 font-medium text-text">Icon (emoji)</label>
-          <input
-            id="folder-icon"
-            v-model="formData.icon"
-            type="text"
-            placeholder="📁"
-            class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-base font-[inherit] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-            maxlength="2"
-          />
-          <span class="block mt-1 text-sm text-text-secondary">Enter an emoji to use as the folder icon</span>
-        </div>
-
-        <div class="mb-6">
           <label for="folder-color" class="block mb-1 font-medium text-text">Color</label>
           <div class="flex gap-2 items-center">
             <input id="folder-color" v-model="formData.color" type="color" class="w-[60px] h-10 border border-input-border rounded cursor-pointer" />
@@ -48,6 +35,32 @@
           <span class="block mt-1 text-sm text-text-secondary">Choose a color for the folder's left border</span>
         </div>
 
+        <div v-if="availableContainers.length > 0" class="mb-6">
+          <label class="block mb-1 font-medium text-text">Add Containers</label>
+          <span class="block mb-2 text-sm text-text-secondary">Select unfoldered containers to add to this folder</span>
+          <div class="max-h-[200px] overflow-auto border border-input-border rounded bg-input-bg">
+            <label
+              v-for="container in availableContainers"
+              :key="container.id"
+              class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-border/30 transition-colors"
+              :class="{ 'bg-primary/10': selectedContainerIds.has(container.id) }"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedContainerIds.has(container.id)"
+                @change="toggleContainer(container.id)"
+                class="shrink-0"
+              />
+              <img v-if="container.icon" :src="container.icon" :alt="container.name" class="w-5 h-5 object-contain shrink-0" />
+              <span class="text-sm text-text">{{ container.name }}</span>
+              <span
+                class="ml-auto px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase"
+                :class="container.state === 'running' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+              >{{ container.state }}</span>
+            </label>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-2 pt-6 border-t border-border">
           <button type="button" @click="$emit('close')" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-border text-text hover:brightness-90 transition">Cancel</button>
           <button type="submit" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition disabled:opacity-50 disabled:cursor-not-allowed" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
@@ -59,6 +72,8 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+import { useDockerStore } from '@/stores/docker';
+import { useFolderStore } from '@/stores/folders';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -70,33 +85,56 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   close: [];
-  save: [data: FolderCreateData | FolderUpdateData];
+  save: [data: FolderCreateData | FolderUpdateData, containerIds: string[]];
 }>();
+
+const dockerStore = useDockerStore();
+const folderStore = useFolderStore();
 
 const isEditing = computed(() => !!props.folder);
 
 const formData = ref({
   name: '',
-  icon: '📁',
   color: '#ff8c2f',
 });
+
+const selectedContainerIds = ref<Set<string>>(new Set());
+
+const availableContainers = computed(() => {
+  const assignedIds = new Set<string>();
+  folderStore.folders.forEach((folder) => {
+    // When editing, don't exclude containers already in this folder
+    if (props.folder && folder.id === props.folder.id) return;
+    folder.containers.forEach((assoc) => assignedIds.add(assoc.container_id));
+  });
+  return dockerStore.sortedContainers.filter((c) => !assignedIds.has(c.id));
+});
+
+function toggleContainer(id: string) {
+  const next = new Set(selectedContainerIds.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  selectedContainerIds.value = next;
+}
 
 // Reset form when modal opens/closes or folder changes
 watch(
   () => [props.isOpen, props.folder],
   () => {
+    selectedContainerIds.value = new Set();
     if (props.isOpen && props.folder) {
       // Editing existing folder
       formData.value = {
         name: props.folder.name,
-        icon: props.folder.icon || '📁',
         color: props.folder.color || '#ff8c2f',
       };
     } else if (props.isOpen) {
       // Creating new folder
       formData.value = {
         name: '',
-        icon: '📁',
         color: '#ff8c2f',
       };
     }
@@ -109,6 +147,6 @@ function handleOverlayClick() {
 }
 
 function handleSubmit() {
-  emit('save', formData.value);
+  emit('save', formData.value, Array.from(selectedContainerIds.value));
 }
 </script>

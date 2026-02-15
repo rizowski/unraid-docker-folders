@@ -11,7 +11,14 @@
       >
         <span class="transition-transform">{{ folder.collapsed ? '▶' : '▼' }}</span>
       </button>
-      <span class="text-2xl" v-if="folder.icon">{{ folder.icon }}</span>
+      <div v-if="containerIcons.length > 0" class="grid shrink-0 gap-0.5" :class="containerIcons.length > 1 ? 'grid-cols-2 w-8 h-8' : 'grid-cols-1 w-8 h-8'">
+        <img
+          v-for="(icon, i) in containerIcons"
+          :key="i"
+          :src="icon"
+          class="w-full h-full object-contain rounded-sm"
+        />
+      </div>
       <h2 class="text-lg font-semibold text-text">{{ folder.name }}</h2>
       <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold">{{ folder.containers.length }}</span>
     </div>
@@ -27,17 +34,31 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useDockerStore } from '@/stores/docker';
 import type { Folder } from '@/types/folder';
 
 interface Props {
   folder: Folder;
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 defineEmits<{
   'toggle-collapse': [];
   edit: [];
   delete: [];
 }>();
+
+const dockerStore = useDockerStore();
+
+const containerIcons = computed(() => {
+  const icons: string[] = [];
+  for (const assoc of props.folder.containers) {
+    const container = dockerStore.containers.find((c) => c.id === assoc.container_id);
+    if (container?.icon) icons.push(container.icon);
+    if (icons.length >= 4) break;
+  }
+  return icons;
+});
 </script>

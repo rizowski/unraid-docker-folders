@@ -19,6 +19,11 @@
   --color-muted: #757575;
 }
 
+/* Override Unraid's global button border styles */
+#unraid-docker-folders-modern button.border-none {
+  border: none !important;
+}
+
 /* Drag and drop styles */
 .sortable-ghost {
   opacity: 0.4;

@@ -1,7 +1,8 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="border border-border rounded-lg p-6 bg-bg-card shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing select-none" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="border border-border rounded-lg p-6 bg-bg-card shadow-sm hover:shadow-md transition" :data-container-id="container.id">
     <div class="flex items-center gap-2 mb-2">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
       <img
         v-if="container.icon"
         :src="container.icon"
@@ -57,7 +58,8 @@
   </div>
 
   <!-- List view -->
-  <div v-else class="flex items-center gap-4 px-4 py-3 bg-bg-card border border-border rounded hover:shadow-sm transition cursor-grab active:cursor-grabbing select-none" :data-container-id="container.id">
+  <div v-else class="flex items-center gap-4 px-4 py-3 bg-bg-card border border-border rounded hover:shadow-sm transition" :data-container-id="container.id">
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
     <img
       v-if="container.icon"
       :src="container.icon"

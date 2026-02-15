@@ -6,14 +6,29 @@
         <ConnectionStatus />
       </div>
       <div class="flex gap-2 items-center">
-        <div class="flex border border-border rounded overflow-hidden">
+        <div class="flex overflow-hidden">
           <button
             @click="viewMode = 'grid'"
             class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
             :class="viewMode === 'grid' ? 'bg-primary text-primary-text' : 'bg-bg-card text-text hover:bg-border'"
             title="Grid view"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
           </button>
           <button
             @click="viewMode = 'list'"
@@ -21,10 +36,32 @@
             :class="viewMode === 'list' ? 'bg-primary text-primary-text' : 'bg-bg-card text-text hover:bg-border'"
             title="List view"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
           </button>
         </div>
-        <button @click="openCreateFolderModal" class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors">+ Create Folder</button>
+        <button
+          @click="openCreateFolderModal"
+          class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors"
+        >
+          + Create Folder
+        </button>
       </div>
     </header>
 
@@ -41,23 +78,38 @@
       <div v-else>
         <!-- Folders -->
         <div v-if="folderStore.sortedFolders.length > 0" class="mb-8">
-          <FolderContainer v-for="folder in folderStore.sortedFolders" :key="folder.id" :folder="folder" :view="viewMode" @edit="openEditFolderModal" @delete="deleteFolder" />
+          <FolderContainer
+            v-for="folder in folderStore.sortedFolders"
+            :key="folder.id"
+            :folder="folder"
+            :view="viewMode"
+
+            @edit="openEditFolderModal"
+            @delete="deleteFolder"
+          />
         </div>
 
         <!-- Unfoldered Containers -->
         <div v-if="dockerStore.unfolderedContainers.length > 0" class="mt-8">
           <div class="flex items-center gap-2 mb-6">
             <h2 class="text-2xl font-semibold text-text">Unfoldered Containers</h2>
-            <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{ dockerStore.unfolderedContainers.length }}</span>
+            <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{
+              dockerStore.unfolderedContainers.length
+            }}</span>
           </div>
 
-          <div class="container-list" :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4'" id="unfoldered-containers">
+          <div
+            class="container-list"
+            :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4'"
+            id="unfoldered-containers"
+          >
             <ContainerCard
               v-for="container in dockerStore.unfolderedContainers"
               :key="container.id"
               :container="container"
               :action-in-progress="actionInProgress === container.id"
               :view="viewMode"
+  
               @start="handleStart"
               @stop="handleStop"
               @restart="handleRestart"
@@ -111,8 +163,7 @@ onMounted(async () => {
   initWebSocket();
 });
 
-// Re-initialize drag-and-drop whenever folders or containers change,
-// since Vue re-renders the DOM and destroys the old Sortable bindings.
+// Re-initialize drag-and-drop whenever folders or containers change.
 watch(
   () => [folderStore.folders, dockerStore.containers],
   () => {
@@ -129,12 +180,15 @@ async function loadData() {
   }
 }
 
-function initializeDragAndDrop() {
-  // Destroy old instances to avoid duplicates
+function destroyDragAndDrop() {
   for (const instance of sortableInstances) {
     instance.destroy();
   }
   sortableInstances = [];
+}
+
+function initializeDragAndDrop() {
+  destroyDragAndDrop();
 
   // Make each folder's container list sortable
   document.querySelectorAll('.container-list[data-folder-id]').forEach((el) => {
@@ -143,6 +197,7 @@ function initializeDragAndDrop() {
     sortableInstances.push(
       new Sortable(el as HTMLElement, {
         group: 'containers',
+        handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {
           const containerId = evt.item.dataset.containerId;
@@ -167,6 +222,7 @@ function initializeDragAndDrop() {
     sortableInstances.push(
       new Sortable(unfolderedEl, {
         group: 'containers',
+        handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {
           const containerId = evt.item.dataset.containerId;
@@ -237,11 +293,23 @@ function closeModal() {
   editingFolder.value = null;
 }
 
-async function saveFolder(data: FolderCreateData | FolderUpdateData) {
+async function saveFolder(data: FolderCreateData | FolderUpdateData, containerIds: string[] = []) {
+  let folderId: number | null = null;
+
   if (editingFolder.value) {
     await folderStore.updateFolder(editingFolder.value.id, data as FolderUpdateData);
+    folderId = editingFolder.value.id;
   } else {
-    await folderStore.createFolder(data as FolderCreateData);
+    const folder = await folderStore.createFolder(data as FolderCreateData);
+    folderId = folder?.id ?? null;
+  }
+
+  if (folderId != null && containerIds.length > 0) {
+    for (const cid of containerIds) {
+      const name = dockerStore.getContainerById(cid)?.name || '';
+      await folderStore.addContainerToFolder(folderId, cid, name);
+    }
+    await folderStore.fetchFolders(true);
   }
 
   closeModal();
