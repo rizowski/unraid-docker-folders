@@ -8,87 +8,58 @@ require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/con
 
 // Check if database exists
 $dbExists = file_exists(DB_PATH);
-$dbError = null;
-
-if (!$dbExists) {
-    $dbError = "Database not initialized. Please reinstall the plugin.";
-}
 ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Docker Folders Modern</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-        }
+<style>
+.docker-folders-container {
+    margin: 0;
+    padding: 0;
+}
 
-        .error-container {
-            max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            border-left: 4px solid #f44336;
-        }
+.docker-folders-container iframe {
+    width: 100%;
+    height: calc(100vh - 150px);
+    min-height: 600px;
+    border: none;
+    display: block;
+}
 
-        .error-container h2 {
-            margin: 0 0 15px 0;
-            color: #f44336;
-        }
+.error-box {
+    max-width: 600px;
+    margin: 50px auto;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-left: 4px solid #f44336;
+}
 
-        .error-container p {
-            margin: 10px 0;
-            color: #666;
-        }
+.error-box h2 {
+    margin: 0 0 15px 0;
+    color: #f44336;
+}
 
-        .error-container code {
-            background: #f5f5f5;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-        }
+.error-box p {
+    margin: 10px 0;
+    color: #666;
+}
 
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            margin-top: 15px;
-            background: #2196f3;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-            font-size: 14px;
-        }
+.error-box code {
+    background: #f5f5f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Courier New', monospace;
+}
+</style>
 
-        .btn:hover {
-            background: #1976d2;
-        }
-
-        iframe {
-            width: 100%;
-            height: calc(100vh - 40px);
-            border: none;
-            display: block;
-        }
-    </style>
-</head>
-<body>
-    <?php if ($dbError): ?>
-        <div class="error-container">
-            <h2>⚠️ Configuration Error</h2>
-            <p><?= htmlspecialchars($dbError) ?></p>
-            <p>Database path: <code><?= htmlspecialchars(DB_PATH) ?></code></p>
-            <a href="/Settings/PluginSettings" class="btn">Go to Plugin Settings</a>
-        </div>
-    <?php else: ?>
-        <iframe src="/plugins/<?= PLUGIN_NAME ?>/assets/index.html" title="Docker Folders Modern Interface"></iframe>
-    <?php endif; ?>
-</body>
-</html>
+<div class="docker-folders-container">
+<?php if (!$dbExists): ?>
+    <div class="error-box">
+        <h2>⚠️ Configuration Error</h2>
+        <p>Database not initialized. Please reinstall the plugin.</p>
+        <p>Database path: <code><?= htmlspecialchars(DB_PATH) ?></code></p>
+    </div>
+<?php else: ?>
+    <iframe src="/plugins/<?= PLUGIN_NAME ?>/assets/index.html" title="Docker Folders Modern Interface"></iframe>
+<?php endif; ?>
+</div>
