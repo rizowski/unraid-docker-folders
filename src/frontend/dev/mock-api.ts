@@ -24,7 +24,7 @@ const containers = [
       { Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.2' } },
-    labels: {},
+    labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/40463-support-linuxserverio-plex-media-server/' },
   },
   {
     id: 'bcd234efg567', name: 'sonarr', image: 'linuxserver/sonarr:latest', state: 'running',
@@ -37,7 +37,7 @@ const containers = [
       { Source: '/mnt/user/downloads', Destination: '/downloads', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.3' } },
-    labels: { 'com.docker.compose.project': 'media-stack' },
+    labels: { 'com.docker.compose.project': 'media-stack', 'net.unraid.docker.support': 'https://forums.unraid.net/topic/79530-support-linuxserverio-sonarr/', 'net.unraid.docker.shell': '/bin/bash' },
   },
   {
     id: 'cde345fgh678', name: 'radarr', image: 'linuxserver/radarr:latest', state: 'running',
@@ -106,7 +106,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 8123, PublicPort: 8123, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/homeassistant', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { host: { IPAddress: '' } },
-    labels: {},
+    labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/98822-support-home-assistant/', 'net.unraid.docker.project': 'https://www.home-assistant.io/' },
   },
   {
     id: 'jkl012mno345', name: 'grafana', image: 'grafana/grafana:latest', state: 'running',

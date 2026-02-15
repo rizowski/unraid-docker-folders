@@ -233,21 +233,36 @@
         </svg>
       </button>
       <a v-if="editUrl" :href="editUrl" class="ml-auto shrink-0 text-text-secondary hover:text-text transition p-2" title="Edit container" @click.stop>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
         </svg>
       </a>
+      <!-- Kebab menu -->
+      <div ref="menuRef" class="relative" :class="{ 'ml-auto': !editUrl }">
+        <button class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
+          </svg>
+        </button>
+        <div v-if="menuOpen" class="absolute right-0 bottom-full mb-1 bg-bg border border-border rounded-lg shadow-lg py-1 min-w-[160px] z-50">
+          <template v-for="item in menuItems" :key="item.label">
+            <a
+              v-if="item.show"
+              :href="item.href"
+              :target="item.target"
+              rel="noopener"
+              class="flex items-center gap-2.5 px-3 py-2 text-sm text-text hover:bg-border/50 transition no-underline"
+              @click="closeMenu"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path v-for="(d, i) in item.icon.split('|')" :key="i" :d="d" />
+              </svg>
+              {{ item.label }}
+            </a>
+          </template>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -329,17 +344,7 @@
 
       <div class="flex gap-1.5 ml-auto shrink-0 items-center">
         <a v-if="editUrl" :href="editUrl" class="text-text-secondary hover:text-text transition p-1.5" title="Edit container">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
             <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
@@ -372,17 +377,7 @@
           :disabled="actionInProgress"
           title="Restart"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1 4 1 10 7 10" />
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
           </svg>
@@ -394,23 +389,38 @@
           :disabled="actionInProgress"
           title="Remove"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6" />
             <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             <line x1="10" y1="11" x2="10" y2="17" />
             <line x1="14" y1="11" x2="14" y2="17" />
           </svg>
         </button>
+        <!-- Kebab menu -->
+        <div ref="menuRef" class="relative">
+          <button class="p-1.5 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+              <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
+            </svg>
+          </button>
+          <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-1 min-w-[160px] z-50">
+            <template v-for="item in menuItems" :key="item.label">
+              <a
+                v-if="item.show"
+                :href="item.href"
+                :target="item.target"
+                rel="noopener"
+                class="flex items-center gap-2.5 px-3 py-2 text-sm text-text hover:bg-border/50 transition no-underline"
+                @click="closeMenu"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path v-for="(d, i) in item.icon.split('|')" :key="i" :d="d" />
+                </svg>
+                {{ item.label }}
+              </a>
+            </template>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -513,6 +523,26 @@ import { useSettingsStore } from '@/stores/settings';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
+
+const menuOpen = ref(false);
+const menuRef = ref<HTMLElement | null>(null);
+
+function toggleMenu() {
+  menuOpen.value = !menuOpen.value;
+}
+
+function closeMenu() {
+  menuOpen.value = false;
+}
+
+function onClickOutside(e: MouseEvent) {
+  if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
+    menuOpen.value = false;
+  }
+}
+
+onMounted(() => document.addEventListener('click', onClickOutside, true));
+onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
 
 interface Props {
   container: Container;
@@ -654,6 +684,54 @@ const editUrl = computed(() => {
   if (props.container.managed !== 'dockerman') return null;
   return `/Docker/UpdateContainer?xmlTemplate=edit:/boot/config/plugins/dockerMan/templates-user/my-${props.container.name}.xml`;
 });
+
+const resolvedWebui = computed(() => {
+  const tpl = props.container.webui;
+  if (!tpl) return null;
+  let url = tpl;
+  // Replace [IP] with current hostname
+  url = url.replace('[IP]', window.location.hostname);
+  // Replace [PORT:xxxx] with the mapped public port
+  url = url.replace(/\[PORT:(\d+)\]/g, (_match, privatePort) => {
+    const pNum = parseInt(privatePort);
+    const mapped = props.container.ports?.find((p) => p.PrivatePort === pNum);
+    return mapped?.PublicPort ? String(mapped.PublicPort) : privatePort;
+  });
+  return url;
+});
+
+const consoleUrl = computed(() => {
+  const shell = props.container.labels?.['net.unraid.docker.shell'] || '/bin/bash';
+  return `/Docker/Terminal?container=${encodeURIComponent(props.container.name)}&cmd=${encodeURIComponent(shell)}`;
+});
+
+const logsUrl = computed(() => {
+  return `/Docker/Log?container=${encodeURIComponent(props.container.name)}`;
+});
+
+const supportUrl = computed(() => {
+  return props.container.labels?.['net.unraid.docker.support'] || null;
+});
+
+const projectUrl = computed(() => {
+  return props.container.labels?.['net.unraid.docker.project'] || null;
+});
+
+interface MenuItem {
+  label: string;
+  icon: string;
+  href: string;
+  target?: string;
+  show: boolean;
+}
+
+const menuItems = computed<MenuItem[]>(() => [
+  { label: 'WebUI', icon: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6|M15 3h6v6|M10 14 21 3', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
+  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value },
+  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', href: logsUrl.value, target: '_blank', show: true },
+  { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
+  { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
+]);
 
 const imageLink = computed(() => {
   const image = props.container.image;
