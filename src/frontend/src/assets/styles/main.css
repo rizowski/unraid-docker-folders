@@ -4,7 +4,7 @@
   --color-text: var(--text-color, #1a1a1a);
   --color-text-secondary: var(--text-color-secondary, #666666);
   --color-bg: var(--background-color, #f2f2f2);
-  --color-bg-card: var(--content-background, #ffffff);
+  --color-bg-card: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 5%);
   --color-border: var(--border-color, #e0e0e0);
   --color-primary: var(--header-background, #ff8c2f);
   --color-primary-text: var(--header-text-color, #ffffff);

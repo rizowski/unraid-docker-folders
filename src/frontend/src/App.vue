@@ -33,7 +33,7 @@
             <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{ dockerStore.unfolderedContainers.length }}</span>
           </div>
 
-          <div class="grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4" id="unfoldered-containers">
+          <div class="container-list grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4" id="unfoldered-containers">
             <ContainerCard
               v-for="container in dockerStore.unfolderedContainers"
               :key="container.id"
@@ -60,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { initWebSocket } from '@/composables/useWebSocket';
@@ -81,11 +81,24 @@ const editingFolder = ref<Folder | null>(null);
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
 
+// Track Sortable instances so we can destroy them before re-creating
+let sortableInstances: Sortable[] = [];
+
 onMounted(async () => {
   await loadData();
   initializeDragAndDrop();
   initWebSocket();
 });
+
+// Re-initialize drag-and-drop whenever folders or containers change,
+// since Vue re-renders the DOM and destroys the old Sortable bindings.
+watch(
+  () => [folderStore.folders, dockerStore.containers],
+  () => {
+    nextTick(() => initializeDragAndDrop());
+  },
+  { deep: true }
+);
 
 async function loadData() {
   try {
@@ -96,12 +109,17 @@ async function loadData() {
 }
 
 function initializeDragAndDrop() {
-  // Wait for next tick to ensure DOM is ready
-  setTimeout(() => {
-    // Make each folder's container list sortable
-    document.querySelectorAll('.container-list[data-folder-id]').forEach((el) => {
-      const folderId = parseInt((el as HTMLElement).dataset.folderId || '0');
+  // Destroy old instances to avoid duplicates
+  for (const instance of sortableInstances) {
+    instance.destroy();
+  }
+  sortableInstances = [];
 
+  // Make each folder's container list sortable
+  document.querySelectorAll('.container-list[data-folder-id]').forEach((el) => {
+    const folderId = parseInt((el as HTMLElement).dataset.folderId || '0');
+
+    sortableInstances.push(
       new Sortable(el as HTMLElement, {
         group: 'containers',
         animation: 150,
@@ -111,36 +129,35 @@ function initializeDragAndDrop() {
 
           if (containerId) {
             await folderStore.addContainerToFolder(folderId, containerId, containerName);
-            await folderStore.fetchFolders(); // Refresh to get updated positions
+            await folderStore.fetchFolders(true);
           }
         },
         onUpdate: async () => {
-          // Get new order of container IDs
           const containerIds = Array.from(el.children).map((child) => (child as HTMLElement).dataset.containerId || '');
-
           await folderStore.reorderContainers(folderId, containerIds);
         },
-      });
-    });
+      })
+    );
+  });
 
-    // Make unfoldered container list sortable
-    const unfolderedEl = document.getElementById('unfoldered-containers');
-    if (unfolderedEl) {
+  // Make unfoldered container list sortable
+  const unfolderedEl = document.getElementById('unfoldered-containers');
+  if (unfolderedEl) {
+    sortableInstances.push(
       new Sortable(unfolderedEl, {
         group: 'containers',
         animation: 150,
         onAdd: async (evt) => {
-          // Container was dropped into unfoldered area - remove from folder
           const containerId = evt.item.dataset.containerId;
 
           if (containerId) {
             await folderStore.removeContainerFromFolder(containerId);
-            await folderStore.fetchFolders();
+            await folderStore.fetchFolders(true);
           }
         },
-      });
-    }
-  }, 100);
+      })
+    );
+  }
 }
 
 async function handleStart(id: string) {
@@ -207,9 +224,6 @@ async function saveFolder(data: FolderCreateData | FolderUpdateData) {
   }
 
   closeModal();
-
-  // Re-initialize drag and drop for new folder
-  setTimeout(initializeDragAndDrop, 100);
 }
 
 async function deleteFolder(id: number) {

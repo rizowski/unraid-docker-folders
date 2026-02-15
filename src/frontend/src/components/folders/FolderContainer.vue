@@ -3,12 +3,7 @@
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
     <div v-if="!folder.collapsed" class="px-4">
-      <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary bg-bg border-2 border-dashed border-border rounded-lg mb-4">
-        <p>No containers in this folder</p>
-        <p class="text-sm italic">Drag containers here to organize them</p>
-      </div>
-
-      <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4 mb-4" :data-folder-id="folder.id">
+      <div class="container-list grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4 mb-4 min-h-[60px]" :data-folder-id="folder.id">
         <ContainerCard
           v-for="assoc in folderContainers"
           :key="assoc.container_id"
@@ -19,6 +14,10 @@
           @restart="handleRestart"
           @remove="handleRemove"
         />
+      </div>
+      <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
+        <p>No containers in this folder</p>
+        <p class="text-sm italic">Drag containers here to organize them</p>
       </div>
     </div>
   </div>

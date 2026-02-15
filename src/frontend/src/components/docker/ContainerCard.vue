@@ -1,5 +1,5 @@
 <template>
-  <div class="border border-border rounded-lg p-6 bg-bg-card shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing" :data-container-id="container.id">
+  <div class="border border-border rounded-lg p-6 bg-bg-card shadow-sm hover:shadow-md transition cursor-grab active:cursor-grabbing select-none" :data-container-id="container.id">
     <div class="flex items-center gap-2 mb-2">
       <img
         v-if="container.icon"
