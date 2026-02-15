@@ -1,35 +1,18 @@
 # Unraid Docker Folders Modern - Project Status
 
-**Last Updated**: 2026-02-14
+**Last Updated**: 2026-02-15
 **Current Version**: v2026.02.14-11
-**Current Phase**: Phase 2 (Blocked)
+**Current Phase**: Phase 2 (Fix applied, awaiting rebuild)
 
 ---
 
-## 🚨 CURRENT BLOCKER
+## FIX APPLIED - Page Rendering Issue
 
-**Problem**: Unraid .page files not rendering content - blank pages
+**Root cause**: `Docker.page` filename collided with Unraid's built-in `Docker.page`. The built-in page uses `Type="xmenu"` to create the Docker menu parent; our file was overwriting it with `Type="php"`, breaking the entire Docker menu.
 
-**What We Know**:
-- Direct asset URL works: `/plugins/unraid-docker-folders-modern/assets/index.html` ✅
-- Plugin appears in plugin list ✅
-- Menu items appear in Docker and Utilities menus ✅
-- BUT: `/Docker/Folders` shows completely blank page (only Unraid header/footer) ❌
-- BUT: `/Settings/Utilities/DockerFoldersModern` shows blank page ❌
-- PHP diagnostic output not visible (even HTML comments don't show)
+**Fix**: Renamed to `DockerFolders.page` with correct attributes (`Menu="Docker:3"`, `Tag="folder"`, `Cond=`). Settings.page updated to `Menu="OtherSettings"`.
 
-**Critical Discovery**: User observation that other plugins don't use sub-routes under existing menus like "Docker". Plugins that work use top-level menu items instead.
-
-**Hypothesis**: Unraid may not support adding pages under existing core menus (Docker, VMs, etc.). We may need to either:
-1. Create our own top-level menu item (like "Docker Folders")
-2. Override the entire Docker menu/tab
-3. Use a different integration approach
-
-**Next Steps to Investigate**:
-1. Check how other Unraid plugins integrate (look at plugins that successfully add menu items)
-2. Test with `Menu="DockerFolders"` (top-level) instead of `Menu="Docker"` (sub-menu)
-3. Check Unraid documentation on .page file Menu attribute behavior
-4. Possibly need to hook into Docker tab differently (JavaScript injection?)
+**Status**: Awaiting rebuild and test on Unraid. See CURRENT_ISSUE.md for full details.
 
 ---
 
@@ -230,9 +213,9 @@ migrations (id, filename, executed_at)
 │           │   └── 002_add_folder_tables.sql
 │           ├── scripts/
 │           │   └── migrate.php
-│           ├── pages/               # ⚠️ CURRENTLY BROKEN
-│           │   ├── Docker.page      # Menu="Docker" - blank page
-│           │   └── Settings.page    # Menu="Utilities" - blank page
+│           ├── pages/
+│           │   ├── DockerFolders.page  # Menu="Docker:3" - Folders tab
+│           │   └── Settings.page       # Menu="OtherSettings"
 │           ├── events/              # (planned for Phase 3)
 │           └── assets/              # Built frontend (from Vite)
 │
@@ -245,40 +228,29 @@ migrations (id, filename, executed_at)
 
 ---
 
-## 🔧 Current .page File Configuration
+## .page File Configuration
 
-### Docker.page (Menu="Docker")
+### DockerFolders.page (Menu="Docker:3")
 ```
-Menu="Docker"
+Menu="Docker:3"
 Title="Folders"
-Icon="folder"
-Type="php"
+Tag="folder"
+Cond="is_file('/var/run/dockerd.pid')"
+Markdown="false"
 ---
-<?php
-require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
-// ... diagnostic PHP code ...
-?>
-<style>...</style>
-<div class="docker-folders-test">
-  <!-- Diagnostic content -->
-  <iframe src="/plugins/unraid-docker-folders-modern/assets/index.html"></iframe>
-</div>
+<!-- iframe embedding Vue app -->
 ```
 
-### Settings.page (Menu="Utilities")
+### Settings.page (Menu="OtherSettings")
 ```
-Menu="Utilities"
+Menu="OtherSettings"
 Title="Docker Folders Modern"
 Icon="folder"
-Type="php"
+Tag="folder"
+Markdown="false"
 ---
-<?php
-require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
-?>
-<!-- Settings page content -->
+<!-- Settings/info page -->
 ```
-
-**Issue**: Neither page renders any content. Even HTML comments aren't visible in page source.
 
 ---
 

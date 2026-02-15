@@ -119,7 +119,12 @@ find "${BUILD_DIR}" -name ".DS_Store" -delete
 
 # Ensure proper permissions
 find "${BUILD_DIR}" -type f -name "*.php" -exec chmod 644 {} \;
+find "${BUILD_DIR}" -type f -name "*.page" -exec chmod 644 {} \;
 find "${BUILD_DIR}" -type f -name "*.sh" -exec chmod 755 {} \;
+find "${BUILD_DIR}" -type f -name "*.sql" -exec chmod 644 {} \;
+find "${BUILD_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
+find "${BUILD_DIR}" -type f -name "*.js" -exec chmod 644 {} \;
+find "${BUILD_DIR}" -type f -name "*.css" -exec chmod 644 {} \;
 find "${BUILD_DIR}" -type d -exec chmod 755 {} \;
 
 echo -e "${GREEN}✓${NC} Backend packaged"

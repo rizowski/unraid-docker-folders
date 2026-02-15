@@ -75,7 +75,7 @@ src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/
   ├── classes/             # PHP business logic (Database, DockerClient, FolderManager)
   ├── include/             # config.php, auth.php
   ├── migrations/          # SQL migration files
-  ├── pages/               # Unraid .page files (⚠️ currently broken)
+  ├── pages/               # Unraid .page files (DockerFolders.page, Settings.page)
   └── assets/              # ← Frontend build output goes here
 ```
 
@@ -101,34 +101,40 @@ Uses **SQLite3 native extension** (NOT PDO) because Unraid PHP lacks PDO SQLite 
 
 ### Unraid Plugin Integration
 
-**⚠️ CRITICAL BLOCKER**: `.page` files currently don't render (blank pages).
+**Page files** are how plugins add UI to Unraid's menu system. Key rules:
 
-**Hypothesis**: Unraid doesn't support sub-menu items under core menus like `Menu="Docker"`. Other plugins use top-level menus.
+1. **NEVER name a .page file the same as a built-in page** (Docker.page, VMs.page, Main.page, Settings.page, etc.) - filenames are used as unique keys in the `$site` array by `PageBuilder.php`
+2. Use `Tag=` for tab icons (not `Icon=`). `Icon=` is only for Settings panel pages
+3. Use `Menu="Docker:N"` with a rank number to add tabs under Docker
+4. Add `Cond="is_file('/var/run/dockerd.pid')"` so tabs only show when Docker is running
 
-**Current (broken) approach**:
+**Current configuration**:
+
+`DockerFolders.page` - Adds "Folders" tab under Docker menu:
 ```
-Menu="Docker"      # Trying to add sub-item under Docker menu
+Menu="Docker:3"
 Title="Folders"
+Tag="folder"
+Cond="is_file('/var/run/dockerd.pid')"
+Markdown="false"
 ```
 
-**Likely fix needed**:
+`Settings.page` - Adds settings page under Settings > Other:
 ```
-Menu="DockerFolders"   # Top-level menu instead
-Title="Docker Folders"
+Menu="OtherSettings"
+Title="Docker Folders Modern"
+Icon="folder"
+Tag="folder"
+Markdown="false"
 ```
 
-**What works**: Direct URL `/plugins/unraid-docker-folders-modern/assets/index.html` loads Vue app successfully.
+**Valid Menu values**: `Tasks`, `Docker`, `VMs`, `Settings`, `OtherSettings`, `Utilities`, `UserPreferences`
 
-**Page file format**:
+**Page file format** (INI header parsed by `parse_ini_string()`):
 ```
-Menu="<MenuName>"
-Title="<Page Title>"
-Icon="<FontAwesome icon name>"
-Type="php"
+Key="Value"
 ---
-<?php
-// PHP code
-?>
+<?php // PHP code ?>
 <!-- HTML content (fragment, not full document) -->
 ```
 
@@ -182,10 +188,8 @@ Type="php"
 
 ## Known Issues & Gotchas
 
-### Critical Blocker
-**.page files don't render** - See CURRENT_ISSUE.md for full analysis. Frontend code is complete but untestable via Unraid menu system.
-
 ### Resolved Issues
+- ✅ Page rendering blank (Docker.page filename collision with built-in - renamed to DockerFolders.page)
 - ✅ XML parse errors in PLG (fixed with CDATA)
 - ✅ SQLite driver unavailable (switched from PDO to SQLite3 native)
 - ✅ Icon display (use FontAwesome names, not file paths)
@@ -263,19 +267,21 @@ Type="php"
 3. Migration tracking in `migrations` table prevents re-execution
 
 ### When Modifying .page Files
-- Must include header with Menu, Title, Icon, Type
+- Header is INI format parsed by `parse_ini_string()` - must have `Key="Value"` pairs
 - Content after `---` separator is HTML fragment (not full document)
 - PHP code allowed before HTML
-- ⚠️ Currently broken - see CURRENT_ISSUE.md for investigation steps
+- **NEVER reuse a built-in page filename** (Docker.page, VMs.page, etc.)
+- Use `Tag=` for tab icons, `Icon=` for Settings panel icons
+- For fast debugging: SSH to Unraid, edit files in-place at `/usr/local/emhttp/plugins/...`, refresh browser
 
 ---
 
 ## Quick Reference
 
 ### Useful URLs (on Unraid)
-- Direct app: `http://<unraid>/plugins/unraid-docker-folders-modern/assets/index.html` ✅ Works
-- Docker menu: `http://<unraid>/Docker/Folders` ❌ Broken (blank)
-- Settings: `http://<unraid>/Settings/Utilities/DockerFoldersModern` ❌ Broken (blank)
+- Direct app: `http://<unraid>/plugins/unraid-docker-folders-modern/assets/index.html`
+- Docker Folders tab: `http://<unraid>/Docker/DockerFolders` (tab under Docker menu)
+- Settings: `http://<unraid>/Settings/DockerFoldersModern` (under Other Settings)
 
 ### Key Constants (config.php)
 - `PLUGIN_NAME`: `unraid-docker-folders-modern`
@@ -295,12 +301,12 @@ Type="php"
 
 ## Next Steps for Development
 
-**Immediate priority**: Resolve .page file rendering issue
-1. Research other Unraid plugins' .page file structure
-2. Test `Menu="DockerFolders"` (top-level) instead of `Menu="Docker"`
-3. Document working approach
-4. Unblock Phase 2 testing
+**Immediate priority**: Rebuild, install, and verify .page fix works
+1. Run `./build/build.sh --release`
+2. Create GitHub release, upload .txz
+3. Install on Unraid and verify Folders tab appears under Docker
+4. Proceed to Phase 2 testing
 
-**After unblocking**: Complete Phase 2 testing, then proceed to Phase 3 (WebSocket real-time updates).
+**After verifying**: Complete Phase 2 testing, then proceed to Phase 3 (WebSocket real-time updates).
 
 **See**: STATUS.md for complete phase breakdown and CURRENT_ISSUE.md for detailed blocker analysis.

@@ -1,7 +1,8 @@
-Menu="Utilities"
+Menu="OtherSettings"
 Title="Docker Folders Modern"
 Icon="folder"
-Type="php"
+Tag="folder"
+Markdown="false"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
