@@ -5,11 +5,11 @@ Cond="is_file('/var/run/dockerd.pid')"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
-require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/auth.php';
 
-// Check database
+// $var is populated by the Unraid framework from state/var.ini
+// It contains the csrf_token that emhttpd's local_prepend.php validates against
+$csrfToken = $var['csrf_token'] ?? '';
 $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
-$csrfToken = getCsrfToken();
 ?>
 <style>
 .docker-folders-wrapper {

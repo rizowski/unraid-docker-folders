@@ -47,10 +47,11 @@
         Restart
       </button>
       <button
+        v-if="container.state !== 'running'"
         @click="$emit('remove', container.id)"
         class="flex-1 py-2 px-4 border-none rounded text-sm font-medium cursor-pointer transition bg-muted text-white hover:bg-error disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="actionInProgress || container.state === 'running'"
-        :title="container.state === 'running' ? 'Stop container before removing' : 'Remove container'"
+        :disabled="actionInProgress"
+        title="Remove container"
       >
         Remove
       </button>

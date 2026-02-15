@@ -2,13 +2,12 @@
  * CSRF token utility for Unraid API requests.
  *
  * The token is passed from the .page file via iframe query parameter.
- * Unraid's emhttpd validates csrf_token in the POST body (form-encoded),
- * NOT in query parameters. So all state-changing requests must send it
- * as a form field in the request body.
+ * It originates from Unraid's $var['csrf_token'] (state/var.ini), which is
+ * the system-wide token that local_prepend.php validates for all POST requests.
  *
- * For requests with JSON data, we include both csrf_token and a "payload"
- * field containing the JSON string, sent as application/x-www-form-urlencoded.
- * PHP reads the data from $_POST['payload'].
+ * We send it via the X-CSRF-Token header, which local_prepend.php accepts
+ * alongside $_POST['csrf_token']. This lets us use JSON request bodies
+ * instead of form-encoded payloads.
  */
 
 let csrfToken: string | null = null;
@@ -25,8 +24,10 @@ export function getCsrfToken(): string | null {
  * Perform an API fetch with CSRF token handling.
  *
  * For GET requests: passes through as-is.
- * For POST/PUT/DELETE: sends csrf_token + optional JSON data as
- * application/x-www-form-urlencoded body so emhttpd can validate.
+ * For POST/PUT/DELETE: sends X-CSRF-Token header + JSON body.
+ *
+ * Note: Unraid's local_prepend.php only validates POST requests.
+ * PUT/DELETE bypass server-level validation but our PHP can validate if needed.
  */
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method || 'GET').toUpperCase();
@@ -36,22 +37,18 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   }
 
   const token = getCsrfToken();
-  const body = new URLSearchParams();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
 
   if (token) {
-    body.append('csrf_token', token);
-  }
-
-  // If there was a JSON body, move it into a "payload" form field
-  if (options.body && typeof options.body === 'string') {
-    body.append('payload', options.body);
+    headers['X-CSRF-Token'] = token;
   }
 
   return fetch(url, {
     ...options,
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: body.toString(),
+    method,
+    headers,
+    // body passes through as-is (JSON string from callers)
   });
 }

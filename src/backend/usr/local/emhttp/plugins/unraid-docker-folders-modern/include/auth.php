@@ -2,6 +2,9 @@
 /**
  * Unraid Docker Folders - Authentication
  *
+ * CSRF tokens are validated by Unraid's local_prepend.php for POST requests.
+ * For PUT/DELETE, we validate manually against the system token from var.ini.
+ *
  * @package UnraidDockerModern
  */
 
@@ -27,7 +30,27 @@ function validateSession()
 }
 
 /**
- * Validate CSRF token for POST/PUT/DELETE requests
+ * Get the system CSRF token from Unraid's var.ini.
+ * This is the same token that local_prepend.php validates against.
+ *
+ * @return string|null The system CSRF token
+ */
+function getSystemCsrfToken()
+{
+  $varIni = '/var/local/emhttp/var.ini';
+  if (!file_exists($varIni)) {
+    return null;
+  }
+  $var = parse_ini_file($varIni);
+  return $var['csrf_token'] ?? null;
+}
+
+/**
+ * Validate CSRF token for PUT/DELETE requests.
+ *
+ * POST requests are already validated by Unraid's local_prepend.php
+ * (auto-prepended to all PHP via php.ini). We only need to handle
+ * PUT and DELETE ourselves.
  *
  * @return bool True if CSRF token is valid
  */
@@ -35,31 +58,32 @@ function validateCsrfToken()
 {
   $method = $_SERVER['REQUEST_METHOD'];
 
-  // Only validate for state-changing operations
-  if (!in_array($method, ['POST', 'PUT', 'DELETE'])) {
+  // GET and OPTIONS don't need CSRF validation
+  if (in_array($method, ['GET', 'OPTIONS'])) {
     return true;
   }
 
-  // Get token from request
-  $token = null;
-  if (isset($_SERVER['HTTP_X_CSRF_TOKEN'])) {
-    $token = $_SERVER['HTTP_X_CSRF_TOKEN'];
-  } elseif (isset($_POST['csrf_token'])) {
-    $token = $_POST['csrf_token'];
-  } elseif (isset($_GET['csrf_token'])) {
-    $token = $_GET['csrf_token'];
+  // POST is validated by local_prepend.php before our code runs
+  if ($method === 'POST') {
+    return true;
   }
 
-  // Compare with session token
-  if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-  }
-
-  if (!isset($_SESSION['csrf_token']) || $token !== $_SESSION['csrf_token']) {
+  // PUT/DELETE: validate manually against the system token
+  $systemToken = getSystemCsrfToken();
+  if (!$systemToken) {
     return false;
   }
 
-  return true;
+  // Accept token from X-CSRF-Token header or query string
+  $token = $_SERVER['HTTP_X_CSRF_TOKEN']
+    ?? $_GET['csrf_token']
+    ?? null;
+
+  if ($token === null) {
+    return false;
+  }
+
+  return hash_equals($systemToken, $token);
 }
 
 /**
@@ -94,22 +118,4 @@ function requireCsrf()
     ]);
     exit();
   }
-}
-
-/**
- * Get CSRF token for current session
- *
- * @return string CSRF token
- */
-function getCsrfToken()
-{
-  if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-  }
-
-  if (!isset($_SESSION['csrf_token'])) {
-    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-  }
-
-  return $_SESSION['csrf_token'];
 }

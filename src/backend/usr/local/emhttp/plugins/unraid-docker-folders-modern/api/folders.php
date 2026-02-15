@@ -23,15 +23,10 @@ $method = $_SERVER['REQUEST_METHOD'];
 $folderManager = new FolderManager();
 
 /**
- * Read JSON request body.
- * Checks $_POST['payload'] first (form-encoded with CSRF token),
- * falls back to raw php://input (direct JSON body).
+ * Read JSON request body from php://input.
  */
 function getRequestData()
 {
-  if (isset($_POST['payload'])) {
-    return json_decode($_POST['payload'], true);
-  }
   return json_decode(file_get_contents('php://input'), true);
 }
 
