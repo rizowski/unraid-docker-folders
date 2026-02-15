@@ -37,7 +37,8 @@ interface Props {
 
 const props = defineProps<Props>();
 
-const emit = defineEmits<{
+// Note: emit is used in template via $emit
+defineEmits<{
   edit: [folder: Folder];
   delete: [id: number];
 }>();
