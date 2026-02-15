@@ -1,50 +1,83 @@
-# Current Issue - CSRF Token Fix Applied
+# Current Work - Phase 3: Live Container Resource Stats
 
 **Date**: 2026-02-15
-**Status**: Fix applied, pending on-device testing
+**Status**: Planning / implementation
 
 ---
 
-## Issue
+## Goal
 
-POST/PUT/DELETE requests to the API returned empty responses, causing:
-```
-Error: Failed to execute 'json' on 'Response': Unexpected end of JSON input
-```
+Add live resource consumption stats to the container card accordion panel. When a user expands a container card, they see real-time resource usage alongside the existing port/mount/network details.
 
-Unraid syslog showed:
-```
-error: /plugins/unraid-docker-folders-modern/api/folders.php - missing csrf_token
-```
+## Stats to Display
 
-## Root Cause
+### Visual bars (progress bar + percentage)
+- **CPU** — percentage of allocated CPU
+- **Memory** — usage / limit with percentage bar
 
-Unraid's webGUI (emhttpd) requires a `csrf_token` parameter on all state-changing HTTP requests. Without it, the request is rejected at the web server level with an empty response body - before PHP even runs.
+### Numeric values
+- **Block I/O** — read / write bytes
+- **Network I/O** — rx / tx bytes
+- **PIDs** — number of processes in the container
 
-The frontend runs inside an iframe, so it has no access to the parent page's CSRF token unless explicitly passed.
+### Additional info
+- **Restart count** — from container inspect (flags crash-looping)
+- **Container uptime** — parsed from container `status` field or computed from `created`
+- **Image size** — size of the container's image layers
+- **Log size** — size of the container's log file (can grow unbounded without rotation)
 
-## Fix Applied
+## Docker API Sources
 
-1. **`DockerFoldersMain.page`** - Reads CSRF token from PHP session, passes to iframe via query parameter:
-   ```php
-   $csrfToken = getCsrfToken();
-   // ...
-   <iframe src="...index.html?csrf_token=<?= urlencode($csrfToken) ?>">
-   ```
+### `/containers/{id}/stats?stream=0` (one-shot)
+Returns a single stats snapshot. Key fields:
+- `cpu_stats.cpu_usage.total_usage` / `system_cpu_usage` / `online_cpus` → CPU %
+- `memory_stats.usage` / `memory_stats.limit` → Memory usage + limit
+- `blkio_stats.io_service_bytes_recursive` → Block I/O read/write
+- `networks.{iface}.rx_bytes` / `tx_bytes` → Network I/O
+- `pids_stats.current` → PID count
 
-2. **`src/frontend/src/utils/csrf.ts`** - New utility that reads the token from `window.location.search` and provides `withCsrf(url)` to append it to any URL.
+### `/containers/{id}/json` (inspect)
+- `RestartCount` → restart count
+- `State.StartedAt` → precise uptime calculation
+- `SizeRw` / `SizeRootFs` → container size (requires `?size=true`, expensive)
 
-3. **`stores/docker.ts`** and **`stores/folders.ts`** - All POST/PUT/DELETE fetch calls wrapped with `withCsrf()`.
+### `/images/{id}/json` (image inspect)
+- `Size` → image size in bytes
 
-## Previous Issues (Resolved)
+### Log size
+- Read from Docker's log file path: `/var/lib/docker/containers/{id}/{id}-json.log`
+- Or use `docker system df -v` equivalent via API
 
-- **Page rendering blank**: `Docker.page` filename collided with Unraid's built-in page. Renamed to `DockerFoldersMain.page`.
-- **PDOException catch**: `FolderManager.php` line 178 caught `PDOException` but codebase uses SQLite3 native. Changed to `Exception`.
+## Implementation Plan
 
-## Verification Steps
+### Backend
+1. New `api/stats.php` — accepts `?ids=id1,id2,...` query param, returns stats for requested containers
+2. PHP loops through IDs, calls Docker stats endpoint for each running container
+3. Also fetches restart count from inspect, image size, log file size
+4. Returns consolidated response: `{ stats: { [containerId]: { cpu, memory, io, network, pids, restartCount, uptime, imageSize, logSize } } }`
 
-1. Build and install: `./build/build.sh --release`
-2. Open Docker > Folders tab
-3. Click "+ Create Folder" - should create successfully (no more empty response error)
-4. Check Unraid syslog - should have no `missing csrf_token` errors
-5. Test all mutation operations: create/edit/delete folder, start/stop/restart/remove container
+### Frontend
+1. New `stores/stats.ts` — Pinia store that polls `api/stats.php` for expanded containers
+2. Only fetches stats for containers whose accordion is currently expanded (efficient)
+3. Polls every 5 seconds while any container is expanded, stops when all collapsed
+4. `ContainerCard.vue` — accordion details panel shows:
+   - CPU: thin progress bar (green/yellow/red based on usage) + "23.4%"
+   - Memory: thin progress bar + "1.2 GB / 4.0 GB (30%)"
+   - Block I/O: "Read: 45.2 MB / Write: 12.1 MB"
+   - Network: "RX: 234.5 MB / TX: 12.3 MB"
+   - PIDs: "12 processes"
+   - Restart count: "3 restarts" (highlighted if > 0)
+   - Uptime: "3 days, 2 hours"
+   - Image size: "234.5 MB"
+   - Log size: "12.3 MB"
+
+### Mock API
+- `dev/mock-api.ts` — add `stats.php` handler returning randomized but realistic stats
+
+## Performance Considerations
+
+- Stats are only fetched for expanded containers (not all containers on every poll)
+- One-shot stats (`stream=0`) returns immediately, no long-polling
+- 5-second poll interval balances freshness vs load
+- Backend batches multiple container IDs in one request to avoid N frontend requests
+- Image size and log size are relatively static — could cache these longer

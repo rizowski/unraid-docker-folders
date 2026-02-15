@@ -67,18 +67,20 @@ src/frontend/              # Vue 3 application
   ├── src/
   │   ├── components/      # Vue components (ConnectionStatus, ContainerCard, Folder*)
   │   ├── composables/     # useWebSocket.ts
-  │   ├── stores/          # Pinia state management (docker.ts, folders.ts)
+  │   ├── stores/          # Pinia state management (docker.ts, folders.ts, settings.ts)
   │   ├── types/           # TypeScript definitions (folder.ts, websocket.ts)
   │   └── utils/           # csrf.ts
+  ├── dev/
+  │   └── mock-api.ts      # Vite dev server mock API (containers, folders, settings, stats)
   └── vite.config.ts       # Build output: ../backend/.../assets/
 
 src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/
-  ├── api/                 # PHP REST endpoints (containers.php, folders.php)
+  ├── api/                 # PHP REST endpoints (containers.php, folders.php, settings.php)
   ├── classes/             # PHP business logic (Database, DockerClient, FolderManager, WebSocketPublisher)
   ├── include/             # config.php, auth.php
   ├── migrations/          # SQL migration files
-  ├── DockerFoldersMain.page      # Menu="Docker:0" - Folders tab
-  ├── DockerFoldersSettings.page  # Menu="OtherSettings" - Settings
+  ├── DockerFoldersMain.page      # Menu="Docker:3" - Folders tab
+  ├── DockerFoldersSettings.page  # Menu="Utilities" - Settings (health status, etc.)
   └── assets/              # ← Frontend build output goes here
 ```
 
@@ -297,27 +299,20 @@ Key="Value"
 - `NCHAN_PUB_URL`: `http://localhost:4433/pub/docker-modern`
 
 ### API Endpoints
-- `GET /api/containers.php` - List containers
+- `GET /api/containers.php` - List containers (includes ports, mounts, networkSettings)
 - `POST /api/containers.php?action=start&id=<id>` - Start container
 - `GET /api/folders.php` - List folders
 - `POST /api/folders.php` - Create folder (body: `{name, icon, color}`)
 - `PUT /api/folders.php?id=<id>` - Update folder
 - `DELETE /api/folders.php?id=<id>` - Delete folder
+- `GET /api/settings.php` - Get all plugin settings
+- `POST /api/settings.php` - Update setting (body: `{key, value}`)
+- `GET /api/stats.php?ids=id1,id2` - Get live resource stats for containers (Phase 3)
 
 ---
 
 ## Next Steps for Development
 
-**Immediate priority**: Build, install, and verify Phase 2-3 features on Unraid
-1. Run `./build/build.sh --release`
-2. Create GitHub release, upload .txz
-3. Install on Unraid and verify:
-   - Folders tab appears under Docker
-   - CSRF fix works (create/edit/delete folder)
-   - WebSocket connects to `/sub/docker-modern`
-   - Multi-tab sync works
-   - Container remove action works
+**Current work**: Phase 3 — Live container resource stats (CPU, Memory, I/O, Network, PIDs, restart count, uptime, image size, log size)
 
-**After verifying**: Proceed to Phase 4 (UI/UX polish).
-
-**See**: STATUS.md for complete phase breakdown, CURRENT_ISSUE.md for CSRF fix details.
+**See**: STATUS.md for phase breakdown, CURRENT_ISSUE.md for Phase 3 implementation details.
