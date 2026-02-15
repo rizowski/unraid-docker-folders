@@ -7,12 +7,30 @@ import { ref, computed } from 'vue';
 import { useFolderStore } from './folders';
 import { apiFetch } from '@/utils/csrf';
 
+export interface ContainerPort {
+  IP: string;
+  PrivatePort: number;
+  PublicPort?: number;
+  Type: string;
+}
+
+export interface ContainerMount {
+  Source: string;
+  Destination: string;
+  Type: string;
+  RW: boolean;
+}
+
 export interface Container {
   id: string;
   name: string;
   image: string;
   state: string;
   status: string;
+  ports: ContainerPort[];
+  mounts: ContainerMount[];
+  networkSettings: Record<string, { IPAddress: string }>;
+  created: number;
   icon: string | null;
   managed: string | null;
   webui: string | null;

@@ -56,6 +56,10 @@
             </svg>
           </button>
         </div>
+        <label class="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer select-none" title="When enabled, running containers show blue and healthy containers show green. When disabled, all running containers show green.">
+          <input type="checkbox" :checked="settingsStore.distinguishHealthy" @change="settingsStore.setDistinguishHealthy(($event.target as HTMLInputElement).checked)" class="cursor-pointer" />
+          Health status
+        </label>
         <button
           @click="openCreateFolderModal"
           class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors"
@@ -131,9 +135,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { ref, onMounted, computed, watch, nextTick, provide, toRef } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useSettingsStore } from '@/stores/settings';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
@@ -144,10 +149,13 @@ import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+const settingsStore = useSettingsStore();
 
 const actionInProgress = ref<string | null>(null);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
+
+provide('distinguishHealthy', toRef(settingsStore, 'distinguishHealthy'));
 const isModalOpen = ref(false);
 const editingFolder = ref<Folder | null>(null);
 
@@ -174,7 +182,7 @@ watch(
 
 async function loadData() {
   try {
-    await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders()]);
+    await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
   } catch (e) {
     console.error('Failed to load data:', e);
   }

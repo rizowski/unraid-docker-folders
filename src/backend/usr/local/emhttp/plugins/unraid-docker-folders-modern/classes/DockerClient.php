@@ -145,6 +145,8 @@ class DockerClient
       'ports' => $container['Ports'] ?? [],
       'labels' => $labels,
       'networkMode' => $container['HostConfig']['NetworkMode'] ?? 'bridge',
+      'mounts' => $container['Mounts'] ?? [],
+      'networkSettings' => $container['NetworkSettings']['Networks'] ?? (object)[],
       'icon' => $labels['net.unraid.docker.icon'] ?? null,
       'managed' => $labels['net.unraid.docker.managed'] ?? null,
       'webui' => $labels['net.unraid.docker.webui'] ?? null,

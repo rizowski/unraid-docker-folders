@@ -14,16 +14,99 @@ import type { Plugin } from 'vite';
 let nextFolderId = 3;
 
 const containers = [
-  { id: 'abc123def456', name: 'plex', image: 'linuxserver/plex:latest', state: 'running', status: 'Up 3 days', icon: null },
-  { id: 'bcd234efg567', name: 'sonarr', image: 'linuxserver/sonarr:latest', state: 'running', status: 'Up 3 days', icon: null },
-  { id: 'cde345fgh678', name: 'radarr', image: 'linuxserver/radarr:latest', state: 'running', status: 'Up 3 days', icon: null },
-  { id: 'def456ghi789', name: 'sabnzbd', image: 'linuxserver/sabnzbd:latest', state: 'running', status: 'Up 2 days', icon: null },
-  { id: 'efg567hij890', name: 'nginx-proxy', image: 'jwilder/nginx-proxy:latest', state: 'running', status: 'Up 5 days', icon: null },
-  { id: 'fgh678ijk901', name: 'mariadb', image: 'linuxserver/mariadb:latest', state: 'running', status: 'Up 5 days', icon: null },
-  { id: 'ghi789jkl012', name: 'redis', image: 'redis:7-alpine', state: 'exited', status: 'Exited (0) 2 hours ago', icon: null },
-  { id: 'hij890klm123', name: 'minecraft', image: 'itzg/minecraft-server:latest', state: 'exited', status: 'Exited (0) 1 day ago', icon: null },
-  { id: 'ijk901lmn234', name: 'homeassistant', image: 'homeassistant/home-assistant:latest', state: 'running', status: 'Up 1 day', icon: null },
-  { id: 'jkl012mno345', name: 'grafana', image: 'grafana/grafana:latest', state: 'running', status: 'Up 4 days', icon: null },
+  {
+    id: 'abc123def456', name: 'plex', image: 'linuxserver/plex:latest', state: 'running',
+    status: 'Up 3 days (healthy)', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:32400]/',
+    created: Date.now() / 1000 - 259200,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 32400, PublicPort: 32400, Type: 'tcp' }],
+    mounts: [
+      { Source: '/mnt/user/appdata/plex', Destination: '/config', Type: 'bind', RW: true },
+      { Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true },
+    ],
+    networkSettings: { bridge: { IPAddress: '172.17.0.2' } },
+  },
+  {
+    id: 'bcd234efg567', name: 'sonarr', image: 'linuxserver/sonarr:latest', state: 'running',
+    status: 'Up 3 days (healthy)', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8989]/',
+    created: Date.now() / 1000 - 259200,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 8989, PublicPort: 8989, Type: 'tcp' }],
+    mounts: [
+      { Source: '/mnt/user/appdata/sonarr', Destination: '/config', Type: 'bind', RW: true },
+      { Source: '/mnt/user/media/tv', Destination: '/tv', Type: 'bind', RW: true },
+      { Source: '/mnt/user/downloads', Destination: '/downloads', Type: 'bind', RW: true },
+    ],
+    networkSettings: { bridge: { IPAddress: '172.17.0.3' } },
+  },
+  {
+    id: 'cde345fgh678', name: 'radarr', image: 'linuxserver/radarr:latest', state: 'running',
+    status: 'Up 3 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:7878]/',
+    created: Date.now() / 1000 - 259200,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 7878, PublicPort: 7878, Type: 'tcp' }],
+    mounts: [
+      { Source: '/mnt/user/appdata/radarr', Destination: '/config', Type: 'bind', RW: true },
+      { Source: '/mnt/user/media/movies', Destination: '/movies', Type: 'bind', RW: true },
+    ],
+    networkSettings: { bridge: { IPAddress: '172.17.0.4' } },
+  },
+  {
+    id: 'def456ghi789', name: 'sabnzbd', image: 'linuxserver/sabnzbd:latest', state: 'running',
+    status: 'Up 2 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8080]/',
+    created: Date.now() / 1000 - 172800,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 8080, PublicPort: 8080, Type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/sabnzbd', Destination: '/config', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.5' } },
+  },
+  {
+    id: 'efg567hij890', name: 'nginx-proxy', image: 'jwilder/nginx-proxy:latest', state: 'running',
+    status: 'Up 5 days', icon: null, managed: 'dockerman', webui: null,
+    created: Date.now() / 1000 - 432000,
+    ports: [
+      { IP: '0.0.0.0', PrivatePort: 80, PublicPort: 80, Type: 'tcp' },
+      { IP: '0.0.0.0', PrivatePort: 443, PublicPort: 443, Type: 'tcp' },
+    ],
+    mounts: [{ Source: '/var/run/docker.sock', Destination: '/tmp/docker.sock', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.6' } },
+  },
+  {
+    id: 'fgh678ijk901', name: 'mariadb', image: 'linuxserver/mariadb:latest', state: 'running',
+    status: 'Up 5 days (healthy)', icon: null, managed: 'dockerman', webui: null,
+    created: Date.now() / 1000 - 432000,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 3306, PublicPort: 3306, Type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/mariadb', Destination: '/config', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.7' } },
+  },
+  {
+    id: 'ghi789jkl012', name: 'redis', image: 'redis:7-alpine', state: 'exited',
+    status: 'Exited (0) 2 hours ago', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 86400,
+    ports: [{ IP: '', PrivatePort: 6379, Type: 'tcp' }],
+    mounts: [],
+    networkSettings: {},
+  },
+  {
+    id: 'hij890klm123', name: 'minecraft', image: 'itzg/minecraft-server:latest', state: 'exited',
+    status: 'Exited (0) 1 day ago', icon: null, managed: 'dockerman', webui: null,
+    created: Date.now() / 1000 - 604800,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 25565, PublicPort: 25565, Type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/minecraft', Destination: '/data', Type: 'bind', RW: true }],
+    networkSettings: {},
+  },
+  {
+    id: 'ijk901lmn234', name: 'homeassistant', image: 'ghcr.io/home-assistant/home-assistant:stable', state: 'running',
+    status: 'Up 1 day', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8123]/',
+    created: Date.now() / 1000 - 86400,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 8123, PublicPort: 8123, Type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/homeassistant', Destination: '/config', Type: 'bind', RW: true }],
+    networkSettings: { host: { IPAddress: '' } },
+  },
+  {
+    id: 'jkl012mno345', name: 'grafana', image: 'grafana/grafana:latest', state: 'running',
+    status: 'Up 4 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:3000]/',
+    created: Date.now() / 1000 - 345600,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 3000, Type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/grafana', Destination: '/var/lib/grafana', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.10' } },
+  },
 ];
 
 const folders: any[] = [
@@ -206,6 +289,32 @@ async function handleFolders(req: any, res: any, params: Record<string, string>)
   }
 }
 
+// --- Settings mock ---
+
+const settings: Record<string, string> = {
+  version: '1.0.0',
+  default_view: 'folders',
+  auto_collapse: '0',
+  show_stats: '0',
+  theme: 'auto',
+  distinguish_healthy: '1',
+};
+
+async function handleSettings(req: any, res: any) {
+  if (req.method === 'GET') {
+    return json(res, { settings });
+  }
+
+  if (req.method === 'POST') {
+    const data = await parseBody(req);
+    if (data.key && data.value !== undefined) {
+      settings[data.key] = data.value;
+      return json(res, { success: true, key: data.key, value: data.value });
+    }
+    return json(res, { error: true, message: 'Missing key or value' }, 400);
+  }
+}
+
 // --- Vite plugin ---
 
 export function mockApiPlugin(): Plugin {
@@ -225,6 +334,8 @@ export function mockApiPlugin(): Plugin {
             await handleContainers(req, res, params);
           } else if (endpoint === 'folders.php') {
             await handleFolders(req, res, params);
+          } else if (endpoint === 'settings.php') {
+            await handleSettings(req, res);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }
