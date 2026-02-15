@@ -24,14 +24,21 @@
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-10 h-10 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-lg font-semibold text-text truncate">{{ container.name }}</h3>
-      <a
-        v-if="editUrl"
-        :href="editUrl"
-        class="shrink-0 text-text-secondary hover:text-text transition"
-        title="Edit container"
-        @click.stop
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      <a v-if="editUrl" :href="editUrl" class="shrink-0 text-text-secondary hover:text-text transition" title="Edit container" @click.stop>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
       </a>
     </div>
 
@@ -64,14 +71,22 @@
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
-          <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            :class="cpuBarColor"
+            :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
+          ></div>
         </div>
         <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.cpuPercent) }}</span>
       </div>
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted w-8 shrink-0">MEM</span>
         <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
-          <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+          <div
+            class="h-full rounded-full transition-all duration-300"
+            :class="memBarColor"
+            :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
+          ></div>
         </div>
         <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
       </div>
@@ -91,9 +106,7 @@
         <p class="text-muted text-xs">Volumes</p>
         <p v-for="mount in displayMounts" :key="mount" class="text-text-secondary font-mono truncate pl-2" :title="mount">{{ mount }}</p>
       </div>
-      <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">
-        No additional details available
-      </div>
+      <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
 
       <!-- Resource Usage Stats -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
@@ -105,23 +118,37 @@
             <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
           </div>
           <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="cpuBarColor"
+              :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
+            ></div>
           </div>
         </div>
         <!-- Memory Bar -->
         <div class="space-y-0.5">
           <div class="flex justify-between text-xs">
             <span class="text-muted">Memory</span>
-            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{ formatPercent(containerStats.memoryPercent) }})</span>
+            <span class="text-text-secondary font-mono"
+              >{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{
+                formatPercent(containerStats.memoryPercent)
+              }})</span
+            >
           </div>
           <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="memBarColor"
+              :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
+            ></div>
           </div>
         </div>
         <!-- Numeric Stats -->
         <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs pt-0.5">
           <span class="text-muted">Block I/O</span>
-          <span class="text-text-secondary font-mono">Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span>
+          <span class="text-text-secondary font-mono"
+            >Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span
+          >
           <span class="text-muted">Network</span>
           <span class="text-text-secondary font-mono">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
           <span class="text-muted">PIDs</span>
@@ -136,12 +163,8 @@
           <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
         </div>
       </div>
-      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
-        Loading stats...
-      </div>
-      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
-        Container not running
-      </div>
+      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Loading stats...</div>
+      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Container not running</div>
     </div>
 
     <div class="flex gap-1.5 px-6 pb-4 pt-2">
@@ -152,7 +175,9 @@
         :disabled="actionInProgress"
         title="Stop"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <rect x="4" y="4" width="16" height="16" rx="2" />
+        </svg>
       </button>
       <button
         v-else
@@ -161,7 +186,9 @@
         :disabled="actionInProgress"
         title="Start"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6,3 20,12 6,21" /></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <polygon points="6,3 20,12 6,21" />
+        </svg>
       </button>
       <button
         @click="confirmRestart"
@@ -169,7 +196,20 @@
         :disabled="actionInProgress"
         title="Restart"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="1 4 1 10 7 10" />
+          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+        </svg>
       </button>
       <button
         v-if="container.state !== 'running'"
@@ -178,7 +218,22 @@
         :disabled="actionInProgress"
         title="Remove"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </svg>
       </button>
     </div>
   </div>
@@ -205,8 +260,8 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-6 h-6 object-contain shrink-0" />
       <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-12 h-12 object-contain shrink-0" />
 
       <!-- Clickable name/image area toggles accordion -->
       <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
@@ -238,27 +293,43 @@
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">CPU</span>
           <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="cpuBarColor"
+              :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
+            ></div>
           </div>
           <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">MEM</span>
           <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="memBarColor"
+              :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
+            ></div>
           </div>
           <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
         </div>
       </div>
 
       <div class="flex gap-0.5 ml-auto shrink-0 items-center">
-        <a
-          v-if="editUrl"
-          :href="editUrl"
-          class="text-text-secondary hover:text-text transition p-1.5"
-          title="Edit container"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <a v-if="editUrl" :href="editUrl" class="text-text-secondary hover:text-text transition p-1.5" title="Edit container">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
         </a>
         <button
           v-if="container.state === 'running'"
@@ -267,7 +338,9 @@
           :disabled="actionInProgress"
           title="Stop"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <rect x="4" y="4" width="16" height="16" rx="2" />
+          </svg>
         </button>
         <button
           v-else
@@ -276,7 +349,9 @@
           :disabled="actionInProgress"
           title="Start"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6,3 20,12 6,21" /></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+            <polygon points="6,3 20,12 6,21" />
+          </svg>
         </button>
         <button
           @click="confirmRestart"
@@ -284,7 +359,20 @@
           :disabled="actionInProgress"
           title="Restart"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="1 4 1 10 7 10" />
+            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+          </svg>
         </button>
         <button
           v-if="container.state !== 'running'"
@@ -293,7 +381,22 @@
           :disabled="actionInProgress"
           title="Remove"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
         </button>
       </div>
     </div>
@@ -312,9 +415,7 @@
         <p class="text-muted text-xs">Volumes</p>
         <p v-for="mount in displayMounts" :key="mount" class="text-text-secondary font-mono truncate pl-2" :title="mount">{{ mount }}</p>
       </div>
-      <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">
-        No additional details available
-      </div>
+      <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
 
       <!-- Resource Usage Stats (list view) -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
@@ -326,23 +427,37 @@
             <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
           </div>
           <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="cpuBarColor"
+              :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
+            ></div>
           </div>
         </div>
         <!-- Memory Bar -->
         <div class="space-y-0.5">
           <div class="flex justify-between text-xs">
             <span class="text-muted">Memory</span>
-            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{ formatPercent(containerStats.memoryPercent) }})</span>
+            <span class="text-text-secondary font-mono"
+              >{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{
+                formatPercent(containerStats.memoryPercent)
+              }})</span
+            >
           </div>
           <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
-            <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="memBarColor"
+              :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
+            ></div>
           </div>
         </div>
         <!-- Numeric Stats -->
         <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs pt-0.5">
           <span class="text-muted">Block I/O</span>
-          <span class="text-text-secondary font-mono">Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span>
+          <span class="text-text-secondary font-mono"
+            >Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span
+          >
           <span class="text-muted">Network</span>
           <span class="text-text-secondary font-mono">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
           <span class="text-muted">PIDs</span>
@@ -357,12 +472,8 @@
           <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
         </div>
       </div>
-      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
-        Loading stats...
-      </div>
-      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
-        Container not running
-      </div>
+      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Loading stats...</div>
+      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">Container not running</div>
     </div>
   </div>
 </template>

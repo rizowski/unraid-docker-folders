@@ -54,16 +54,7 @@ function handleGet()
   }
 
   $dockerClient = new DockerClient();
-  $stats = [];
-
-  foreach ($ids as $id) {
-    try {
-      $stats[$id] = $dockerClient->formatStats($id);
-    } catch (Exception $e) {
-      error_log("Stats error for container {$id}: " . $e->getMessage());
-      $stats[$id] = null;
-    }
-  }
+  $stats = $dockerClient->fetchBatchStats($ids);
 
   jsonResponse(['stats' => $stats]);
 }

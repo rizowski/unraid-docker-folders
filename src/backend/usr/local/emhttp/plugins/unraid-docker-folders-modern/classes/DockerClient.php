@@ -260,6 +260,202 @@ class DockerClient
   }
 
   /**
+   * Execute multiple Docker API requests in parallel via curl_multi
+   *
+   * @param array $requests Associative array of ['key' => '/api/path', ...]
+   * @return array Associative array of ['key' => decoded_json | null, ...]
+   */
+  private function requestMulti($requests)
+  {
+    if (empty($requests)) {
+      return [];
+    }
+
+    $mh = curl_multi_init();
+    $handles = [];
+
+    foreach ($requests as $key => $path) {
+      $url = "http://localhost/{$this->apiVersion}{$path}";
+      $ch = curl_init();
+      curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, $this->socketPath);
+      curl_setopt($ch, CURLOPT_URL, $url);
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+      curl_setopt($ch, CURLOPT_HEADER, false);
+      curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+      curl_multi_add_handle($mh, $ch);
+      $handles[$key] = $ch;
+    }
+
+    // Execute all handles
+    $running = null;
+    do {
+      curl_multi_exec($mh, $running);
+      if ($running > 0) {
+        curl_multi_select($mh);
+      }
+    } while ($running > 0);
+
+    // Collect results
+    $results = [];
+    foreach ($handles as $key => $ch) {
+      $response = curl_multi_getcontent($ch);
+      $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+      $error = curl_error($ch);
+
+      if ($error || $httpCode < 200 || $httpCode >= 300) {
+        $results[$key] = null;
+      } else {
+        $decoded = json_decode($response, true);
+        $results[$key] = ($decoded === null && json_last_error() !== JSON_ERROR_NONE) ? null : $decoded;
+      }
+
+      curl_multi_remove_handle($mh, $ch);
+      curl_close($ch);
+    }
+
+    curl_multi_close($mh);
+    return $results;
+  }
+
+  /**
+   * Fetch stats for multiple containers in parallel
+   *
+   * Runs 3 phases of parallel requests instead of sequential per-container calls:
+   *   Phase 1: All container stats in parallel
+   *   Phase 2: All container inspects in parallel
+   *   Phase 3: All unique image inspects in parallel (deduped)
+   *
+   * @param array $ids Array of container IDs
+   * @return array Associative array of ['id' => formattedStats | null, ...]
+   */
+  public function fetchBatchStats($ids)
+  {
+    if (empty($ids)) {
+      return [];
+    }
+
+    // Phase 1: Fetch all container stats in parallel
+    $statsRequests = [];
+    foreach ($ids as $id) {
+      $statsRequests[$id] = "/containers/{$id}/stats?stream=0";
+    }
+    $statsResults = $this->requestMulti($statsRequests);
+
+    // Phase 2: Fetch all container inspects in parallel
+    $inspectRequests = [];
+    foreach ($ids as $id) {
+      if ($statsResults[$id] !== null) {
+        $inspectRequests[$id] = "/containers/{$id}/json";
+      }
+    }
+    $inspectResults = $this->requestMulti($inspectRequests);
+
+    // Phase 3: Collect unique image IDs and fetch image info in parallel
+    $imageMap = []; // imageId => [containerId, ...]
+    foreach ($inspectResults as $id => $inspect) {
+      if ($inspect === null) continue;
+      $imageId = $inspect['Image'] ?? '';
+      if ($imageId) {
+        $imageMap[$imageId][] = $id;
+      }
+    }
+
+    $imageRequests = [];
+    foreach (array_keys($imageMap) as $imageId) {
+      $imageRequests[$imageId] = "/images/{$imageId}/json";
+    }
+    $imageResults = $this->requestMulti($imageRequests);
+
+    // Phase 4: Assemble formatted stats for each container
+    $output = [];
+    foreach ($ids as $id) {
+      $stats = $statsResults[$id] ?? null;
+      if (!$stats) {
+        $output[$id] = null;
+        continue;
+      }
+
+      // CPU %
+      $cpuPercent = 0.0;
+      $cpuStats = $stats['cpu_stats'] ?? [];
+      $preCpuStats = $stats['precpu_stats'] ?? [];
+      $cpuDelta = ($cpuStats['cpu_usage']['total_usage'] ?? 0)
+                - ($preCpuStats['cpu_usage']['total_usage'] ?? 0);
+      $systemDelta = ($cpuStats['system_cpu_usage'] ?? 0)
+                   - ($preCpuStats['system_cpu_usage'] ?? 0);
+      $onlineCpus = $cpuStats['online_cpus'] ?? 1;
+      if ($systemDelta > 0 && $cpuDelta >= 0) {
+        $cpuPercent = round(($cpuDelta / $systemDelta) * $onlineCpus * 100, 2);
+      }
+
+      // Memory
+      $memStats = $stats['memory_stats'] ?? [];
+      $memoryUsage = $memStats['usage'] ?? 0;
+      $memoryLimit = $memStats['limit'] ?? 1;
+      $memoryPercent = $memoryLimit > 0 ? round(($memoryUsage / $memoryLimit) * 100, 2) : 0;
+
+      // Block I/O
+      $blockRead = 0;
+      $blockWrite = 0;
+      $blkioStats = $stats['blkio_stats']['io_service_bytes_recursive'] ?? [];
+      foreach ($blkioStats as $entry) {
+        $op = strtolower($entry['op'] ?? '');
+        if ($op === 'read') {
+          $blockRead += $entry['value'] ?? 0;
+        } elseif ($op === 'write') {
+          $blockWrite += $entry['value'] ?? 0;
+        }
+      }
+
+      // Network
+      $netRx = 0;
+      $netTx = 0;
+      $networks = $stats['networks'] ?? [];
+      foreach ($networks as $iface) {
+        $netRx += $iface['rx_bytes'] ?? 0;
+        $netTx += $iface['tx_bytes'] ?? 0;
+      }
+
+      // PIDs
+      $pids = $stats['pids_stats']['current'] ?? 0;
+
+      // Inspect data
+      $inspect = $inspectResults[$id] ?? null;
+      $restartCount = $inspect['RestartCount'] ?? 0;
+      $startedAt = $inspect['State']['StartedAt'] ?? '';
+
+      // Image size (deduped)
+      $imageSize = 0;
+      $imageId = $inspect['Image'] ?? '';
+      if ($imageId && isset($imageResults[$imageId])) {
+        $imageSize = $imageResults[$imageId]['Size'] ?? 0;
+      }
+
+      // Log size
+      $fullId = $stats['id'] ?? $id;
+      $logSize = $this->getContainerLogSize($fullId);
+
+      $output[$id] = [
+        'cpuPercent' => $cpuPercent,
+        'memoryUsage' => $memoryUsage,
+        'memoryLimit' => $memoryLimit,
+        'memoryPercent' => $memoryPercent,
+        'blockRead' => $blockRead,
+        'blockWrite' => $blockWrite,
+        'netRx' => $netRx,
+        'netTx' => $netTx,
+        'pids' => $pids,
+        'restartCount' => $restartCount,
+        'startedAt' => $startedAt,
+        'imageSize' => $imageSize,
+        'logSize' => $logSize,
+      ];
+    }
+
+    return $output;
+  }
+
+  /**
    * Format container from list endpoint
    *
    * @param array $container Raw container data
@@ -353,6 +549,7 @@ class DockerClient
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
 
     if ($data !== null) {
       $json = json_encode($data);
