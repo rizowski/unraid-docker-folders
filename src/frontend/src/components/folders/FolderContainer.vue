@@ -1,14 +1,14 @@
 <template>
-  <div class="folder-container">
+  <div class="mb-8">
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
-    <div v-if="!folder.collapsed" class="folder-content">
-      <div v-if="folderContainers.length === 0" class="empty-folder">
+    <div v-if="!folder.collapsed" class="px-4">
+      <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary bg-bg border-2 border-dashed border-border rounded-lg mb-4">
         <p>No containers in this folder</p>
-        <p class="hint">Drag containers here to organize them</p>
+        <p class="text-sm italic">Drag containers here to organize them</p>
       </div>
 
-      <div v-else class="container-list" :data-folder-id="folder.id">
+      <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4 mb-4" :data-folder-id="folder.id">
         <ContainerCard
           v-for="assoc in folderContainers"
           :key="assoc.container_id"
@@ -101,39 +101,3 @@ async function handleRemove(id: string) {
   }
 }
 </script>
-
-<style scoped>
-.folder-container {
-  margin-bottom: var(--spacing-xl);
-}
-
-.folder-content {
-  padding: 0 var(--spacing-md);
-}
-
-.empty-folder {
-  text-align: center;
-  padding: var(--spacing-xl);
-  color: var(--color-text-secondary);
-  background-color: #fafafa;
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--spacing-md);
-}
-
-.empty-folder p {
-  margin: var(--spacing-xs) 0;
-}
-
-.hint {
-  font-size: var(--font-size-sm);
-  font-style: italic;
-}
-
-.container-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
-}
-</style>

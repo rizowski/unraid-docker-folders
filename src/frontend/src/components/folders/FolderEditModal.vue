@@ -1,35 +1,56 @@
 <template>
-  <div v-if="isOpen" class="modal-overlay" @click="handleOverlayClick">
-    <div class="modal-content" @click.stop>
-      <div class="modal-header">
-        <h2>{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
-        <button class="close-btn" @click="$emit('close')" aria-label="Close">×</button>
+  <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]" @click="handleOverlayClick">
+    <div class="bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
+      <div class="flex justify-between items-center p-6 border-b border-border">
+        <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
+        <button class="bg-transparent border-none text-[32px] cursor-pointer text-text-secondary leading-none p-0 w-8 h-8 hover:text-text" @click="$emit('close')" aria-label="Close">&times;</button>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="modal-body">
-        <div class="form-group">
-          <label for="folder-name">Folder Name *</label>
-          <input id="folder-name" v-model="formData.name" type="text" required placeholder="Enter folder name" class="form-input" autofocus />
+      <form @submit.prevent="handleSubmit" class="p-6">
+        <div class="mb-6">
+          <label for="folder-name" class="block mb-1 font-medium text-text">Folder Name *</label>
+          <input
+            id="folder-name"
+            v-model="formData.name"
+            type="text"
+            required
+            placeholder="Enter folder name"
+            class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-base font-[inherit] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+            autofocus
+          />
         </div>
 
-        <div class="form-group">
-          <label for="folder-icon">Icon (emoji)</label>
-          <input id="folder-icon" v-model="formData.icon" type="text" placeholder="📁" class="form-input" maxlength="2" />
-          <span class="help-text">Enter an emoji to use as the folder icon</span>
+        <div class="mb-6">
+          <label for="folder-icon" class="block mb-1 font-medium text-text">Icon (emoji)</label>
+          <input
+            id="folder-icon"
+            v-model="formData.icon"
+            type="text"
+            placeholder="📁"
+            class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-base font-[inherit] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+            maxlength="2"
+          />
+          <span class="block mt-1 text-sm text-text-secondary">Enter an emoji to use as the folder icon</span>
         </div>
 
-        <div class="form-group">
-          <label for="folder-color">Color</label>
-          <div class="color-picker">
-            <input id="folder-color" v-model="formData.color" type="color" class="color-input" />
-            <input v-model="formData.color" type="text" placeholder="#2196f3" class="form-input color-text" pattern="^#[0-9A-Fa-f]{6}$" />
+        <div class="mb-6">
+          <label for="folder-color" class="block mb-1 font-medium text-text">Color</label>
+          <div class="flex gap-2 items-center">
+            <input id="folder-color" v-model="formData.color" type="color" class="w-[60px] h-10 border border-input-border rounded cursor-pointer" />
+            <input
+              v-model="formData.color"
+              type="text"
+              placeholder="#ff8c2f"
+              class="flex-1 py-2 px-4 border border-input-border rounded bg-input-bg text-base font-[inherit] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
+              pattern="^#[0-9A-Fa-f]{6}$"
+            />
           </div>
-          <span class="help-text">Choose a color for the folder's left border</span>
+          <span class="block mt-1 text-sm text-text-secondary">Choose a color for the folder's left border</span>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" @click="$emit('close')" class="btn btn-secondary">Cancel</button>
-          <button type="submit" class="btn btn-primary" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
+        <div class="flex justify-end gap-2 pt-6 border-t border-border">
+          <button type="button" @click="$emit('close')" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-border text-text hover:brightness-90 transition">Cancel</button>
+          <button type="submit" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition disabled:opacity-50 disabled:cursor-not-allowed" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
         </div>
       </form>
     </div>
@@ -37,7 +58,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -57,7 +78,7 @@ const isEditing = computed(() => !!props.folder);
 const formData = ref({
   name: '',
   icon: '📁',
-  color: '#2196f3',
+  color: '#ff8c2f',
 });
 
 // Reset form when modal opens/closes or folder changes
@@ -69,14 +90,14 @@ watch(
       formData.value = {
         name: props.folder.name,
         icon: props.folder.icon || '📁',
-        color: props.folder.color || '#2196f3',
+        color: props.folder.color || '#ff8c2f',
       };
     } else if (props.isOpen) {
       // Creating new folder
       formData.value = {
         name: '',
         icon: '📁',
-        color: '#2196f3',
+        color: '#ff8c2f',
       };
     }
   },
@@ -91,160 +112,3 @@ function handleSubmit() {
   emit('save', formData.value);
 }
 </script>
-
-<script lang="ts">
-import { computed } from 'vue';
-export default {
-  name: 'FolderEditModal',
-};
-</script>
-
-<style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
-  max-width: 500px;
-  width: 90%;
-  max-height: 90vh;
-  overflow: auto;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.modal-header h2 {
-  margin: 0;
-  font-size: var(--font-size-xl);
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 32px;
-  cursor: pointer;
-  color: var(--color-text-secondary);
-  line-height: 1;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-}
-
-.close-btn:hover {
-  color: var(--color-text);
-}
-
-.modal-body {
-  padding: var(--spacing-lg);
-}
-
-.form-group {
-  margin-bottom: var(--spacing-lg);
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: var(--spacing-xs);
-  font-weight: 500;
-  color: var(--color-text);
-}
-
-.form-input {
-  width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-md);
-  font-family: inherit;
-}
-
-.form-input:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
-}
-
-.color-picker {
-  display: flex;
-  gap: var(--spacing-sm);
-  align-items: center;
-}
-
-.color-input {
-  width: 60px;
-  height: 40px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.color-text {
-  flex: 1;
-}
-
-.help-text {
-  display: block;
-  margin-top: var(--spacing-xs);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--spacing-sm);
-  padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--color-border);
-}
-
-.btn {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-primary {
-  background-color: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #1976d2;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background-color: #e0e0e0;
-  color: var(--color-text);
-}
-
-.btn-secondary:hover {
-  background-color: #d0d0d0;
-}
-</style>

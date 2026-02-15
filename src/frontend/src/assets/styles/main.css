@@ -1,128 +1,29 @@
-/* CSS Reset and Base Styles for Unraid Docker Folders */
+@import "tailwindcss";
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-:root {
-  /* Colors - Will be expanded in Phase 4 */
-  --color-primary: #2196f3;
+@theme {
+  --color-text: var(--text-color, #1a1a1a);
+  --color-text-secondary: var(--text-color-secondary, #666666);
+  --color-bg: var(--background-color, #f2f2f2);
+  --color-bg-card: var(--content-background, #ffffff);
+  --color-border: var(--border-color, #e0e0e0);
+  --color-primary: var(--header-background, #ff8c2f);
+  --color-primary-text: var(--header-text-color, #ffffff);
+  --color-button: var(--button-background, #ff8c2f);
+  --color-button-hover: var(--button-hover, #ff6600);
+  --color-button-text: var(--button-text-color, #ffffff);
+  --color-input-bg: var(--input-background, #ffffff);
+  --color-input-border: var(--input-border, #cccccc);
   --color-success: #4caf50;
   --color-error: #f44336;
   --color-warning: #ff9800;
-  --color-info: #00bcd4;
-
-  --color-text: #333333;
-  --color-text-secondary: #666666;
-  --color-border: #e0e0e0;
-  --color-background: #ffffff;
-
-  /* Spacing */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-
-  /* Typography */
-  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', sans-serif;
-  --font-size-xs: 12px;
-  --font-size-sm: 14px;
-  --font-size-md: 16px;
-  --font-size-lg: 18px;
-  --font-size-xl: 24px;
-  --font-size-xxl: 32px;
-
-  /* Border Radius */
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-full: 9999px;
-
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.15);
+  --color-muted: #757575;
 }
 
-html {
-  font-size: 16px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Drag and drop styles */
+.sortable-ghost {
+  opacity: 0.4;
 }
 
-body {
-  font-family: var(--font-family);
-  font-size: var(--font-size-md);
-  line-height: 1.5;
-  color: var(--color-text);
-  background-color: var(--color-background);
-}
-
-/* Headings */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-h1 {
-  font-size: var(--font-size-xxl);
-}
-
-h2 {
-  font-size: var(--font-size-xl);
-}
-
-h3 {
-  font-size: var(--font-size-lg);
-}
-
-/* Buttons */
-button {
-  font-family: inherit;
-  font-size: inherit;
-}
-
-/* Links */
-a {
-  color: var(--color-primary);
-  text-decoration: none;
-}
-
-a:hover {
-  text-decoration: underline;
-}
-
-/* Focus styles */
-:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
-}
-
-/* Scrollbar styling (webkit) */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: var(--radius-md);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
+.sortable-drag {
+  cursor: grabbing !important;
 }

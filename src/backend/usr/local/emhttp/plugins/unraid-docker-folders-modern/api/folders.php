@@ -32,7 +32,7 @@ function getRequestData()
   if (isset($_POST['payload'])) {
     return json_decode($_POST['payload'], true);
   }
-  return getRequestData();
+  return json_decode(file_get_contents('php://input'), true);
 }
 
 try {

@@ -1,46 +1,39 @@
 <template>
-  <div id="unraid-docker-folders-modern">
-    <header class="header">
-      <div class="header-left">
-        <h1>Docker Containers</h1>
-        <span class="stats">{{ dockerStore.containerCount}} containers, {{ folderStore.folderCount }} folders</span>
+  <div id="unraid-docker-folders-modern" class="max-w-[1400px] mx-auto p-6 font-sans text-text bg-bg">
+    <header class="flex justify-between items-center mb-8 pb-6 border-b-2 border-border">
+      <div class="flex items-baseline gap-4">
+        <span class="text-sm text-text-secondary">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
         <ConnectionStatus />
       </div>
-      <div class="header-right">
-        <button @click="openCreateFolderModal" class="btn btn-primary">+ Create Folder</button>
+      <div class="flex gap-2">
+        <button @click="openCreateFolderModal" class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors">+ Create Folder</button>
       </div>
     </header>
 
-    <main class="main-content">
-      <div v-if="isLoading" class="loading">
+    <main class="min-h-[400px]">
+      <div v-if="isLoading" class="text-center py-8 px-6 text-text-secondary">
         <p>Loading...</p>
       </div>
 
-      <div v-else-if="error" class="error">
+      <div v-else-if="error" class="text-center py-8 px-6 text-error">
         <p>Error: {{ error }}</p>
-        <button @click="loadData">Retry</button>
+        <button @click="loadData" class="mt-4 px-6 py-2 bg-error text-white border-none rounded cursor-pointer">Retry</button>
       </div>
 
       <div v-else>
         <!-- Folders -->
-        <div v-if="folderStore.sortedFolders.length > 0" class="folders-section">
-          <FolderContainer
-            v-for="folder in folderStore.sortedFolders"
-            :key="folder.id"
-            :folder="folder"
-            @edit="openEditFolderModal"
-            @delete="deleteFolder"
-          />
+        <div v-if="folderStore.sortedFolders.length > 0" class="mb-8">
+          <FolderContainer v-for="folder in folderStore.sortedFolders" :key="folder.id" :folder="folder" @edit="openEditFolderModal" @delete="deleteFolder" />
         </div>
 
         <!-- Unfoldered Containers -->
-        <div v-if="dockerStore.unfolderedContainers.length > 0" class="unfoldered-section">
-          <div class="section-header">
-            <h2>Unfoldered Containers</h2>
-            <span class="container-count">{{ dockerStore.unfolderedContainers.length }}</span>
+        <div v-if="dockerStore.unfolderedContainers.length > 0" class="mt-8">
+          <div class="flex items-center gap-2 mb-6">
+            <h2 class="text-2xl font-semibold text-text">Unfoldered Containers</h2>
+            <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{ dockerStore.unfolderedContainers.length }}</span>
           </div>
 
-          <div class="container-list" id="unfoldered-containers">
+          <div class="grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4" id="unfoldered-containers">
             <ContainerCard
               v-for="container in dockerStore.unfolderedContainers"
               :key="container.id"
@@ -55,7 +48,7 @@
         </div>
 
         <!-- Empty State -->
-        <div v-if="dockerStore.containerCount === 0" class="empty-state">
+        <div v-if="dockerStore.containerCount === 0" class="text-center py-8 px-6 text-text-secondary">
           <p>No Docker containers found</p>
         </div>
       </div>
@@ -88,7 +81,42 @@ const editingFolder = ref<Folder | null>(null);
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
 
+function inheritParentTheme() {
+  try {
+    const parentStyles = window.parent.document.documentElement
+      ? getComputedStyle(window.parent.document.documentElement)
+      : null;
+    if (!parentStyles) return;
+
+    const varsToInherit = [
+      'text-color',
+      'background-color',
+      'content-background',
+      'border-color',
+      'header-background',
+      'header-text-color',
+      'button-background',
+      'button-hover',
+      'button-text-color',
+      'input-background',
+      'input-border',
+      'text-color-secondary',
+    ];
+
+    const root = document.documentElement;
+    for (const varName of varsToInherit) {
+      const value = parentStyles.getPropertyValue(`--${varName}`).trim();
+      if (value) {
+        root.style.setProperty(`--${varName}`, value);
+      }
+    }
+  } catch {
+    // Cross-origin or no parent frame — use fallback values from @theme
+  }
+}
+
 onMounted(async () => {
+  inheritParentTheme();
   await loadData();
   initializeDragAndDrop();
   initWebSocket();
@@ -208,10 +236,8 @@ function closeModal() {
 
 async function saveFolder(data: FolderCreateData | FolderUpdateData) {
   if (editingFolder.value) {
-    // Update existing folder
     await folderStore.updateFolder(editingFolder.value.id, data as FolderUpdateData);
   } else {
-    // Create new folder
     await folderStore.createFolder(data as FolderCreateData);
   }
 
@@ -227,139 +253,3 @@ async function deleteFolder(id: number) {
   }
 }
 </script>
-
-<style>
-/* Global styles */
-#unraid-docker-folders-modern {
-  font-family: var(--font-family);
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: var(--spacing-lg);
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-xl);
-  padding-bottom: var(--spacing-lg);
-  border-bottom: 2px solid var(--color-border);
-}
-
-.header-left {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-md);
-}
-
-.header-left h1 {
-  margin: 0;
-  font-size: var(--font-size-xxl);
-  color: var(--color-text);
-}
-
-.stats {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.header-right {
-  display: flex;
-  gap: var(--spacing-sm);
-}
-
-.btn {
-  padding: var(--spacing-sm) var(--spacing-lg);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-md);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.btn-primary {
-  background-color: var(--color-primary);
-  color: white;
-}
-
-.btn-primary:hover {
-  background-color: #1976d2;
-}
-
-.main-content {
-  min-height: 400px;
-}
-
-.loading,
-.error,
-.empty-state {
-  text-align: center;
-  padding: var(--spacing-xl) var(--spacing-lg);
-  color: var(--color-text-secondary);
-}
-
-.error {
-  color: var(--color-error);
-}
-
-.error button {
-  margin-top: var(--spacing-md);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background-color: var(--color-error);
-  color: white;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.folders-section {
-  margin-bottom: var(--spacing-xl);
-}
-
-.unfoldered-section {
-  margin-top: var(--spacing-xl);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-lg);
-}
-
-.section-header h2 {
-  margin: 0;
-  font-size: var(--font-size-xl);
-  color: var(--color-text);
-}
-
-.container-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 var(--spacing-sm);
-  background-color: var(--color-text-secondary);
-  color: white;
-  border-radius: var(--radius-full);
-  font-size: var(--font-size-xs);
-  font-weight: 600;
-}
-
-.container-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: var(--spacing-md);
-}
-
-/* Drag and drop styles */
-.sortable-ghost {
-  opacity: 0.4;
-}
-
-.sortable-drag {
-  cursor: grabbing !important;
-}
-</style>

@@ -1,7 +1,15 @@
 <template>
-  <span class="connection-status" :class="connectionStatus">
-    <span class="status-dot"></span>
-    <span class="status-label">{{ label }}</span>
+  <span class="inline-flex items-center gap-1.5 text-xs font-medium">
+    <span
+      class="w-2 h-2 rounded-full"
+      :class="{
+        'bg-success': connectionStatus === 'connected',
+        'bg-warning animate-pulse': connectionStatus === 'connecting',
+        'bg-error': connectionStatus === 'error',
+        'bg-muted': connectionStatus === 'disconnected',
+      }"
+    ></span>
+    <span class="text-text-secondary">{{ label }}</span>
   </span>
 </template>
 
@@ -25,46 +33,3 @@ const label = computed(() => {
   }
 });
 </script>
-
-<style scoped>
-.connection-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-xs);
-  font-weight: 500;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #9e9e9e;
-}
-
-.connection-status.connected .status-dot {
-  background-color: #4caf50;
-}
-
-.connection-status.connecting .status-dot {
-  background-color: #ff9800;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.connection-status.error .status-dot {
-  background-color: #f44336;
-}
-
-.connection-status.disconnected .status-dot {
-  background-color: #9e9e9e;
-}
-
-.status-label {
-  color: var(--color-text-secondary);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-</style>
