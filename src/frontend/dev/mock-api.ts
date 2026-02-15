@@ -11,7 +11,7 @@ import type { Plugin } from 'vite';
 
 // --- Mock data ---
 
-let nextFolderId = 3;
+let nextFolderId = 5;
 
 const containers = [
   {
@@ -127,12 +127,11 @@ const folders: any[] = [
     color: '#e91e63',
     position: 0,
     collapsed: false,
+    compose_project: null,
     created_at: Date.now(),
     updated_at: Date.now(),
     containers: [
       { id: 1, container_id: 'abc123def456', container_name: 'plex', folder_id: 1, position: 0 },
-      { id: 2, container_id: 'bcd234efg567', container_name: 'sonarr', folder_id: 1, position: 1 },
-      { id: 3, container_id: 'cde345fgh678', container_name: 'radarr', folder_id: 1, position: 2 },
     ],
   },
   {
@@ -142,11 +141,42 @@ const folders: any[] = [
     color: '#2196f3',
     position: 1,
     collapsed: false,
+    compose_project: null,
     created_at: Date.now(),
     updated_at: Date.now(),
     containers: [
       { id: 4, container_id: 'efg567hij890', container_name: 'nginx-proxy', folder_id: 2, position: 0 },
-      { id: 5, container_id: 'fgh678ijk901', container_name: 'mariadb', folder_id: 2, position: 1 },
+    ],
+  },
+  {
+    id: 3,
+    name: 'media-stack',
+    icon: 'layer-group',
+    color: '#ff8c2f',
+    position: 2,
+    collapsed: false,
+    compose_project: 'media-stack',
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    containers: [
+      { id: 2, container_id: 'bcd234efg567', container_name: 'sonarr', folder_id: 3, position: 0 },
+      { id: 3, container_id: 'cde345fgh678', container_name: 'radarr', folder_id: 3, position: 1 },
+      { id: 6, container_id: 'def456ghi789', container_name: 'sabnzbd', folder_id: 3, position: 2 },
+    ],
+  },
+  {
+    id: 4,
+    name: 'db-stack',
+    icon: 'layer-group',
+    color: '#ff8c2f',
+    position: 3,
+    collapsed: false,
+    compose_project: 'db-stack',
+    created_at: Date.now(),
+    updated_at: Date.now(),
+    containers: [
+      { id: 5, container_id: 'fgh678ijk901', container_name: 'mariadb', folder_id: 4, position: 0 },
+      { id: 7, container_id: 'ghi789jkl012', container_name: 'redis', folder_id: 4, position: 1 },
     ],
   },
 ];

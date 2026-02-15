@@ -14,7 +14,7 @@
         launch="&launch;" pluginURL="&pluginURL;"
         support="https://github.com/&github;/issues"
         project="https://github.com/&github;"
-        icon="folder"
+        icon="icon.png"
         min="7.0.0">
 
 <CHANGES>

@@ -17,6 +17,7 @@ export interface Folder {
   color: string | null;
   position: number;
   collapsed: boolean;
+  compose_project: string | null;
   created_at: number;
   updated_at: number;
   containers: ContainerAssociation[];
