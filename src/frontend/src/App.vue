@@ -4,6 +4,7 @@
       <div class="header-left">
         <h1>Docker Containers</h1>
         <span class="stats">{{ dockerStore.containerCount}} containers, {{ folderStore.folderCount }} folders</span>
+        <ConnectionStatus />
       </div>
       <div class="header-right">
         <button @click="openCreateFolderModal" class="btn btn-primary">+ Create Folder</button>
@@ -48,6 +49,7 @@
               @start="handleStart"
               @stop="handleStop"
               @restart="handleRestart"
+              @remove="handleRemove"
             />
           </div>
         </div>
@@ -68,9 +70,11 @@
 import { ref, onMounted, computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
+import ConnectionStatus from '@/components/ConnectionStatus.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
 
@@ -87,6 +91,7 @@ const error = computed(() => dockerStore.error || folderStore.error);
 onMounted(async () => {
   await loadData();
   initializeDragAndDrop();
+  initWebSocket();
 });
 
 async function loadData() {
@@ -167,6 +172,20 @@ async function handleRestart(id: string) {
   actionInProgress.value = id;
   try {
     await dockerStore.restartContainer(id);
+  } finally {
+    actionInProgress.value = null;
+  }
+}
+
+async function handleRemove(id: string) {
+  const container = dockerStore.getContainerById(id);
+  const name = container?.name || id.substring(0, 12);
+  if (!confirm(`Are you sure you want to remove container "${name}"? This cannot be undone.`)) {
+    return;
+  }
+  actionInProgress.value = id;
+  try {
+    await dockerStore.removeContainer(id);
   } finally {
     actionInProgress.value = null;
   }

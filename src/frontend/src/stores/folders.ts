@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderExportConfig, FolderImportResult } from '@/types/folder';
+import { withCsrf } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
@@ -13,6 +14,8 @@ export const useFolderStore = defineStore('folders', () => {
   const folders = ref<Folder[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  let lastFetchTime = 0;
+  const FETCH_DEBOUNCE_MS = 500;
 
   // Getters
   const folderCount = computed(() => folders.value.length);
@@ -26,7 +29,13 @@ export const useFolderStore = defineStore('folders', () => {
   });
 
   // Actions
-  async function fetchFolders() {
+  async function fetchFolders(force = false) {
+    const now = Date.now();
+    if (!force && now - lastFetchTime < FETCH_DEBOUNCE_MS) {
+      return;
+    }
+    lastFetchTime = now;
+
     loading.value = true;
     error.value = null;
 
@@ -52,7 +61,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -85,7 +94,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php?id=${id}`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -121,7 +130,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php?id=${id}`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${id}`), {
         method: 'DELETE',
       });
 
@@ -147,7 +156,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php?id=${folderId}&action=add_container`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${folderId}&action=add_container`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -186,7 +195,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php?action=remove_container`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?action=remove_container`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -215,7 +224,7 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function reorderContainers(folderId: number, containerIds: string[]): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -247,7 +256,7 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function reorderFolders(folderIds: number[]): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/folders.php?action=reorder_folders`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?action=reorder_folders`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -291,7 +300,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php?action=import`, {
+      const response = await fetch(withCsrf(`${API_BASE}/folders.php?action=import`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

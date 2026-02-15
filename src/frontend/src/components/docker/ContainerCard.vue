@@ -34,6 +34,14 @@
       >
         Restart
       </button>
+      <button
+        @click="$emit('remove', container.id)"
+        class="btn btn-remove"
+        :disabled="actionInProgress"
+        title="Remove container"
+      >
+        Remove
+      </button>
     </div>
   </div>
 </template>
@@ -52,6 +60,7 @@ defineEmits<{
   start: [id: string];
   stop: [id: string];
   restart: [id: string];
+  remove: [id: string];
 }>();
 </script>
 
@@ -167,6 +176,15 @@ defineEmits<{
 
 .btn-restart:hover:not(:disabled) {
   background-color: #1976d2;
+}
+
+.btn-remove {
+  background-color: #757575;
+  color: white;
+}
+
+.btn-remove:hover:not(:disabled) {
+  background-color: #d32f2f;
 }
 
 .btn:disabled {

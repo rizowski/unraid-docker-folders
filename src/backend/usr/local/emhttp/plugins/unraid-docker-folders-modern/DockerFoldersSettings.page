@@ -168,7 +168,7 @@ require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/con
   <div class="info-box">
     <h3>🚀 Access the Interface</h3>
     <p>Access the Docker Folders interface from:</p>
-    <p><strong>Docker Menu:</strong> <code>Docker > Folders (Modern)</code></p>
+    <p><strong>Docker Menu:</strong> <code>Docker > Folders</code></p>
     <p><strong>Direct URL:</strong> <code>http://<?= $_SERVER['SERVER_NAME'] ?>/plugins/unraid-docker-folders-modern/assets/index.html</code></p>
   </div>
 

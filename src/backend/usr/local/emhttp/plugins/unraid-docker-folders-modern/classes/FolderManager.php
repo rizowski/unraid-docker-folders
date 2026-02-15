@@ -175,7 +175,7 @@ class FolderManager
                 'position' => $maxPosition + 1,
             ]);
             return true;
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             error_log('Error adding container to folder: ' . $e->getMessage());
             return false;
         }

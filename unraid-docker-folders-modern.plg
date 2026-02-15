@@ -252,8 +252,8 @@ if [ $VERIFY_FAIL -eq 0 ]; then
   echo "========================================="
   echo ""
   echo "Access the plugin:"
-  echo "  • Docker > Folders (Modern)"
-  echo "  • Settings > Utilities > Docker Folders Modern"
+  echo "  • Docker > Folders"
+  echo "  • Settings > Utilities > Docker Folders"
   echo ""
   echo "Installation log: ${LOG_FILE}"
 else

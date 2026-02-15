@@ -5,9 +5,11 @@ Cond="is_file('/var/run/dockerd.pid')"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
+require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/auth.php';
 
 // Check database
 $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
+$csrfToken = getCsrfToken();
 ?>
 <style>
 .docker-folders-wrapper {
@@ -38,7 +40,7 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     </div>
 <?php endif; ?>
     <iframe
-        src="/plugins/unraid-docker-folders-modern/assets/index.html"
+        src="/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=<?= urlencode($csrfToken) ?>"
         title="Docker Folders Modern">
     </iframe>
 </div>

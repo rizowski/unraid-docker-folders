@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useFolderStore } from './folders';
+import { withCsrf } from '@/utils/csrf';
 
 export interface Container {
   id: string;
@@ -21,6 +22,8 @@ export const useDockerStore = defineStore('docker', () => {
   const containers = ref<Container[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  let lastFetchTime = 0;
+  const FETCH_DEBOUNCE_MS = 500;
 
   // Getters
   const containerCount = computed(() => containers.value.length);
@@ -45,7 +48,13 @@ export const useDockerStore = defineStore('docker', () => {
   });
 
   // Actions
-  async function fetchContainers() {
+  async function fetchContainers(force = false) {
+    const now = Date.now();
+    if (!force && now - lastFetchTime < FETCH_DEBOUNCE_MS) {
+      return;
+    }
+    lastFetchTime = now;
+
     loading.value = true;
     error.value = null;
 
@@ -68,7 +77,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function startContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/containers.php?action=start&id=${id}`, {
+      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=start&id=${id}`), {
         method: 'POST',
       });
 
@@ -88,7 +97,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function stopContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/containers.php?action=stop&id=${id}`, {
+      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=stop&id=${id}`), {
         method: 'POST',
       });
 
@@ -108,7 +117,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function restartContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(`${API_BASE}/containers.php?action=restart&id=${id}`, {
+      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=restart&id=${id}`), {
         method: 'POST',
       });
 
@@ -122,6 +131,26 @@ export const useDockerStore = defineStore('docker', () => {
       return true;
     } catch (e) {
       console.error('Error restarting container:', e);
+      return false;
+    }
+  }
+
+  async function removeContainer(id: string): Promise<boolean> {
+    try {
+      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=remove&id=${id}`), {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to remove container`);
+      }
+
+      // Refresh container list
+      await fetchContainers();
+
+      return true;
+    } catch (e) {
+      console.error('Error removing container:', e);
       return false;
     }
   }
@@ -142,5 +171,6 @@ export const useDockerStore = defineStore('docker', () => {
     startContainer,
     stopContainer,
     restartContainer,
+    removeContainer,
   };
 });

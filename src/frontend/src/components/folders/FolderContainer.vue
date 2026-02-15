@@ -17,6 +17,7 @@
           @start="handleStart"
           @stop="handleStop"
           @restart="handleRestart"
+          @remove="handleRemove"
         />
       </div>
     </div>
@@ -81,6 +82,20 @@ async function handleRestart(id: string) {
   actionInProgress.value = id;
   try {
     await dockerStore.restartContainer(id);
+  } finally {
+    actionInProgress.value = null;
+  }
+}
+
+async function handleRemove(id: string) {
+  const container = dockerStore.containers.find((c) => c.id === id);
+  const name = container?.name || id.substring(0, 12);
+  if (!confirm(`Are you sure you want to remove container "${name}"? This cannot be undone.`)) {
+    return;
+  }
+  actionInProgress.value = id;
+  try {
+    await dockerStore.removeContainer(id);
   } finally {
     actionInProgress.value = null;
   }

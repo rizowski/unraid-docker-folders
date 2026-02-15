@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/FolderManager.php';
+require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 // Set JSON content type
 header('Content-Type: application/json');
@@ -120,6 +121,8 @@ function handlePost($folderManager)
             errorResponse('Import failed: ' . implode(', ', $result['errors']), 500);
         }
 
+        WebSocketPublisher::publish('folder', 'import', $result);
+
         jsonResponse($result);
     }
 
@@ -146,6 +149,9 @@ function handlePost($folderManager)
         }
 
         $folder = $folderManager->getFolder($id);
+
+        WebSocketPublisher::publish('folder', 'add_container', ['folder' => $folder]);
+
         jsonResponse([
             'success' => true,
             'folder' => $folder,
@@ -161,6 +167,10 @@ function handlePost($folderManager)
         }
 
         $success = $folderManager->removeContainerFromFolder($data['container_id']);
+
+        WebSocketPublisher::publish('folder', 'remove_container', [
+            'container_id' => $data['container_id'],
+        ]);
 
         jsonResponse([
             'success' => $success,
@@ -186,6 +196,9 @@ function handlePost($folderManager)
         }
 
         $folder = $folderManager->getFolder($id);
+
+        WebSocketPublisher::publish('folder', 'reorder_containers', ['folder' => $folder]);
+
         jsonResponse([
             'success' => true,
             'folder' => $folder,
@@ -206,6 +219,8 @@ function handlePost($folderManager)
             errorResponse('Failed to reorder folders', 500);
         }
 
+        WebSocketPublisher::publish('folder', 'reorder', null);
+
         jsonResponse(['success' => true]);
     }
 
@@ -217,6 +232,8 @@ function handlePost($folderManager)
     }
 
     $folder = $folderManager->createFolder($data);
+
+    WebSocketPublisher::publish('folder', 'create', ['folder' => $folder]);
 
     jsonResponse([
         'success' => true,
@@ -247,6 +264,8 @@ function handlePut($folderManager)
         errorResponse('Folder not found', 404);
     }
 
+    WebSocketPublisher::publish('folder', 'update', ['folder' => $folder]);
+
     jsonResponse([
         'success' => true,
         'folder' => $folder,
@@ -269,6 +288,8 @@ function handleDelete($folderManager)
     if (!$success) {
         errorResponse('Folder not found', 404);
     }
+
+    WebSocketPublisher::publish('folder', 'delete', ['id' => $id]);
 
     jsonResponse(['success' => true]);
 }

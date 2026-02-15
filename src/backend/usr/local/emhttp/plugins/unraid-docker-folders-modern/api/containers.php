@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/DockerClient.php';
+require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 // Set JSON content type
 header('Content-Type: application/json');
@@ -123,8 +124,13 @@ function handlePost($dockerClient) {
         errorResponse($message, 500);
     }
 
-    // Get updated container info
-    $container = $dockerClient->inspectContainer($id);
+    // Get updated container info (may be null for 'remove')
+    $container = ($action !== 'remove') ? $dockerClient->inspectContainer($id) : null;
+
+    WebSocketPublisher::publish('container', $action, [
+        'id' => $id,
+        'container' => $container,
+    ]);
 
     jsonResponse([
         'success' => true,
