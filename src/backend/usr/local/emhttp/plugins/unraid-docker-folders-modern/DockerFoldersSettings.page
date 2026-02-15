@@ -154,7 +154,7 @@ require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/con
 
 <div class="settings-container">
   <div class="settings-header">
-    <h1>Docker Folders Modern</h1>
+    <h1>Docker Folders</h1>
     <p>A modern plugin for organizing Docker containers with folders and real-time updates</p>
   </div>
 

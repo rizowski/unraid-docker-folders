@@ -122,6 +122,7 @@ class DockerClient {
      * @return array Formatted container
      */
     private function formatContainer($container) {
+        $labels = $container['Labels'] ?? [];
         return [
             'id' => $container['Id'],
             'name' => ltrim($container['Names'][0] ?? '', '/'),
@@ -132,8 +133,9 @@ class DockerClient {
             'state' => $container['State'],
             'status' => $container['Status'],
             'ports' => $container['Ports'] ?? [],
-            'labels' => $container['Labels'] ?? [],
+            'labels' => $labels,
             'networkMode' => $container['HostConfig']['NetworkMode'] ?? 'bridge',
+            'icon' => $labels['net.unraid.docker.icon'] ?? null,
         ];
     }
 

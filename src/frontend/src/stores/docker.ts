@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useFolderStore } from './folders';
-import { withCsrf } from '@/utils/csrf';
+import { apiFetch } from '@/utils/csrf';
 
 export interface Container {
   id: string;
@@ -13,6 +13,7 @@ export interface Container {
   image: string;
   state: string;
   status: string;
+  icon: string | null;
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -32,6 +33,18 @@ export const useDockerStore = defineStore('docker', () => {
     return (id: string) => containers.value.find((c) => c.id === id);
   });
 
+  const stateOrder: Record<string, number> = {
+    exited: 0,
+    running: 1,
+    created: 2,
+  };
+
+  const sortedContainers = computed(() => {
+    return [...containers.value].sort((a, b) => {
+      return (stateOrder[a.state] ?? 3) - (stateOrder[b.state] ?? 3);
+    });
+  });
+
   const unfolderedContainers = computed(() => {
     const folderStore = useFolderStore();
     const assignedContainerIds = new Set<string>();
@@ -43,8 +56,8 @@ export const useDockerStore = defineStore('docker', () => {
       });
     });
 
-    // Return containers that aren't in any folder
-    return containers.value.filter((c) => !assignedContainerIds.has(c.id));
+    // Return containers that aren't in any folder, sorted by state
+    return sortedContainers.value.filter((c) => !assignedContainerIds.has(c.id));
   });
 
   // Actions
@@ -77,7 +90,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function startContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=start&id=${id}`), {
+      const response = await apiFetch(`${API_BASE}/containers.php?action=start&id=${id}`, {
         method: 'POST',
       });
 
@@ -97,7 +110,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function stopContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=stop&id=${id}`), {
+      const response = await apiFetch(`${API_BASE}/containers.php?action=stop&id=${id}`, {
         method: 'POST',
       });
 
@@ -117,7 +130,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function restartContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=restart&id=${id}`), {
+      const response = await apiFetch(`${API_BASE}/containers.php?action=restart&id=${id}`, {
         method: 'POST',
       });
 
@@ -137,7 +150,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   async function removeContainer(id: string): Promise<boolean> {
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/containers.php?action=remove&id=${id}`), {
+      const response = await apiFetch(`${API_BASE}/containers.php?action=remove&id=${id}`, {
         method: 'POST',
       });
 
@@ -164,6 +177,7 @@ export const useDockerStore = defineStore('docker', () => {
     // Getters
     containerCount,
     getContainerById,
+    sortedContainers,
     unfolderedContainers,
 
     // Actions

@@ -22,6 +22,18 @@ header('Content-Type: application/json');
 $method = $_SERVER['REQUEST_METHOD'];
 $folderManager = new FolderManager();
 
+/**
+ * Read JSON request body.
+ * Checks $_POST['payload'] first (form-encoded with CSRF token),
+ * falls back to raw php://input (direct JSON body).
+ */
+function getRequestData() {
+    if (isset($_POST['payload'])) {
+        return json_decode($_POST['payload'], true);
+    }
+    return getRequestData();
+}
+
 try {
     switch ($method) {
         case 'GET':
@@ -109,7 +121,7 @@ function handlePost($folderManager)
 
     // Import configuration
     if ($action === 'import') {
-        $config = json_decode(file_get_contents('php://input'), true);
+        $config = getRequestData();
 
         if (!$config) {
             errorResponse('Invalid JSON data', 400);
@@ -132,7 +144,7 @@ function handlePost($folderManager)
             errorResponse('Folder ID is required', 400);
         }
 
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = getRequestData();
 
         if (!isset($data['container_id']) || !isset($data['container_name'])) {
             errorResponse('container_id and container_name are required', 400);
@@ -160,7 +172,7 @@ function handlePost($folderManager)
 
     // Remove container from folder
     if ($action === 'remove_container') {
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = getRequestData();
 
         if (!isset($data['container_id'])) {
             errorResponse('container_id is required', 400);
@@ -183,7 +195,7 @@ function handlePost($folderManager)
             errorResponse('Folder ID is required', 400);
         }
 
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = getRequestData();
 
         if (!isset($data['container_ids']) || !is_array($data['container_ids'])) {
             errorResponse('container_ids array is required', 400);
@@ -207,7 +219,7 @@ function handlePost($folderManager)
 
     // Reorder folders
     if ($action === 'reorder_folders') {
-        $data = json_decode(file_get_contents('php://input'), true);
+        $data = getRequestData();
 
         if (!isset($data['folder_ids']) || !is_array($data['folder_ids'])) {
             errorResponse('folder_ids array is required', 400);
@@ -225,7 +237,7 @@ function handlePost($folderManager)
     }
 
     // Create folder (default action)
-    $data = json_decode(file_get_contents('php://input'), true);
+    $data = getRequestData();
 
     if (!$data) {
         $data = [];
@@ -252,7 +264,7 @@ function handlePut($folderManager)
         errorResponse('Folder ID is required', 400);
     }
 
-    $data = json_decode(file_get_contents('php://input'), true);
+    $data = getRequestData();
 
     if (!$data) {
         errorResponse('Invalid JSON data', 400);

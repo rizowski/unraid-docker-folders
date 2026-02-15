@@ -1,6 +1,12 @@
 <template>
   <div class="container-card" :data-container-id="container.id">
     <div class="container-header">
+      <img
+        v-if="container.icon"
+        :src="container.icon"
+        :alt="container.name"
+        class="container-icon"
+      />
       <h3>{{ container.name }}</h3>
       <span class="container-status" :class="container.state">
         {{ container.state }}
@@ -37,8 +43,8 @@
       <button
         @click="$emit('remove', container.id)"
         class="btn btn-remove"
-        :disabled="actionInProgress"
-        title="Remove container"
+        :disabled="actionInProgress || container.state === 'running'"
+        :title="container.state === 'running' ? 'Stop container before removing' : 'Remove container'"
       >
         Remove
       </button>
@@ -85,13 +91,21 @@ defineEmits<{
 
 .container-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: var(--spacing-sm);
   margin-bottom: var(--spacing-sm);
+}
+
+.container-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .container-header h3 {
   margin: 0;
+  flex: 1;
   font-size: var(--font-size-lg);
   color: var(--color-text);
 }

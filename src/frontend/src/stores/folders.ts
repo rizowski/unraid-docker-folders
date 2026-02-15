@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderExportConfig, FolderImportResult } from '@/types/folder';
-import { withCsrf } from '@/utils/csrf';
+import { apiFetch } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
@@ -61,11 +61,8 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php`), {
+      const response = await apiFetch(`${API_BASE}/folders.php`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(data),
       });
 
@@ -94,11 +91,8 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${id}`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?id=${id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(data),
       });
 
@@ -130,7 +124,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${id}`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?id=${id}`, {
         method: 'DELETE',
       });
 
@@ -156,11 +150,8 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${folderId}&action=add_container`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?id=${folderId}&action=add_container`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           container_id: containerId,
           container_name: containerName,
@@ -195,11 +186,8 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?action=remove_container`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?action=remove_container`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           container_id: containerId,
         }),
@@ -224,11 +212,8 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function reorderContainers(folderId: number, containerIds: string[]): Promise<boolean> {
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           container_ids: containerIds,
         }),
@@ -256,11 +241,8 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function reorderFolders(folderIds: number[]): Promise<boolean> {
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?action=reorder_folders`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?action=reorder_folders`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           folder_ids: folderIds,
         }),
@@ -300,11 +282,8 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(withCsrf(`${API_BASE}/folders.php?action=import`), {
+      const response = await apiFetch(`${API_BASE}/folders.php?action=import`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify(config),
       });
 
