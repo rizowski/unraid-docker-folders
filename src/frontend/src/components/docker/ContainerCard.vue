@@ -97,7 +97,9 @@
         <template v-if="displayMounts.length">
           <span class="text-muted shrink-0">Volumes</span>
           <div class="text-text-secondary font-mono space-y-0.5">
-            <p v-for="mount in displayMounts" :key="mount" class="truncate" :title="mount">{{ mount }}</p>
+            <p v-for="mount in displayMounts" :key="mount.destination" class="truncate" :title="`${mount.destination} -> ${mount.source}`">
+              {{ mount.destination }} -&gt; <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="hover:underline" @click.stop>{{ mount.sourceShort }}</a>
+            </p>
           </div>
         </template>
       </div>
@@ -277,11 +279,11 @@
       <!-- Clickable name/image area toggles accordion -->
       <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
         <span class="font-semibold text-text min-w-[140px]">{{ container.name }}</span>
-        <span class="text-sm text-text-secondary font-mono truncate hidden sm:inline">
+        <span class="text-sm text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="text-xs text-muted hidden md:inline">{{ container.status }}</span>
+        <span class="text-xs text-muted">{{ container.status }}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -300,7 +302,7 @@
       </div>
 
       <!-- Inline compact stats (list view) -->
-      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5 hidden lg:block">
+      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">CPU</span>
           <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
@@ -422,25 +424,28 @@
             <span v-else>{{ container.image }}</span>
           </span>
         </template>
-        <template v-if="networkInfo">
-          <span class="text-muted shrink-0">Network</span>
-          <span class="text-text-secondary font-mono truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
-        </template>
-        <template v-if="displayPorts.length">
-          <span class="text-muted shrink-0">Ports</span>
-          <span class="text-text-secondary font-mono truncate">{{ displayPorts.join(', ') }}</span>
-        </template>
-        <template v-if="displayMounts.length">
-          <span class="text-muted shrink-0">Volumes</span>
-          <div class="text-text-secondary font-mono space-y-0.5">
-            <p v-for="mount in displayMounts" :key="mount" class="truncate" :title="mount">{{ mount }}</p>
+      </div>
+      <div v-if="networkInfo || displayPorts.length || displayMounts.length" class="grid grid-cols-2 gap-4">
+        <div v-if="networkInfo || displayPorts.length">
+          <p class="text-muted text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
+          <div class="text-text-secondary font-mono text-xs space-y-0.5">
+            <p v-if="networkInfo" class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</p>
+            <p v-for="port in displayPorts" :key="port" class="truncate">{{ port }}</p>
           </div>
-        </template>
+        </div>
+        <div v-if="displayMounts.length">
+          <p class="text-muted text-xs mb-1">Volumes</p>
+          <div class="text-text-secondary font-mono text-xs space-y-0.5">
+            <p v-for="mount in displayMounts" :key="mount.destination" class="truncate" :title="`${mount.destination} -> ${mount.source}`">
+              {{ mount.destination }} -&gt; <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="hover:underline" @click.stop>{{ mount.sourceShort }}</a>
+            </p>
+          </div>
+        </div>
       </div>
       <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
 
       <!-- Resource Usage Stats (list view) -->
-      <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
+      <div v-if="isRunning && containerStats" class="space-y-1.5 pt-2 border-t border-border">
         <p class="text-muted text-xs">Resource Usage</p>
         <!-- CPU Bar -->
         <div class="space-y-0.5">
@@ -687,8 +692,8 @@ const displayMounts = computed(() => {
   const mounts = props.container.mounts;
   if (!mounts?.length) return [];
   return mounts.slice(0, 2).map((m) => {
-    const src = m.Source.length > 30 ? '...' + m.Source.slice(-27) : m.Source;
-    return `${m.Destination} -> ${src}`;
+    const srcShort = m.Source.length > 30 ? '...' + m.Source.slice(-27) : m.Source;
+    return { destination: m.Destination, source: m.Source, sourceShort: srcShort };
   });
 });
 </script>
