@@ -1,6 +1,6 @@
-Menu="OtherSettings"
+Menu="Utilities"
 Title="Docker Folders Modern"
-Icon="folder"
+Icon="icon.png"
 Tag="folder"
 Markdown="false"
 ---
