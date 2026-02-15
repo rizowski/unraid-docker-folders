@@ -57,6 +57,15 @@
           </button>
         </div>
         <button
+          @click="dragLocked = !dragLocked"
+          class="px-3 py-1.5 border-none text-sm cursor-pointer transition-colors"
+          :class="dragLocked ? 'bg-warning text-white' : 'bg-bg-card text-text hover:bg-border'"
+          :title="dragLocked ? 'Unlock drag & drop' : 'Lock drag & drop'"
+        >
+          <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
+        </button>
+        <button
           @click="openCreateFolderModal"
           class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors"
         >
@@ -77,12 +86,13 @@
 
       <div v-else>
         <!-- Folders -->
-        <div v-if="folderStore.sortedFolders.length > 0" class="mb-8">
+        <div v-if="folderStore.sortedFolders.length > 0" id="folder-list" class="mb-8">
           <FolderContainer
             v-for="folder in folderStore.sortedFolders"
             :key="folder.id"
             :folder="folder"
             :view="viewMode"
+            :data-folder-sort-id="folder.id"
 
             @edit="openEditFolderModal"
             @delete="deleteFolder"
@@ -151,6 +161,12 @@ const actionInProgress = ref<string | null>(null);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
+const dragLocked = ref(localStorage.getItem('docker-folders-drag-locked') === '1');
+watch(dragLocked, (v) => {
+  localStorage.setItem('docker-folders-drag-locked', v ? '1' : '0');
+  nextTick(() => initializeDragAndDrop());
+});
+
 provide('distinguishHealthy', toRef(settingsStore, 'distinguishHealthy'));
 const isModalOpen = ref(false);
 const editingFolder = ref<Folder | null>(null);
@@ -193,6 +209,27 @@ function destroyDragAndDrop() {
 
 function initializeDragAndDrop() {
   destroyDragAndDrop();
+
+  if (dragLocked.value) return;
+
+  // Make folder list sortable (reorder folders)
+  const folderListEl = document.getElementById('folder-list');
+  if (folderListEl) {
+    sortableInstances.push(
+      new Sortable(folderListEl, {
+        handle: '.folder-drag-handle',
+        animation: 150,
+        onEnd: async () => {
+          const folderIds = Array.from(folderListEl.children)
+            .map((child) => parseInt((child as HTMLElement).dataset.folderSortId || '0'))
+            .filter((id) => id > 0);
+          if (folderIds.length > 0) {
+            await folderStore.reorderFolders(folderIds);
+          }
+        },
+      })
+    );
+  }
 
   // Make each folder's container list sortable
   document.querySelectorAll('.container-list[data-folder-id]').forEach((el) => {
@@ -269,11 +306,6 @@ async function handleRestart(id: string) {
 }
 
 async function handleRemove(id: string) {
-  const container = dockerStore.getContainerById(id);
-  const name = container?.name || id.substring(0, 12);
-  if (!confirm(`Are you sure you want to remove container "${name}"? This cannot be undone.`)) {
-    return;
-  }
   actionInProgress.value = id;
   try {
     await dockerStore.removeContainer(id);

@@ -4,6 +4,25 @@
     :style="{ borderLeftColor: folder.color || '#ff8c2f' }"
   >
     <div class="flex items-center gap-2 flex-1">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="folder-drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing"
+      >
+        <circle cx="9" cy="5" r="1" />
+        <circle cx="9" cy="12" r="1" />
+        <circle cx="9" cy="19" r="1" />
+        <circle cx="15" cy="5" r="1" />
+        <circle cx="15" cy="12" r="1" />
+        <circle cx="15" cy="19" r="1" />
+      </svg>
       <button
         class="bg-transparent border-none p-1 cursor-pointer text-sm text-text-secondary flex items-center justify-center w-6 h-6"
         @click="$emit('toggle-collapse')"

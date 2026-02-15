@@ -91,11 +91,6 @@ async function handleRestart(id: string) {
 }
 
 async function handleRemove(id: string) {
-  const container = dockerStore.containers.find((c) => c.id === id);
-  const name = container?.name || id.substring(0, 12);
-  if (!confirm(`Are you sure you want to remove container "${name}"? This cannot be undone.`)) {
-    return;
-  }
   actionInProgress.value = id;
   try {
     await dockerStore.removeContainer(id);

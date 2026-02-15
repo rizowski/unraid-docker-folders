@@ -21,7 +21,7 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <img v-if="container.icon" :src="container.icon" :alt="container.name" class="w-10 h-10 object-contain shrink-0" />
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-10 h-10 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-lg font-semibold text-text truncate">{{ container.name }}</h3>
       <a
@@ -57,6 +57,24 @@
       >
         <polyline points="6 9 12 15 18 9" />
       </svg>
+    </div>
+
+    <!-- Compact stats bars (always visible for running containers) -->
+    <div v-if="isRunning && containerStats && !expanded" class="px-6 pb-1 space-y-1">
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-muted w-8 shrink-0">CPU</span>
+        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+        </div>
+        <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.cpuPercent) }}</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-muted w-8 shrink-0">MEM</span>
+        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+        </div>
+        <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
+      </div>
     </div>
 
     <!-- Accordion details -->
@@ -126,38 +144,41 @@
       </div>
     </div>
 
-    <div class="flex gap-2 p-6 pt-3">
+    <div class="flex gap-1.5 px-6 pb-4 pt-2">
       <button
         v-if="container.state === 'running'"
-        @click="$emit('stop', container.id)"
-        class="flex-1 py-2 px-4 border-none rounded text-sm font-medium cursor-pointer transition bg-error text-white hover:bg-error/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="confirmStop"
+        class="p-2 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
+        title="Stop"
       >
-        Stop
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
       </button>
       <button
         v-else
-        @click="$emit('start', container.id)"
-        class="flex-1 py-2 px-4 border-none rounded text-sm font-medium cursor-pointer transition bg-success text-white hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="emit('start', container.id)"
+        class="p-2 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
+        title="Start"
       >
-        Start
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6,3 20,12 6,21" /></svg>
       </button>
       <button
-        @click="$emit('restart', container.id)"
-        class="flex-1 py-2 px-4 border-none rounded text-sm font-medium cursor-pointer transition bg-primary text-primary-text hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="confirmRestart"
+        class="p-2 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
+        title="Restart"
       >
-        Restart
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
       </button>
       <button
         v-if="container.state !== 'running'"
-        @click="$emit('remove', container.id)"
-        class="flex-1 py-2 px-4 border-none rounded text-sm font-medium cursor-pointer transition bg-muted text-white hover:bg-error disabled:opacity-50 disabled:cursor-not-allowed"
+        @click="confirmRemove"
+        class="p-2 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
-        title="Remove container"
+        title="Remove"
       >
-        Remove
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
       </button>
     </div>
   </div>
@@ -184,7 +205,7 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <img v-if="container.icon" :src="container.icon" :alt="container.name" class="w-6 h-6 object-contain shrink-0" />
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-6 h-6 object-contain shrink-0" />
       <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
 
       <!-- Clickable name/image area toggles accordion -->
@@ -212,46 +233,67 @@
         </svg>
       </div>
 
-      <div class="flex gap-1.5 ml-auto shrink-0 items-center">
+      <!-- Inline compact stats (list view) -->
+      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5 hidden lg:block">
+        <div class="flex items-center gap-1.5 text-[11px]">
+          <span class="text-muted w-7 text-right">CPU</span>
+          <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+          </div>
+          <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px]">
+          <span class="text-muted w-7 text-right">MEM</span>
+          <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+          </div>
+          <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
+        </div>
+      </div>
+
+      <div class="flex gap-0.5 ml-auto shrink-0 items-center">
         <a
           v-if="editUrl"
           :href="editUrl"
-          class="text-text-secondary hover:text-text transition p-1"
+          class="text-text-secondary hover:text-text transition p-1.5"
           title="Edit container"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </a>
         <button
           v-if="container.state === 'running'"
-          @click="$emit('stop', container.id)"
-          class="py-1 px-3 border-none rounded text-xs font-medium cursor-pointer transition bg-error text-white hover:bg-error/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="confirmStop"
+          class="p-1.5 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
+          title="Stop"
         >
-          Stop
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
         </button>
         <button
           v-else
-          @click="$emit('start', container.id)"
-          class="py-1 px-3 border-none rounded text-xs font-medium cursor-pointer transition bg-success text-white hover:bg-success/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="emit('start', container.id)"
+          class="p-1.5 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
+          title="Start"
         >
-          Start
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6,3 20,12 6,21" /></svg>
         </button>
         <button
-          @click="$emit('restart', container.id)"
-          class="py-1 px-3 border-none rounded text-xs font-medium cursor-pointer transition bg-primary text-primary-text hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="confirmRestart"
+          class="p-1.5 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
+          title="Restart"
         >
-          Restart
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
         </button>
         <button
           v-if="container.state !== 'running'"
-          @click="$emit('remove', container.id)"
-          class="py-1 px-3 border-none rounded text-xs font-medium cursor-pointer transition bg-muted text-white hover:bg-error disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="confirmRemove"
+          class="p-1.5 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
-          title="Remove container"
+          title="Remove"
         >
-          Remove
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></svg>
         </button>
       </div>
     </div>
@@ -326,10 +368,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
+import { computed, inject, ref, watch, onMounted, onUnmounted, type Ref } from 'vue';
 import type { Container } from '@/stores/docker';
 import { useStatsStore } from '@/stores/stats';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
+// Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
+const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
 interface Props {
   container: Container;
@@ -341,12 +385,30 @@ const props = withDefaults(defineProps<Props>(), {
   view: 'grid',
 });
 
-defineEmits<{
+const emit = defineEmits<{
   start: [id: string];
   stop: [id: string];
   restart: [id: string];
   remove: [id: string];
 }>();
+
+function confirmStop() {
+  if (confirm(`Stop container "${props.container.name}"?`)) {
+    emit('stop', props.container.id);
+  }
+}
+
+function confirmRestart() {
+  if (confirm(`Restart container "${props.container.name}"?`)) {
+    emit('restart', props.container.id);
+  }
+}
+
+function confirmRemove() {
+  if (confirm(`Remove container "${props.container.name}"? This cannot be undone.`)) {
+    emit('remove', props.container.id);
+  }
+}
 
 const expanded = ref(false);
 const statsStore = useStatsStore();
@@ -379,6 +441,22 @@ const restartClass = computed(() => {
   return (containerStats.value?.restartCount ?? 0) > 0 ? 'text-error' : 'text-text-secondary';
 });
 
+// Register running containers for compact bar polling
+onMounted(() => {
+  if (isRunning.value) {
+    statsStore.registerVisible(props.container.id);
+  }
+});
+
+// React to container state changes (start/stop)
+watch(isRunning, (running) => {
+  if (running) {
+    statsStore.registerVisible(props.container.id);
+  } else {
+    statsStore.unregisterVisible(props.container.id);
+  }
+});
+
 watch(expanded, (val) => {
   if (val) {
     statsStore.registerExpanded(props.container.id);
@@ -388,6 +466,7 @@ watch(expanded, (val) => {
 });
 
 onUnmounted(() => {
+  statsStore.unregisterVisible(props.container.id);
   if (expanded.value) {
     statsStore.unregisterExpanded(props.container.id);
   }
