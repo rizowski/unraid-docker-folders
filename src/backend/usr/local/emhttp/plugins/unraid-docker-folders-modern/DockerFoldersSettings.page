@@ -15,6 +15,7 @@ foreach ($rows as $row) {
   $settings[$row['key']] = $row['value'];
 }
 $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
+$showStats = ($settings['show_stats'] ?? '0') === '1';
 ?>
 
 <style>
@@ -197,7 +198,18 @@ $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
       </div>
       <div class="setting-control">
         <input type="checkbox" id="distinguish-healthy" <?= $distinguishHealthy ? 'checked' : '' ?> onchange="saveSetting('distinguish_healthy', this.checked ? '1' : '0')" />
-        <span id="save-status-distinguish" class="save-status">Saved</span>
+        <span id="save-status-distinguish-healthy" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-stats">Show container stats</label>
+        <div class="description">When enabled, live resource stats (CPU, memory, network, etc.) are polled and displayed on container cards. Disable to reduce network traffic and server load.</div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-stats" <?= $showStats ? 'checked' : '' ?> onchange="saveSetting('show_stats', this.checked ? '1' : '0')" />
+        <span id="save-status-show-stats" class="save-status">Saved</span>
       </div>
     </div>
   </div>
@@ -221,7 +233,7 @@ $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 
 <script>
 function saveSetting(key, value) {
-  var statusEl = document.getElementById('save-status-' + key.replace('_', '-'));
+  var statusEl = document.getElementById('save-status-' + key.replace(/_/g, '-'));
   var csrfToken = (typeof window.csrf_token === 'string') ? window.csrf_token : '';
   var body = 'csrf_token=' + encodeURIComponent(csrfToken) + '&payload=' + encodeURIComponent(JSON.stringify({key: key, value: value}));
 

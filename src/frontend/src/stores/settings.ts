@@ -10,6 +10,7 @@ const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 export const useSettingsStore = defineStore('settings', () => {
   const distinguishHealthy = ref(true);
+  const showStats = ref(false);
   const loaded = ref(false);
 
   async function fetchSettings() {
@@ -22,6 +23,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
       if ('distinguish_healthy' in settings) {
         distinguishHealthy.value = settings.distinguish_healthy !== '0';
+      }
+      if ('show_stats' in settings) {
+        showStats.value = settings.show_stats !== '0';
       }
 
       loaded.value = true;
@@ -43,10 +47,25 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setShowStats(value: boolean) {
+    showStats.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'show_stats', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
   return {
     distinguishHealthy,
+    showStats,
     loaded,
     fetchSettings,
     setDistinguishHealthy,
+    setShowStats,
   };
 });

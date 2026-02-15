@@ -482,6 +482,7 @@
 import { computed, inject, ref, watch, onMounted, onUnmounted, type Ref } from 'vue';
 import type { Container } from '@/stores/docker';
 import { useStatsStore } from '@/stores/stats';
+import { useSettingsStore } from '@/stores/settings';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
@@ -523,8 +524,10 @@ function confirmRemove() {
 
 const expanded = ref(false);
 const statsStore = useStatsStore();
+const settingsStore = useSettingsStore();
 
-const containerStats = computed(() => statsStore.getStats(props.container.id));
+const showStats = computed(() => settingsStore.showStats);
+const containerStats = computed(() => showStats.value ? statsStore.getStats(props.container.id) : null);
 const isRunning = computed(() => props.container.state === 'running');
 
 const cpuBarColor = computed(() => {
@@ -552,15 +555,16 @@ const restartClass = computed(() => {
   return (containerStats.value?.restartCount ?? 0) > 0 ? 'text-error' : 'text-text-secondary';
 });
 
-// Register running containers for compact bar polling
+// Register running containers for compact bar polling (only when stats enabled)
 onMounted(() => {
-  if (isRunning.value) {
+  if (showStats.value && isRunning.value) {
     statsStore.registerVisible(props.container.id);
   }
 });
 
 // React to container state changes (start/stop)
 watch(isRunning, (running) => {
+  if (!showStats.value) return;
   if (running) {
     statsStore.registerVisible(props.container.id);
   } else {
@@ -568,7 +572,19 @@ watch(isRunning, (running) => {
   }
 });
 
+// React to showStats toggling on/off
+watch(showStats, (enabled) => {
+  if (enabled) {
+    if (isRunning.value) statsStore.registerVisible(props.container.id);
+    if (expanded.value) statsStore.registerExpanded(props.container.id);
+  } else {
+    statsStore.unregisterVisible(props.container.id);
+    statsStore.unregisterExpanded(props.container.id);
+  }
+});
+
 watch(expanded, (val) => {
+  if (!showStats.value) return;
   if (val) {
     statsStore.registerExpanded(props.container.id);
   } else {
