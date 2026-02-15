@@ -76,6 +76,54 @@
       <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">
         No additional details available
       </div>
+
+      <!-- Resource Usage Stats -->
+      <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
+        <p class="text-muted text-xs">Resource Usage</p>
+        <!-- CPU Bar -->
+        <div class="space-y-0.5">
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">CPU</span>
+            <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
+          </div>
+          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+          </div>
+        </div>
+        <!-- Memory Bar -->
+        <div class="space-y-0.5">
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">Memory</span>
+            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{ formatPercent(containerStats.memoryPercent) }})</span>
+          </div>
+          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+          </div>
+        </div>
+        <!-- Numeric Stats -->
+        <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs pt-0.5">
+          <span class="text-muted">Block I/O</span>
+          <span class="text-text-secondary font-mono">Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span>
+          <span class="text-muted">Network</span>
+          <span class="text-text-secondary font-mono">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+          <span class="text-muted">PIDs</span>
+          <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+          <span class="text-muted">Restarts</span>
+          <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+          <span class="text-muted">Uptime</span>
+          <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+          <span class="text-muted">Image Size</span>
+          <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+          <span class="text-muted">Log Size</span>
+          <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+        </div>
+      </div>
+      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
+        Loading stats...
+      </div>
+      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
+        Container not running
+      </div>
     </div>
 
     <div class="flex gap-2 p-6 pt-3">
@@ -225,13 +273,63 @@
       <div v-if="!networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">
         No additional details available
       </div>
+
+      <!-- Resource Usage Stats (list view) -->
+      <div v-if="isRunning && containerStats" class="space-y-1.5 pt-1 border-t border-border mt-1">
+        <p class="text-muted text-xs">Resource Usage</p>
+        <!-- CPU Bar -->
+        <div class="space-y-0.5">
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">CPU</span>
+            <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
+          </div>
+          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" :class="cpuBarColor" :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"></div>
+          </div>
+        </div>
+        <!-- Memory Bar -->
+        <div class="space-y-0.5">
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">Memory</span>
+            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{ formatPercent(containerStats.memoryPercent) }})</span>
+          </div>
+          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-300" :class="memBarColor" :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"></div>
+          </div>
+        </div>
+        <!-- Numeric Stats -->
+        <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs pt-0.5">
+          <span class="text-muted">Block I/O</span>
+          <span class="text-text-secondary font-mono">Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span>
+          <span class="text-muted">Network</span>
+          <span class="text-text-secondary font-mono">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+          <span class="text-muted">PIDs</span>
+          <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+          <span class="text-muted">Restarts</span>
+          <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+          <span class="text-muted">Uptime</span>
+          <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+          <span class="text-muted">Image Size</span>
+          <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+          <span class="text-muted">Log Size</span>
+          <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+        </div>
+      </div>
+      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
+        Loading stats...
+      </div>
+      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-1 border-t border-border mt-1">
+        Container not running
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, type Ref } from 'vue';
+import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
 import type { Container } from '@/stores/docker';
+import { useStatsStore } from '@/stores/stats';
+import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 
 interface Props {
   container: Container;
@@ -251,6 +349,49 @@ defineEmits<{
 }>();
 
 const expanded = ref(false);
+const statsStore = useStatsStore();
+
+const containerStats = computed(() => statsStore.getStats(props.container.id));
+const isRunning = computed(() => props.container.state === 'running');
+
+const cpuBarColor = computed(() => {
+  const pct = containerStats.value?.cpuPercent ?? 0;
+  if (pct > 80) return 'bg-error';
+  if (pct > 50) return 'bg-warning';
+  return 'bg-success';
+});
+
+const memBarColor = computed(() => {
+  const pct = containerStats.value?.memoryPercent ?? 0;
+  if (pct > 80) return 'bg-error';
+  if (pct > 50) return 'bg-warning';
+  return 'bg-success';
+});
+
+const logSizeClass = computed(() => {
+  const size = containerStats.value?.logSize ?? 0;
+  if (size > 1_073_741_824) return 'text-error';
+  if (size > 104_857_600) return 'text-warning';
+  return 'text-text-secondary';
+});
+
+const restartClass = computed(() => {
+  return (containerStats.value?.restartCount ?? 0) > 0 ? 'text-error' : 'text-text-secondary';
+});
+
+watch(expanded, (val) => {
+  if (val) {
+    statsStore.registerExpanded(props.container.id);
+  } else {
+    statsStore.unregisterExpanded(props.container.id);
+  }
+});
+
+onUnmounted(() => {
+  if (expanded.value) {
+    statsStore.unregisterExpanded(props.container.id);
+  }
+});
 
 const distinguishHealthy = inject<Ref<boolean>>('distinguishHealthy', ref(true));
 

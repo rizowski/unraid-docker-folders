@@ -315,6 +315,60 @@ async function handleSettings(req: any, res: any) {
   }
 }
 
+// --- Stats mock ---
+
+const EXITED_IDS = new Set(['ghi789jkl012', 'hij890klm123']);
+
+const mockStatsProfiles: Record<string, { cpuBase: number; memBase: number; memLimit: number; pids: number; restarts: number; startedHoursAgo: number; imageSizeMB: number; logSizeMB: number }> = {
+  abc123def456: { cpuBase: 15, memBase: 2048, memLimit: 8192, pids: 45, restarts: 0, startedHoursAgo: 72, imageSizeMB: 350, logSizeMB: 8 },
+  bcd234efg567: { cpuBase: 5, memBase: 512, memLimit: 4096, pids: 12, restarts: 0, startedHoursAgo: 72, imageSizeMB: 220, logSizeMB: 15 },
+  cde345fgh678: { cpuBase: 4, memBase: 480, memLimit: 4096, pids: 10, restarts: 0, startedHoursAgo: 72, imageSizeMB: 225, logSizeMB: 12 },
+  def456ghi789: { cpuBase: 8, memBase: 768, memLimit: 4096, pids: 8, restarts: 0, startedHoursAgo: 48, imageSizeMB: 180, logSizeMB: 45 },
+  efg567hij890: { cpuBase: 2, memBase: 128, memLimit: 2048, pids: 4, restarts: 1, startedHoursAgo: 120, imageSizeMB: 55, logSizeMB: 3 },
+  fgh678ijk901: { cpuBase: 3, memBase: 256, memLimit: 2048, pids: 15, restarts: 0, startedHoursAgo: 120, imageSizeMB: 420, logSizeMB: 120 },
+  ijk901lmn234: { cpuBase: 12, memBase: 1024, memLimit: 4096, pids: 30, restarts: 2, startedHoursAgo: 24, imageSizeMB: 1200, logSizeMB: 1200 },
+  jkl012mno345: { cpuBase: 6, memBase: 384, memLimit: 2048, pids: 18, restarts: 0, startedHoursAgo: 96, imageSizeMB: 310, logSizeMB: 5 },
+};
+
+function generateMockStats(id: string) {
+  if (EXITED_IDS.has(id)) return null;
+
+  const profile = mockStatsProfiles[id];
+  if (!profile) return null;
+
+  const jitter = () => (Math.random() - 0.5) * 0.3 + 1; // 0.85 - 1.15
+  const MB = 1024 * 1024;
+
+  const memUsage = Math.round(profile.memBase * MB * jitter());
+  const memLimit = profile.memLimit * MB;
+
+  return {
+    cpuPercent: Math.round(profile.cpuBase * jitter() * 10) / 10,
+    memoryUsage: memUsage,
+    memoryLimit: memLimit,
+    memoryPercent: Math.round((memUsage / memLimit) * 10000) / 100,
+    blockRead: Math.round(50 * MB * jitter()),
+    blockWrite: Math.round(20 * MB * jitter()),
+    netRx: Math.round(200 * MB * jitter()),
+    netTx: Math.round(50 * MB * jitter()),
+    pids: profile.pids,
+    restartCount: profile.restarts,
+    startedAt: new Date(Date.now() - profile.startedHoursAgo * 3600_000).toISOString(),
+    imageSize: Math.round(profile.imageSizeMB * MB),
+    logSize: Math.round(profile.logSizeMB * MB),
+  };
+}
+
+function handleStats(_req: any, res: any, params: Record<string, string>) {
+  const idsParam = params.ids || '';
+  const ids = idsParam.split(',').filter(Boolean);
+  const stats: Record<string, any> = {};
+  for (const id of ids) {
+    stats[id] = generateMockStats(id);
+  }
+  return json(res, { stats });
+}
+
 // --- Vite plugin ---
 
 export function mockApiPlugin(): Plugin {
@@ -336,6 +390,8 @@ export function mockApiPlugin(): Plugin {
             await handleFolders(req, res, params);
           } else if (endpoint === 'settings.php') {
             await handleSettings(req, res);
+          } else if (endpoint === 'stats.php') {
+            handleStats(req, res, params);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }

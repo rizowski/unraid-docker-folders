@@ -125,6 +125,141 @@ class DockerClient
   }
 
   /**
+   * Get one-shot container stats (CPU, memory, network, block I/O)
+   *
+   * @param string $id Container ID or name
+   * @return array|null Raw stats or null on error
+   */
+  public function getContainerStats($id)
+  {
+    $response = $this->request('GET', "/containers/{$id}/stats?stream=0");
+    return $response ?: null;
+  }
+
+  /**
+   * Get image info
+   *
+   * @param string $imageId Image ID or name
+   * @return array|null Image detail or null on error
+   */
+  public function getImageInfo($imageId)
+  {
+    $response = $this->request('GET', "/images/{$imageId}/json");
+    return $response ?: null;
+  }
+
+  /**
+   * Get container log file size
+   *
+   * @param string $fullId Full container ID (64 chars)
+   * @return int Size in bytes (0 if not found)
+   */
+  public function getContainerLogSize($fullId)
+  {
+    $logPath = "/var/lib/docker/containers/{$fullId}/{$fullId}-json.log";
+    if (file_exists($logPath)) {
+      return (int) filesize($logPath);
+    }
+    return 0;
+  }
+
+  /**
+   * Get formatted stats for a container
+   *
+   * Orchestrates calls to stats, inspect, and image endpoints,
+   * then computes CPU %, memory %, and aggregates all metrics.
+   *
+   * @param string $id Container ID or name
+   * @return array|null Formatted stats or null if container not running
+   */
+  public function formatStats($id)
+  {
+    $stats = $this->getContainerStats($id);
+    if (!$stats) {
+      return null;
+    }
+
+    // CPU % from precpu_stats vs cpu_stats delta
+    $cpuPercent = 0.0;
+    $cpuStats = $stats['cpu_stats'] ?? [];
+    $preCpuStats = $stats['precpu_stats'] ?? [];
+
+    $cpuDelta = ($cpuStats['cpu_usage']['total_usage'] ?? 0)
+              - ($preCpuStats['cpu_usage']['total_usage'] ?? 0);
+    $systemDelta = ($cpuStats['system_cpu_usage'] ?? 0)
+                 - ($preCpuStats['system_cpu_usage'] ?? 0);
+    $onlineCpus = $cpuStats['online_cpus'] ?? 1;
+
+    if ($systemDelta > 0 && $cpuDelta >= 0) {
+      $cpuPercent = round(($cpuDelta / $systemDelta) * $onlineCpus * 100, 2);
+    }
+
+    // Memory
+    $memStats = $stats['memory_stats'] ?? [];
+    $memoryUsage = $memStats['usage'] ?? 0;
+    $memoryLimit = $memStats['limit'] ?? 1;
+    $memoryPercent = $memoryLimit > 0 ? round(($memoryUsage / $memoryLimit) * 100, 2) : 0;
+
+    // Block I/O
+    $blockRead = 0;
+    $blockWrite = 0;
+    $blkioStats = $stats['blkio_stats']['io_service_bytes_recursive'] ?? [];
+    foreach ($blkioStats as $entry) {
+      $op = strtolower($entry['op'] ?? '');
+      if ($op === 'read') {
+        $blockRead += $entry['value'] ?? 0;
+      } elseif ($op === 'write') {
+        $blockWrite += $entry['value'] ?? 0;
+      }
+    }
+
+    // Network
+    $netRx = 0;
+    $netTx = 0;
+    $networks = $stats['networks'] ?? [];
+    foreach ($networks as $iface) {
+      $netRx += $iface['rx_bytes'] ?? 0;
+      $netTx += $iface['tx_bytes'] ?? 0;
+    }
+
+    // PIDs
+    $pids = $stats['pids_stats']['current'] ?? 0;
+
+    // Inspect for restart count and startedAt
+    $inspect = $this->inspectContainer($id);
+    $restartCount = $inspect['restartCount'] ?? 0;
+    $startedAt = $inspect['state']['startedAt'] ?? '';
+
+    // Image size
+    $imageSize = 0;
+    $imageId = $inspect['imageId'] ?? '';
+    if ($imageId) {
+      $imageInfo = $this->getImageInfo($imageId);
+      $imageSize = $imageInfo['Size'] ?? 0;
+    }
+
+    // Log size (need full 64-char container ID)
+    $fullId = $stats['id'] ?? $id;
+    $logSize = $this->getContainerLogSize($fullId);
+
+    return [
+      'cpuPercent' => $cpuPercent,
+      'memoryUsage' => $memoryUsage,
+      'memoryLimit' => $memoryLimit,
+      'memoryPercent' => $memoryPercent,
+      'blockRead' => $blockRead,
+      'blockWrite' => $blockWrite,
+      'netRx' => $netRx,
+      'netTx' => $netTx,
+      'pids' => $pids,
+      'restartCount' => $restartCount,
+      'startedAt' => $startedAt,
+      'imageSize' => $imageSize,
+      'logSize' => $logSize,
+    ];
+  }
+
+  /**
    * Format container from list endpoint
    *
    * @param array $container Raw container data

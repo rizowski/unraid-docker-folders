@@ -25,14 +25,26 @@ $folderManager = new FolderManager();
 /**
  * Read JSON request data.
  * Checks $_POST['payload'] first (form-encoded alongside csrf_token),
- * falls back to raw php://input for direct JSON requests.
+ * then parses php://input as URL-encoded (for PUT/DELETE where PHP
+ * doesn't populate $_POST), falls back to raw JSON.
  */
 function getRequestData()
 {
   if (isset($_POST['payload'])) {
     return json_decode($_POST['payload'], true);
   }
-  return json_decode(file_get_contents('php://input'), true);
+
+  $raw = file_get_contents('php://input');
+
+  // Check if the raw body is URL-encoded (contains payload= field)
+  if (strpos($raw, 'payload=') !== false) {
+    parse_str($raw, $parsed);
+    if (isset($parsed['payload'])) {
+      return json_decode($parsed['payload'], true);
+    }
+  }
+
+  return json_decode($raw, true);
 }
 
 try {
