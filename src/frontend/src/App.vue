@@ -56,10 +56,6 @@
             </svg>
           </button>
         </div>
-        <label class="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer select-none" title="When enabled, running containers show blue and healthy containers show green. When disabled, all running containers show green.">
-          <input type="checkbox" :checked="settingsStore.distinguishHealthy" @change="settingsStore.setDistinguishHealthy(($event.target as HTMLInputElement).checked)" class="cursor-pointer" />
-          Health status
-        </label>
         <button
           @click="openCreateFolderModal"
           class="px-6 py-2 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition-colors"
