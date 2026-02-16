@@ -329,31 +329,33 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="shrink-0 text-text-secondary transition-transform duration-200"
+        :class="expanded ? 'rotate-180' : ''"
+      >
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
+      <span class="w-[3px] h-5 rounded-full shrink-0" :class="statusBarClass" :title="statusTooltip"></span>
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
 
-      <div class="flex items-center gap-4 flex-1 min-w-0">
-        <span class="text-xs font-semibold text-text min-w-0 sm:min-w-[120px]">{{ container.name }}</span>
+      <div class="flex flex-col flex-1 min-w-0 gap-0.5">
+        <div class="flex items-center gap-3">
+          <span class="text-xs font-semibold text-text">{{ container.name }}</span>
+          <span class="text-[11px] text-text-secondary truncate">{{ container.status }}</span>
+        </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="text-[11px] text-text">{{ container.status }}</span>
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="shrink-0 text-text-secondary transition-transform duration-200"
-          :class="expanded ? 'rotate-180' : ''"
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
       </div>
 
       <!-- Compact ports (list collapsed) -->
@@ -763,6 +765,9 @@ const statusDotClass = computed(() => {
   if (state === 'exited' || state === 'stopped') return 'bg-red-500';
   return 'bg-gray-400';
 });
+
+// Vertical bar variant for list view (same color logic)
+const statusBarClass = computed(() => statusDotClass.value);
 
 const statusTooltip = computed(() => {
   const state = props.container.state;
