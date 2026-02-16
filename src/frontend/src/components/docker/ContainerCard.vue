@@ -499,7 +499,7 @@
     </div>
 
     <!-- List accordion details -->
-    <div v-if="expanded" class="px-4 pb-4 pt-2 border-t border-border ml-[72px] space-y-3 text-sm">
+    <div v-if="expanded" class="px-2 sm:px-4 pb-4 pt-2 border-t border-border ml-2 sm:ml-10 space-y-3 text-sm">
       <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
         <template v-if="container.image">
           <span class="text-muted shrink-0">Image</span>

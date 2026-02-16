@@ -4,7 +4,7 @@
 
 ### Added
 - Mobile-responsive layout with sm breakpoints across all components
-- Header stacks vertically on narrow viewports
+- Header wraps naturally on narrow viewports
 - Compact "New" button text on mobile, full "Create Folder" on sm+
 - Secondary info (image, status, stats, ports) hidden on mobile list/folder rows
 - Collapsible "Unfoldered Containers" section with chevron toggle (persisted to localStorage)
@@ -43,6 +43,8 @@
 - Removed redundant access info section from settings
 
 ### Fixed
+- List view expanded details used excessive left margin (72px), now uses more available width
+- Header no longer breaks into column layout on desktop inside iframe
 - Console URL corrected to /logterminal/<name>/
 - Logs URL corrected to /logterminal/<name>.log/
 - Stats bars hidden in iframe due to responsive breakpoints

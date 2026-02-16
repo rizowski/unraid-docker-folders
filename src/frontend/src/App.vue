@@ -1,6 +1,6 @@
 <template>
   <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text">
-    <header class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
+    <header class="flex flex-wrap justify-between items-center gap-y-3 gap-x-4 mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
       <div class="flex items-baseline gap-2 sm:gap-4">
         <span class="text-sm text-text-secondary">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
         <ConnectionStatus />
