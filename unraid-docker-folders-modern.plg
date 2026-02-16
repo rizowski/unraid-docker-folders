@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.15-40">
-<!ENTITY md5 "2ef45ce2b9da971ddb55347d3b6f2ce4">
+<!ENTITY version "2026.02.15-41">
+<!ENTITY md5 "cef7a127e61c87712f3b6e67699644a6">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">

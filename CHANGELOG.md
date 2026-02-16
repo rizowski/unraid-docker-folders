@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.15-41
+### Changes
+- Always show app on Folders tab regardless of replace setting
+
 ## 2026.02.15-40
 ### Changes
 - Simplify inject page to only collapse native Docker section
