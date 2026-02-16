@@ -15,14 +15,23 @@ $replaceDockersSection = ($row && $row['value'] === '1');
 if (!$replaceDockersSection) return;
 ?>
 
-<link rel="stylesheet" href="<?autov('/plugins/unraid-docker-folders-modern/assets/css/app.css')?>">
-
 <script>
 (function() {
-  function tryReplace() {
-    var containerSection = null;
+  function hideNativeDockerSection() {
+    // Hide the "Docker Containers" title bar
+    document.querySelectorAll('div.title').forEach(function(el) {
+      if (el.textContent && /Docker Containers/i.test(el.textContent)) {
+        el.style.display = 'none';
+      }
+    });
 
-    // 1. Primary: look for the container list table by known IDs
+    // Hide the view mode toggle
+    document.querySelectorAll('.ToggleViewMode').forEach(function(el) {
+      el.style.display = 'none';
+    });
+
+    // Hide the container list itself
+    var containerSection = null;
     var selectors = [
       '#docker_list',
       '#docker_containers',
@@ -34,7 +43,6 @@ if (!$replaceDockersSection) return;
       if (containerSection) break;
     }
 
-    // 2. Try finding rows with ct-name class (container name cells)
     if (!containerSection) {
       var ctName = document.querySelector('.ct-name');
       if (ctName) {
@@ -42,118 +50,52 @@ if (!$replaceDockersSection) return;
       }
     }
 
-    // 3. Fallback: find by "Docker Containers" heading text
-    if (!containerSection) {
-      var allElements = document.querySelectorAll('td, th, h2, h3, div.title, span.title, div > span');
-      for (var j = 0; j < allElements.length; j++) {
-        var text = (allElements[j].textContent || '').trim();
-        if (/^Docker Containers$/i.test(text)) {
-          containerSection = allElements[j].closest('table') || allElements[j].closest('div') || allElements[j].parentElement;
+    if (containerSection) {
+      // Walk up to find the outermost single-child wrapper
+      var target = containerSection;
+      while (target.parentElement) {
+        var parent = target.parentElement;
+        if (parent === document.body || parent.id === 'content_all' || parent.id === 'tab1' ||
+            parent.classList.contains('content') || parent.tagName === 'FORM') break;
+        var siblings = Array.from(parent.childNodes).filter(function(n) {
+          return n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim());
+        });
+        if (siblings.length === 1) {
+          target = parent;
+        } else {
           break;
         }
       }
+
+      // Wrap native section in a collapsed accordion
+      var accordion = document.createElement('details');
+      accordion.className = 'native-docker-accordion';
+      accordion.style.cssText = 'margin-top:12px;';
+
+      var summary = document.createElement('summary');
+      summary.style.cssText = 'cursor:pointer;padding:8px 12px;font-size:13px;user-select:none;';
+      summary.textContent = 'Native Docker Containers';
+      accordion.appendChild(summary);
+
+      target.parentElement.insertBefore(accordion, target);
+      accordion.appendChild(target);
     }
 
-    if (!containerSection) {
-      if (tryReplace.attempts < 20) {
-        tryReplace.attempts++;
-        setTimeout(tryReplace, 250);
-      }
-      return;
-    }
-
-    // Walk up: if the section is inside a wrapper that only contains this section,
-    // replace at the highest useful level to avoid empty containers
-    var target = containerSection;
-    while (target.parentElement) {
-      var parent = target.parentElement;
-      // Stop at body or at content_all / tab containers — those are page-level
-      if (parent === document.body || parent.id === 'content_all' || parent.id === 'tab1' ||
-          parent.classList.contains('content') || parent.tagName === 'FORM') break;
-      // If parent has only this child (or only whitespace text nodes), go up
-      var siblings = Array.from(parent.childNodes).filter(function(n) {
-        return n.nodeType === 1 || (n.nodeType === 3 && n.textContent.trim());
-      });
-      if (siblings.length === 1) {
-        target = parent;
-      } else {
-        break;
-      }
-    }
-
-    // Hide the native "Docker Containers" title bar and view mode toggle
-    var titleDiv = target.parentElement.querySelector('div.title');
-    if (titleDiv) titleDiv.style.display = 'none';
-    var toggleView = target.parentElement.querySelector('.ToggleViewMode');
-    if (toggleView) toggleView.style.display = 'none';
-
-    // Also search above target in case title/toggle are siblings of a higher parent
-    document.querySelectorAll('div.title').forEach(function(el) {
-      if (el.textContent && /Docker Containers/i.test(el.textContent)) {
-        el.style.display = 'none';
-      }
-    });
-    document.querySelectorAll('.ToggleViewMode').forEach(function(el) {
-      el.style.display = 'none';
-    });
-
-    // Wrap native container section in a collapsible accordion, defaulted closed
-    var accordion = document.createElement('details');
-    accordion.className = 'native-docker-accordion';
-    accordion.style.cssText = 'margin-top:12px;border:1px solid var(--border-color,#333);border-radius:4px;overflow:hidden;';
-
-    var summary = document.createElement('summary');
-    summary.style.cssText = 'cursor:pointer;padding:8px 12px;font-size:13px;color:var(--text-secondary,#999);background:var(--bg-secondary,#1a1a1a);user-select:none;';
-    summary.textContent = 'Native Docker Containers';
-    accordion.appendChild(summary);
-
-    // Move the target inside the accordion
-    target.parentElement.insertBefore(accordion, target);
-    accordion.appendChild(target);
-    target.style.display = '';
-
-    // Insert our app before the accordion
-    var wrapper = document.createElement('div');
-    wrapper.id = 'unraid-docker-folders-modern';
-    wrapper.className = 'unapi';
-
-    var appDiv = document.createElement('div');
-    appDiv.id = 'app';
-    wrapper.appendChild(appDiv);
-    accordion.parentElement.insertBefore(wrapper, accordion);
-
-    // Hide any sibling elements that are part of the containers UI
-    var siblingsToHide = ['#btnAddContainer', '.addContainer', '#dockerMenu',
-                          '#docker-context-menu', '.docker_readmore'];
-    siblingsToHide.forEach(function(sel) {
-      var el = document.querySelector(sel);
-      if (el && !wrapper.contains(el) && !accordion.contains(el)) {
-        el.style.display = 'none';
-      }
-    });
-
-    // Hide the "Folders" tab link since our app is embedded here
-    var tabLinks = document.querySelectorAll('#tab-bar a, .tabs a, ul.tabs li a, a[href*="DockerFolders"]');
-    tabLinks.forEach(function(link) {
-      var linkText = (link.textContent || '').trim();
-      if (linkText === 'Folders' || /DockerFoldersMain/i.test(link.href || '')) {
-        link.style.display = 'none';
-      }
-    });
-
-    // Load our app
-    var script = document.createElement('script');
-    script.type = 'module';
-    script.src = '/plugins/unraid-docker-folders-modern/assets/js/app.js';
-    document.body.appendChild(script);
+    return !!containerSection;
   }
 
-  tryReplace.attempts = 0;
+  var attempts = 0;
+  function tryHide() {
+    if (!hideNativeDockerSection() && attempts < 20) {
+      attempts++;
+      setTimeout(tryHide, 250);
+    }
+  }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', tryReplace);
+    document.addEventListener('DOMContentLoaded', tryHide);
   } else {
-    setTimeout(tryReplace, 100);
+    setTimeout(tryHide, 100);
   }
 })();
 </script>
