@@ -79,7 +79,8 @@ echo -e "${BLUE}========================================${NC}"
 echo ""
 
 # Clean previous build
-echo -e "${YELLOW}[1/5]${NC} Cleaning previous build..."
+TOTAL_STEPS=$([ "$BUILD_TYPE" == "release" ] && echo "7" || echo "5")
+echo -e "${YELLOW}[1/${TOTAL_STEPS}]${NC} Cleaning previous build..."
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 mkdir -p "$ARCHIVE_DIR"
@@ -87,7 +88,7 @@ echo -e "${GREEN}✓${NC} Build directory prepared"
 echo ""
 
 # Build frontend
-echo -e "${YELLOW}[2/5]${NC} Building frontend..."
+echo -e "${YELLOW}[2/${TOTAL_STEPS}]${NC} Building frontend..."
 cd "$FRONTEND_DIR"
 
 if [ ! -d "node_modules" ]; then
@@ -106,8 +107,67 @@ fi
 echo -e "${GREEN}✓${NC} Frontend built successfully"
 echo ""
 
+# Generate CHANGELOG.md from git tags (release builds only)
+if [ "$BUILD_TYPE" == "release" ]; then
+  echo -e "${YELLOW}[3/${TOTAL_STEPS}]${NC} Generating CHANGELOG.md..."
+  cd "$PROJECT_ROOT"
+
+  CHANGELOG_FILE="${PROJECT_ROOT}/CHANGELOG.md"
+  echo "# Changelog" > "$CHANGELOG_FILE"
+  echo "" >> "$CHANGELOG_FILE"
+
+  # Get all tags sorted by version (newest first)
+  TAGS=($(git tag -l --sort=-version:refname))
+
+  for i in "${!TAGS[@]}"; do
+    TAG="${TAGS[$i]}"
+    # Strip "v" prefix for display
+    TAG_VERSION="${TAG#v}"
+
+    echo "## ${TAG_VERSION}" >> "$CHANGELOG_FILE"
+    echo "### Changes" >> "$CHANGELOG_FILE"
+
+    # Get commits between this tag and the next older tag
+    if [ $((i + 1)) -lt ${#TAGS[@]} ]; then
+      PREV_TAG="${TAGS[$((i + 1))]}"
+      COMMITS=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release" || true)
+    else
+      # Oldest tag - get all commits up to this tag
+      COMMITS=$(git log "${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release" || true)
+    fi
+
+    if [ -n "$COMMITS" ]; then
+      echo "$COMMITS" >> "$CHANGELOG_FILE"
+    else
+      echo "- Release ${TAG_VERSION}" >> "$CHANGELOG_FILE"
+    fi
+
+    echo "" >> "$CHANGELOG_FILE"
+  done
+
+  # Add unreleased commits (between latest tag and HEAD) as the current version
+  if [ ${#TAGS[@]} -gt 0 ]; then
+    UNRELEASED=$(git log "${TAGS[0]}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release" || true)
+    if [ -n "$UNRELEASED" ]; then
+      # Prepend current version section before the rest
+      EXISTING=$(cat "$CHANGELOG_FILE")
+      echo "# Changelog" > "$CHANGELOG_FILE"
+      echo "" >> "$CHANGELOG_FILE"
+      echo "## ${VERSION}" >> "$CHANGELOG_FILE"
+      echo "### Changes" >> "$CHANGELOG_FILE"
+      echo "$UNRELEASED" >> "$CHANGELOG_FILE"
+      echo "" >> "$CHANGELOG_FILE"
+      # Append existing content without the "# Changelog" header
+      echo "$EXISTING" | tail -n +3 >> "$CHANGELOG_FILE"
+    fi
+  fi
+
+  echo -e "${GREEN}✓${NC} CHANGELOG.md generated"
+  echo ""
+fi
+
 # Copy backend files to build directory
-echo -e "${YELLOW}[3/5]${NC} Packaging backend..."
+echo -e "${YELLOW}[$([ "$BUILD_TYPE" == "release" ] && echo "4" || echo "3")/${TOTAL_STEPS}]${NC} Packaging backend..."
 cd "$PROJECT_ROOT"
 
 # Copy the entire backend structure
@@ -136,7 +196,7 @@ echo -e "${GREEN}✓${NC} Backend packaged"
 echo ""
 
 # Create .txz package
-echo -e "${YELLOW}[4/5]${NC} Creating .txz archive..."
+echo -e "${YELLOW}[$([ "$BUILD_TYPE" == "release" ] && echo "5" || echo "4")/${TOTAL_STEPS}]${NC} Creating .txz archive..."
 cd "$BUILD_DIR"
 
 # Remove macOS resource forks and metadata files
@@ -158,7 +218,7 @@ echo -e "${GREEN}✓${NC} Archive created: ${ARCHIVE_PATH} (${ARCHIVE_SIZE})"
 echo ""
 
 # Calculate MD5 checksum
-echo -e "${YELLOW}[5/5]${NC} Calculating MD5 checksum..."
+echo -e "${YELLOW}[$([ "$BUILD_TYPE" == "release" ] && echo "6" || echo "5")/${TOTAL_STEPS}]${NC} Calculating MD5 checksum..."
 cd "$ARCHIVE_DIR"
 
 if command -v md5sum &> /dev/null; then
@@ -223,7 +283,7 @@ echo ""
 # For release builds, update PLG file and create git tag
 if [ "$BUILD_TYPE" == "release" ]; then
   echo -e "${BLUE}========================================${NC}"
-  echo -e "${BLUE}  Update PLG & Git Workflow${NC}"
+  echo -e "${YELLOW}[7/${TOTAL_STEPS}]${NC}${BLUE} Update PLG & Git Workflow${NC}"
   echo -e "${BLUE}========================================${NC}"
   echo ""
 
