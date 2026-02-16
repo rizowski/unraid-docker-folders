@@ -81,13 +81,11 @@ if (!$replaceDockersSection) return;
       }
     }
 
-    // Replace the target's content with our app
-    target.innerHTML = '';
-    target.style.padding = '0';
-    target.style.margin = '0';
-    target.style.border = 'none';
-    target.style.background = 'none';
+    // Hide native container section instead of clearing it —
+    // Unraid renders its container list asynchronously and would overwrite innerHTML
+    target.style.display = 'none';
 
+    // Insert our app as a sibling before the hidden target
     var wrapper = document.createElement('div');
     wrapper.id = 'unraid-docker-folders-modern';
     wrapper.className = 'unapi';
@@ -95,14 +93,44 @@ if (!$replaceDockersSection) return;
     var appDiv = document.createElement('div');
     appDiv.id = 'app';
     wrapper.appendChild(appDiv);
-    target.appendChild(wrapper);
+    target.parentElement.insertBefore(wrapper, target);
+
+    // Keep native UI hidden even if Unraid re-renders or modifies the DOM
+    var nativeSelectors = selectors.concat(['.ct-name']);
+    var parentEl = target.parentElement;
+
+    function hideNativeElements() {
+      // Re-hide target in case Unraid toggled its display
+      if (target.style.display !== 'none') {
+        target.style.display = 'none';
+      }
+      // Hide any new native container elements that appear outside our wrapper
+      nativeSelectors.forEach(function(sel) {
+        parentEl.querySelectorAll(sel).forEach(function(el) {
+          if (wrapper.contains(el)) return;
+          // Walk up to find the direct child of parentEl
+          var ancestor = el;
+          while (ancestor.parentElement && ancestor.parentElement !== parentEl) {
+            ancestor = ancestor.parentElement;
+          }
+          if (ancestor !== wrapper && ancestor !== target && ancestor.parentElement === parentEl) {
+            ancestor.style.display = 'none';
+          }
+        });
+      });
+    }
+
+    var observer = new MutationObserver(function() {
+      hideNativeElements();
+    });
+    observer.observe(parentEl, { childList: true, subtree: true });
 
     // Hide any sibling elements that are part of the containers UI
     var siblingsToHide = ['#btnAddContainer', '.addContainer', '#dockerMenu',
                           '#docker-context-menu', '.docker_readmore'];
     siblingsToHide.forEach(function(sel) {
       var el = document.querySelector(sel);
-      if (el && !target.contains(el)) {
+      if (el && !wrapper.contains(el)) {
         el.style.display = 'none';
       }
     });
