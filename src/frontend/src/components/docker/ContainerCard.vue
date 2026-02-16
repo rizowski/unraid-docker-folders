@@ -125,8 +125,8 @@
         </template>
         <template v-if="displayMounts.length">
           <span class="text-muted shrink-0">Volumes</span>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
-            <p v-for="mount in displayMounts" :key="mount.destination" class="truncate" :title="`${mount.source} -> ${mount.destination}`">
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+            <p v-for="mount in displayMounts" :key="mount.destination" class="whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
               <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
             </p>
           </div>
@@ -197,8 +197,8 @@
         <!-- Labels -->
         <div v-if="displayLabels.length" class="space-y-1 pt-1 text-xs">
           <p class="text-muted">Labels</p>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
-            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
               <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
             </p>
           </div>
@@ -218,8 +218,8 @@
         </div>
         <div v-if="displayLabels.length" class="space-y-1 pt-1">
           <p class="text-muted text-xs">Labels</p>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
-            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
               <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
             </p>
           </div>
@@ -558,8 +558,8 @@
         </div>
         <div v-if="displayMounts.length">
           <p class="text-muted text-xs mb-1">Volumes</p>
-          <div class="text-text-secondary font-mono text-xs space-y-0.5">
-            <p v-for="mount in displayMounts" :key="mount.destination" class="truncate" :title="`${mount.source} -> ${mount.destination}`">
+          <div class="text-text-secondary font-mono text-xs space-y-0.5 overflow-x-auto">
+            <p v-for="mount in displayMounts" :key="mount.destination" class="whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
               <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
             </p>
           </div>
@@ -635,8 +635,8 @@
             </div>
             <div v-if="displayLabels.length" class="space-y-1">
               <p class="text-muted text-xs">Labels</p>
-              <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
-                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+              <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
                   <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
                 </p>
               </div>
@@ -658,8 +658,8 @@
         </div>
         <div v-if="displayLabels.length" class="space-y-1 pt-1">
           <p class="text-muted text-xs">Labels</p>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
-            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
               <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
             </p>
           </div>
