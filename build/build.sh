@@ -130,10 +130,10 @@ if [ "$BUILD_TYPE" == "release" ]; then
     # Get commits between this tag and the next older tag
     if [ $((i + 1)) -lt ${#TAGS[@]} ]; then
       PREV_TAG="${TAGS[$((i + 1))]}"
-      COMMITS=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release" || true)
+      COMMITS=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
     else
       # Oldest tag - get all commits up to this tag
-      COMMITS=$(git log "${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release" || true)
+      COMMITS=$(git log "${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
     fi
 
     if [ -n "$COMMITS" ]; then
@@ -147,7 +147,7 @@ if [ "$BUILD_TYPE" == "release" ]; then
 
   # Add unreleased commits (between latest tag and HEAD) as the current version
   if [ ${#TAGS[@]} -gt 0 ]; then
-    UNRELEASED=$(git log "${TAGS[0]}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release" || true)
+    UNRELEASED=$(git log "${TAGS[0]}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
     if [ -n "$UNRELEASED" ]; then
       # Prepend current version section before the rest
       EXISTING=$(cat "$CHANGELOG_FILE")
@@ -320,10 +320,10 @@ if [ "$BUILD_TYPE" == "release" ]; then
         if git diff --quiet "$PLG_FILE"; then
           echo -e "${YELLOW}⚠${NC} No changes to PLG file (version/MD5 already up to date)"
         else
-          # Stage and commit PLG file
-          echo "Committing PLG file changes..."
-          git add "$PLG_FILE"
-          git commit -m "Update PLG for release ${VERSION}
+          # Stage and commit PLG file and generated CHANGELOG
+          echo "Committing PLG file and CHANGELOG changes..."
+          git add "$PLG_FILE" "${PROJECT_ROOT}/CHANGELOG.md"
+          git commit -m "Update PLG and CHANGELOG for release ${VERSION}
 
 - Version: ${VERSION}
 - MD5: ${MD5}
@@ -367,9 +367,9 @@ if [ "$BUILD_TYPE" == "release" ]; then
       # Generate release notes from commits since last tag
       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
       if [ -n "$LAST_TAG" ]; then
-        COMMIT_LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release")
+        COMMIT_LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release")
       else
-        COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG for release")
+        COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG.*for release")
       fi
 
       RELEASE_NOTES="Release ${VERSION}
@@ -437,9 +437,9 @@ MD5: ${MD5}"
         # Generate changelog from commits since last tag
         LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
         if [ -n "$LAST_TAG" ]; then
-          GH_COMMIT_LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release")
+          GH_COMMIT_LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release")
         else
-          GH_COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG for release")
+          GH_COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG.*for release")
         fi
 
         RELEASE_BODY="## Changes
