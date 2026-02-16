@@ -7,6 +7,7 @@
 - Header stacks vertically on narrow viewports
 - Compact "New" button text on mobile, full "Create Folder" on sm+
 - Secondary info (image, status, stats, ports) hidden on mobile list/folder rows
+- Collapsible "Unfoldered Containers" section with chevron toggle (persisted to localStorage)
 - Auto-group Docker Compose stacks into folders
 - Replace Docker Containers section setting (fully takes over the Docker tab content)
 - Styled confirmation modals for stop/restart/remove/delete-folder actions

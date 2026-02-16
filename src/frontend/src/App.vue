@@ -107,7 +107,25 @@
 
         <!-- Unfoldered Containers -->
         <div v-if="dockerStore.unfolderedContainers.length > 0" class="mt-8">
-          <div class="flex items-center gap-2 mb-4">
+          <div
+            class="flex items-center gap-2 mb-4 cursor-pointer select-none"
+            @click="unfolderedCollapsed = !unfolderedCollapsed"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="shrink-0 text-text-secondary transition-transform duration-200"
+              :class="unfolderedCollapsed ? '-rotate-90' : ''"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
             <h2 class="text-sm font-semibold text-text">Unfoldered Containers</h2>
             <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{
               dockerStore.unfolderedContainers.length
@@ -115,6 +133,7 @@
           </div>
 
           <div
+            v-if="!unfolderedCollapsed"
             class="container-list"
             :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'"
             id="unfoldered-containers"
@@ -125,7 +144,7 @@
               :container="container"
               :action-in-progress="actionInProgress === container.id"
               :view="viewMode"
-  
+
               @start="handleStart"
               @stop="handleStop"
               @restart="handleRestart"
@@ -181,6 +200,9 @@ const statsStore = useStatsStore();
 const actionInProgress = ref<string | null>(null);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
+
+const unfolderedCollapsed = ref(localStorage.getItem('docker-folders-unfoldered-collapsed') === '1');
+watch(unfolderedCollapsed, (v) => localStorage.setItem('docker-folders-unfoldered-collapsed', v ? '1' : '0'));
 
 const dragLocked = ref(localStorage.getItem('docker-folders-drag-locked') === '1');
 watch(dragLocked, (v) => {
