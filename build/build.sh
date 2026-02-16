@@ -303,13 +303,18 @@ if [ "$BUILD_TYPE" == "release" ]; then
     else
       # Create annotated tag
       echo "Creating tag: ${TAG_NAME}"
+
+      # Generate release notes from commits since last tag
+      LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+      if [ -n "$LAST_TAG" ]; then
+        COMMIT_LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release")
+      else
+        COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG for release")
+      fi
+
       RELEASE_NOTES="Release ${VERSION}
 
-Phase 2: Folder Organization
-- Full folder management with drag-and-drop
-- Custom folder icons and colors
-- Robust install/uninstall hooks
-- Docker menu integration
+${COMMIT_LOG}
 
 Package: ${PLUGIN_NAME}-${VERSION}.txz
 MD5: ${MD5}"
@@ -368,13 +373,18 @@ MD5: ${MD5}"
       else
         # Create new release
         RELEASE_TITLE="Release ${VERSION}"
-        RELEASE_BODY="## Phase 2: Folder Organization
 
-### Features
-- Full folder management with drag-and-drop
-- Custom folder icons and colors
-- Robust install/uninstall hooks
-- Docker menu integration
+        # Generate changelog from commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          GH_COMMIT_LOG=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG for release")
+        else
+          GH_COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG for release")
+        fi
+
+        RELEASE_BODY="## Changes
+
+${GH_COMMIT_LOG}
 
 ### Installation
 \`\`\`
