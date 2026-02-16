@@ -20,14 +20,11 @@ if (!$replaceDockersSection) return;
 <script>
 (function() {
   function tryReplace() {
-    // Strategy: find the Docker Containers section and replace it entirely.
-    // Unraid's Docker page uses a table-based layout. The containers section
-    // is typically a <table> with an id or a recognizable heading inside it.
-
     var containerSection = null;
 
-    // 1. Try known IDs/selectors
+    // 1. Primary: look for the container list table by known IDs
     var selectors = [
+      '#docker_list',
       '#docker_containers',
       'table.docker_readmore',
       '#dockerContainerTable',
@@ -37,13 +34,20 @@ if (!$replaceDockersSection) return;
       if (containerSection) break;
     }
 
-    // 2. Fallback: find by "Docker Containers" heading text
+    // 2. Try finding rows with ct-name class (container name cells)
     if (!containerSection) {
-      var allElements = document.querySelectorAll('td, th, h2, h3, div.title, span.title');
+      var ctName = document.querySelector('.ct-name');
+      if (ctName) {
+        containerSection = ctName.closest('table') || ctName.closest('div');
+      }
+    }
+
+    // 3. Fallback: find by "Docker Containers" heading text
+    if (!containerSection) {
+      var allElements = document.querySelectorAll('td, th, h2, h3, div.title, span.title, div > span');
       for (var j = 0; j < allElements.length; j++) {
-        var text = allElements[j].textContent || '';
-        if (text.trim().match(/^Docker Containers$/i)) {
-          // Walk up to the outermost containing table/section
+        var text = (allElements[j].textContent || '').trim();
+        if (/^Docker Containers$/i.test(text)) {
           containerSection = allElements[j].closest('table') || allElements[j].closest('div') || allElements[j].parentElement;
           break;
         }
@@ -94,13 +98,21 @@ if (!$replaceDockersSection) return;
     target.appendChild(wrapper);
 
     // Hide any sibling elements that are part of the containers UI
-    // (e.g. "Add Container" button, context menus, footers)
     var siblingsToHide = ['#btnAddContainer', '.addContainer', '#dockerMenu',
                           '#docker-context-menu', '.docker_readmore'];
     siblingsToHide.forEach(function(sel) {
       var el = document.querySelector(sel);
       if (el && !target.contains(el)) {
         el.style.display = 'none';
+      }
+    });
+
+    // Hide the "Folders" tab link since our app is embedded here
+    var tabLinks = document.querySelectorAll('#tab-bar a, .tabs a, ul.tabs li a, a[href*="DockerFolders"]');
+    tabLinks.forEach(function(link) {
+      var linkText = (link.textContent || '').trim();
+      if (linkText === 'Folders' || /DockerFoldersMain/i.test(link.href || '')) {
+        link.style.display = 'none';
       }
     });
 

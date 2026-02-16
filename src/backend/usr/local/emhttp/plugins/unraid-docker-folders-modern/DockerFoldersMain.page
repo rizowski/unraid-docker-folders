@@ -5,8 +5,15 @@ Cond="is_file('/var/run/dockerd.pid')"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
+require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/classes/Database.php';
 
 $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
+$replaceEnabled = false;
+if ($dbStatus === 'exists') {
+    $db = Database::getInstance();
+    $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['replace_docker_section']);
+    $replaceEnabled = ($row && $row['value'] === '1');
+}
 ?>
 
 <?php if ($dbStatus === 'missing'): ?>
@@ -15,8 +22,13 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     <p>The plugin database has not been initialized. Please reinstall the plugin or run migrations.</p>
     <p>Expected path: <code><?= DB_PATH ?></code></p>
 </div>
-<?php endif; ?>
-
+<?php elseif ($replaceEnabled): ?>
+<div style="padding:20px;text-align:center;color:#888;">
+    <p>Docker Folders is embedded in the Docker Containers tab.</p>
+    <p>Disable "Replace Docker Containers section" in <a href="/Settings/DockerFoldersSettings">Settings</a> to use this tab instead.</p>
+</div>
+<?php else: ?>
 <link rel="stylesheet" href="<?autov('/plugins/unraid-docker-folders-modern/assets/css/app.css')?>">
 <div id="app"></div>
 <script type="module" src="<?autov('/plugins/unraid-docker-folders-modern/assets/js/app.js')?>"></script>
+<?php endif; ?>
