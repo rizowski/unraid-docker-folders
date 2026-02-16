@@ -3,6 +3,7 @@
   <div v-if="view === 'grid'" class="flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:brightness-[1.03] transition" :data-container-id="container.id">
     <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
       <svg
+        v-if="!dragLocked"
         xmlns="http://www.w3.org/2000/svg"
         width="16"
         height="16"
@@ -308,6 +309,7 @@
   <div v-else class="container-row rounded transition border-b border-border/50" :data-container-id="container.id">
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3">
       <svg
+        v-if="!dragLocked"
         xmlns="http://www.w3.org/2000/svg"
         width="14"
         height="14"
@@ -749,6 +751,7 @@ onUnmounted(() => {
 });
 
 const distinguishHealthy = inject<Ref<boolean>>('distinguishHealthy', ref(true));
+const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
 const isHealthy = computed(() => props.container.status?.toLowerCase().includes('(healthy)'));
 

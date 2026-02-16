@@ -6,6 +6,7 @@
   >
     <div class="flex items-center gap-2 flex-1">
       <svg
+        v-if="!dragLocked"
         xmlns="http://www.w3.org/2000/svg"
         width="16"
         height="16"
@@ -130,11 +131,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import type { Folder } from '@/types/folder';
+
+const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
 interface Props {
   folder: Folder;

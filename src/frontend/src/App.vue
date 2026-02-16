@@ -211,6 +211,7 @@ watch(dragLocked, (v) => {
 });
 
 provide('distinguishHealthy', toRef(settingsStore, 'distinguishHealthy'));
+provide('dragLocked', dragLocked);
 const isModalOpen = ref(false);
 const editingFolder = ref<Folder | null>(null);
 
