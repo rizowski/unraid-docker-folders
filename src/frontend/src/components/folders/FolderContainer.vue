@@ -2,8 +2,8 @@
   <div class="mb-2">
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
-    <div v-if="!folder.collapsed" class="px-4">
-      <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4'" :data-folder-id="folder.id">
+    <div v-if="!folder.collapsed" class="px-2 sm:px-4">
+      <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'" :data-folder-id="folder.id">
         <ContainerCard
           v-for="assoc in folderContainers"
           :key="assoc.container_id"

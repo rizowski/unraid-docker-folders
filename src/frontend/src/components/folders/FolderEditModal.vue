@@ -1,14 +1,14 @@
 <template>
   <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]" @click="handleOverlayClick">
     <div class="bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
-      <div class="flex justify-between items-center p-6 border-b border-border">
+      <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
 
-      <form @submit.prevent="handleSubmit" class="p-6">
+      <form @submit.prevent="handleSubmit" class="p-4 sm:p-6">
         <div class="mb-6">
           <label for="folder-name" class="block mb-1 font-medium text-text">Folder Name *</label>
           <input

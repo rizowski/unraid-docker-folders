@@ -3,6 +3,10 @@
 ## 2026.02.15
 
 ### Added
+- Mobile-responsive layout with sm breakpoints across all components
+- Header stacks vertically on narrow viewports
+- Compact "New" button text on mobile, full "Create Folder" on sm+
+- Secondary info (image, status, stats, ports) hidden on mobile list/folder rows
 - Auto-group Docker Compose stacks into folders
 - Replace Docker Containers section setting (fully takes over the Docker tab content)
 - Styled confirmation modals for stop/restart/remove/delete-folder actions
@@ -19,6 +23,9 @@
 - Changelog displayed on settings page
 
 ### Changed
+- Grid minmax reduced from 350px to 280px for single-column on small screens
+- Reduced padding and gaps on mobile (cards, folders, modals, header)
+- List view expanded accordion uses single-column grid on mobile
 - Docker section inject replaces content entirely instead of hiding alongside
 - Flat nav button style (removed gradients)
 - Folder edit/delete icons use consistent SVG style

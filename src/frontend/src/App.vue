@@ -1,11 +1,11 @@
 <template>
-  <div id="unraid-docker-folders-modern" class="unapi px-6 py-4 font-sans text-text">
-    <header class="flex justify-between items-center mb-8 pb-6 border-b-2 border-border">
-      <div class="flex items-baseline gap-4">
+  <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text">
+    <header class="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
+      <div class="flex items-baseline gap-2 sm:gap-4">
         <span class="text-sm text-text-secondary">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
         <ConnectionStatus />
       </div>
-      <div class="flex gap-3 items-center">
+      <div class="flex gap-2 sm:gap-3 items-center">
         <a href="/Settings/DockerFoldersSettings" class="nav-btn" title="Settings" style="text-decoration: none;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3" />
@@ -75,7 +75,7 @@
           @click="openCreateFolderModal"
           class="nav-btn active"
         >
-          + Create Folder
+          <span class="hidden sm:inline">+ Create Folder</span><span class="sm:hidden">+ New</span>
         </button>
       </div>
     </header>
@@ -116,7 +116,7 @@
 
           <div
             class="container-list"
-            :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(350px,1fr))] gap-4'"
+            :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'"
             id="unfoldered-containers"
           >
             <ContainerCard

@@ -1,7 +1,7 @@
 <template>
   <!-- Grid (card) view -->
   <div v-if="view === 'grid'" class="flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:brightness-[1.03] transition" :data-container-id="container.id">
-    <div class="flex items-center gap-2 p-6 pb-0">
+    <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="16"
@@ -27,7 +27,7 @@
     </div>
 
     <!-- Clickable summary row -->
-    <div class="flex items-center gap-2 px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
+    <div class="flex items-center gap-2 px-4 sm:px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
       <p class="flex-1 text-[11px] text-text-secondary font-mono truncate">
         <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
         <span v-else>{{ container.image }}</span>
@@ -51,12 +51,12 @@
     </div>
 
     <!-- Compact ports (collapsed) -->
-    <div v-if="compactPorts && !expanded" class="px-6 pb-0.5">
+    <div v-if="compactPorts && !expanded" class="px-4 sm:px-6 pb-0.5">
       <span class="text-[11px] text-text font-mono">Ports: {{ compactPorts }}</span>
     </div>
 
     <!-- Compact stats loading state -->
-    <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-6 pb-1 space-y-1">
+    <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
         <span class="text-text w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
@@ -74,7 +74,7 @@
     </div>
 
     <!-- Compact stats bars (always visible for running containers) -->
-    <div v-if="isRunning && containerStats && !expanded" class="px-6 pb-1 space-y-1">
+    <div v-if="isRunning && containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
         <span class="text-text w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
@@ -105,7 +105,7 @@
     </div>
 
     <!-- Accordion details -->
-    <div v-if="expanded" class="px-6 pb-2 space-y-3 text-xs border-t border-border pt-3 overflow-hidden">
+    <div v-if="expanded" class="px-4 sm:px-6 pb-2 space-y-3 text-xs border-t border-border pt-3 overflow-hidden">
       <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 min-w-0">
         <template v-if="container.image">
           <span class="text-muted shrink-0">Image</span>
@@ -192,7 +192,7 @@
       <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-2 border-t border-border">Container not running</div>
     </div>
 
-    <div class="flex items-center gap-3 px-6 pb-4 pt-2 mt-auto border-t border-border/30">
+    <div class="flex items-center gap-3 px-4 pb-3 pt-2 sm:px-6 sm:pb-4 mt-auto border-t border-border/30">
       <button
         v-if="container.state === 'running'"
         @click="confirmAction = 'stop'"
@@ -306,7 +306,7 @@
 
   <!-- List view -->
   <div v-else class="container-row rounded transition border-b border-border/50" :data-container-id="container.id">
-    <div class="flex items-center gap-4 px-4 py-3">
+    <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3">
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="14"
@@ -331,12 +331,12 @@
 
       <!-- Clickable name/image area toggles accordion -->
       <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
-        <span class="text-xs font-semibold text-text min-w-[120px]">{{ container.name }}</span>
-        <span class="text-[11px] text-text-secondary font-mono truncate">
+        <span class="text-xs font-semibold text-text min-w-0 sm:min-w-[120px]">{{ container.name }}</span>
+        <span class="hidden sm:inline text-[11px] text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="text-[11px] text-text">{{ container.status }}</span>
+        <span class="hidden sm:inline text-[11px] text-text">{{ container.status }}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -358,7 +358,7 @@
       <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-text font-mono">{{ compactPorts }}</span>
 
       <!-- Inline compact stats loading (list view) -->
-      <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
+      <div v-if="isRunning && showStats && !containerStats && !expanded" class="hidden sm:block shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-text w-7 text-right">CPU</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
@@ -376,7 +376,7 @@
       </div>
 
       <!-- Inline compact stats (list view) -->
-      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 flex items-center gap-3">
+      <div v-if="isRunning && containerStats && !expanded" class="hidden sm:flex shrink-0 items-center gap-3">
         <div class="w-[140px] space-y-0.5">
           <div class="flex items-center gap-1.5 text-[11px]">
             <span class="text-text w-7 text-right">CPU</span>
@@ -509,7 +509,7 @@
           </span>
         </template>
       </div>
-      <div v-if="networkInfo || displayPorts.length || displayMounts.length" class="grid grid-cols-2 gap-4">
+      <div v-if="networkInfo || displayPorts.length || displayMounts.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
         <div v-if="networkInfo || displayPorts.length">
           <p class="text-muted text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
           <div class="text-text-secondary font-mono text-xs space-y-0.5">
