@@ -1,5 +1,5 @@
 <template>
-  <div class="mb-8">
+  <div class="mb-2">
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
     <div v-if="!folder.collapsed" class="px-4">

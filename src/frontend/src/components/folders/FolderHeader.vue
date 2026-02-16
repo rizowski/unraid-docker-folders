@@ -2,6 +2,7 @@
   <div
     class="flex justify-between items-center px-6 py-4 bg-bg rounded-sm mb-4 cursor-pointer select-none border-l-4 hover:brightness-95 transition"
     :style="{ borderLeftColor: folder.color || '#ff8c2f' }"
+    @click="$emit('toggle-collapse')"
   >
     <div class="flex items-center gap-2 flex-1">
       <svg
@@ -23,13 +24,21 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <button
-        class="bg-transparent border-none p-1 cursor-pointer text-sm text-text-secondary flex items-center justify-center w-6 h-6"
-        @click="$emit('toggle-collapse')"
-        :aria-label="folder.collapsed ? 'Expand folder' : 'Collapse folder'"
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="shrink-0 text-muted transition-transform duration-200"
+        :class="folder.collapsed ? '-rotate-90' : ''"
       >
-        <span class="transition-transform">{{ folder.collapsed ? '▶' : '▼' }}</span>
-      </button>
+        <polyline points="6 9 12 15 18 9" />
+      </svg>
       <div
         v-if="containerIcons.length > 0"
         class="grid shrink-0 gap-0.5 mr-2"
@@ -46,24 +55,32 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" /></svg>
         Compose
       </span>
-      <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold ml-1">{{
-        folder.containers.length
-      }}</span>
+      <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold ml-1" :title="`${runningCount} running / ${folder.containers.length} total`">
+        {{ runningCount }}/{{ folder.containers.length }}
+      </span>
     </div>
     <div class="flex gap-1">
       <button
-        class="bg-transparent border-none px-2 py-1 cursor-pointer text-base opacity-60 hover:opacity-100 hover:scale-110 transition"
-        @click="$emit('edit')"
+        class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-text transition"
+        @click.stop="$emit('edit')"
         title="Edit folder"
       >
-        ✏️
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
       </button>
       <button
-        class="bg-transparent border-none px-2 py-1 cursor-pointer text-base opacity-60 hover:opacity-100 hover:scale-110 transition"
-        @click="$emit('delete')"
+        class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-error transition"
+        @click.stop="$emit('delete')"
         title="Delete folder"
       >
-        🗑️
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="10" y1="11" x2="10" y2="17" />
+          <line x1="14" y1="11" x2="14" y2="17" />
+        </svg>
       </button>
     </div>
   </div>
@@ -87,6 +104,13 @@ defineEmits<{
 }>();
 
 const dockerStore = useDockerStore();
+
+const runningCount = computed(() => {
+  return props.folder.containers.filter((assoc) => {
+    const container = dockerStore.containers.find((c) => c.id === assoc.container_id);
+    return container?.state === 'running';
+  }).length;
+});
 
 const containerIcons = computed(() => {
   const icons: string[] = [];

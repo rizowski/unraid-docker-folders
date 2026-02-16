@@ -98,8 +98,9 @@
         <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
       </div>
       <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
-        <span class="text-error w-8 shrink-0">RST</span>
-        <span class="text-error font-mono">{{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}</span>
+        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium">
+          {{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}
+        </span>
       </div>
     </div>
 
@@ -194,7 +195,7 @@
     <div class="flex items-center gap-3 px-6 pb-4 pt-2 mt-auto border-t border-border/30">
       <button
         v-if="container.state === 'running'"
-        @click="confirmStop"
+        @click="confirmAction = 'stop'"
         class="p-2 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
         title="Stop"
@@ -216,7 +217,7 @@
       </button>
       <button
         v-if="isRunning"
-        @click="confirmRestart"
+        @click="confirmAction = 'restart'"
         class="p-2 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
         title="Restart"
@@ -238,7 +239,7 @@
       </button>
       <button
         v-if="!isRunning"
-        @click="confirmRemove"
+        @click="confirmAction = 'remove'"
         class="p-2 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="actionInProgress"
         title="Remove"
@@ -260,14 +261,8 @@
           <line x1="14" y1="11" x2="14" y2="17" />
         </svg>
       </button>
-      <a v-if="editUrl" :href="editUrl" class="ml-auto shrink-0 text-text-secondary hover:text-text transition p-2" title="Edit container" @click.stop>
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-      </a>
       <!-- Kebab menu -->
-      <div ref="menuRef" class="relative" :class="{ 'ml-auto': !editUrl }">
+      <div ref="menuRef" class="relative ml-auto">
         <button class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
             <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
@@ -391,22 +386,16 @@
             <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
           </div>
         </div>
-        <span v-if="containerStats.restartCount > 0" class="text-error text-[11px] font-mono shrink-0" :title="`${containerStats.restartCount} restart(s)`">
+        <span v-if="containerStats.restartCount > 0" class="inline-flex items-center px-1.5 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium shrink-0" :title="`${containerStats.restartCount} restart(s)`">
           {{ containerStats.restartCount }} rst
         </span>
       </div>
 
-      <div class="flex gap-1.5 ml-auto shrink-0 items-center">
-        <a v-if="editUrl" :href="editUrl" class="text-text-secondary hover:text-text transition p-1.5" title="Edit container">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-        </a>
+      <div class="flex gap-1 ml-auto shrink-0 items-center">
         <button
           v-if="container.state === 'running'"
-          @click="confirmStop"
-          class="p-1.5 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="confirmAction = 'stop'"
+          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
           title="Stop"
         >
@@ -417,7 +406,7 @@
         <button
           v-else
           @click="emit('start', container.id)"
-          class="p-1.5 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
           title="Start"
         >
@@ -427,8 +416,8 @@
         </button>
         <button
           v-if="isRunning"
-          @click="confirmRestart"
-          class="p-1.5 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="confirmAction = 'restart'"
+          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
           title="Restart"
         >
@@ -439,8 +428,8 @@
         </button>
         <button
           v-if="!isRunning"
-          @click="confirmRemove"
-          class="p-1.5 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          @click="confirmAction = 'remove'"
+          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="actionInProgress"
           title="Remove"
         >
@@ -453,7 +442,7 @@
         </button>
         <!-- Kebab menu -->
         <div ref="menuRef" class="relative">
-          <button class="p-1.5 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
+          <button class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
               <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
             </svg>
@@ -568,6 +557,18 @@
       <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-2 border-t border-border">Container not running</div>
     </div>
   </div>
+
+  <Teleport to="body">
+    <ConfirmModal
+      :is-open="!!confirmAction"
+      :title="confirmModalConfig.title"
+      :message="confirmModalConfig.message"
+      :confirm-label="confirmModalConfig.label"
+      :variant="confirmModalConfig.variant"
+      @confirm="handleConfirm"
+      @cancel="confirmAction = null"
+    />
+  </Teleport>
 </template>
 
 <script setup lang="ts">
@@ -576,6 +577,7 @@ import type { Container } from '@/stores/docker';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
@@ -616,22 +618,27 @@ const emit = defineEmits<{
   remove: [id: string];
 }>();
 
-function confirmStop() {
-  if (confirm(`Stop container "${props.container.name}"?`)) {
-    emit('stop', props.container.id);
-  }
-}
+const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
 
-function confirmRestart() {
-  if (confirm(`Restart container "${props.container.name}"?`)) {
-    emit('restart', props.container.id);
+const confirmModalConfig = computed(() => {
+  switch (confirmAction.value) {
+    case 'stop':
+      return { title: 'Stop Container', message: `Stop "${props.container.name}"?`, label: 'Stop', variant: 'danger' as const };
+    case 'restart':
+      return { title: 'Restart Container', message: `Restart "${props.container.name}"?`, label: 'Restart', variant: 'default' as const };
+    case 'remove':
+      return { title: 'Remove Container', message: `Remove "${props.container.name}"? This cannot be undone.`, label: 'Remove', variant: 'danger' as const };
+    default:
+      return { title: '', message: '', label: '', variant: 'default' as const };
   }
-}
+});
 
-function confirmRemove() {
-  if (confirm(`Remove container "${props.container.name}"? This cannot be undone.`)) {
-    emit('remove', props.container.id);
-  }
+function handleConfirm() {
+  const action = confirmAction.value;
+  confirmAction.value = null;
+  if (action === 'stop') emit('stop', props.container.id);
+  else if (action === 'restart') emit('restart', props.container.id);
+  else if (action === 'remove') emit('remove', props.container.id);
 }
 
 const expanded = ref(false);
@@ -781,6 +788,7 @@ interface MenuItem {
 }
 
 const menuItems = computed<MenuItem[]>(() => [
+  { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
   { label: 'WebUI', icon: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6|M15 3h6v6|M10 14 21 3', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
   { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value },
   { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', href: logsUrl.value, target: '_blank', show: true },
