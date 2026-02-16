@@ -5,6 +5,8 @@ A modern Unraid plugin that adds folder organization to the Docker tab with real
 ## Features
 
 - **Folder Organization**: Group Docker containers into customizable folders with icons and colors
+- **Container Search**: Filter containers by name or image in real-time; folders auto-expand to show matches
+- **Live Resource Stats**: CPU, memory, I/O, network, PIDs, restart count, uptime, image/log size for running containers
 - **Real-Time Updates**: WebSocket integration via Unraid's nchan server - all open tabs update instantly
 - **Drag & Drop**: Organize containers by dragging them between folders (SortableJS)
 - **Container Actions**: Start, stop, restart, and remove containers directly from the folder view
@@ -50,17 +52,17 @@ After release build, manually create a GitHub release and upload the `.txz` file
 ### Phase 2: Folder Management - COMPLETE
 - Folder CRUD, drag-and-drop, container assignment, import/export, menu integration
 
-### Phase 3: Real-Time Updates - COMPLETE (code written, pending on-device testing)
+### Phase 3: Real-Time Updates & Live Stats - COMPLETE (code written, pending on-device testing)
 - WebSocket publisher (nchan), frontend composable with reconnection, connection status indicator, polling fallback, CSRF token handling, container remove action
+- Live resource stats: CPU, memory, I/O, network, PIDs, restart count, uptime, image size, log size
+- Container search by name/image with folder filtering and auto-expand
+- Horizontally scrollable labels and volumes sections
 
 ### Phase 4: UI/UX Polish (Planned)
 - Dark/light theme, responsive design, animations, loading skeletons
 
 ### Phase 5: Testing & Release (Planned)
 - Unit tests, integration tests, documentation, v1.0 release
-
-### Future
-- Container update detection, CPU/memory stats, port/volume display, search & filtering
 
 ## Support
 

@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Unraid Docker Folders Modern** - A modern Unraid plugin to replace the outdated folderview2 plugin with Vue 3 frontend, real-time WebSocket updates, and SQLite persistence. Allows organizing Docker containers into folders with drag-and-drop.
 
-**Current Status**: Phases 1-3 code complete, pending on-device testing. See STATUS.md for details.
+**Current Status**: Phases 1-3 code complete (including live stats, search, UI polish), pending on-device testing. See STATUS.md for details.
 
 ---
 
@@ -67,7 +67,7 @@ src/frontend/              # Vue 3 application
   ├── src/
   │   ├── components/      # Vue components (ConnectionStatus, ContainerCard, Folder*)
   │   ├── composables/     # useWebSocket.ts
-  │   ├── stores/          # Pinia state management (docker.ts, folders.ts, settings.ts)
+  │   ├── stores/          # Pinia state management (docker.ts, folders.ts, settings.ts, stats.ts)
   │   ├── types/           # TypeScript definitions (folder.ts, websocket.ts)
   │   └── utils/           # csrf.ts
   ├── dev/
@@ -75,7 +75,7 @@ src/frontend/              # Vue 3 application
   └── vite.config.ts       # Build output: ../backend/.../assets/
 
 src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/
-  ├── api/                 # PHP REST endpoints (containers.php, folders.php, settings.php)
+  ├── api/                 # PHP REST endpoints (containers.php, folders.php, settings.php, stats.php)
   ├── classes/             # PHP business logic (Database, DockerClient, FolderManager, WebSocketPublisher)
   ├── include/             # config.php, auth.php
   ├── migrations/          # SQL migration files
@@ -173,7 +173,7 @@ Key="Value"
 1. `DockerClient.php` queries Docker socket
 2. Results cached in `container_cache` table
 3. Frontend fetches via REST API
-4. (Planned) WebSocket updates on container state changes
+4. WebSocket updates on container state changes (nchan pub/sub)
 
 ---
 
@@ -182,8 +182,10 @@ Key="Value"
 **Frontend**: Pinia stores in `src/frontend/src/stores/`
 
 **Key stores**:
-- `docker.ts` - Container list, status, actions (start/stop/restart)
+- `docker.ts` - Container list, status, actions (start/stop/restart), search query
 - `folders.ts` - Folder CRUD, container assignments, drag-drop reordering
+- `stats.ts` - Live resource stats with visibility-based polling
+- `settings.ts` - Backend-persisted plugin settings
 
 **State persistence**: Folders/assignments stored in SQLite, NOT localStorage
 
@@ -229,8 +231,9 @@ Key="Value"
 
 ### Current State
 - Phase 1: ✅ Build system, database, API endpoints working
-- Phase 2: ⚠️ Code complete but untested (blocked on menu integration)
-- Phases 3-5: Not started
+- Phase 2: ✅ Code complete (folder CRUD, drag-and-drop, import/export)
+- Phase 3: ✅ Code complete (WebSocket, live stats, search, UI polish)
+- Phases 4-5: Not started
 
 ### When Unblocked
 1. Test folder CRUD operations
@@ -313,6 +316,6 @@ Key="Value"
 
 ## Next Steps for Development
 
-**Current work**: Phase 3 — Live container resource stats (CPU, Memory, I/O, Network, PIDs, restart count, uptime, image size, log size)
+**Current work**: On-device testing of Phases 1-3, then Phase 4 UI/UX polish.
 
-**See**: STATUS.md for phase breakdown, CURRENT_ISSUE.md for Phase 3 implementation details.
+**See**: STATUS.md for phase breakdown, CURRENT_ISSUE.md for recently completed work.

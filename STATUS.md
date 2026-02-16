@@ -1,7 +1,7 @@
 # Unraid Docker Folders Modern - Project Status
 
 **Last Updated**: 2026-02-15
-**Current Phase**: Phase 3 in progress — Live container resource stats
+**Current Phase**: Phase 3 complete (pending on-device testing) — UI polish ongoing
 
 ---
 
@@ -47,20 +47,29 @@ Enriched container cards with detailed info and backend-persisted settings.
 - `App.vue` — provides `distinguishHealthy` setting via Vue provide/inject (no prop drilling)
 - `dev/mock-api.ts` — all mock containers have realistic ports, mounts, networkSettings, created, managed, webui fields; new settings endpoint handler
 
-### Phase 3: Real-Time Updates & Live Stats - IN PROGRESS
+### Phase 3: Real-Time Updates & Live Stats - COMPLETE (pending on-device testing)
 
-**Completed (WebSocket infrastructure):**
+**WebSocket infrastructure:**
 - `WebSocketPublisher.php` - static publisher, POSTs JSON events to nchan (fire-and-forget, 2s timeout)
 - `containers.php` - publishes after start/stop/restart/remove actions
 - `folders.php` - publishes after create/update/delete/add_container/remove_container/reorder/import
 - `composables/useWebSocket.ts` - singleton WebSocket manager with exponential backoff reconnect (1s-30s), event dispatch to stores, 30s polling fallback
 - `components/ConnectionStatus.vue` - colored dot indicator (green=Live, yellow=Connecting, gray=Offline, red=Error)
 
-**In Progress (Live resource stats):**
-- Backend: Docker `/containers/{id}/stats?stream=0` endpoint for one-shot stats
-- Backend: New `api/stats.php` endpoint returning CPU%, Memory, I/O, Network, PIDs for all running containers
-- Frontend: Stats store with periodic polling
-- Frontend: Container accordion shows CPU/Memory progress bars, I/O/Network numbers, PIDs, restart count
+**Live resource stats:**
+- Backend: `api/stats.php` — batched endpoint returning CPU%, Memory, I/O, Network, PIDs, restart count, uptime, image size, log size
+- Frontend: `stores/stats.ts` — Pinia store with visibility-based polling (only fetches for visible containers)
+- Frontend: ContainerCard accordion shows CPU/Memory progress bars, I/O/Network numbers, PIDs, restart count, uptime, image/log size
+- Collapsed folder headers show aggregated stats for their containers
+
+**Container search:**
+- Search input in header filters by container name or image (case-insensitive substring)
+- Folders with no matches are hidden; folders with matches auto-expand
+- Drag-and-drop disabled during active search
+- Search state in `docker.ts` store (`searchQuery` ref)
+
+**UI improvements:**
+- Labels and volumes sections are horizontally scrollable (overflow-x-auto) instead of truncated with ellipsis
 
 ### Phase 4: UI/UX Polish - NOT STARTED
 - Dark/light theme support
@@ -89,9 +98,10 @@ src/frontend/                    # Vue 3 + TypeScript + Vite
     composables/
       useWebSocket.ts            # WebSocket manager (singleton)
     stores/
-      docker.ts                  # Container state + actions
+      docker.ts                  # Container state + actions + search
       folders.ts                 # Folder state + operations
       settings.ts                # Plugin settings (backend-persisted)
+      stats.ts                   # Live resource stats polling
     types/
       folder.ts                  # Folder type definitions
       websocket.ts               # WebSocket event types
@@ -106,6 +116,7 @@ src/backend/.../unraid-docker-folders-modern/
     containers.php               # Container CRUD + WebSocket publish
     folders.php                  # Folder CRUD + WebSocket publish
     settings.php                 # Plugin settings CRUD
+    stats.php                    # Live container resource stats
   classes/
     Database.php                 # SQLite3 singleton wrapper
     DockerClient.php             # Docker socket client
@@ -123,9 +134,9 @@ src/backend/.../unraid-docker-folders-modern/
 
 ## Next Steps
 
-1. **Phase 3**: Implement live container resource stats (CPU, Memory, I/O, Network, PIDs)
-2. **Build and install**: `./build/build.sh --release`, create GitHub release, install on Unraid
-3. **On-device testing**: Verify all Phase 2-3 features work on real Unraid hardware
+1. **Build and install**: `./build/build.sh --release`, create GitHub release, install on Unraid
+2. **On-device testing**: Verify all Phase 1-3 features work on real Unraid hardware
+3. **Phase 4**: UI/UX polish — dark/light theme, responsive design, animations
 
 ---
 

@@ -1,16 +1,17 @@
 # Quick Start - Resuming Development
 
 **Last Session**: 2026-02-15
-**Status**: Phase 3 code complete, pending on-device testing
+**Status**: Phases 1-3 complete, pending on-device testing
 
 ---
 
 ## TL;DR
 
 - Phases 1-3 code is complete and builds cleanly
-- CSRF token fix applied (was causing all POST/PUT/DELETE to fail)
+- Live resource stats (CPU, memory, I/O, network, PIDs, restart count, uptime, image/log size)
+- Container search filters by name/image with folder auto-expand
 - WebSocket real-time updates implemented (nchan pub/sub)
-- Container remove action added to UI
+- Labels and volumes are horizontally scrollable instead of truncated
 - **Next**: Build, install on Unraid, verify everything works
 
 ---
@@ -28,6 +29,8 @@
 #    - Start/stop a container
 #    - Check for WebSocket connection in browser DevTools
 #    - Open two tabs, action in one should update the other
+#    - Search for a container by name or image
+#    - Verify live stats appear in expanded container cards
 ```
 
 ---
@@ -47,6 +50,9 @@
 - Container remove action with confirmation dialog
 - Fetch debounce (500ms) to prevent redundant API calls
 - 30s polling fallback for external changes
+- Live resource stats (CPU, memory bars + numeric stats)
+- Container search with folder filtering and auto-expand
+- Horizontally scrollable labels and volumes
 
 ## What Needs Testing
 
@@ -56,32 +62,8 @@
 - Container remove from UI
 - Polling fallback (change via native Docker tab, verify Folders updates)
 - nchan channel availability (may need Unraid-side configuration)
-
----
-
-## Key Files Changed (Phase 3)
-
-### Backend
-| File | Change |
-|------|--------|
-| `classes/WebSocketPublisher.php` | NEW - nchan publisher |
-| `classes/FolderManager.php` | FIX - PDOException -> Exception |
-| `api/containers.php` | ADD - publish calls after actions |
-| `api/folders.php` | ADD - publish calls after mutations |
-| `DockerFoldersMain.page` | FIX - passes CSRF token to iframe |
-
-### Frontend
-| File | Change |
-|------|--------|
-| `utils/csrf.ts` | NEW - CSRF token utility |
-| `types/websocket.ts` | NEW - WebSocket event types |
-| `composables/useWebSocket.ts` | NEW - WebSocket manager |
-| `components/ConnectionStatus.vue` | NEW - status indicator |
-| `stores/docker.ts` | ADD - removeContainer, debounce, CSRF |
-| `stores/folders.ts` | ADD - debounce, CSRF |
-| `components/docker/ContainerCard.vue` | ADD - Remove button |
-| `components/folders/FolderContainer.vue` | ADD - remove handler |
-| `App.vue` | ADD - WebSocket init, status indicator, remove handler |
+- Stats polling performance with many running containers
+- Search filtering with large container lists
 
 ---
 
@@ -89,7 +71,7 @@
 
 - **CLAUDE.md** - Complete development reference (architecture, build, conventions)
 - **STATUS.md** - Phase-by-phase project status
-- **CURRENT_ISSUE.md** - Current issue details (CSRF fix)
+- **CURRENT_ISSUE.md** - Current work and recently completed items
 - **QUICK_START.md** - This file
 
 ---
