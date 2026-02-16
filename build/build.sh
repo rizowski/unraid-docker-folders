@@ -113,6 +113,11 @@ cd "$PROJECT_ROOT"
 # Copy the entire backend structure
 cp -r "${BACKEND_DIR}/usr" "${BUILD_DIR}/"
 
+# Copy CHANGELOG.md into plugin directory for settings page
+if [ -f "${PROJECT_ROOT}/CHANGELOG.md" ]; then
+    cp "${PROJECT_ROOT}/CHANGELOG.md" "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/"
+fi
+
 # Remove macOS metadata files
 find "${BUILD_DIR}" -name "._*" -delete
 find "${BUILD_DIR}" -name ".DS_Store" -delete

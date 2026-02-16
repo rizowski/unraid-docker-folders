@@ -17,6 +17,62 @@ foreach ($rows as $row) {
 $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
+
+// Parse CHANGELOG.md — extract the latest version section
+$changelogHtml = '';
+$changelogPath = PLUGIN_DIR . '/CHANGELOG.md';
+if (file_exists($changelogPath)) {
+  $lines = file($changelogPath, FILE_IGNORE_NEW_LINES);
+  $inLatest = false;
+  $sections = [];
+  $currentSection = '';
+  $currentItems = [];
+
+  foreach ($lines as $line) {
+    // Skip the "# Changelog" title
+    if (preg_match('/^# /', $line)) continue;
+
+    // "## version" — start of a version block
+    if (preg_match('/^## (.+)/', $line, $m)) {
+      if ($inLatest) break; // stop at second version heading
+      $inLatest = true;
+      $changelogVersion = trim($m[1]);
+      continue;
+    }
+
+    if (!$inLatest) continue;
+
+    // "### Section" heading
+    if (preg_match('/^### (.+)/', $line, $m)) {
+      if ($currentSection && $currentItems) {
+        $sections[] = ['title' => $currentSection, 'items' => $currentItems];
+      }
+      $currentSection = trim($m[1]);
+      $currentItems = [];
+      continue;
+    }
+
+    // "- item" list entry
+    if (preg_match('/^- (.+)/', $line, $m)) {
+      $currentItems[] = htmlspecialchars(trim($m[1]));
+    }
+  }
+
+  if ($currentSection && $currentItems) {
+    $sections[] = ['title' => $currentSection, 'items' => $currentItems];
+  }
+
+  if ($sections) {
+    $changelogHtml .= '<h3 style="margin:0 0 10px 0;font-size:16px;color:#333;">Latest Changes — ' . htmlspecialchars($changelogVersion ?? '') . '</h3>';
+    foreach ($sections as $sec) {
+      $changelogHtml .= '<p style="margin:8px 0 4px;font-weight:600;font-size:13px;color:#555;">' . htmlspecialchars($sec['title']) . '</p><ul style="margin:0 0 0 16px;padding:0;font-size:13px;color:#666;">';
+      foreach ($sec['items'] as $item) {
+        $changelogHtml .= '<li style="margin:2px 0;">' . $item . '</li>';
+      }
+      $changelogHtml .= '</ul>';
+    }
+  }
+}
 ?>
 
 <style>
@@ -182,7 +238,7 @@ $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
     <h1>Docker Folders</h1>
     <p>A modern plugin for organizing Docker containers with folders and real-time updates</p>
     <div style="margin-top: 12px;">
-      <a href="/Docker/DockerFolders" class="btn btn-primary">Open Docker Folders</a>
+      <a href="/Docker" class="btn btn-primary">Open Docker Folders</a>
     </div>
   </div>
 
@@ -191,6 +247,12 @@ $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
     <p><strong>Version:</strong> <?= PLUGIN_VERSION ?></p>
     <p><strong>Author:</strong> <?= PLUGIN_AUTHOR ?></p>
   </div>
+
+  <?php if ($changelogHtml): ?>
+  <div class="info-box" style="border-left-color: #4caf50;">
+    <?= $changelogHtml ?>
+  </div>
+  <?php endif; ?>
 
   <div class="settings-section">
     <h3>Display Settings</h3>
@@ -229,17 +291,7 @@ $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
     </div>
   </div>
 
-  <div class="info-box">
-    <h3>Access the Interface</h3>
-    <p>Access the Docker Folders interface from:</p>
-    <p><strong>Docker Menu:</strong> <code>Docker > Folders</code></p>
-    <p><strong>Direct URL:</strong> <code>http://<?= $_SERVER['SERVER_NAME'] ?>/plugins/unraid-docker-folders-modern/assets/index.html</code></p>
-  </div>
-
   <div class="action-buttons">
-    <a href="/plugins/unraid-docker-folders-modern/assets/index.html" class="btn btn-primary" target="_blank">
-      Open Docker Folders UI
-    </a>
     <a href="https://github.com/rizowski/unraid-docker-folders" class="btn btn-secondary" target="_blank">
       View on GitHub
     </a>
