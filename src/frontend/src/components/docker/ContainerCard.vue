@@ -169,45 +169,38 @@
             ></div>
           </div>
         </div>
-        <!-- Detailed Stats + Container Info -->
-        <div class="grid grid-cols-2 gap-4 text-xs pt-1">
-          <!-- Left column: I/O, Network, PIDs etc -->
-          <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
-            <span class="text-muted">Block I/O</span>
-            <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-            <span class="text-muted">Network</span>
-            <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-            <span class="text-muted">PIDs</span>
-            <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-            <span class="text-muted">Restarts</span>
-            <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-            <span class="text-muted">Uptime</span>
-            <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-            <span class="text-muted">Image Size</span>
-            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-            <span class="text-muted">Log Size</span>
-            <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
-          </div>
-          <!-- Right column: Health, Command, Labels -->
-          <div class="space-y-2 min-w-0 content-start">
-            <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-              <template v-if="healthStatus">
-                <span class="text-muted">Health</span>
-                <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-              </template>
-              <template v-if="container.command">
-                <span class="text-muted">Command</span>
-                <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
-              </template>
-            </div>
-            <div v-if="displayLabels.length" class="space-y-1">
-              <p class="text-muted text-xs">Labels</p>
-              <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
-                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
-                  <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-                </p>
-              </div>
-            </div>
+        <!-- Numeric Stats -->
+        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-1">
+          <span class="text-muted">Block I/O</span>
+          <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+          <span class="text-muted">Network</span>
+          <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+          <span class="text-muted">PIDs</span>
+          <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+          <span class="text-muted">Restarts</span>
+          <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+          <span class="text-muted">Uptime</span>
+          <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+          <span class="text-muted">Image Size</span>
+          <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+          <span class="text-muted">Log Size</span>
+          <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+          <template v-if="healthStatus">
+            <span class="text-muted">Health</span>
+            <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+          </template>
+          <template v-if="container.command">
+            <span class="text-muted">Command</span>
+            <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+          </template>
+        </div>
+        <!-- Labels -->
+        <div v-if="displayLabels.length" class="space-y-1 pt-1 text-xs">
+          <p class="text-muted">Labels</p>
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
+            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+              <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+            </p>
           </div>
         </div>
       </div>
