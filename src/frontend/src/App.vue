@@ -320,9 +320,10 @@ function initializeDragAndDrop() {
         animation: 150,
         onAdd: async (evt) => {
           const containerId = evt.item.dataset.containerId;
+          const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 
-          if (containerId) {
-            await folderStore.removeContainerFromFolder(containerId);
+          if (containerName) {
+            await folderStore.removeContainerFromFolder(containerName);
             await folderStore.fetchFolders(true);
           }
         },

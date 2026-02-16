@@ -70,8 +70,11 @@ function handleGet($dockerClient)
     // List all containers
     $containers = $dockerClient->listContainers(true);
 
-    // Auto-group Docker Compose stacks into folders
+    // Reconcile container IDs (handles container recreate/update)
     $folderManager = new FolderManager();
+    $folderManager->reconcileContainerIds($containers);
+
+    // Auto-group Docker Compose stacks into folders
     $changed = $folderManager->syncComposeStacks($containers);
     if ($changed) {
       WebSocketPublisher::publish('folders', 'updated');

@@ -183,14 +183,16 @@ function handlePost($folderManager)
   if ($action === 'remove_container') {
     $data = getRequestData();
 
-    if (!isset($data['container_id'])) {
-      errorResponse('container_id is required', 400);
+    // Support both container_name (preferred) and container_id (legacy)
+    $containerName = $data['container_name'] ?? $data['container_id'] ?? null;
+    if (!$containerName) {
+      errorResponse('container_name is required', 400);
     }
 
-    $success = $folderManager->removeContainerFromFolder($data['container_id']);
+    $success = $folderManager->removeContainerFromFolder($containerName);
 
     WebSocketPublisher::publish('folder', 'remove_container', [
-      'container_id' => $data['container_id'],
+      'container_name' => $containerName,
     ]);
 
     jsonResponse([

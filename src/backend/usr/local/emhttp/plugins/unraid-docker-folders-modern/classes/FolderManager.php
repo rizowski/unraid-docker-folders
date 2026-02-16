@@ -164,8 +164,8 @@ class FolderManager
     $sql = 'SELECT MAX(position) FROM container_folders WHERE folder_id = ?';
     $maxPosition = $this->db->fetchValue($sql, [$folderId]) ?? -1;
 
-    // Remove container from any other folder first
-    $this->removeContainerFromFolder($containerId);
+    // Remove container from any other folder first (by name, since that's the stable key)
+    $this->removeContainerFromFolder($containerName);
 
     // Add to new folder
     try {
@@ -185,13 +185,48 @@ class FolderManager
   /**
    * Remove a container from its folder
    *
-   * @param string $containerId Container ID
+   * @param string $containerName Container name
    * @return bool Success
    */
-  public function removeContainerFromFolder($containerId)
+  public function removeContainerFromFolder($containerName)
   {
-    $this->db->delete('container_folders', 'container_id = ?', [$containerId]);
+    $this->db->delete('container_folders', 'container_name = ?', [$containerName]);
     return true;
+  }
+
+  /**
+   * Reconcile container IDs after containers are recreated/updated.
+   *
+   * Matches existing associations by container_name and updates their
+   * container_id to the current value from Docker.
+   *
+   * @param array $containers List of container data from DockerClient
+   * @return void
+   */
+  public function reconcileContainerIds($containers)
+  {
+    $associations = $this->db->fetchAll('SELECT id, container_id, container_name FROM container_folders');
+
+    // Build a map of name -> current container id from Docker
+    $nameToId = [];
+    foreach ($containers as $container) {
+      $name = ltrim($container['name'] ?? '', '/');
+      if ($name !== '') {
+        $nameToId[$name] = $container['id'];
+      }
+    }
+
+    foreach ($associations as $assoc) {
+      $currentId = $nameToId[$assoc['container_name']] ?? null;
+      if ($currentId !== null && $currentId !== $assoc['container_id']) {
+        $this->db->update(
+          'container_folders',
+          ['container_id' => $currentId],
+          'id = ?',
+          [$assoc['id']]
+        );
+      }
+    }
   }
 
   /**
@@ -262,15 +297,15 @@ class FolderManager
   }
 
   /**
-   * Get folder ID for a container
+   * Get folder ID for a container by name
    *
-   * @param string $containerId Container ID
+   * @param string $containerName Container name
    * @return int|null Folder ID or null if not in a folder
    */
-  public function getContainerFolder($containerId)
+  public function getContainerFolder($containerName)
   {
-    $sql = 'SELECT folder_id FROM container_folders WHERE container_id = ?';
-    return $this->db->fetchValue($sql, [$containerId]);
+    $sql = 'SELECT folder_id FROM container_folders WHERE container_name = ?';
+    return $this->db->fetchValue($sql, [$containerName]);
   }
 
   /**
@@ -397,11 +432,11 @@ class FolderManager
       $foldersByProject[$folder['compose_project']] = $folder;
     }
 
-    // Get all current container-folder assignments
-    $assignedContainers = $this->db->fetchAll('SELECT container_id, folder_id FROM container_folders');
+    // Get all current container-folder assignments keyed by container name
+    $assignedContainers = $this->db->fetchAll('SELECT container_name, folder_id FROM container_folders');
     $assignmentMap = [];
     foreach ($assignedContainers as $row) {
-      $assignmentMap[$row['container_id']] = (int) $row['folder_id'];
+      $assignmentMap[$row['container_name']] = (int) $row['folder_id'];
     }
 
     foreach ($projects as $projectName => $projectContainers) {
@@ -421,10 +456,10 @@ class FolderManager
       // Assign unassigned containers to the compose folder
       foreach ($projectContainers as $container) {
         $containerId = $container['id'];
-        if (!isset($assignmentMap[$containerId])) {
-          $containerName = ltrim($container['name'], '/');
+        $containerName = ltrim($container['name'], '/');
+        if (!isset($assignmentMap[$containerName])) {
           $this->addContainerToFolder($folderId, $containerId, $containerName);
-          $assignmentMap[$containerId] = $folderId;
+          $assignmentMap[$containerName] = $folderId;
           $changed = true;
         }
       }

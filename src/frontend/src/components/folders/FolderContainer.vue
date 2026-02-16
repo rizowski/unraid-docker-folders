@@ -6,9 +6,9 @@
       <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'" :data-folder-id="folder.id">
         <ContainerCard
           v-for="assoc in folderContainers"
-          :key="assoc.container_id"
-          :container="getContainer(assoc.container_id)!"
-          :action-in-progress="actionInProgress === assoc.container_id"
+          :key="assoc.container_name"
+          :container="getContainer(assoc.container_name)!"
+          :action-in-progress="actionInProgress === assoc.container_name"
           :view="view"
           @start="handleStart"
           @stop="handleStop"
@@ -59,8 +59,8 @@ const folderContainers = computed(() => {
   return props.folder.containers || [];
 });
 
-function getContainer(id: string) {
-  return dockerStore.containers.find((c) => c.id === id);
+function getContainer(name: string) {
+  return dockerStore.containers.find((c) => c.name === name);
 }
 
 function toggleCollapse() {
@@ -71,9 +71,9 @@ function toggleCollapse() {
   // so data is ready by the time ContainerCard components mount
   if (wasCollapsed && settingsStore.showStats) {
     for (const assoc of folderContainers.value) {
-      const container = getContainer(assoc.container_id);
+      const container = getContainer(assoc.container_name);
       if (container?.state === 'running') {
-        statsStore.registerVisible(assoc.container_id);
+        statsStore.registerVisible(container.id);
       }
     }
   }
@@ -87,10 +87,10 @@ function registerCollapsedStats() {
   unregisterCollapsedStats();
   if (!props.folder.collapsed || !settingsStore.showStats) return;
   for (const assoc of folderContainers.value) {
-    const container = getContainer(assoc.container_id);
+    const container = getContainer(assoc.container_name);
     if (container?.state === 'running') {
-      statsStore.registerVisible(assoc.container_id);
-      collapsedRegisteredIds.value.add(assoc.container_id);
+      statsStore.registerVisible(container.id);
+      collapsedRegisteredIds.value.add(container.id);
     }
   }
 }

@@ -103,13 +103,13 @@ const formData = ref({
 const selectedContainerIds = ref<Set<string>>(new Set());
 
 const availableContainers = computed(() => {
-  const assignedIds = new Set<string>();
+  const assignedNames = new Set<string>();
   folderStore.folders.forEach((folder) => {
     // When editing, don't exclude containers already in this folder
     if (props.folder && folder.id === props.folder.id) return;
-    folder.containers.forEach((assoc) => assignedIds.add(assoc.container_id));
+    folder.containers.forEach((assoc) => assignedNames.add(assoc.container_name));
   });
-  return dockerStore.sortedContainers.filter((c) => !assignedIds.has(c.id));
+  return dockerStore.sortedContainers.filter((c) => !assignedNames.has(c.name));
 });
 
 function toggleContainer(id: string) {

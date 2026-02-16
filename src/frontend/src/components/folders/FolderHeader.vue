@@ -159,7 +159,7 @@ const collapsedPorts = computed(() => {
   if (!settingsStore.showFolderPorts) return '';
   const ports: number[] = [];
   for (const assoc of props.folder.containers) {
-    const container = dockerStore.containers.find((c) => c.id === assoc.container_id);
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
     if (container?.state !== 'running' || !container.ports?.length) continue;
     for (const p of container.ports) {
       if (p.PublicPort && !ports.includes(p.PublicPort)) {
@@ -173,7 +173,7 @@ const collapsedPorts = computed(() => {
 
 const runningCount = computed(() => {
   return props.folder.containers.filter((assoc) => {
-    const container = dockerStore.containers.find((c) => c.id === assoc.container_id);
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
     return container?.state === 'running';
   }).length;
 });
@@ -181,7 +181,7 @@ const runningCount = computed(() => {
 const containerIcons = computed(() => {
   const icons: string[] = [];
   for (const assoc of props.folder.containers) {
-    const container = dockerStore.containers.find((c) => c.id === assoc.container_id);
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
     if (container?.icon) icons.push(container.icon);
     if (icons.length >= 4) break;
   }
@@ -193,7 +193,9 @@ const folderStats = computed(() => {
   let memTotal = 0;
   let count = 0;
   for (const assoc of props.folder.containers) {
-    const s = statsStore.getStats(assoc.container_id);
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
+    if (!container) continue;
+    const s = statsStore.getStats(container.id);
     if (!s) continue;
     cpuTotal += s.cpuPercent;
     memTotal += s.memoryPercent;

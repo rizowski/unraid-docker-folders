@@ -69,17 +69,17 @@ export const useDockerStore = defineStore('docker', () => {
 
   const unfolderedContainers = computed(() => {
     const folderStore = useFolderStore();
-    const assignedContainerIds = new Set<string>();
+    const assignedContainerNames = new Set<string>();
 
-    // Collect all assigned container IDs
+    // Collect all assigned container names (stable across recreations)
     folderStore.folders.forEach((folder) => {
       folder.containers.forEach((assoc) => {
-        assignedContainerIds.add(assoc.container_id);
+        assignedContainerNames.add(assoc.container_name);
       });
     });
 
     // Return containers that aren't in any folder, sorted by state
-    return sortedContainers.value.filter((c) => !assignedContainerIds.has(c.id));
+    return sortedContainers.value.filter((c) => !assignedContainerNames.has(c.name));
   });
 
   // Actions

@@ -171,17 +171,17 @@ export const useFolderStore = defineStore('folders', () => {
     }
   }
 
-  async function removeContainerFromFolder(containerId: string): Promise<boolean> {
+  async function removeContainerFromFolder(containerName: string): Promise<boolean> {
     // Optimistically remove from local state
     for (const folder of folders.value) {
-      folder.containers = folder.containers.filter((c) => c.container_id !== containerId);
+      folder.containers = folder.containers.filter((c) => c.container_name !== containerName);
     }
 
     try {
       const response = await apiFetch(`${API_BASE}/folders.php?action=remove_container`, {
         method: 'POST',
         body: JSON.stringify({
-          container_id: containerId,
+          container_name: containerName,
         }),
       });
 
