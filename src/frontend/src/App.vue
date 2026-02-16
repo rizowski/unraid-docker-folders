@@ -6,6 +6,12 @@
         <ConnectionStatus />
       </div>
       <div class="flex gap-3 items-center">
+        <a href="/Settings/DockerFoldersSettings" class="nav-btn" title="Settings" style="text-decoration: none;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </a>
         <div class="flex">
           <button
             @click="viewMode = 'grid'"
@@ -71,12 +77,6 @@
         >
           + Create Folder
         </button>
-        <a href="/Settings/DockerFoldersSettings" class="nav-btn" title="Settings" style="text-decoration: none;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-          </svg>
-        </a>
       </div>
     </header>
 
@@ -143,6 +143,18 @@
 
     <!-- Folder Edit Modal -->
     <FolderEditModal :is-open="isModalOpen" :folder="editingFolder" @close="closeModal" @save="saveFolder" />
+
+    <Teleport to="body">
+      <ConfirmModal
+        :is-open="!!deletingFolderId"
+        title="Delete Folder"
+        :message="`Delete &quot;${deletingFolderName}&quot;? Containers will be moved to unfoldered.`"
+        confirm-label="Delete"
+        variant="danger"
+        @confirm="confirmDeleteFolder"
+        @cancel="deletingFolderId = null"
+      />
+    </Teleport>
   </div>
 </template>
 
@@ -155,6 +167,7 @@ import { useStatsStore } from '@/stores/stats';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
+import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ConnectionStatus from '@/components/ConnectionStatus.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
@@ -368,9 +381,20 @@ async function saveFolder(data: FolderCreateData | FolderUpdateData, containerId
   closeModal();
 }
 
-async function deleteFolder(id: number) {
-  if (confirm('Are you sure you want to delete this folder? Containers will be moved to unfoldered.')) {
-    await folderStore.deleteFolder(id);
+const deletingFolderId = ref<number | null>(null);
+const deletingFolderName = computed(() => {
+  if (!deletingFolderId.value) return '';
+  return folderStore.folders.find((f) => f.id === deletingFolderId.value)?.name || 'this folder';
+});
+
+function deleteFolder(id: number) {
+  deletingFolderId.value = id;
+}
+
+async function confirmDeleteFolder() {
+  if (deletingFolderId.value) {
+    await folderStore.deleteFolder(deletingFolderId.value);
   }
+  deletingFolderId.value = null;
 }
 </script>

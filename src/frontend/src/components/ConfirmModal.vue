@@ -1,5 +1,5 @@
 <template>
-  <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]" @click="$emit('cancel')">
+  <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]" style="font-size: 16px; line-height: 1.5;" @click="$emit('cancel')">
     <div class="bg-bg-card rounded-lg shadow-lg max-w-[400px] w-[90%]" @click.stop>
       <div class="flex items-center gap-3 p-6 pb-2">
         <div

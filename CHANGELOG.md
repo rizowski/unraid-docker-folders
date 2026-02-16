@@ -5,7 +5,7 @@
 ### Added
 - Auto-group Docker Compose stacks into folders
 - Replace Docker Containers section setting (fully takes over the Docker tab content)
-- Styled confirmation modals for stop/restart/remove actions
+- Styled confirmation modals for stop/restart/remove/delete-folder actions
 - Container edit, WebUI, Console, Logs, Project, Support in kebab menu
 - WebUI globe icon on card/row action bar for containers with a web interface
 - Average CPU/memory stats on collapsed folders with loading skeleton
@@ -29,7 +29,9 @@
 - Tighter folder row spacing
 - Consistent icon sizing in list view action buttons
 - Dark theme hover states use color-mix for better contrast
+- Settings button moved to far left of nav bar
 - Settings "Open Docker Folders" links to /Docker
+- Collapsed text uses theme-aware color for better dark theme contrast
 - Removed redundant access info section from settings
 
 ### Fixed
@@ -42,3 +44,4 @@
 - Stats load immediately on page load instead of waiting for poll interval
 - Stats persist through folder collapse/expand cycles (no skeleton flash)
 - Card view accordion text overflow with long volume paths
+- Confirm modal font size when rendered inside Unraid iframe

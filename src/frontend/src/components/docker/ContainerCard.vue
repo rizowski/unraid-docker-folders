@@ -32,7 +32,7 @@
         <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
         <span v-else>{{ container.image }}</span>
       </p>
-      <span class="text-[11px] text-muted">{{ container.status }}</span>
+      <span class="text-[11px] text-text-secondary">{{ container.status }}</span>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="14"
@@ -43,7 +43,7 @@
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
-        class="shrink-0 text-muted transition-transform duration-200"
+        class="shrink-0 text-text-secondary transition-transform duration-200"
         :class="expanded ? 'rotate-180' : ''"
       >
         <polyline points="6 9 12 15 18 9" />
@@ -52,31 +52,31 @@
 
     <!-- Compact ports (collapsed) -->
     <div v-if="compactPorts && !expanded" class="px-6 pb-0.5">
-      <span class="text-[11px] text-muted font-mono">Ports: {{ compactPorts }}</span>
+      <span class="text-[11px] text-text-secondary font-mono">Ports: {{ compactPorts }}</span>
     </div>
 
     <!-- Compact stats loading state -->
     <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-muted w-8 shrink-0">CPU</span>
+        <span class="text-text-secondary w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
         </div>
-        <span class="text-muted font-mono w-12 text-right shrink-0">--</span>
+        <span class="text-text-secondary font-mono w-12 text-right shrink-0">--</span>
       </div>
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-muted w-8 shrink-0">MEM</span>
+        <span class="text-text-secondary w-8 shrink-0">MEM</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
         </div>
-        <span class="text-muted font-mono w-12 text-right shrink-0">--</span>
+        <span class="text-text-secondary font-mono w-12 text-right shrink-0">--</span>
       </div>
     </div>
 
     <!-- Compact stats bars (always visible for running containers) -->
     <div v-if="isRunning && containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-muted w-8 shrink-0">CPU</span>
+        <span class="text-text-secondary w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300"
@@ -87,7 +87,7 @@
         <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.cpuPercent) }}</span>
       </div>
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-muted w-8 shrink-0">MEM</span>
+        <span class="text-text-secondary w-8 shrink-0">MEM</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300"
@@ -336,7 +336,7 @@
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="text-[11px] text-muted">{{ container.status }}</span>
+        <span class="text-[11px] text-text-secondary">{{ container.status }}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -347,7 +347,7 @@
           stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="shrink-0 text-muted transition-transform duration-200"
+          class="shrink-0 text-text-secondary transition-transform duration-200"
           :class="expanded ? 'rotate-180' : ''"
         >
           <polyline points="6 9 12 15 18 9" />
@@ -355,23 +355,23 @@
       </div>
 
       <!-- Compact ports (list collapsed) -->
-      <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-muted font-mono">{{ compactPorts }}</span>
+      <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-text-secondary font-mono">{{ compactPorts }}</span>
 
       <!-- Inline compact stats loading (list view) -->
       <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-muted w-7 text-right">CPU</span>
+          <span class="text-text-secondary w-7 text-right">CPU</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-muted font-mono w-9 text-right">--</span>
+          <span class="text-text-secondary font-mono w-9 text-right">--</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-muted w-7 text-right">MEM</span>
+          <span class="text-text-secondary w-7 text-right">MEM</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-muted font-mono w-9 text-right">--</span>
+          <span class="text-text-secondary font-mono w-9 text-right">--</span>
         </div>
       </div>
 
@@ -379,7 +379,7 @@
       <div v-if="isRunning && containerStats && !expanded" class="shrink-0 flex items-center gap-3">
         <div class="w-[140px] space-y-0.5">
           <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="text-muted w-7 text-right">CPU</span>
+            <span class="text-text-secondary w-7 text-right">CPU</span>
             <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"
@@ -390,7 +390,7 @@
             <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
           </div>
           <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="text-muted w-7 text-right">MEM</span>
+            <span class="text-text-secondary w-7 text-right">MEM</span>
             <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"
