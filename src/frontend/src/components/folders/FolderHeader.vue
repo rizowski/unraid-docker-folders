@@ -42,11 +42,11 @@
       <div
         v-if="containerIcons.length > 0"
         class="grid shrink-0 gap-0.5 mr-2"
-        :class="containerIcons.length > 1 ? 'grid-cols-2 w-12 h-12' : 'grid-cols-1 w-12 h-12'"
+        :class="containerIcons.length > 1 ? 'grid-cols-2 w-9 h-9' : 'grid-cols-1 w-9 h-9'"
       >
         <img v-for="(icon, i) in containerIcons" :key="i" :src="icon" class="w-full h-full object-contain rounded-sm" />
       </div>
-      <h2 class="text-lg font-semibold text-text mr-1">{{ folder.name }}</h2>
+      <h2 class="text-sm font-semibold text-text mr-1">{{ folder.name }}</h2>
       <span
         v-if="folder.compose_project"
         class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded text-[11px] font-medium tracking-wide uppercase mr-1"
@@ -58,6 +58,7 @@
       <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold ml-1" :title="`${runningCount} running / ${folder.containers.length} total`">
         {{ runningCount }}/{{ folder.containers.length }}
       </span>
+      <span v-if="folder.collapsed && collapsedPorts" class="text-[11px] text-muted font-mono ml-2 truncate">{{ collapsedPorts }}</span>
     </div>
     <div class="flex gap-1">
       <button
@@ -89,6 +90,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
+import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
 
 interface Props {
@@ -104,6 +106,23 @@ defineEmits<{
 }>();
 
 const dockerStore = useDockerStore();
+const settingsStore = useSettingsStore();
+
+const collapsedPorts = computed(() => {
+  if (!settingsStore.showFolderPorts) return '';
+  const ports: number[] = [];
+  for (const assoc of props.folder.containers) {
+    const container = dockerStore.containers.find((c) => c.id === assoc.container_id);
+    if (container?.state !== 'running' || !container.ports?.length) continue;
+    for (const p of container.ports) {
+      if (p.PublicPort && !ports.includes(p.PublicPort)) {
+        ports.push(p.PublicPort);
+      }
+    }
+  }
+  if (!ports.length) return '';
+  return ports.sort((a, b) => a - b).join(', ');
+});
 
 const runningCount = computed(() => {
   return props.folder.containers.filter((assoc) => {

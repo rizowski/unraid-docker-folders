@@ -166,6 +166,11 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
 }
 
+/* Stats bar track: subtle on both light and dark themes */
+#unraid-docker-folders-modern .stats-bar-track {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 10%, transparent);
+}
+
 /* Drag and drop styles */
 .sortable-ghost {
   opacity: 0.4;

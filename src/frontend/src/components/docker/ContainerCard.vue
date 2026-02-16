@@ -21,18 +21,18 @@
         <circle cx="15" cy="12" r="1" />
         <circle cx="15" cy="19" r="1" />
       </svg>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-8 h-8 object-contain shrink-0" />
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
-      <h3 class="flex-1 text-base font-semibold text-text truncate">{{ container.name }}</h3>
+      <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
     </div>
 
     <!-- Clickable summary row -->
     <div class="flex items-center gap-2 px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
-      <p class="flex-1 text-xs text-text-secondary font-mono truncate">
+      <p class="flex-1 text-[11px] text-text-secondary font-mono truncate">
         <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
         <span v-else>{{ container.image }}</span>
       </p>
-      <span class="text-xs text-muted">{{ container.status }}</span>
+      <span class="text-[11px] text-muted">{{ container.status }}</span>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="14"
@@ -59,14 +59,14 @@
     <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted w-8 shrink-0">CPU</span>
-        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
         </div>
         <span class="text-muted font-mono w-12 text-right shrink-0">--</span>
       </div>
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted w-8 shrink-0">MEM</span>
-        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
         </div>
         <span class="text-muted font-mono w-12 text-right shrink-0">--</span>
@@ -77,7 +77,7 @@
     <div v-if="isRunning && containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted w-8 shrink-0">CPU</span>
-        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300"
             :class="cpuBarColor"
@@ -88,7 +88,7 @@
       </div>
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted w-8 shrink-0">MEM</span>
-        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300"
             :class="memBarColor"
@@ -142,7 +142,7 @@
             <span class="text-muted">CPU</span>
             <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
           </div>
-          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
               :class="cpuBarColor"
@@ -160,7 +160,7 @@
               }})</span
             >
           </div>
-          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
               :class="memBarColor"
@@ -261,8 +261,23 @@
           <line x1="14" y1="11" x2="14" y2="17" />
         </svg>
       </button>
+      <a
+        v-if="resolvedWebui && isRunning"
+        :href="resolvedWebui"
+        target="_blank"
+        rel="noopener"
+        class="ml-auto p-2 rounded text-text-secondary hover:text-primary transition"
+        title="Open WebUI"
+        @click.stop
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+          <polyline points="15 3 21 3 21 9" />
+          <line x1="10" y1="14" x2="21" y2="3" />
+        </svg>
+      </a>
       <!-- Kebab menu -->
-      <div ref="menuRef" class="relative ml-auto">
+      <div ref="menuRef" class="relative" :class="{ 'ml-auto': !resolvedWebui || !isRunning }">
         <button class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
             <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
@@ -312,16 +327,16 @@
         <circle cx="15" cy="19" r="1" />
       </svg>
       <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-9 h-9 object-contain shrink-0" />
+      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
 
       <!-- Clickable name/image area toggles accordion -->
       <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
-        <span class="text-sm font-semibold text-text min-w-[120px]">{{ container.name }}</span>
-        <span class="text-xs text-text-secondary font-mono truncate">
+        <span class="text-xs font-semibold text-text min-w-[120px]">{{ container.name }}</span>
+        <span class="text-[11px] text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="text-xs text-muted">{{ container.status }}</span>
+        <span class="text-[11px] text-muted">{{ container.status }}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -346,14 +361,14 @@
       <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">CPU</span>
-          <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+          <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
           </div>
           <span class="text-muted font-mono w-9 text-right">--</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">MEM</span>
-          <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+          <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
           </div>
           <span class="text-muted font-mono w-9 text-right">--</span>
@@ -365,7 +380,7 @@
         <div class="w-[140px] space-y-0.5">
           <div class="flex items-center gap-1.5 text-[11px]">
             <span class="text-muted w-7 text-right">CPU</span>
-            <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+            <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"
                 :class="cpuBarColor"
@@ -376,7 +391,7 @@
           </div>
           <div class="flex items-center gap-1.5 text-[11px]">
             <span class="text-muted w-7 text-right">MEM</span>
-            <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+            <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"
                 :class="memBarColor"
@@ -392,6 +407,21 @@
       </div>
 
       <div class="flex gap-1 ml-auto shrink-0 items-center">
+        <a
+          v-if="resolvedWebui && isRunning"
+          :href="resolvedWebui"
+          target="_blank"
+          rel="noopener"
+          class="flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition"
+          title="Open WebUI"
+          @click.stop
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        </a>
         <button
           v-if="container.state === 'running'"
           @click="confirmAction = 'stop'"
@@ -507,7 +537,7 @@
             <span class="text-muted">CPU</span>
             <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
           </div>
-          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
               :class="cpuBarColor"
@@ -525,7 +555,7 @@
               }})</span
             >
           </div>
-          <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
               :class="memBarColor"
@@ -763,12 +793,11 @@ const resolvedWebui = computed(() => {
 });
 
 const consoleUrl = computed(() => {
-  const shell = props.container.labels?.['net.unraid.docker.shell'] || '/bin/bash';
-  return `/Docker/Terminal?container=${encodeURIComponent(props.container.name)}&cmd=${encodeURIComponent(shell)}`;
+  return `/logterminal/${encodeURIComponent(props.container.name)}/`;
 });
 
 const logsUrl = computed(() => {
-  return `/Docker/Log?container=${encodeURIComponent(props.container.name)}`;
+  return `/logterminal/${encodeURIComponent(props.container.name)}.log/`;
 });
 
 const supportUrl = computed(() => {

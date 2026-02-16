@@ -17,6 +17,7 @@ foreach ($rows as $row) {
 $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
+$showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
 
 // Parse CHANGELOG.md — extract the latest version section
 $changelogHtml = '';
@@ -287,6 +288,17 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="show-stats" <?= $showStats ? 'checked' : '' ?> onchange="saveSetting('show_stats', this.checked ? '1' : '0')" />
         <span id="save-status-show-stats" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-folder-ports">Show ports on collapsed folders</label>
+        <div class="description">When enabled, collapsed folders display the public ports of all running containers inside them. <strong>Default: On</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-folder-ports" <?= $showFolderPorts ? 'checked' : '' ?> onchange="saveSetting('show_folder_ports', this.checked ? '1' : '0')" />
+        <span id="save-status-show-folder-ports" class="save-status">Saved</span>
       </div>
     </div>
   </div>
