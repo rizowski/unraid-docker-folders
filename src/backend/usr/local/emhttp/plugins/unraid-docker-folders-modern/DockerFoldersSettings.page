@@ -18,6 +18,7 @@ $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
+$enableUpdateChecks = ($settings['enable_update_checks'] ?? '0') === '1';
 
 // Parse CHANGELOG.md — extract the latest version section
 $changelogHtml = '';
@@ -299,6 +300,17 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="show-folder-ports" <?= $showFolderPorts ? 'checked' : '' ?> onchange="saveSetting('show_folder_ports', this.checked ? '1' : '0')" />
         <span id="save-status-show-folder-ports" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="enable-update-checks">Enable image update checks</label>
+        <div class="description">When enabled, a button appears in the header to check Docker registries for newer images. Containers with available updates show an "Update" badge and can be pulled directly. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="enable-update-checks" <?= $enableUpdateChecks ? 'checked' : '' ?> onchange="saveSetting('enable_update_checks', this.checked ? '1' : '0')" />
+        <span id="save-status-enable-update-checks" class="save-status">Saved</span>
       </div>
     </div>
   </div>

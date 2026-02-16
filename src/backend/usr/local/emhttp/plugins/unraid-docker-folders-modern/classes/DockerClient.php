@@ -456,6 +456,133 @@ class DockerClient
   }
 
   /**
+   * Get local image digest from RepoDigests
+   *
+   * @param string $imageRef Image name or ID
+   * @return string|null Digest string or null
+   */
+  public function getImageDigest($imageRef)
+  {
+    $info = $this->getImageInfo($imageRef);
+    if (!$info) return null;
+
+    $digests = $info['RepoDigests'] ?? [];
+    return !empty($digests) ? $digests[0] : null;
+  }
+
+  /**
+   * Get remote image digest via Docker distribution API
+   *
+   * Uses the Docker daemon's /distribution endpoint which leverages
+   * the daemon's configured registry credentials.
+   *
+   * @param string $imageName Full image reference (e.g. linuxserver/plex:latest)
+   * @return string|null Remote digest or null on error
+   */
+  public function getRemoteImageDigest($imageName)
+  {
+    $response = $this->request('GET', "/distribution/{$imageName}/json", null, 15);
+    if (!$response) return null;
+
+    return $response['Descriptor']['digest'] ?? null;
+  }
+
+  /**
+   * Check if an image has an update available
+   *
+   * @param string $imageName Image reference (e.g. linuxserver/plex:latest)
+   * @param string $localImageId Local image ID for digest lookup
+   * @return array Result with update_available, local_digest, remote_digest, error
+   */
+  public function checkImageUpdate($imageName, $localImageId)
+  {
+    $result = [
+      'update_available' => false,
+      'local_digest' => null,
+      'remote_digest' => null,
+      'error' => null,
+    ];
+
+    // Get local digest
+    $localDigest = $this->getImageDigest($localImageId);
+    $result['local_digest'] = $localDigest;
+
+    // Get remote digest
+    $remoteDigest = $this->getRemoteImageDigest($imageName);
+    if ($remoteDigest === null) {
+      $result['error'] = 'Failed to fetch remote digest';
+      return $result;
+    }
+    $result['remote_digest'] = $remoteDigest;
+
+    // Compare: local RepoDigest format is "name@sha256:abc...", remote is just "sha256:abc..."
+    if ($localDigest && $remoteDigest) {
+      $localHash = strpos($localDigest, '@') !== false
+        ? substr($localDigest, strpos($localDigest, '@') + 1)
+        : $localDigest;
+      $result['update_available'] = ($localHash !== $remoteDigest);
+    }
+
+    return $result;
+  }
+
+  /**
+   * Pull a Docker image with progress callback
+   *
+   * @param string $imageName Image to pull (e.g. linuxserver/plex:latest)
+   * @param callable $onProgress Callback receiving JSON progress chunks
+   * @return bool True on success
+   */
+  public function pullImage($imageName, callable $onProgress)
+  {
+    if (!file_exists($this->socketPath)) {
+      return false;
+    }
+
+    // Split name:tag
+    $parts = explode(':', $imageName, 2);
+    $fromImage = $parts[0];
+    $tag = $parts[1] ?? 'latest';
+
+    $url = "http://localhost/{$this->apiVersion}/images/create?fromImage=" . urlencode($fromImage) . "&tag=" . urlencode($tag);
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, $this->socketPath);
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+    curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 600); // 10 minute timeout
+
+    // Stream response chunks to the callback
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($onProgress) {
+      // Docker sends newline-delimited JSON
+      $lines = explode("\n", $data);
+      foreach ($lines as $line) {
+        $line = trim($line);
+        if (empty($line)) continue;
+        $decoded = json_decode($line, true);
+        if ($decoded !== null) {
+          $onProgress($decoded);
+        }
+      }
+      return strlen($data);
+    });
+
+    $result = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($error) {
+      error_log("Docker pull error: {$error}");
+      return false;
+    }
+
+    return $httpCode >= 200 && $httpCode < 300;
+  }
+
+  /**
    * Format container from list endpoint
    *
    * @param array $container Raw container data
@@ -534,7 +661,7 @@ class DockerClient
    * @param array|null $data Request body
    * @return mixed Response data or false on error
    */
-  private function request($method, $path, $data = null)
+  private function request($method, $path, $data = null, $timeout = 5)
   {
     if (!file_exists($this->socketPath)) {
       error_log("Docker socket not found: {$this->socketPath}");
@@ -549,7 +676,7 @@ class DockerClient
     curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HEADER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
 
     if ($data !== null) {
       $json = json_encode($data);

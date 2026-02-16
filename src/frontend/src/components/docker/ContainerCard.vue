@@ -25,6 +25,7 @@
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
+      <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
     </div>
 
     <!-- Clickable summary row -->
@@ -229,11 +230,21 @@
     </div>
 
     <div class="flex items-center gap-3 px-4 pb-3 pt-2 sm:px-6 sm:pb-4 mt-auto border-t border-border/30">
+      <template v-if="isActionInProgress">
+        <div class="flex items-center gap-2 text-xs text-text-secondary">
+          <svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <span>{{ actionStatusText }}</span>
+        </div>
+      </template>
+      <template v-else>
       <button
         v-if="container.state === 'running'"
         @click="confirmAction = 'stop'"
         class="p-2 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="actionInProgress"
+        :disabled="isActionInProgress"
         title="Stop"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -244,7 +255,7 @@
         v-else
         @click="emit('start', container.id)"
         class="p-2 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="actionInProgress"
+        :disabled="isActionInProgress"
         title="Start"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -255,7 +266,7 @@
         v-if="isRunning"
         @click="confirmAction = 'restart'"
         class="p-2 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="actionInProgress"
+        :disabled="isActionInProgress"
         title="Restart"
       >
         <svg
@@ -277,7 +288,7 @@
         v-if="!isRunning"
         @click="confirmAction = 'remove'"
         class="p-2 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="actionInProgress"
+        :disabled="isActionInProgress"
         title="Remove"
       >
         <svg
@@ -297,6 +308,19 @@
           <line x1="14" y1="11" x2="14" y2="17" />
         </svg>
       </button>
+      <button
+        v-if="hasUpdate"
+        @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
+        class="p-2 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
+        title="Pull Update"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+          <polyline points="7 10 12 15 17 10" />
+          <line x1="12" y1="15" x2="12" y2="3" />
+        </svg>
+      </button>
+      </template>
       <a
         v-if="resolvedWebui && isRunning"
         :href="resolvedWebui"
@@ -385,6 +409,7 @@
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
         <div class="flex items-center gap-3">
           <span class="text-xs font-semibold text-text">{{ container.name }}</span>
+          <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
           <span class="text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
@@ -446,6 +471,16 @@
       </div>
 
       <div class="flex gap-1 ml-auto shrink-0 items-center" @click.stop>
+        <template v-if="isActionInProgress">
+          <div class="flex items-center gap-1.5 text-xs text-text-secondary mr-1">
+            <svg class="animate-spin h-3.5 w-3.5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <span>{{ actionStatusText }}</span>
+          </div>
+        </template>
+        <template v-else>
         <a
           v-if="resolvedWebui && isRunning"
           :href="resolvedWebui"
@@ -465,7 +500,7 @@
           v-if="container.state === 'running'"
           @click="confirmAction = 'stop'"
           class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="actionInProgress"
+          :disabled="isActionInProgress"
           title="Stop"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -476,7 +511,7 @@
           v-else
           @click="emit('start', container.id)"
           class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="actionInProgress"
+          :disabled="isActionInProgress"
           title="Start"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
@@ -487,7 +522,7 @@
           v-if="isRunning"
           @click="confirmAction = 'restart'"
           class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="actionInProgress"
+          :disabled="isActionInProgress"
           title="Restart"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -499,7 +534,7 @@
           v-if="!isRunning"
           @click="confirmAction = 'remove'"
           class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="actionInProgress"
+          :disabled="isActionInProgress"
           title="Remove"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -509,6 +544,19 @@
             <line x1="14" y1="11" x2="14" y2="17" />
           </svg>
         </button>
+        <button
+          v-if="hasUpdate"
+          @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
+          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
+          title="Pull Update"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+        </button>
+        </template>
         <!-- Kebab menu -->
         <div ref="menuRef" class="relative">
           <button class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
@@ -687,6 +735,7 @@ import { computed, inject, ref, watch, onMounted, onUnmounted, type Ref } from '
 import type { Container } from '@/stores/docker';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
+import { useUpdatesStore } from '@/stores/updates';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
@@ -714,7 +763,7 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
 
 interface Props {
   container: Container;
-  actionInProgress?: boolean;
+  actionInProgress?: string | null;
   view?: 'grid' | 'list';
 }
 
@@ -727,7 +776,20 @@ const emit = defineEmits<{
   stop: [id: string];
   restart: [id: string];
   remove: [id: string];
+  pull: [data: { image: string; name: string; managed: string | null }];
 }>();
+
+const isActionInProgress = computed(() => !!props.actionInProgress);
+
+const actionStatusText = computed(() => {
+  switch (props.actionInProgress) {
+    case 'start': return 'Starting...';
+    case 'stop': return 'Stopping...';
+    case 'restart': return 'Restarting...';
+    case 'remove': return 'Removing...';
+    default: return '';
+  }
+});
 
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
 
@@ -755,6 +817,9 @@ function handleConfirm() {
 const expanded = ref(false);
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
+const updatesStore = useUpdatesStore();
+
+const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
 
 const showStats = computed(() => settingsStore.showStats);
 const containerStats = computed(() => showStats.value ? statsStore.getStats(props.container.id) : null);

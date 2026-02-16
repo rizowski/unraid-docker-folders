@@ -9,12 +9,13 @@
             v-for="assoc in folderContainers"
             :key="assoc.container_name"
             :container="getContainer(assoc.container_name)!"
-            :action-in-progress="actionInProgress === assoc.container_name"
+            :action-in-progress="actionInProgress?.id === assoc.container_name ? actionInProgress.action : null"
             :view="view"
             @start="handleStart"
             @stop="handleStop"
             @restart="handleRestart"
             @remove="handleRemove"
+            @pull="(data) => emit('pull', data)"
           />
         </div>
         <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
@@ -46,16 +47,17 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 // Note: emit is used in template via $emit
-defineEmits<{
+const emit = defineEmits<{
   edit: [folder: Folder];
   delete: [id: number];
+  pull: [data: { image: string; name: string; managed: string | null }];
 }>();
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
-const actionInProgress = ref<string | null>(null);
+const actionInProgress = ref<{ id: string; action: string } | null>(null);
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
@@ -130,7 +132,7 @@ watch(() => props.folder.collapsed, () => {
 watch(() => settingsStore.showStats, () => registerCollapsedStats());
 
 async function handleStart(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'start' };
   try {
     await dockerStore.startContainer(id);
   } finally {
@@ -139,7 +141,7 @@ async function handleStart(id: string) {
 }
 
 async function handleStop(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'stop' };
   try {
     await dockerStore.stopContainer(id);
   } finally {
@@ -148,7 +150,7 @@ async function handleStop(id: string) {
 }
 
 async function handleRestart(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'restart' };
   try {
     await dockerStore.restartContainer(id);
   } finally {
@@ -157,7 +159,7 @@ async function handleRestart(id: string) {
 }
 
 async function handleRemove(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'remove' };
   try {
     await dockerStore.removeContainer(id);
   } finally {

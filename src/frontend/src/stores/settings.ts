@@ -13,6 +13,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const showStats = ref(true);
   const replaceDockerSection = ref(false);
   const showFolderPorts = ref(true);
+  const enableUpdateChecks = ref(false);
   const loaded = ref(false);
 
   async function fetchSettings() {
@@ -34,6 +35,9 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('show_folder_ports' in settings) {
         showFolderPorts.value = settings.show_folder_ports !== '0';
+      }
+      if ('enable_update_checks' in settings) {
+        enableUpdateChecks.value = settings.enable_update_checks === '1';
       }
 
       loaded.value = true;
@@ -81,6 +85,19 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setEnableUpdateChecks(value: boolean) {
+    enableUpdateChecks.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'enable_update_checks', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
   async function setReplaceDockerSection(value: boolean) {
     replaceDockerSection.value = value;
 
@@ -99,11 +116,13 @@ export const useSettingsStore = defineStore('settings', () => {
     showStats,
     replaceDockerSection,
     showFolderPorts,
+    enableUpdateChecks,
     loaded,
     fetchSettings,
     setDistinguishHealthy,
     setShowStats,
     setShowFolderPorts,
+    setEnableUpdateChecks,
     setReplaceDockerSection,
   };
 });

@@ -86,6 +86,26 @@
           <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
         </button>
         <button
+          v-if="settingsStore.enableUpdateChecks"
+          @click="updatesStore.checkForUpdates()"
+          class="nav-btn relative"
+          :disabled="updatesStore.checking"
+          title="Check for image updates"
+        >
+          <svg v-if="updatesStore.checking" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <template v-else>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span v-if="updatesStore.updatesAvailableCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-warning text-white rounded-full text-[10px] font-bold">{{ updatesStore.updatesAvailableCount }}</span>
+          </template>
+        </button>
+        <button
           @click="openCreateFolderModal"
           class="nav-btn active"
         >
@@ -116,6 +136,7 @@
 
             @edit="openEditFolderModal"
             @delete="deleteFolder"
+            @pull="handlePull"
           />
         </div>
 
@@ -156,13 +177,14 @@
               v-for="container in filteredUnfolderedContainers"
               :key="container.id"
               :container="container"
-              :action-in-progress="actionInProgress === container.id"
+              :action-in-progress="actionInProgress?.id === container.id ? actionInProgress.action : null"
               :view="viewMode"
 
               @start="handleStart"
               @stop="handleStop"
               @restart="handleRestart"
               @remove="handleRemove"
+              @pull="handlePull"
             />
           </div>
         </div>
@@ -176,6 +198,16 @@
 
     <!-- Folder Edit Modal -->
     <FolderEditModal :is-open="isModalOpen" :folder="editingFolder" @close="closeModal" @save="saveFolder" />
+
+    <!-- Pull Progress Modal -->
+    <PullProgressModal
+      :is-open="!!pullingContainer"
+      :image="pullingContainer?.image ?? ''"
+      :container-name="pullingContainer?.name ?? ''"
+      :managed="pullingContainer?.managed ?? null"
+      @close="pullingContainer = null"
+      @complete="handlePullComplete"
+    />
 
     <Teleport to="body">
       <ConfirmModal
@@ -197,12 +229,14 @@ import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
+import { useUpdatesStore } from '@/stores/updates';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ConnectionStatus from '@/components/ConnectionStatus.vue';
+import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
 
@@ -210,8 +244,10 @@ const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
+const updatesStore = useUpdatesStore();
 
-const actionInProgress = ref<string | null>(null);
+const actionInProgress = ref<{ id: string; action: string } | null>(null);
+const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
@@ -277,6 +313,9 @@ watch(
 async function loadData() {
   try {
     await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
+    if (settingsStore.enableUpdateChecks) {
+      await updatesStore.fetchCachedUpdates();
+    }
     // Pre-fetch stats for all running containers so data is ready before components mount
     if (settingsStore.showStats) {
       const runningIds = dockerStore.containers
@@ -371,7 +410,7 @@ function initializeDragAndDrop() {
 }
 
 async function handleStart(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'start' };
   try {
     await dockerStore.startContainer(id);
   } finally {
@@ -380,7 +419,7 @@ async function handleStart(id: string) {
 }
 
 async function handleStop(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'stop' };
   try {
     await dockerStore.stopContainer(id);
   } finally {
@@ -389,7 +428,7 @@ async function handleStop(id: string) {
 }
 
 async function handleRestart(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'restart' };
   try {
     await dockerStore.restartContainer(id);
   } finally {
@@ -398,12 +437,22 @@ async function handleRestart(id: string) {
 }
 
 async function handleRemove(id: string) {
-  actionInProgress.value = id;
+  actionInProgress.value = { id, action: 'remove' };
   try {
     await dockerStore.removeContainer(id);
   } finally {
     actionInProgress.value = null;
   }
+}
+
+function handlePull(data: { image: string; name: string; managed: string | null }) {
+  pullingContainer.value = data;
+}
+
+async function handlePullComplete(image: string) {
+  updatesStore.clearUpdateForImage(image);
+  await dockerStore.fetchContainers(true);
+  await updatesStore.fetchCachedUpdates();
 }
 
 function openCreateFolderModal() {

@@ -9,6 +9,8 @@
 import { ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useUpdatesStore } from '@/stores/updates';
+import { useSettingsStore } from '@/stores/settings';
 import type { ConnectionStatus, WebSocketEvent } from '@/types/websocket';
 
 const connectionStatus = ref<ConnectionStatus>('disconnected');
@@ -36,6 +38,12 @@ function handleEvent(event: WebSocketEvent) {
     dockerStore.fetchContainers();
   } else if (event.entity === 'folder') {
     folderStore.fetchFolders();
+  } else if (event.entity === 'updates') {
+    const settingsStore = useSettingsStore();
+    if (settingsStore.enableUpdateChecks) {
+      const updatesStore = useUpdatesStore();
+      updatesStore.fetchCachedUpdates();
+    }
   }
 }
 

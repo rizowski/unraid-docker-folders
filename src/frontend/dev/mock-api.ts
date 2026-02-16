@@ -338,6 +338,7 @@ const settings: Record<string, string> = {
   show_stats: '1',
   theme: 'auto',
   distinguish_healthy: '1',
+  enable_update_checks: '0',
 };
 
 async function handleSettings(req: any, res: any) {
@@ -409,6 +410,98 @@ function handleStats(_req: any, res: any, params: Record<string, string>) {
   return json(res, { stats });
 }
 
+// --- Updates mock ---
+
+const mockUpdateChecks: Record<string, any> = {};
+
+function handleUpdates(req: any, res: any, params: Record<string, string>) {
+  if (req.method === 'GET') {
+    return json(res, { updates: mockUpdateChecks });
+  }
+
+  if (req.method === 'POST' && params.action === 'check') {
+    // Simulate checking — mark a few containers as having updates
+    const imagesToCheck = [...new Set(containers.map((c) => c.image))];
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const image of imagesToCheck) {
+      const hasUpdate = image.includes('plex') || image.includes('sonarr') || image.includes('grafana');
+      mockUpdateChecks[image] = {
+        image,
+        local_digest: `${image}@sha256:abc123`,
+        remote_digest: hasUpdate ? 'sha256:def456' : 'sha256:abc123',
+        update_available: hasUpdate,
+        checked_at: now,
+        error: null,
+      };
+    }
+
+    return json(res, { updates: mockUpdateChecks });
+  }
+}
+
+// --- Pull mock (SSE) ---
+
+function handlePull(req: any, res: any, params: Record<string, string>) {
+  if (req.method !== 'POST') {
+    return json(res, { error: true, message: 'Method not allowed' }, 405);
+  }
+
+  const image = params.image;
+  if (!image) {
+    return json(res, { error: true, message: 'Image parameter required' }, 400);
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'X-Accel-Buffering': 'no',
+    'Connection': 'keep-alive',
+  });
+
+  const layers = ['a1b2c3d4e5f6', 'b2c3d4e5f6a1', 'c3d4e5f6a1b2'];
+  const statuses = ['Pulling fs layer', 'Downloading', 'Downloading', 'Download complete', 'Extracting', 'Pull complete'];
+  let step = 0;
+
+  function sendEvent(event: string, data: any) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  sendEvent('status', { message: `Pulling ${image}...` });
+
+  const interval = setInterval(() => {
+    const layerIdx = Math.floor(step / statuses.length);
+    const statusIdx = step % statuses.length;
+
+    if (layerIdx >= layers.length) {
+      clearInterval(interval);
+      // Clear update flag
+      if (mockUpdateChecks[image]) {
+        mockUpdateChecks[image].update_available = false;
+        mockUpdateChecks[image].local_digest = mockUpdateChecks[image].remote_digest;
+      }
+      sendEvent('complete', { message: 'Pull complete', image });
+      sendEvent('done', { finished: true });
+      res.end();
+      return;
+    }
+
+    const status = statuses[statusIdx];
+    const data: any = { id: layers[layerIdx], status };
+
+    if (status === 'Downloading') {
+      const progress = statusIdx === 1 ? 0.5 : 1.0;
+      data.current = Math.round(50_000_000 * progress);
+      data.total = 50_000_000;
+    }
+
+    sendEvent('progress', data);
+    step++;
+  }, 200);
+
+  req.on('close', () => clearInterval(interval));
+}
+
 // --- Vite plugin ---
 
 export function mockApiPlugin(): Plugin {
@@ -432,6 +525,10 @@ export function mockApiPlugin(): Plugin {
             await handleSettings(req, res);
           } else if (endpoint === 'stats.php') {
             handleStats(req, res, params);
+          } else if (endpoint === 'updates.php') {
+            handleUpdates(req, res, params);
+          } else if (endpoint === 'pull.php') {
+            handlePull(req, res, params);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }
