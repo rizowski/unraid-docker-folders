@@ -171,6 +171,74 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 10%, transparent);
 }
 
+/* Folder collapse/expand — CSS Grid height transition */
+#unraid-docker-folders-modern .folder-content-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms ease;
+}
+
+#unraid-docker-folders-modern .folder-content-grid.folder-content-expanded {
+  grid-template-rows: 1fr;
+}
+
+#unraid-docker-folders-modern .folder-content-inner {
+  overflow: hidden;
+}
+
+/* Modal enter/exit transitions */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity 200ms ease;
+}
+
+.modal-enter-active .modal-content,
+.modal-leave-active .modal-content {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
+}
+
+.modal-enter-from .modal-content {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.modal-leave-to .modal-content {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* Container state change pulse */
+@keyframes state-change-pulse {
+  0%, 100% { border-color: var(--border-color, #e0e0e0); }
+  33% { border-color: var(--header-background, #ff8c2f); }
+  66% { border-color: var(--border-color, #e0e0e0); }
+}
+
+#unraid-docker-folders-modern .state-change-pulse {
+  animation: state-change-pulse 600ms ease;
+}
+
+/* Container card fade-in on mount */
+@keyframes container-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+#unraid-docker-folders-modern .container-card-enter {
+  animation: container-fade-in 150ms ease both;
+}
+
 /* Drag and drop styles */
 .sortable-ghost {
   opacity: 0.4;

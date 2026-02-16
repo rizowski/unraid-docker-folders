@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:brightness-[1.03] transition" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:brightness-[1.03] transition" :class="{ 'state-change-pulse': stateChangePulse }" :data-container-id="container.id">
     <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
       <svg
         v-if="!dragLocked"
@@ -341,7 +341,7 @@
   </div>
 
   <!-- List view -->
-  <div v-else class="container-row rounded transition border-b border-border/50" :data-container-id="container.id">
+  <div v-else class="container-card-enter container-row rounded transition border-b border-border/50" :class="{ 'state-change-pulse': stateChangePulse }" :data-container-id="container.id">
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
       <svg
         v-if="!dragLocked"
@@ -791,6 +791,18 @@ onMounted(() => {
     statsStore.registerVisible(props.container.id);
   }
 });
+
+// State change pulse animation
+const stateChangePulse = ref(false);
+let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+
+watch(() => props.container.state, () => {
+  stateChangePulse.value = true;
+  clearTimeout(pulseTimer);
+  pulseTimer = setTimeout(() => { stateChangePulse.value = false; }, 600);
+});
+
+onUnmounted(() => clearTimeout(pulseTimer));
 
 // React to container state changes (start/stop)
 watch(isRunning, (running) => {

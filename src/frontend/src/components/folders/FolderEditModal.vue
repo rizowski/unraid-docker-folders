@@ -1,6 +1,7 @@
 <template>
+  <Transition name="modal">
   <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]" @click="handleOverlayClick">
-    <div class="bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
+    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
@@ -70,6 +71,7 @@
       </form>
     </div>
   </div>
+  </Transition>
 </template>
 
 <script setup lang="ts">

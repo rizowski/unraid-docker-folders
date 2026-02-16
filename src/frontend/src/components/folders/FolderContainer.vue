@@ -2,23 +2,25 @@
   <div class="mb-2">
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
-    <div v-if="!folder.collapsed || isSearching" class="px-2 sm:px-4">
-      <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'" :data-folder-id="folder.id">
-        <ContainerCard
-          v-for="assoc in folderContainers"
-          :key="assoc.container_name"
-          :container="getContainer(assoc.container_name)!"
-          :action-in-progress="actionInProgress === assoc.container_name"
-          :view="view"
-          @start="handleStart"
-          @stop="handleStop"
-          @restart="handleRestart"
-          @remove="handleRemove"
-        />
-      </div>
-      <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
-        <p>No containers in this folder</p>
-        <p class="text-sm italic">Drag containers here to organize them</p>
+    <div class="folder-content-grid" :class="{ 'folder-content-expanded': !folder.collapsed || isSearching }">
+      <div class="folder-content-inner px-2 sm:px-4">
+        <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'" :data-folder-id="folder.id">
+          <ContainerCard
+            v-for="assoc in folderContainers"
+            :key="assoc.container_name"
+            :container="getContainer(assoc.container_name)!"
+            :action-in-progress="actionInProgress === assoc.container_name"
+            :view="view"
+            @start="handleStart"
+            @stop="handleStop"
+            @restart="handleRestart"
+            @remove="handleRemove"
+          />
+        </div>
+        <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
+          <p>No containers in this folder</p>
+          <p class="text-sm italic">Drag containers here to organize them</p>
+        </div>
       </div>
     </div>
   </div>
