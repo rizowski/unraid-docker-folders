@@ -2,7 +2,7 @@
   <div class="mb-2">
     <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
-    <div v-if="!folder.collapsed" class="px-2 sm:px-4">
+    <div v-if="!folder.collapsed || isSearching" class="px-2 sm:px-4">
       <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'" :data-folder-id="folder.id">
         <ContainerCard
           v-for="assoc in folderContainers"
@@ -55,8 +55,19 @@ const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
 const actionInProgress = ref<string | null>(null);
 
+const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
+
 const folderContainers = computed(() => {
-  return props.folder.containers || [];
+  const all = props.folder.containers || [];
+  if (!isSearching.value) return all;
+  const q = dockerStore.searchQuery.trim().toLowerCase();
+  return all.filter((assoc) => {
+    const container = getContainer(assoc.container_name);
+    if (container) {
+      return container.name.toLowerCase().includes(q) || container.image.toLowerCase().includes(q);
+    }
+    return assoc.container_name.toLowerCase().includes(q);
+  });
 });
 
 function getContainer(name: string) {

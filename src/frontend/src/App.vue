@@ -12,6 +12,20 @@
         <ConnectionStatus />
       </div>
       <div class="flex gap-2 sm:gap-3 items-center">
+        <div class="relative">
+          <input
+            v-model="dockerStore.searchQuery"
+            type="text"
+            placeholder="Search containers..."
+            class="nav-btn text-sm pl-3 pr-7 py-1 w-40 sm:w-52 border border-border rounded bg-transparent text-text placeholder:text-text-secondary focus:outline-none focus:border-text-secondary"
+          />
+          <button
+            v-if="dockerStore.searchQuery"
+            @click="dockerStore.searchQuery = ''"
+            class="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
+            title="Clear search"
+          >&times;</button>
+        </div>
         <div class="flex">
           <button
             @click="viewMode = 'grid'"
@@ -92,9 +106,9 @@
 
       <div v-else>
         <!-- Folders -->
-        <div v-if="folderStore.sortedFolders.length > 0" id="folder-list" class="mb-8">
+        <div v-if="filteredFolders.length > 0" id="folder-list" class="mb-8">
           <FolderContainer
-            v-for="folder in folderStore.sortedFolders"
+            v-for="folder in filteredFolders"
             :key="folder.id"
             :folder="folder"
             :view="viewMode"
@@ -106,7 +120,7 @@
         </div>
 
         <!-- Unfoldered Containers -->
-        <div v-if="dockerStore.unfolderedContainers.length > 0" class="mt-8">
+        <div v-if="filteredUnfolderedContainers.length > 0" class="mt-8">
           <div
             class="flex items-center gap-2 mb-4 cursor-pointer select-none"
             @click="unfolderedCollapsed = !unfolderedCollapsed"
@@ -128,7 +142,7 @@
             </svg>
             <h2 class="text-sm font-semibold text-text">Unfoldered Containers</h2>
             <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{
-              dockerStore.unfolderedContainers.length
+              filteredUnfolderedContainers.length
             }}</span>
           </div>
 
@@ -139,7 +153,7 @@
             id="unfoldered-containers"
           >
             <ContainerCard
-              v-for="container in dockerStore.unfolderedContainers"
+              v-for="container in filteredUnfolderedContainers"
               :key="container.id"
               :container="container"
               :action-in-progress="actionInProgress === container.id"
@@ -218,6 +232,30 @@ const editingFolder = ref<Folder | null>(null);
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
 
+const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
+
+function containerMatchesSearch(name: string, image?: string): boolean {
+  const q = dockerStore.searchQuery.trim().toLowerCase();
+  if (!q) return true;
+  return name.toLowerCase().includes(q) || (image ? image.toLowerCase().includes(q) : false);
+}
+
+const filteredUnfolderedContainers = computed(() => {
+  if (!isSearching.value) return dockerStore.unfolderedContainers;
+  return dockerStore.unfolderedContainers.filter((c) => containerMatchesSearch(c.name, c.image));
+});
+
+const filteredFolders = computed(() => {
+  if (!isSearching.value) return folderStore.sortedFolders;
+  const q = dockerStore.searchQuery.trim().toLowerCase();
+  return folderStore.sortedFolders.filter((folder) =>
+    (folder.containers || []).some((assoc) => {
+      const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
+      return container ? containerMatchesSearch(container.name, container.image) : assoc.container_name.toLowerCase().includes(q);
+    })
+  );
+});
+
 // Track Sortable instances so we can destroy them before re-creating
 let sortableInstances: Sortable[] = [];
 
@@ -227,9 +265,9 @@ onMounted(async () => {
   initWebSocket();
 });
 
-// Re-initialize drag-and-drop whenever folders or containers change.
+// Re-initialize drag-and-drop whenever folders, containers, or search change.
 watch(
-  () => [folderStore.folders, dockerStore.containers],
+  () => [folderStore.folders, dockerStore.containers, dockerStore.searchQuery],
   () => {
     nextTick(() => initializeDragAndDrop());
   },
@@ -263,7 +301,7 @@ function destroyDragAndDrop() {
 function initializeDragAndDrop() {
   destroyDragAndDrop();
 
-  if (dragLocked.value) return;
+  if (dragLocked.value || isSearching.value) return;
 
   // Make folder list sortable (reorder folders)
   const folderListEl = document.getElementById('folder-list');

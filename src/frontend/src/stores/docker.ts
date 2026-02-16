@@ -45,6 +45,7 @@ export const useDockerStore = defineStore('docker', () => {
   const containers = ref<Container[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const searchQuery = ref('');
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
   let initialLoadDone = false;
@@ -200,6 +201,7 @@ export const useDockerStore = defineStore('docker', () => {
     containers,
     loading,
     error,
+    searchQuery,
 
     // Getters
     containerCount,
