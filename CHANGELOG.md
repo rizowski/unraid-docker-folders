@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.15-40
+### Changes
+- Simplify inject page to only collapse native Docker section
+
 ## 2026.02.15-39
 ### Changes
 - Wrap native Docker section in collapsed accordion instead of hiding
