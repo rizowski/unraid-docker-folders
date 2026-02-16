@@ -21,11 +21,41 @@
 **Docker Folders Modern** — Organize your Docker containers into drag-and-drop folders with a modern Vue 3 interface, live resource stats, and real-time updates.
 
 ###2026.02.15
+**Added**
+- Mobile-responsive layout with sm breakpoints across all components
+- Collapsible "Unfoldered Containers" section (persisted to localStorage)
 - Auto-group Docker Compose stacks into folders
-- Live container resource stats (CPU, memory, network, I/O, PIDs)
-- Toggle stats polling on/off from plugin settings
-- Real-time updates via WebSocket (nchan)
-- Connection status indicator
+- Replace Docker Containers section setting (fully takes over the Docker tab)
+- Styled confirmation modals for stop/restart/remove/delete-folder actions
+- Container edit, WebUI, Console, Logs, Project, Support in kebab menu
+- WebUI globe icon on card/row action bar
+- Average CPU/memory stats on collapsed folders with loading skeleton
+- Show ports on collapsed folders (configurable, default on)
+- Restart count badge on collapsed containers
+- Running/total count in folder badge
+- Settings button in nav bar
+- Volume paths link to Unraid file browser
+- Changelog displayed on settings page
+
+**Changed**
+- Grid minmax reduced from 350px to 280px for single-column on small screens
+- Reduced padding and gaps on mobile (cards, folders, modals, header)
+- List view expanded accordion uses single-column grid on mobile
+- Flat nav button style (removed gradients)
+- Smaller text sizes throughout
+- Stats bar track uses subtle color-mix for better dark theme contrast
+- Dark theme hover states use color-mix for better contrast
+- Settings button moved to far left of nav bar
+
+**Fixed**
+- List view expanded details used excessive left margin, now uses more available width
+- Header no longer breaks into column layout on desktop inside iframe
+- Console and Logs URLs corrected
+- Stats bars hidden in iframe due to responsive breakpoints
+- Stats load immediately on page load instead of waiting for poll interval
+- Stats persist through folder collapse/expand cycles (no skeleton flash)
+- Card view accordion text overflow with long volume paths
+- Confirm modal font size when rendered inside Unraid iframe
 
 ###2026.02.14
 - Folder organization with drag-and-drop
