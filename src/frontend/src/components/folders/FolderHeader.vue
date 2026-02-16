@@ -58,28 +58,28 @@
       <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold ml-1" :title="`${runningCount} running / ${folder.containers.length} total`">
         {{ runningCount }}/{{ folder.containers.length }}
       </span>
-      <span v-if="folder.collapsed && collapsedPorts" class="text-[11px] text-text-secondary font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
+      <span v-if="folder.collapsed && collapsedPorts" class="text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
       <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="flex items-center gap-3 ml-auto mr-4 shrink-0">
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text-secondary w-7 text-right">CPU</span>
+          <span class="text-text w-7 text-right">CPU</span>
           <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">--</span>
+          <span class="text-text font-mono w-9 text-right">--</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text-secondary w-7 text-right">MEM</span>
+          <span class="text-text w-7 text-right">MEM</span>
           <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">--</span>
+          <span class="text-text font-mono w-9 text-right">--</span>
         </div>
       </div>
       <!-- Folder average stats -->
       <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text-secondary w-7 text-right">CPU</span>
+          <span class="text-text w-7 text-right">CPU</span>
           <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
@@ -87,10 +87,10 @@
               :style="{ width: Math.min(folderStats.cpuPercent, 100) + '%' }"
             ></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">{{ folderStats.cpuPercent.toFixed(1) }}%</span>
+          <span class="text-text font-mono w-9 text-right">{{ folderStats.cpuPercent.toFixed(1) }}%</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text-secondary w-7 text-right">MEM</span>
+          <span class="text-text w-7 text-right">MEM</span>
           <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
             <div
               class="h-full rounded-full transition-all duration-300"
@@ -98,7 +98,7 @@
               :style="{ width: Math.min(folderStats.memPercent, 100) + '%' }"
             ></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">{{ folderStats.memPercent.toFixed(1) }}%</span>
+          <span class="text-text font-mono w-9 text-right">{{ folderStats.memPercent.toFixed(1) }}%</span>
         </div>
       </div>
     </div>

@@ -32,7 +32,7 @@
         <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
         <span v-else>{{ container.image }}</span>
       </p>
-      <span class="text-[11px] text-text-secondary">{{ container.status }}</span>
+      <span class="text-[11px] text-text">{{ container.status }}</span>
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="14"
@@ -52,31 +52,31 @@
 
     <!-- Compact ports (collapsed) -->
     <div v-if="compactPorts && !expanded" class="px-6 pb-0.5">
-      <span class="text-[11px] text-text-secondary font-mono">Ports: {{ compactPorts }}</span>
+      <span class="text-[11px] text-text font-mono">Ports: {{ compactPorts }}</span>
     </div>
 
     <!-- Compact stats loading state -->
     <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-text-secondary w-8 shrink-0">CPU</span>
+        <span class="text-text w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
         </div>
-        <span class="text-text-secondary font-mono w-12 text-right shrink-0">--</span>
+        <span class="text-text font-mono w-12 text-right shrink-0">--</span>
       </div>
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-text-secondary w-8 shrink-0">MEM</span>
+        <span class="text-text w-8 shrink-0">MEM</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
         </div>
-        <span class="text-text-secondary font-mono w-12 text-right shrink-0">--</span>
+        <span class="text-text font-mono w-12 text-right shrink-0">--</span>
       </div>
     </div>
 
     <!-- Compact stats bars (always visible for running containers) -->
     <div v-if="isRunning && containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-text-secondary w-8 shrink-0">CPU</span>
+        <span class="text-text w-8 shrink-0">CPU</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300"
@@ -84,10 +84,10 @@
             :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
           ></div>
         </div>
-        <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.cpuPercent) }}</span>
+        <span class="text-text font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.cpuPercent) }}</span>
       </div>
       <div class="flex items-center gap-2 text-xs">
-        <span class="text-text-secondary w-8 shrink-0">MEM</span>
+        <span class="text-text w-8 shrink-0">MEM</span>
         <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
           <div
             class="h-full rounded-full transition-all duration-300"
@@ -95,7 +95,7 @@
             :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
           ></div>
         </div>
-        <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
+        <span class="text-text font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
       </div>
       <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
         <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium">
@@ -336,7 +336,7 @@
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="text-[11px] text-text-secondary">{{ container.status }}</span>
+        <span class="text-[11px] text-text">{{ container.status }}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -355,23 +355,23 @@
       </div>
 
       <!-- Compact ports (list collapsed) -->
-      <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-text-secondary font-mono">{{ compactPorts }}</span>
+      <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-text font-mono">{{ compactPorts }}</span>
 
       <!-- Inline compact stats loading (list view) -->
       <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text-secondary w-7 text-right">CPU</span>
+          <span class="text-text w-7 text-right">CPU</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">--</span>
+          <span class="text-text font-mono w-9 text-right">--</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text-secondary w-7 text-right">MEM</span>
+          <span class="text-text w-7 text-right">MEM</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
             <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">--</span>
+          <span class="text-text font-mono w-9 text-right">--</span>
         </div>
       </div>
 
@@ -379,7 +379,7 @@
       <div v-if="isRunning && containerStats && !expanded" class="shrink-0 flex items-center gap-3">
         <div class="w-[140px] space-y-0.5">
           <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="text-text-secondary w-7 text-right">CPU</span>
+            <span class="text-text w-7 text-right">CPU</span>
             <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"
@@ -387,10 +387,10 @@
                 :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
               ></div>
             </div>
-            <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
+            <span class="text-text font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
           </div>
           <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="text-text-secondary w-7 text-right">MEM</span>
+            <span class="text-text w-7 text-right">MEM</span>
             <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
               <div
                 class="h-full rounded-full transition-all duration-300"
@@ -398,7 +398,7 @@
                 :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
               ></div>
             </div>
-            <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
+            <span class="text-text font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
           </div>
         </div>
         <span v-if="containerStats.restartCount > 0" class="inline-flex items-center px-1.5 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium shrink-0" :title="`${containerStats.restartCount} restart(s)`">
@@ -800,6 +800,8 @@ const logsUrl = computed(() => {
   return `/logterminal/${encodeURIComponent(props.container.name)}.log/`;
 });
 
+const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
+
 const supportUrl = computed(() => {
   return props.container.labels?.['net.unraid.docker.support'] || null;
 });
@@ -819,8 +821,8 @@ interface MenuItem {
 const menuItems = computed<MenuItem[]>(() => [
   { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
   { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
-  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value },
-  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', href: logsUrl.value, target: '_blank', show: true },
+  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value && !isCompose.value },
+  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', href: logsUrl.value, target: '_blank', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
 ]);
