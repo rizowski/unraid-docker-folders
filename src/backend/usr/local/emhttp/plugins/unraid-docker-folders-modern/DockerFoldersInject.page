@@ -81,11 +81,38 @@ if (!$replaceDockersSection) return;
       }
     }
 
-    // Hide native container section instead of clearing it —
-    // Unraid renders its container list asynchronously and would overwrite innerHTML
-    target.style.display = 'none';
+    // Hide the native "Docker Containers" title bar and view mode toggle
+    var titleDiv = target.parentElement.querySelector('div.title');
+    if (titleDiv) titleDiv.style.display = 'none';
+    var toggleView = target.parentElement.querySelector('.ToggleViewMode');
+    if (toggleView) toggleView.style.display = 'none';
 
-    // Insert our app as a sibling before the hidden target
+    // Also search above target in case title/toggle are siblings of a higher parent
+    document.querySelectorAll('div.title').forEach(function(el) {
+      if (el.textContent && /Docker Containers/i.test(el.textContent)) {
+        el.style.display = 'none';
+      }
+    });
+    document.querySelectorAll('.ToggleViewMode').forEach(function(el) {
+      el.style.display = 'none';
+    });
+
+    // Wrap native container section in a collapsible accordion, defaulted closed
+    var accordion = document.createElement('details');
+    accordion.className = 'native-docker-accordion';
+    accordion.style.cssText = 'margin-top:12px;border:1px solid var(--border-color,#333);border-radius:4px;overflow:hidden;';
+
+    var summary = document.createElement('summary');
+    summary.style.cssText = 'cursor:pointer;padding:8px 12px;font-size:13px;color:var(--text-secondary,#999);background:var(--bg-secondary,#1a1a1a);user-select:none;';
+    summary.textContent = 'Native Docker Containers';
+    accordion.appendChild(summary);
+
+    // Move the target inside the accordion
+    target.parentElement.insertBefore(accordion, target);
+    accordion.appendChild(target);
+    target.style.display = '';
+
+    // Insert our app before the accordion
     var wrapper = document.createElement('div');
     wrapper.id = 'unraid-docker-folders-modern';
     wrapper.className = 'unapi';
@@ -93,44 +120,14 @@ if (!$replaceDockersSection) return;
     var appDiv = document.createElement('div');
     appDiv.id = 'app';
     wrapper.appendChild(appDiv);
-    target.parentElement.insertBefore(wrapper, target);
-
-    // Keep native UI hidden even if Unraid re-renders or modifies the DOM
-    var nativeSelectors = selectors.concat(['.ct-name']);
-    var parentEl = target.parentElement;
-
-    function hideNativeElements() {
-      // Re-hide target in case Unraid toggled its display
-      if (target.style.display !== 'none') {
-        target.style.display = 'none';
-      }
-      // Hide any new native container elements that appear outside our wrapper
-      nativeSelectors.forEach(function(sel) {
-        parentEl.querySelectorAll(sel).forEach(function(el) {
-          if (wrapper.contains(el)) return;
-          // Walk up to find the direct child of parentEl
-          var ancestor = el;
-          while (ancestor.parentElement && ancestor.parentElement !== parentEl) {
-            ancestor = ancestor.parentElement;
-          }
-          if (ancestor !== wrapper && ancestor !== target && ancestor.parentElement === parentEl) {
-            ancestor.style.display = 'none';
-          }
-        });
-      });
-    }
-
-    var observer = new MutationObserver(function() {
-      hideNativeElements();
-    });
-    observer.observe(parentEl, { childList: true, subtree: true });
+    accordion.parentElement.insertBefore(wrapper, accordion);
 
     // Hide any sibling elements that are part of the containers UI
     var siblingsToHide = ['#btnAddContainer', '.addContainer', '#dockerMenu',
                           '#docker-context-menu', '.docker_readmore'];
     siblingsToHide.forEach(function(sel) {
       var el = document.querySelector(sel);
-      if (el && !wrapper.contains(el)) {
+      if (el && !wrapper.contains(el) && !accordion.contains(el)) {
         el.style.display = 'none';
       }
     });
