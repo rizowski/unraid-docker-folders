@@ -75,7 +75,7 @@
           @click="openCreateFolderModal"
           class="nav-btn active"
         >
-          <span class="hidden sm:inline">+ Create Folder</span><span class="sm:hidden">+ New</span>
+          + Create Folder
         </button>
       </div>
     </header>
