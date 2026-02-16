@@ -28,6 +28,8 @@
 import { computed, ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useStatsStore } from '@/stores/stats';
+import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
 import FolderHeader from './FolderHeader.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
@@ -49,6 +51,8 @@ defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+const statsStore = useStatsStore();
+const settingsStore = useSettingsStore();
 const actionInProgress = ref<string | null>(null);
 
 const folderContainers = computed(() => {
@@ -60,7 +64,19 @@ function getContainer(id: string) {
 }
 
 function toggleCollapse() {
+  const wasCollapsed = props.folder.collapsed;
   folderStore.toggleFolderCollapse(props.folder.id);
+
+  // Pre-fetch stats for running containers when expanding a folder
+  // so data is ready by the time ContainerCard components mount
+  if (wasCollapsed && settingsStore.showStats) {
+    for (const assoc of folderContainers.value) {
+      const container = getContainer(assoc.container_id);
+      if (container?.state === 'running') {
+        statsStore.registerVisible(assoc.container_id);
+      }
+    }
+  }
 }
 
 async function handleStart(id: string) {

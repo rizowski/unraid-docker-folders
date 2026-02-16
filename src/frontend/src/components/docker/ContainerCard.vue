@@ -55,6 +55,24 @@
       <span class="text-[11px] text-muted font-mono">Ports: {{ compactPorts }}</span>
     </div>
 
+    <!-- Compact stats loading state -->
+    <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-6 pb-1 space-y-1">
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-muted w-8 shrink-0">CPU</span>
+        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
+        </div>
+        <span class="text-muted font-mono w-12 text-right shrink-0">--</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="text-muted w-8 shrink-0">MEM</span>
+        <div class="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
+        </div>
+        <span class="text-muted font-mono w-12 text-right shrink-0">--</span>
+      </div>
+    </div>
+
     <!-- Compact stats bars (always visible for running containers) -->
     <div v-if="isRunning && containerStats && !expanded" class="px-6 pb-1 space-y-1">
       <div class="flex items-center gap-2 text-xs">
@@ -78,6 +96,10 @@
           ></div>
         </div>
         <span class="text-text-secondary font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
+      </div>
+      <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
+        <span class="text-error w-8 shrink-0">RST</span>
+        <span class="text-error font-mono">{{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}</span>
       </div>
     </div>
 
@@ -325,30 +347,53 @@
       <!-- Compact ports (list collapsed) -->
       <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-muted font-mono">{{ compactPorts }}</span>
 
-      <!-- Inline compact stats (list view) -->
-      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
+      <!-- Inline compact stats loading (list view) -->
+      <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">CPU</span>
           <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="cpuBarColor"
-              :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
-            ></div>
+            <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
+          <span class="text-muted font-mono w-9 text-right">--</span>
         </div>
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-muted w-7 text-right">MEM</span>
           <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="memBarColor"
-              :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
-            ></div>
+            <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
           </div>
-          <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
+          <span class="text-muted font-mono w-9 text-right">--</span>
         </div>
+      </div>
+
+      <!-- Inline compact stats (list view) -->
+      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 flex items-center gap-3">
+        <div class="w-[140px] space-y-0.5">
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="text-muted w-7 text-right">CPU</span>
+            <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all duration-300"
+                :class="cpuBarColor"
+                :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
+              ></div>
+            </div>
+            <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
+          </div>
+          <div class="flex items-center gap-1.5 text-[11px]">
+            <span class="text-muted w-7 text-right">MEM</span>
+            <div class="flex-1 h-1 bg-border rounded-full overflow-hidden">
+              <div
+                class="h-full rounded-full transition-all duration-300"
+                :class="memBarColor"
+                :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
+              ></div>
+            </div>
+            <span class="text-text-secondary font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
+          </div>
+        </div>
+        <span v-if="containerStats.restartCount > 0" class="text-error text-[11px] font-mono shrink-0" :title="`${containerStats.restartCount} restart(s)`">
+          {{ containerStats.restartCount }} rst
+        </span>
       </div>
 
       <div class="flex gap-1.5 ml-auto shrink-0 items-center">

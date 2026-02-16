@@ -66,18 +66,19 @@
   cursor: pointer;
 }
 
-/* Nav buttons: Unraid-native styling using Unraid's CSS variables */
-#unraid-docker-folders-modern button.nav-btn {
+/* Nav buttons: flat style with Unraid CSS variables */
+#unraid-docker-folders-modern button.nav-btn,
+#unraid-docker-folders-modern a.nav-btn {
   font-family: clear-sans, sans-serif;
   font-size: 12px;
   font-weight: bold;
   letter-spacing: 1px;
   text-transform: uppercase;
-  padding: 8px 12px;
-  border: var(--button-border, 1px solid #e8e8e8);
+  padding: 8px 14px;
+  border: 1px solid var(--border-color, #e0e0e0);
   border-radius: 4px;
-  color: var(--button-text-color, #303030);
-  background: var(--button-background, linear-gradient(#f0f0f0, #c8c8c8));
+  color: var(--text-color, #303030);
+  background: transparent;
   cursor: pointer;
   white-space: nowrap;
   display: inline-flex;
@@ -88,12 +89,13 @@
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-#unraid-docker-folders-modern button.nav-btn:hover {
-  color: var(--hover-button-text-color, #303030);
-  background: var(--hover-button-background, linear-gradient(#e0e0e0, #b0b0b0));
+#unraid-docker-folders-modern button.nav-btn:hover,
+#unraid-docker-folders-modern a.nav-btn:hover {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
 }
 
-#unraid-docker-folders-modern button.nav-btn.active {
+#unraid-docker-folders-modern button.nav-btn.active,
+#unraid-docker-folders-modern a.nav-btn.active {
   color: var(--header-text-color, #ffffff);
   background: var(--header-background, #ff8c2f);
   border-color: transparent;

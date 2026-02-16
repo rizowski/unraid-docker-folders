@@ -15,7 +15,8 @@ foreach ($rows as $row) {
   $settings[$row['key']] = $row['value'];
 }
 $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
-$showStats = ($settings['show_stats'] ?? '0') === '1';
+$showStats = ($settings['show_stats'] ?? '1') === '1';
+$replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
 ?>
 
 <style>
@@ -180,6 +181,9 @@ $showStats = ($settings['show_stats'] ?? '0') === '1';
   <div class="settings-header">
     <h1>Docker Folders</h1>
     <p>A modern plugin for organizing Docker containers with folders and real-time updates</p>
+    <div style="margin-top: 12px;">
+      <a href="/Docker/DockerFolders" class="btn btn-primary">Open Docker Folders</a>
+    </div>
   </div>
 
   <div class="info-box">
@@ -193,8 +197,19 @@ $showStats = ($settings['show_stats'] ?? '0') === '1';
 
     <div class="setting-row">
       <div class="setting-info">
+        <label for="replace-docker-section">Replace Docker Containers section</label>
+        <div class="description">When enabled, the built-in Docker Containers section on the Docker tab is replaced with the Docker Folders UI. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="replace-docker-section" <?= $replaceDockerSection ? 'checked' : '' ?> onchange="saveSetting('replace_docker_section', this.checked ? '1' : '0')" />
+        <span id="save-status-replace-docker-section" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
         <label for="distinguish-healthy">Distinguish health status</label>
-        <div class="description">When enabled, running containers with a passing health check show green, and those without a health check show blue. When disabled, all running containers show green.</div>
+        <div class="description">When enabled, running containers with a passing health check show green, and those without a health check show blue. When disabled, all running containers show green. <strong>Default: On</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="distinguish-healthy" <?= $distinguishHealthy ? 'checked' : '' ?> onchange="saveSetting('distinguish_healthy', this.checked ? '1' : '0')" />
@@ -205,7 +220,7 @@ $showStats = ($settings['show_stats'] ?? '0') === '1';
     <div class="setting-row">
       <div class="setting-info">
         <label for="show-stats">Show container stats</label>
-        <div class="description">When enabled, live resource stats (CPU, memory, network, etc.) are polled and displayed on container cards. Disable to reduce network traffic and server load.</div>
+        <div class="description">When enabled, live resource stats (CPU, memory, network, etc.) are polled and displayed on container cards. Disable to reduce network traffic and server load. <strong>Default: On</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="show-stats" <?= $showStats ? 'checked' : '' ?> onchange="saveSetting('show_stats', this.checked ? '1' : '0')" />

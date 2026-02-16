@@ -1,0 +1,102 @@
+Menu="Docker"
+Title=""
+Tag=""
+Cond="is_file('/var/run/dockerd.pid')"
+Markdown="false"
+---
+<?php
+require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
+require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/classes/Database.php';
+
+$db = Database::getInstance();
+$row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['replace_docker_section']);
+$replaceDockersSection = ($row && $row['value'] === '1');
+
+if (!$replaceDockersSection) return;
+?>
+
+<link rel="stylesheet" href="<?autov('/plugins/unraid-docker-folders-modern/assets/css/app.css')?>">
+
+<script>
+(function() {
+  // Wait for the Docker page to fully render
+  function tryReplace() {
+    // The Docker Containers section is typically inside a div with id "docker_containers"
+    // or a table after the "Docker Containers" heading. Look for known selectors.
+    var selectors = [
+      '#docker_containers',           // Common container table wrapper
+      'table.docker_readmore',        // The container table itself
+      '#dockerContainerTable',        // Another possible ID
+    ];
+
+    var containerSection = null;
+
+    // Try known selectors
+    for (var i = 0; i < selectors.length; i++) {
+      containerSection = document.querySelector(selectors[i]);
+      if (containerSection) break;
+    }
+
+    // Fallback: find by heading text
+    if (!containerSection) {
+      var headings = document.querySelectorAll('td.text-center, th, h2, h3, .title');
+      for (var j = 0; j < headings.length; j++) {
+        if (headings[j].textContent && headings[j].textContent.trim().match(/Docker Containers/i)) {
+          // Walk up to find the containing table or section
+          containerSection = headings[j].closest('table') || headings[j].parentElement;
+          break;
+        }
+      }
+    }
+
+    if (!containerSection) {
+      // Retry after a short delay — page may still be loading
+      if (tryReplace.attempts < 20) {
+        tryReplace.attempts++;
+        setTimeout(tryReplace, 250);
+      }
+      return;
+    }
+
+    // Hide the original section
+    containerSection.style.display = 'none';
+
+    // Also hide the "Add Container" button row if it exists nearby
+    var addBtn = document.querySelector('#btnAddContainer, .addContainer');
+    if (addBtn) {
+      var btnRow = addBtn.closest('tr') || addBtn.closest('div');
+      if (btnRow) btnRow.style.display = 'none';
+    }
+
+    // Create our replacement container
+    var wrapper = document.createElement('div');
+    wrapper.id = 'unraid-docker-folders-modern';
+    wrapper.className = 'unapi';
+    wrapper.style.marginTop = '10px';
+
+    // Insert our app div
+    var appDiv = document.createElement('div');
+    appDiv.id = 'app';
+    wrapper.appendChild(appDiv);
+
+    // Insert after the hidden section
+    containerSection.parentNode.insertBefore(wrapper, containerSection.nextSibling);
+
+    // Load our app JS
+    var script = document.createElement('script');
+    script.type = 'module';
+    script.src = '/plugins/unraid-docker-folders-modern/assets/js/app.js';
+    document.body.appendChild(script);
+  }
+
+  tryReplace.attempts = 0;
+
+  // Start when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryReplace);
+  } else {
+    // Small delay to let Unraid's own scripts render the Docker page
+    setTimeout(tryReplace, 100);
+  }
+})();
+</script>
