@@ -59,9 +59,9 @@
       <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold ml-1" :title="`${runningCount} running / ${folder.containers.length} total`">
         {{ runningCount }}/{{ folder.containers.length }}
       </span>
-      <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
+      <span v-if="folder.collapsed && collapsedPorts" class="text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
-      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden sm:flex items-center gap-3 ml-auto mr-4 shrink-0">
+      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="flex items-center gap-3 ml-auto mr-4 shrink-0">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-text w-7 text-right">CPU</span>
           <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
@@ -78,7 +78,7 @@
         </div>
       </div>
       <!-- Folder average stats -->
-      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden sm:flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
+      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-text w-7 text-right">CPU</span>
           <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">

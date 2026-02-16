@@ -334,11 +334,11 @@
       <!-- Clickable name/image area toggles accordion -->
       <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
         <span class="text-xs font-semibold text-text min-w-0 sm:min-w-[120px]">{{ container.name }}</span>
-        <span class="hidden sm:inline text-[11px] text-text-secondary font-mono truncate">
+        <span class="text-[11px] text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
           <span v-else>{{ container.image }}</span>
         </span>
-        <span class="hidden sm:inline text-[11px] text-text">{{ container.status }}</span>
+        <span class="text-[11px] text-text">{{ container.status }}</span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="12"
@@ -360,7 +360,7 @@
       <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-text font-mono">{{ compactPorts }}</span>
 
       <!-- Inline compact stats loading (list view) -->
-      <div v-if="isRunning && showStats && !containerStats && !expanded" class="hidden sm:block shrink-0 w-[140px] space-y-0.5">
+      <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-text w-7 text-right">CPU</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
@@ -378,7 +378,7 @@
       </div>
 
       <!-- Inline compact stats (list view) -->
-      <div v-if="isRunning && containerStats && !expanded" class="hidden sm:flex shrink-0 items-center gap-3">
+      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 flex items-center gap-3">
         <div class="w-[140px] space-y-0.5">
           <div class="flex items-center gap-1.5 text-[11px]">
             <span class="text-text w-7 text-right">CPU</span>
