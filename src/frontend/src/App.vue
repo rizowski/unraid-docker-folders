@@ -107,8 +107,8 @@
 
         <!-- Unfoldered Containers -->
         <div v-if="dockerStore.unfolderedContainers.length > 0" class="mt-8">
-          <div class="flex items-center gap-2 mb-6">
-            <h2 class="text-2xl font-semibold text-text">Unfoldered Containers</h2>
+          <div class="flex items-center gap-2 mb-4">
+            <h2 class="text-sm font-semibold text-text">Unfoldered Containers</h2>
             <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{
               dockerStore.unfolderedContainers.length
             }}</span>

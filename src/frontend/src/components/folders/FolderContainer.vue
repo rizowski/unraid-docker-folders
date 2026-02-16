@@ -25,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useStatsStore } from '@/stores/stats';
@@ -78,6 +78,43 @@ function toggleCollapse() {
     }
   }
 }
+
+// When collapsed, register running containers for stats polling so folder header can show averages.
+// When expanded, ContainerCard handles its own registration, so we unregister ours.
+const collapsedRegisteredIds = ref(new Set<string>());
+
+function registerCollapsedStats() {
+  unregisterCollapsedStats();
+  if (!props.folder.collapsed || !settingsStore.showStats) return;
+  for (const assoc of folderContainers.value) {
+    const container = getContainer(assoc.container_id);
+    if (container?.state === 'running') {
+      statsStore.registerVisible(assoc.container_id);
+      collapsedRegisteredIds.value.add(assoc.container_id);
+    }
+  }
+}
+
+function unregisterCollapsedStats() {
+  for (const id of collapsedRegisteredIds.value) {
+    statsStore.unregisterVisible(id);
+  }
+  collapsedRegisteredIds.value.clear();
+}
+
+onMounted(() => registerCollapsedStats());
+onUnmounted(() => unregisterCollapsedStats());
+
+watch(() => props.folder.collapsed, () => {
+  if (props.folder.collapsed) {
+    // Wait for ContainerCards to unmount first, then register
+    nextTick(() => registerCollapsedStats());
+  } else {
+    unregisterCollapsedStats();
+  }
+});
+
+watch(() => settingsStore.showStats, () => registerCollapsedStats());
 
 async function handleStart(id: string) {
   actionInProgress.value = id;

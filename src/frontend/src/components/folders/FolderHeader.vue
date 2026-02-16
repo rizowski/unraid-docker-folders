@@ -58,7 +58,49 @@
       <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-primary text-primary-text rounded-full text-xs font-semibold ml-1" :title="`${runningCount} running / ${folder.containers.length} total`">
         {{ runningCount }}/{{ folder.containers.length }}
       </span>
-      <span v-if="folder.collapsed && collapsedPorts" class="text-[11px] text-muted font-mono ml-2 truncate">{{ collapsedPorts }}</span>
+      <span v-if="folder.collapsed && collapsedPorts" class="text-[11px] text-muted font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
+      <!-- Folder average stats loading -->
+      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="flex items-center gap-3 ml-auto mr-4 shrink-0">
+        <div class="flex items-center gap-1.5 text-[11px]">
+          <span class="text-muted w-7 text-right">CPU</span>
+          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
+            <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
+          </div>
+          <span class="text-muted font-mono w-9 text-right">--</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px]">
+          <span class="text-muted w-7 text-right">MEM</span>
+          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
+            <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
+          </div>
+          <span class="text-muted font-mono w-9 text-right">--</span>
+        </div>
+      </div>
+      <!-- Folder average stats -->
+      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
+        <div class="flex items-center gap-1.5 text-[11px]">
+          <span class="text-muted w-7 text-right">CPU</span>
+          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="folderStats.cpuPercent > 80 ? 'bg-error' : folderStats.cpuPercent > 50 ? 'bg-warning' : 'bg-success'"
+              :style="{ width: Math.min(folderStats.cpuPercent, 100) + '%' }"
+            ></div>
+          </div>
+          <span class="text-text-secondary font-mono w-9 text-right">{{ folderStats.cpuPercent.toFixed(1) }}%</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-[11px]">
+          <span class="text-muted w-7 text-right">MEM</span>
+          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
+            <div
+              class="h-full rounded-full transition-all duration-300"
+              :class="folderStats.memPercent > 80 ? 'bg-error' : folderStats.memPercent > 50 ? 'bg-warning' : 'bg-success'"
+              :style="{ width: Math.min(folderStats.memPercent, 100) + '%' }"
+            ></div>
+          </div>
+          <span class="text-text-secondary font-mono w-9 text-right">{{ folderStats.memPercent.toFixed(1) }}%</span>
+        </div>
+      </div>
     </div>
     <div class="flex gap-1">
       <button
@@ -91,6 +133,7 @@
 import { computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
+import { useStatsStore } from '@/stores/stats';
 import type { Folder } from '@/types/folder';
 
 interface Props {
@@ -107,6 +150,7 @@ defineEmits<{
 
 const dockerStore = useDockerStore();
 const settingsStore = useSettingsStore();
+const statsStore = useStatsStore();
 
 const collapsedPorts = computed(() => {
   if (!settingsStore.showFolderPorts) return '';
@@ -139,5 +183,20 @@ const containerIcons = computed(() => {
     if (icons.length >= 4) break;
   }
   return icons;
+});
+
+const folderStats = computed(() => {
+  let cpuTotal = 0;
+  let memTotal = 0;
+  let count = 0;
+  for (const assoc of props.folder.containers) {
+    const s = statsStore.getStats(assoc.container_id);
+    if (!s) continue;
+    cpuTotal += s.cpuPercent;
+    memTotal += s.memoryPercent;
+    count++;
+  }
+  if (count === 0) return null;
+  return { cpuPercent: cpuTotal / count, memPercent: memTotal / count };
 });
 </script>

@@ -7,8 +7,9 @@
 - Replace Docker Containers section setting (fully takes over the Docker tab content)
 - Styled confirmation modals for stop/restart/remove actions
 - Container edit, WebUI, Console, Logs, Project, Support in kebab menu
-- WebUI icon on card/row action bar for containers with a web interface
-- Show ports on collapsed folders (configurable setting, default on)
+- WebUI globe icon on card/row action bar for containers with a web interface
+- Average CPU/memory stats on collapsed folders with loading skeleton
+- Show ports on collapsed folders with "Ports:" label (configurable setting, default on)
 - Restart count badge on collapsed containers
 - Stats loading skeleton while polling
 - Folder click-to-expand/collapse
@@ -21,7 +22,8 @@
 - Docker section inject replaces content entirely instead of hiding alongside
 - Flat nav button style (removed gradients)
 - Folder edit/delete icons use consistent SVG style
-- Smaller text sizes throughout (container name, image, status)
+- Smaller text sizes throughout (container name, image, status, unfoldered heading)
+- WebUI icon changed from external-link arrow to globe
 - Smaller container and folder icons
 - Stats bar track uses subtle color-mix for better dark theme contrast
 - Tighter folder row spacing
