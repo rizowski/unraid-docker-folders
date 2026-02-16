@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.02.15-42
+### Changes
+- Add container action feedback, image update checking, and pull with progress
+- Add UI animations: folder collapse, modal transitions, state pulse, card fade-in
+
 ## 2026.02.15-41
 ### Changes
 - Always show app on Folders tab regardless of replace setting
