@@ -105,8 +105,8 @@
     </div>
 
     <!-- Accordion details -->
-    <div v-if="expanded" class="px-6 pb-2 space-y-3 text-sm border-t border-border pt-3">
-      <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+    <div v-if="expanded" class="px-6 pb-2 space-y-3 text-xs border-t border-border pt-3 overflow-hidden">
+      <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 min-w-0">
         <template v-if="container.image">
           <span class="text-muted shrink-0">Image</span>
           <span class="text-text-secondary font-mono truncate">
@@ -124,14 +124,14 @@
         </template>
         <template v-if="displayMounts.length">
           <span class="text-muted shrink-0">Volumes</span>
-          <div class="text-text-secondary font-mono space-y-0.5">
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
             <p v-for="mount in displayMounts" :key="mount.destination" class="truncate" :title="`${mount.destination} -> ${mount.source}`">
               {{ mount.destination }} -&gt; <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="hover:underline" @click.stop>{{ mount.sourceShort }}</a>
             </p>
           </div>
         </template>
       </div>
-      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
+      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted italic">No additional details available</div>
 
       <!-- Resource Usage Stats -->
       <div v-if="isRunning && containerStats" class="space-y-2 pt-2 border-t border-border">

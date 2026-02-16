@@ -151,6 +151,7 @@ import { ref, onMounted, computed, watch, nextTick, provide, toRef } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
+import { useStatsStore } from '@/stores/stats';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
@@ -162,6 +163,7 @@ import Sortable from 'sortablejs';
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const settingsStore = useSettingsStore();
+const statsStore = useStatsStore();
 
 const actionInProgress = ref<string | null>(null);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
@@ -201,6 +203,15 @@ watch(
 async function loadData() {
   try {
     await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
+    // Pre-fetch stats for all running containers so data is ready before components mount
+    if (settingsStore.showStats) {
+      const runningIds = dockerStore.containers
+        .filter((c) => c.state === 'running')
+        .map((c) => c.id);
+      for (const id of runningIds) {
+        statsStore.registerVisible(id);
+      }
+    }
   } catch (e) {
     console.error('Failed to load data:', e);
   }

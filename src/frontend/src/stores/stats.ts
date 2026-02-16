@@ -36,6 +36,7 @@ export const useStatsStore = defineStore('stats', () => {
   const stats = ref<Record<string, ContainerStats | null>>({});
   const loading = ref(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let kickTimer: ReturnType<typeof setTimeout> | null = null;
 
   const getStats = computed(() => {
     return (id: string): ContainerStats | null => stats.value[id] ?? null;
@@ -69,8 +70,23 @@ export const useStatsStore = defineStore('stats', () => {
 
   function startPolling() {
     if (pollTimer) return;
-    fetchStats();
+    // Debounce the initial fetch so all registrations from the same
+    // render cycle are batched into a single request.
+    scheduleKick();
     pollTimer = setInterval(fetchStats, POLL_INTERVAL_MS);
+  }
+
+  function scheduleKick() {
+    if (kickTimer) clearTimeout(kickTimer);
+    kickTimer = setTimeout(() => {
+      kickTimer = null;
+      fetchStats();
+      // Reset the interval so the next poll is a full POLL_INTERVAL_MS from now
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = setInterval(fetchStats, POLL_INTERVAL_MS);
+      }
+    }, 50);
   }
 
   function stopPolling() {
@@ -89,37 +105,36 @@ export const useStatsStore = defineStore('stats', () => {
   }
 
   function registerVisible(id: string) {
+    const isNew = !visibleIds.value.has(id);
     visibleIds.value.add(id);
     visibleIds.value = new Set(visibleIds.value);
     ensurePolling();
+    if (isNew && pollTimer) scheduleKick();
   }
 
   function unregisterVisible(id: string) {
     visibleIds.value.delete(id);
     visibleIds.value = new Set(visibleIds.value);
-    if (!expandedIds.value.has(id)) {
-      delete stats.value[id];
-    }
     ensurePolling();
   }
 
   function registerExpanded(id: string) {
+    const isNew = !expandedIds.value.has(id);
     expandedIds.value.add(id);
     expandedIds.value = new Set(expandedIds.value);
     ensurePolling();
+    if (isNew && pollTimer) scheduleKick();
   }
 
   function unregisterExpanded(id: string) {
     expandedIds.value.delete(id);
     expandedIds.value = new Set(expandedIds.value);
-    if (!visibleIds.value.has(id)) {
-      delete stats.value[id];
-    }
     ensurePolling();
   }
 
   function cleanup() {
     stopPolling();
+    if (kickTimer) { clearTimeout(kickTimer); kickTimer = null; }
     visibleIds.value = new Set();
     expandedIds.value = new Set();
     stats.value = {};

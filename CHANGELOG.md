@@ -39,3 +39,6 @@
 - Container image and status text hidden on narrow viewports
 - Show stats enabled by default
 - Empty section left behind when replacing Docker Containers content
+- Stats load immediately on page load instead of waiting for poll interval
+- Stats persist through folder collapse/expand cycles (no skeleton flash)
+- Card view accordion text overflow with long volume paths
