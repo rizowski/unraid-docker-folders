@@ -22,6 +22,8 @@
 - Settings button in nav bar
 - Volume paths link to Unraid file browser
 - Changelog displayed on settings page
+- Container details in expanded accordion: command, health status, and docker labels
+- Health/command/labels displayed side-by-side with I/O stats in two-column layout
 
 ### Changed
 - Grid minmax reduced from 350px to 280px for single-column on small screens
@@ -55,3 +57,4 @@
 - Stats persist through folder collapse/expand cycles (no skeleton flash)
 - Card view accordion text overflow with long volume paths
 - Confirm modal font size when rendered inside Unraid iframe
+- Accordion chevron direction (now points right when collapsed, down when expanded)

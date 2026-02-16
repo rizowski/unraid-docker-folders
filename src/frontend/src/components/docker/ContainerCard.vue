@@ -45,7 +45,7 @@
         stroke-linecap="round"
         stroke-linejoin="round"
         class="shrink-0 text-text-secondary transition-transform duration-200"
-        :class="expanded ? 'rotate-180' : ''"
+        :class="expanded ? '' : '-rotate-90'"
       >
         <polyline points="6 9 12 15 18 9" />
       </svg>
@@ -169,28 +169,70 @@
             ></div>
           </div>
         </div>
-        <!-- Numeric Stats -->
-        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-1">
-          <span class="text-muted">Block I/O</span>
-          <span class="text-text-secondary font-mono"
-            >Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span
-          >
-          <span class="text-muted">Network</span>
-          <span class="text-text-secondary font-mono">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-          <span class="text-muted">PIDs</span>
-          <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-          <span class="text-muted">Restarts</span>
-          <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-          <span class="text-muted">Uptime</span>
-          <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-          <span class="text-muted">Image Size</span>
-          <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-          <span class="text-muted">Log Size</span>
-          <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+        <!-- Detailed Stats + Container Info -->
+        <div class="grid grid-cols-2 gap-4 text-xs pt-1">
+          <!-- Left column: I/O, Network, PIDs etc -->
+          <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
+            <span class="text-muted">Block I/O</span>
+            <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+            <span class="text-muted">Network</span>
+            <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+            <span class="text-muted">PIDs</span>
+            <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+            <span class="text-muted">Restarts</span>
+            <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+            <span class="text-muted">Uptime</span>
+            <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+            <span class="text-muted">Image Size</span>
+            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+            <span class="text-muted">Log Size</span>
+            <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+          </div>
+          <!-- Right column: Health, Command, Labels -->
+          <div class="space-y-2 min-w-0 content-start">
+            <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+              <template v-if="healthStatus">
+                <span class="text-muted">Health</span>
+                <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+              </template>
+              <template v-if="container.command">
+                <span class="text-muted">Command</span>
+                <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+              </template>
+            </div>
+            <div v-if="displayLabels.length" class="space-y-1">
+              <p class="text-muted text-xs">Labels</p>
+              <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
+                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+                  <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-2 border-t border-border">Loading stats...</div>
-      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-2 border-t border-border">Container not running</div>
+      <!-- Container info when not running (no stats section) -->
+      <div v-else class="space-y-2 pt-2 border-t border-border">
+        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+          <template v-if="healthStatus">
+            <span class="text-muted">Health</span>
+            <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+          </template>
+          <template v-if="container.command">
+            <span class="text-muted">Command</span>
+            <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+          </template>
+        </div>
+        <div v-if="displayLabels.length" class="space-y-1 pt-1">
+          <p class="text-muted text-xs">Labels</p>
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
+            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+              <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+            </p>
+          </div>
+        </div>
+        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-muted text-xs italic">Container not running</div>
+      </div>
     </div>
 
     <div class="flex items-center gap-3 px-4 pb-3 pt-2 sm:px-6 sm:pb-4 mt-auto border-t border-border/30">
@@ -340,7 +382,7 @@
         stroke-linecap="round"
         stroke-linejoin="round"
         class="shrink-0 text-text-secondary transition-transform duration-200"
-        :class="expanded ? 'rotate-180' : ''"
+        :class="expanded ? '' : '-rotate-90'"
       >
         <polyline points="6 9 12 15 18 9" />
       </svg>
@@ -567,28 +609,70 @@
             ></div>
           </div>
         </div>
-        <!-- Numeric Stats -->
-        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-0.5">
-          <span class="text-muted">Block I/O</span>
-          <span class="text-text-secondary font-mono"
-            >Read: {{ formatBytes(containerStats.blockRead) }} / Write: {{ formatBytes(containerStats.blockWrite) }}</span
-          >
-          <span class="text-muted">Network</span>
-          <span class="text-text-secondary font-mono">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-          <span class="text-muted">PIDs</span>
-          <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-          <span class="text-muted">Restarts</span>
-          <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-          <span class="text-muted">Uptime</span>
-          <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-          <span class="text-muted">Image Size</span>
-          <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-          <span class="text-muted">Log Size</span>
-          <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+        <!-- Detailed Stats + Container Info -->
+        <div class="grid grid-cols-2 gap-4 text-xs pt-0.5">
+          <!-- Left column: I/O, Network, PIDs etc -->
+          <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
+            <span class="text-muted">Block I/O</span>
+            <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+            <span class="text-muted">Network</span>
+            <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+            <span class="text-muted">PIDs</span>
+            <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+            <span class="text-muted">Restarts</span>
+            <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+            <span class="text-muted">Uptime</span>
+            <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+            <span class="text-muted">Image Size</span>
+            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+            <span class="text-muted">Log Size</span>
+            <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
+          </div>
+          <!-- Right column: Health, Command, Labels -->
+          <div class="space-y-2 min-w-0 content-start">
+            <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+              <template v-if="healthStatus">
+                <span class="text-muted">Health</span>
+                <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+              </template>
+              <template v-if="container.command">
+                <span class="text-muted">Command</span>
+                <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+              </template>
+            </div>
+            <div v-if="displayLabels.length" class="space-y-1">
+              <p class="text-muted text-xs">Labels</p>
+              <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
+                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+                  <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
-      <div v-else-if="isRunning && !containerStats" class="text-muted text-xs italic pt-2 border-t border-border">Loading stats...</div>
-      <div v-else-if="!isRunning && expanded" class="text-muted text-xs italic pt-2 border-t border-border">Container not running</div>
+      <!-- Container info when not running (no stats section) -->
+      <div v-else class="space-y-2 pt-2 border-t border-border">
+        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+          <template v-if="healthStatus">
+            <span class="text-muted">Health</span>
+            <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+          </template>
+          <template v-if="container.command">
+            <span class="text-muted">Command</span>
+            <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+          </template>
+        </div>
+        <div v-if="displayLabels.length" class="space-y-1 pt-1">
+          <p class="text-muted text-xs">Labels</p>
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0">
+            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] truncate" :title="`${label.key}=${label.value}`">
+              <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+            </p>
+          </div>
+        </div>
+        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-muted text-xs italic">Container not running</div>
+      </div>
     </div>
   </div>
 
@@ -885,5 +969,40 @@ const displayMounts = computed(() => {
     const srcShort = m.Source.length > 30 ? '...' + m.Source.slice(-27) : m.Source;
     return { destination: m.Destination, source: m.Source, sourceShort: srcShort };
   });
+});
+
+const healthStatus = computed(() => {
+  const status = props.container.status?.toLowerCase() || '';
+  if (status.includes('(healthy)')) return 'healthy';
+  if (status.includes('(unhealthy)')) return 'unhealthy';
+  if (status.includes('(health: starting)')) return 'starting';
+  return null;
+});
+
+const healthClass = computed(() => {
+  switch (healthStatus.value) {
+    case 'healthy': return 'text-success';
+    case 'unhealthy': return 'text-error';
+    case 'starting': return 'text-warning';
+    default: return 'text-text-secondary';
+  }
+});
+
+const displayLabels = computed(() => {
+  const labels = props.container.labels;
+  if (!labels) return [];
+  // Filter out internal/noisy labels
+  const hidden = new Set([
+    'maintainer',
+    'org.opencontainers.image.created',
+    'org.opencontainers.image.revision',
+    'org.opencontainers.image.source',
+    'org.opencontainers.image.version',
+  ]);
+  return Object.entries(labels)
+    .filter(([key]) => !hidden.has(key))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(0, 15)
+    .map(([key, value]) => ({ key, value }));
 });
 </script>

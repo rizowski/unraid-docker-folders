@@ -27,6 +27,7 @@ export interface Container {
   image: string;
   state: string;
   status: string;
+  command: string;
   ports: ContainerPort[];
   mounts: ContainerMount[];
   networkSettings: Record<string, { IPAddress: string }>;
