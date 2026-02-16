@@ -307,7 +307,7 @@
 
   <!-- List view -->
   <div v-else class="container-row rounded transition border-b border-border/50" :data-container-id="container.id">
-    <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3">
+    <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
       <svg
         v-if="!dragLocked"
         xmlns="http://www.w3.org/2000/svg"
@@ -320,6 +320,7 @@
         stroke-linecap="round"
         stroke-linejoin="round"
         class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2"
+        @click.stop
       >
         <circle cx="9" cy="5" r="1" />
         <circle cx="9" cy="12" r="1" />
@@ -331,8 +332,7 @@
       <span class="w-2.5 h-2.5 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
 
-      <!-- Clickable name/image area toggles accordion -->
-      <div class="flex items-center gap-4 flex-1 min-w-0 cursor-pointer select-none" @click="expanded = !expanded">
+      <div class="flex items-center gap-4 flex-1 min-w-0">
         <span class="text-xs font-semibold text-text min-w-0 sm:min-w-[120px]">{{ container.name }}</span>
         <span class="text-[11px] text-text-secondary font-mono truncate">
           <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="hover:underline" @click.stop>{{ container.image }}</a>
@@ -408,7 +408,7 @@
         </span>
       </div>
 
-      <div class="flex gap-1 ml-auto shrink-0 items-center">
+      <div class="flex gap-1 ml-auto shrink-0 items-center" @click.stop>
         <a
           v-if="resolvedWebui && isRunning"
           :href="resolvedWebui"
