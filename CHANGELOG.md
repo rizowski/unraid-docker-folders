@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.23-2
+### Changes
+- Load app in iframe to isolate from Unraid global CSS
+
 ## 2026.02.23
 ### Changes
 - Add Markdown="false" to DockerFoldersMain.page to fix styles not loading
