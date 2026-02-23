@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.23-4
+### Changes
+- Pass Unraid CSS variables into iframe for dark theme support
+
 ## 2026.02.23-2
 ### Changes
 - Load app in iframe to isolate from Unraid global CSS
@@ -268,4 +272,3 @@
 - Implement backend PHP classes and API
 - Set up frontend with Vue 3, TypeScript, and Vite
 - Initial project structure for unraid-docker-modern plugin
-
