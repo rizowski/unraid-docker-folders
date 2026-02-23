@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.02.23-9
+### Changes
+- Remove Plugin Information section from settings page
+- Fix list view kebab menu clipped by overflow-hidden
+
 ## 2026.02.23-8
 ### Changes
 - Unify KebabMenu component, fix responsive overflow, and add tests
