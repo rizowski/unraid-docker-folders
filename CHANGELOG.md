@@ -268,3 +268,4 @@
 - Implement backend PHP classes and API
 - Set up frontend with Vue 3, TypeScript, and Vite
 - Initial project structure for unraid-docker-modern plugin
+
