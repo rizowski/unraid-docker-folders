@@ -95,7 +95,7 @@
       </div>
     </header>
 
-    <main class="min-h-[400px]">
+    <main class="min-h-[200px]">
       <div v-if="isLoading" class="text-center py-8 px-6 text-text-secondary">
         <p>Loading...</p>
       </div>
@@ -148,25 +148,28 @@
             }}</span>
           </div>
 
-          <div
-            v-if="!unfolderedCollapsed"
-            class="container-list"
-            :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'"
-            id="unfoldered-containers"
-          >
-            <ContainerCard
-              v-for="container in filteredUnfolderedContainers"
-              :key="container.id"
-              :container="container"
-              :action-in-progress="actionInProgress?.id === container.id ? actionInProgress.action : null"
-              :view="viewMode"
+          <div class="folder-content-grid" :class="{ 'folder-content-expanded': !unfolderedCollapsed }">
+            <div class="folder-content-inner">
+              <div
+                class="container-list"
+                :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'"
+                id="unfoldered-containers"
+              >
+                <ContainerCard
+                  v-for="container in filteredUnfolderedContainers"
+                  :key="container.id"
+                  :container="container"
+                  :action-in-progress="actionInProgress?.id === container.id ? actionInProgress.action : null"
+                  :view="viewMode"
 
-              @start="handleStart"
-              @stop="handleStop"
-              @restart="handleRestart"
-              @remove="handleRemove"
-              @pull="handlePull"
-            />
+                  @start="handleStart"
+                  @stop="handleStop"
+                  @restart="handleRestart"
+                  @remove="handleRemove"
+                  @pull="handlePull"
+                />
+              </div>
+            </div>
           </div>
         </div>
 

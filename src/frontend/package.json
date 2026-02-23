@@ -8,7 +8,9 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",
-    "lint": "eslint src --ext .vue,.ts,.tsx"
+    "lint": "eslint src --ext .vue,.ts,.tsx",
+    "test": "vitest",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "pinia": "^2.1.7",
@@ -19,10 +21,13 @@
     "@tailwindcss/vite": "^4.1.18",
     "@types/sortablejs": "^1.15.8",
     "@vitejs/plugin-vue": "^5.0.4",
+    "@vue/test-utils": "^2.4.6",
     "@vue/tsconfig": "^0.5.1",
+    "jsdom": "^28.1.0",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.4.0",
     "vite": "^5.1.4",
+    "vitest": "^4.0.18",
     "vue-tsc": "^2.0.6"
   },
   "packageManager": "yarn@1.22.21+sha1.1959a18351b811cdeedbd484a8f86c3cc3bbaf72"

@@ -171,6 +171,12 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
 }
 
+/* Kebab menu items: ensure button items match link item padding
+   (the global button reset sets padding: 0 which overrides Tailwind) */
+#unraid-docker-folders-modern button.kebab-menu-item {
+  padding: 0.5rem 0.75rem; /* py-2 px-3 */
+}
+
 /* Kebab menu hover: lighter than border/50 for dark themes */
 #unraid-docker-folders-modern .kebab-menu-item:hover {
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);

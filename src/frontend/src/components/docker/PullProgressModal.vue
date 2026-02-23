@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="modal-enter fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div v-if="isOpen" class="modal-enter fixed inset-0 z-[1000] flex items-center justify-center p-4">
       <div class="fixed inset-0 bg-black/50" @click="handleClose"></div>
       <div class="relative bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <!-- Header -->

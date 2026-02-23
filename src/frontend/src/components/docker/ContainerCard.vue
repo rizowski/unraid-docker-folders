@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse }" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen }" :data-container-id="container.id">
     <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
       <svg
         v-if="!dragLocked"
@@ -337,35 +337,18 @@
         </svg>
       </a>
       <!-- Kebab menu -->
-      <div ref="menuRef" class="relative" :class="{ 'ml-auto': !resolvedWebui || !isRunning }">
-        <button class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-            <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
-          </svg>
-        </button>
-        <div v-if="menuOpen" class="absolute right-0 bottom-full mb-1 bg-bg border border-border rounded-lg shadow-lg py-1 min-w-[160px] z-50">
-          <template v-for="item in menuItems" :key="item.label">
-            <a
-              v-if="item.show"
-              :href="item.href"
-              :target="item.target"
-              rel="noopener"
-              class="kebab-menu-item flex items-center gap-2.5 px-3 py-2 text-sm text-text transition no-underline"
-              @click="closeMenu"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path v-for="(d, i) in item.icon.split('|')" :key="i" :d="d" />
-              </svg>
-              {{ item.label }}
-            </a>
-          </template>
-        </div>
-      </div>
+      <KebabMenu
+        ref="kebabMenuRef"
+        :items="menuItems"
+        position="above"
+        button-class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text"
+        :class="{ 'ml-auto': !resolvedWebui || !isRunning }"
+      />
     </div>
   </div>
 
   <!-- List view -->
-  <div v-else class="container-card-enter container-row rounded transition border-b border-border/50" :class="{ 'state-change-pulse': stateChangePulse }" :data-container-id="container.id">
+  <div v-else class="container-card-enter container-row rounded transition border-b border-border/50 overflow-hidden" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen }" :data-container-id="container.id">
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
       <svg
         v-if="!dragLocked"
@@ -407,8 +390,8 @@
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
 
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
-        <div class="flex items-center gap-3">
-          <span class="text-xs font-semibold text-text">{{ container.name }}</span>
+        <div class="flex items-center gap-3 min-w-0">
+          <span class="text-xs font-semibold text-text truncate">{{ container.name }}</span>
           <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
           <span class="text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
@@ -419,10 +402,10 @@
       </div>
 
       <!-- Compact ports (list collapsed) -->
-      <span v-if="compactPorts && !expanded" class="shrink-0 text-[11px] text-text font-mono">{{ compactPorts }}</span>
+      <span v-if="compactPorts && !expanded" class="hidden sm:inline shrink-0 text-[11px] text-text font-mono">{{ compactPorts }}</span>
 
       <!-- Inline compact stats loading (list view) -->
-      <div v-if="isRunning && showStats && !containerStats && !expanded" class="shrink-0 w-[140px] space-y-0.5">
+      <div v-if="isRunning && showStats && !containerStats && !expanded" class="hidden md:block shrink-0 w-[140px] space-y-0.5">
         <div class="flex items-center gap-1.5 text-[11px]">
           <span class="text-text w-7 text-right">CPU</span>
           <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
@@ -440,7 +423,7 @@
       </div>
 
       <!-- Inline compact stats (list view) -->
-      <div v-if="isRunning && containerStats && !expanded" class="shrink-0 flex items-center gap-3">
+      <div v-if="isRunning && containerStats && !expanded" class="hidden md:flex shrink-0 items-center gap-3">
         <div class="w-[140px] space-y-0.5">
           <div class="flex items-center gap-1.5 text-[11px]">
             <span class="text-text w-7 text-right">CPU</span>
@@ -558,30 +541,12 @@
         </button>
         </template>
         <!-- Kebab menu -->
-        <div ref="menuRef" class="relative">
-          <button class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-              <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
-            </svg>
-          </button>
-          <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-1 min-w-[160px] z-50">
-            <template v-for="item in menuItems" :key="item.label">
-              <a
-                v-if="item.show"
-                :href="item.href"
-                :target="item.target"
-                rel="noopener"
-                class="kebab-menu-item flex items-center gap-2.5 px-3 py-2 text-sm text-text transition no-underline"
-                @click="closeMenu"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path v-for="(d, i) in item.icon.split('|')" :key="i" :d="d" />
-                </svg>
-                {{ item.label }}
-              </a>
-            </template>
-          </div>
-        </div>
+        <KebabMenu
+          ref="kebabMenuRef"
+          :items="menuItems"
+          button-class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text"
+          :icon-size="14"
+        />
       </div>
     </div>
 
@@ -738,28 +703,13 @@ import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 import ConfirmModal from '@/components/ConfirmModal.vue';
+import KebabMenu from '@/components/KebabMenu.vue';
+import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
-const menuOpen = ref(false);
-const menuRef = ref<HTMLElement | null>(null);
-
-function toggleMenu() {
-  menuOpen.value = !menuOpen.value;
-}
-
-function closeMenu() {
-  menuOpen.value = false;
-}
-
-function onClickOutside(e: MouseEvent) {
-  if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
-    menuOpen.value = false;
-  }
-}
-
-onMounted(() => document.addEventListener('click', onClickOutside, true));
-onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
+const kebabMenuRef = ref<InstanceType<typeof KebabMenu> | null>(null);
+const menuOpen = computed(() => kebabMenuRef.value?.menuOpen ?? false);
 
 interface Props {
   container: Container;
@@ -972,15 +922,7 @@ const projectUrl = computed(() => {
   return props.container.labels?.['net.unraid.docker.project'] || null;
 });
 
-interface MenuItem {
-  label: string;
-  icon: string;
-  href: string;
-  target?: string;
-  show: boolean;
-}
-
-const menuItems = computed<MenuItem[]>(() => [
+const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
   { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
   { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value && !isCompose.value },
