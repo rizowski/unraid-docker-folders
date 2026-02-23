@@ -244,12 +244,6 @@ if (file_exists($changelogPath)) {
     </div>
   </div>
 
-  <div class="info-box">
-    <h3>Plugin Information</h3>
-    <p><strong>Version:</strong> <?= PLUGIN_VERSION ?></p>
-    <p><strong>Author:</strong> <?= PLUGIN_AUTHOR ?></p>
-  </div>
-
   <?php if ($changelogHtml): ?>
   <div class="info-box" style="border-left-color: #4caf50;">
     <?= $changelogHtml ?>
