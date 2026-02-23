@@ -103,41 +103,64 @@
         </div>
       </div>
     </div>
-    <div class="flex gap-1">
+    <div ref="menuRef" class="relative" @click.stop>
       <button
         class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-text transition"
-        @click.stop="$emit('edit')"
-        title="Edit folder"
+        title="Folder actions"
+        @click="menuOpen = !menuOpen"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+          <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
         </svg>
       </button>
-      <button
-        class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-error transition"
-        @click.stop="$emit('delete')"
-        title="Delete folder"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <line x1="10" y1="11" x2="10" y2="17" />
-          <line x1="14" y1="11" x2="14" y2="17" />
-        </svg>
-      </button>
+      <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-1 min-w-[140px] z-[100]">
+        <button
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text transition text-left cursor-pointer"
+          @click="menuOpen = false; $emit('edit')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+          Edit
+        </button>
+        <button
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text hover:text-error transition text-left cursor-pointer"
+          @click="menuOpen = false; $emit('delete')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            <line x1="10" y1="11" x2="10" y2="17" />
+            <line x1="14" y1="11" x2="14" y2="17" />
+          </svg>
+          Delete
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, type Ref } from 'vue';
+import { computed, inject, ref, onMounted, onUnmounted, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import type { Folder } from '@/types/folder';
 
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
+
+const menuOpen = ref(false);
+const menuRef = ref<HTMLElement | null>(null);
+
+function onClickOutside(e: MouseEvent) {
+  if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
+    menuOpen.value = false;
+  }
+}
+
+onMounted(() => document.addEventListener('click', onClickOutside, true));
+onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
 
 interface Props {
   folder: Folder;

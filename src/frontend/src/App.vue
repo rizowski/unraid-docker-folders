@@ -371,6 +371,9 @@ function initializeDragAndDrop() {
         handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {
+          // Revert SortableJS DOM move — let Vue reactivity handle rendering
+          evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] || null);
+
           const containerId = evt.item.dataset.containerId;
           const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 
@@ -396,6 +399,9 @@ function initializeDragAndDrop() {
         handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {
+          // Revert SortableJS DOM move — let Vue reactivity handle rendering
+          evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] || null);
+
           const containerId = evt.item.dataset.containerId;
           const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 

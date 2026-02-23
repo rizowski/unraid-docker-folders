@@ -229,7 +229,7 @@
       </div>
     </div>
 
-    <div class="flex items-center gap-3 px-4 pb-3 pt-2 sm:px-6 sm:pb-4 mt-auto border-t border-border/30">
+    <div class="flex items-center gap-3 px-4 py-2 sm:px-6 sm:py-3 mt-auto border-t border-border/30">
       <template v-if="isActionInProgress">
         <div class="flex items-center gap-2 text-xs text-text-secondary">
           <svg class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -499,7 +499,7 @@
         <button
           v-if="container.state === 'running'"
           @click="confirmAction = 'stop'"
-          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Stop"
         >
@@ -510,7 +510,7 @@
         <button
           v-else
           @click="emit('start', container.id)"
-          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Start"
         >
@@ -521,7 +521,7 @@
         <button
           v-if="isRunning"
           @click="confirmAction = 'restart'"
-          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Restart"
         >
@@ -533,7 +533,7 @@
         <button
           v-if="!isRunning"
           @click="confirmAction = 'remove'"
-          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Remove"
         >
@@ -547,7 +547,7 @@
         <button
           v-if="hasUpdate"
           @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
-          class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
+          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
           title="Pull Update"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -559,7 +559,7 @@
         </template>
         <!-- Kebab menu -->
         <div ref="menuRef" class="relative">
-          <button class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
+          <button class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text" title="More actions" @click.stop="toggleMenu">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
               <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
             </svg>

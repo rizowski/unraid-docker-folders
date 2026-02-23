@@ -49,7 +49,9 @@
 
 /* Neutralize Unraid's button styles.
    Even with .unapi, be explicit to beat any specificity edge cases.
-   Excludes .nav-btn which should inherit Unraid's native look. */
+   Excludes .nav-btn which should inherit Unraid's native look.
+   Note: color is NOT reset here so Tailwind utilities (text-success,
+   text-error, text-primary) can control button icon colors. */
 #unraid-docker-folders-modern button:not(.nav-btn) {
   font-family: inherit;
   font-size: inherit;
@@ -62,7 +64,6 @@
   border: none;
   border-radius: 0;
   background: none;
-  color: inherit;
   cursor: pointer;
 }
 
@@ -156,6 +157,11 @@
   vertical-align: middle;
 }
 
+/* List view action buttons: subtle background so they're visible */
+#unraid-docker-folders-modern .container-row .action-btn {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 6%, transparent);
+}
+
 /* Container row hover: subtle lighten that works on dark themes */
 #unraid-docker-folders-modern .container-row:hover {
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
@@ -184,6 +190,11 @@
 
 #unraid-docker-folders-modern .folder-content-inner {
   overflow: hidden;
+}
+
+/* When expanded, allow kebab menus to escape the container */
+#unraid-docker-folders-modern .folder-content-grid.folder-content-expanded .folder-content-inner {
+  overflow: visible;
 }
 
 /* Modal enter/exit transitions */
