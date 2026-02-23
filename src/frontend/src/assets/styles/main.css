@@ -163,6 +163,10 @@
 }
 
 /* Container row hover: subtle lighten that works on dark themes */
+#unraid-docker-folders-modern .container-row {
+  transition: background 0.15s ease;
+}
+
 #unraid-docker-folders-modern .container-row:hover {
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
 }

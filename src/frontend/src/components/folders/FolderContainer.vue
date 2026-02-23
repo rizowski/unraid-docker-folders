@@ -1,6 +1,6 @@
 <template>
   <div class="mb-2">
-    <FolderHeader :folder="folder" @toggle-collapse="toggleCollapse" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
+    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" />
 
     <div class="folder-content-grid" :class="{ 'folder-content-expanded': !folder.collapsed || isSearching }">
       <div class="folder-content-inner px-2 sm:px-4">
@@ -9,7 +9,7 @@
             v-for="assoc in folderContainers"
             :key="assoc.container_name"
             :container="getContainer(assoc.container_name)!"
-            :action-in-progress="actionInProgress?.id === assoc.container_name ? actionInProgress.action : null"
+            :action-in-progress="actionInProgress?.id === getContainer(assoc.container_name)?.id ? actionInProgress!.action : null"
             :view="view"
             @start="handleStart"
             @stop="handleStop"
@@ -59,19 +59,40 @@ const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
 const actionInProgress = ref<{ id: string; action: string } | null>(null);
 
+const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
+const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
+watch(hideStopped, (v) => localStorage.setItem(storageKey.value, v ? '1' : '0'));
+
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
 const folderContainers = computed(() => {
+  let list = props.folder.containers || [];
+  if (isSearching.value) {
+    const q = dockerStore.searchQuery.trim().toLowerCase();
+    list = list.filter((assoc) => {
+      const container = getContainer(assoc.container_name);
+      if (container) {
+        return container.name.toLowerCase().includes(q) || container.image.toLowerCase().includes(q);
+      }
+      return assoc.container_name.toLowerCase().includes(q);
+    });
+  }
+  if (hideStopped.value) {
+    list = list.filter((assoc) => {
+      const container = getContainer(assoc.container_name);
+      return container?.state === 'running';
+    });
+  }
+  return list;
+});
+
+const hiddenCount = computed(() => {
+  if (!hideStopped.value) return 0;
   const all = props.folder.containers || [];
-  if (!isSearching.value) return all;
-  const q = dockerStore.searchQuery.trim().toLowerCase();
-  return all.filter((assoc) => {
+  return all.length - all.filter((assoc) => {
     const container = getContainer(assoc.container_name);
-    if (container) {
-      return container.name.toLowerCase().includes(q) || container.image.toLowerCase().includes(q);
-    }
-    return assoc.container_name.toLowerCase().includes(q);
-  });
+    return container?.state === 'running';
+  }).length;
 });
 
 function getContainer(name: string) {

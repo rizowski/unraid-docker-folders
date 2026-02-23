@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:brightness-[1.03] transition" :class="{ 'state-change-pulse': stateChangePulse }" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse }" :data-container-id="container.id">
     <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
       <svg
         v-if="!dragLocked"

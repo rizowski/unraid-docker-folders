@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-4 cursor-pointer select-none border-l-4 hover:brightness-95 transition"
+    class="flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-4 cursor-pointer select-none border-l-4 hover:bg-bg-card transition"
     :style="{ borderLeftColor: folder.color || '#ff8c2f' }"
     @click="$emit('toggle-collapse')"
   >
@@ -103,7 +103,24 @@
         </div>
       </div>
     </div>
-    <div ref="menuRef" class="relative" @click.stop>
+    <div class="flex items-center gap-1" @click.stop>
+      <button
+        class="p-1.5 rounded cursor-pointer transition relative"
+        :class="hideStopped ? 'text-text' : 'text-text-secondary hover:text-text'"
+        :title="hideStopped ? 'Show stopped containers' : 'Hide stopped containers'"
+        @click="$emit('toggle-hide-stopped')"
+      >
+        <svg v-if="hideStopped" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+          <line x1="1" y1="1" x2="23" y2="23" />
+        </svg>
+        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+        <span v-if="hideStopped && hiddenCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-text-secondary text-white rounded-full text-[10px] font-bold">{{ hiddenCount }}</span>
+      </button>
+    <div ref="menuRef" class="relative">
       <button
         class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-text transition"
         title="Folder actions"
@@ -138,6 +155,7 @@
         </button>
       </div>
     </div>
+    </div>
   </div>
 </template>
 
@@ -164,12 +182,18 @@ onUnmounted(() => document.removeEventListener('click', onClickOutside, true));
 
 interface Props {
   folder: Folder;
+  hideStopped?: boolean;
+  hiddenCount?: number;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  hideStopped: false,
+  hiddenCount: 0,
+});
 
 defineEmits<{
   'toggle-collapse': [];
+  'toggle-hide-stopped': [];
   edit: [];
   delete: [];
 }>();
