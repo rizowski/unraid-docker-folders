@@ -2,6 +2,7 @@ Menu="Docker:0"
 Title="Folders"
 Tag="folder-open"
 Cond="is_file('/var/run/dockerd.pid')"
+Markdown="false"
 ---
 <?php
 require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
