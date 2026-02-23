@@ -27,29 +27,26 @@ const containers = [
     labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/40463-support-linuxserverio-plex-media-server/' },
   },
   {
-    id: 'bcd234efg567', name: 'sonarr', image: 'linuxserver/sonarr:latest', state: 'running',
-    status: 'Up 3 days (healthy)', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8989]/',
+    id: 'bcd234efg567', name: 'postgres', image: 'postgres:16-alpine', state: 'running',
+    status: 'Up 3 days (healthy)', icon: null, managed: null, webui: null,
     created: Date.now() / 1000 - 259200,
-    ports: [{ IP: '0.0.0.0', PrivatePort: 8989, PublicPort: 8989, Type: 'tcp' }],
+    ports: [{ IP: '0.0.0.0', PrivatePort: 5432, PublicPort: 5432, Type: 'tcp' }],
     mounts: [
-      { Source: '/mnt/user/appdata/sonarr', Destination: '/config', Type: 'bind', RW: true },
-      { Source: '/mnt/user/media/tv', Destination: '/tv', Type: 'bind', RW: true },
-      { Source: '/mnt/user/downloads', Destination: '/downloads', Type: 'bind', RW: true },
+      { Source: '/mnt/user/appdata/postgres', Destination: '/var/lib/postgresql/data', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.3' } },
-    labels: { 'com.docker.compose.project': 'media-stack', 'net.unraid.docker.support': 'https://forums.unraid.net/topic/79530-support-linuxserverio-sonarr/', 'net.unraid.docker.shell': '/bin/bash' },
+    labels: { 'com.docker.compose.project': 'db-stack' },
   },
   {
-    id: 'cde345fgh678', name: 'radarr', image: 'linuxserver/radarr:latest', state: 'running',
-    status: 'Up 3 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:7878]/',
+    id: 'cde345fgh678', name: 'valkey', image: 'valkey/valkey:8-alpine', state: 'running',
+    status: 'Up 3 days', icon: null, managed: null, webui: null,
     created: Date.now() / 1000 - 259200,
-    ports: [{ IP: '0.0.0.0', PrivatePort: 7878, PublicPort: 7878, Type: 'tcp' }],
+    ports: [{ IP: '0.0.0.0', PrivatePort: 6379, PublicPort: 6380, Type: 'tcp' }],
     mounts: [
-      { Source: '/mnt/user/appdata/radarr', Destination: '/config', Type: 'bind', RW: true },
-      { Source: '/mnt/user/media/movies', Destination: '/movies', Type: 'bind', RW: true },
+      { Source: '/mnt/user/appdata/valkey', Destination: '/data', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.4' } },
-    labels: { 'com.docker.compose.project': 'media-stack' },
+    labels: { 'com.docker.compose.project': 'db-stack' },
   },
   {
     id: 'def456ghi789', name: 'sabnzbd', image: 'linuxserver/sabnzbd:latest', state: 'running',
@@ -58,7 +55,7 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 8080, PublicPort: 8080, Type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/sabnzbd', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.5' } },
-    labels: { 'com.docker.compose.project': 'media-stack' },
+    labels: {},
   },
   {
     id: 'efg567hij890', name: 'nginx-proxy', image: 'jwilder/nginx-proxy:latest', state: 'running',
@@ -117,6 +114,21 @@ const containers = [
     networkSettings: { bridge: { IPAddress: '172.17.0.10' } },
     labels: {},
   },
+  {
+    id: 'klm123nop456', name: 'caddy', image: 'caddy:2-alpine', state: 'running',
+    status: 'Up 5 days', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 432000,
+    ports: [
+      { IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8880, Type: 'tcp' },
+      { IP: '0.0.0.0', PrivatePort: 443, PublicPort: 8443, Type: 'tcp' },
+    ],
+    mounts: [
+      { Source: '/mnt/user/appdata/caddy/Caddyfile', Destination: '/etc/caddy/Caddyfile', Type: 'bind', RW: true },
+      { Source: '/mnt/user/appdata/caddy/data', Destination: '/data', Type: 'bind', RW: true },
+    ],
+    networkSettings: { bridge: { IPAddress: '172.17.0.11' } },
+    labels: {},
+  },
 ];
 
 const folders: any[] = [
@@ -146,22 +158,21 @@ const folders: any[] = [
     updated_at: Date.now(),
     containers: [
       { id: 4, container_id: 'efg567hij890', container_name: 'nginx-proxy', folder_id: 2, position: 0 },
+      { id: 8, container_id: 'klm123nop456', container_name: 'caddy', folder_id: 2, position: 1 },
     ],
   },
   {
     id: 3,
-    name: 'media-stack',
-    icon: 'layer-group',
-    color: '#ff8c2f',
+    name: 'Downloads',
+    icon: '📥',
+    color: '#4caf50',
     position: 2,
     collapsed: false,
-    compose_project: 'media-stack',
+    compose_project: null,
     created_at: Date.now(),
     updated_at: Date.now(),
     containers: [
-      { id: 2, container_id: 'bcd234efg567', container_name: 'sonarr', folder_id: 3, position: 0 },
-      { id: 3, container_id: 'cde345fgh678', container_name: 'radarr', folder_id: 3, position: 1 },
-      { id: 6, container_id: 'def456ghi789', container_name: 'sabnzbd', folder_id: 3, position: 2 },
+      { id: 6, container_id: 'def456ghi789', container_name: 'sabnzbd', folder_id: 3, position: 0 },
     ],
   },
   {
@@ -177,6 +188,8 @@ const folders: any[] = [
     containers: [
       { id: 5, container_id: 'fgh678ijk901', container_name: 'mariadb', folder_id: 4, position: 0 },
       { id: 7, container_id: 'ghi789jkl012', container_name: 'redis', folder_id: 4, position: 1 },
+      { id: 2, container_id: 'bcd234efg567', container_name: 'postgres', folder_id: 4, position: 2 },
+      { id: 3, container_id: 'cde345fgh678', container_name: 'valkey', folder_id: 4, position: 3 },
     ],
   },
 ];
@@ -362,8 +375,9 @@ const EXITED_IDS = new Set(['ghi789jkl012', 'hij890klm123']);
 
 const mockStatsProfiles: Record<string, { cpuBase: number; memBase: number; memLimit: number; pids: number; restarts: number; startedHoursAgo: number; imageSizeMB: number; logSizeMB: number }> = {
   abc123def456: { cpuBase: 15, memBase: 2048, memLimit: 8192, pids: 45, restarts: 0, startedHoursAgo: 72, imageSizeMB: 350, logSizeMB: 8 },
-  bcd234efg567: { cpuBase: 5, memBase: 512, memLimit: 4096, pids: 12, restarts: 0, startedHoursAgo: 72, imageSizeMB: 220, logSizeMB: 15 },
-  cde345fgh678: { cpuBase: 4, memBase: 480, memLimit: 4096, pids: 10, restarts: 0, startedHoursAgo: 72, imageSizeMB: 225, logSizeMB: 12 },
+  bcd234efg567: { cpuBase: 3, memBase: 256, memLimit: 4096, pids: 20, restarts: 0, startedHoursAgo: 72, imageSizeMB: 85, logSizeMB: 25 },
+  cde345fgh678: { cpuBase: 1, memBase: 64, memLimit: 2048, pids: 5, restarts: 0, startedHoursAgo: 72, imageSizeMB: 35, logSizeMB: 2 },
+  klm123nop456: { cpuBase: 2, memBase: 48, memLimit: 2048, pids: 8, restarts: 0, startedHoursAgo: 120, imageSizeMB: 45, logSizeMB: 1 },
   def456ghi789: { cpuBase: 8, memBase: 768, memLimit: 4096, pids: 8, restarts: 0, startedHoursAgo: 48, imageSizeMB: 180, logSizeMB: 45 },
   efg567hij890: { cpuBase: 2, memBase: 128, memLimit: 2048, pids: 4, restarts: 1, startedHoursAgo: 120, imageSizeMB: 55, logSizeMB: 3 },
   fgh678ijk901: { cpuBase: 3, memBase: 256, memLimit: 2048, pids: 15, restarts: 0, startedHoursAgo: 120, imageSizeMB: 420, logSizeMB: 120 },
@@ -425,7 +439,7 @@ function handleUpdates(req: any, res: any, params: Record<string, string>) {
     const now = Math.floor(Date.now() / 1000);
 
     for (const image of imagesToCheck) {
-      const hasUpdate = image.includes('plex') || image.includes('sonarr') || image.includes('grafana');
+      const hasUpdate = image.includes('plex') || image.includes('postgres') || image.includes('grafana');
       mockUpdateChecks[image] = {
         image,
         local_digest: `${image}@sha256:abc123`,

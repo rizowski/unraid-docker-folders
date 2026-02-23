@@ -26,48 +26,37 @@
             title="Clear search"
           >&times;</button>
         </div>
-        <button
-          @click="viewMode = viewMode === 'grid' ? 'list' : 'grid'"
-          class="nav-btn"
-          :title="viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'"
-        >
-          <svg
-            v-if="viewMode === 'grid'"
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+        <div class="view-mode-toggle">
+          <div class="view-mode-slider" :class="{ 'slider-right': viewMode === 'list' }"></div>
+          <button
+            @click="viewMode = 'grid'"
+            class="relative z-10 flex items-center justify-center w-8 h-7 rounded-full transition-colors duration-200 cursor-pointer"
+            :class="viewMode === 'grid' ? 'text-primary-text' : 'text-text-secondary hover:text-text'"
+            title="Grid view"
           >
-            <rect x="3" y="3" width="7" height="7" />
-            <rect x="14" y="3" width="7" height="7" />
-            <rect x="3" y="14" width="7" height="7" />
-            <rect x="14" y="14" width="7" height="7" />
-          </svg>
-          <svg
-            v-else
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="7" height="7" />
+              <rect x="14" y="3" width="7" height="7" />
+              <rect x="3" y="14" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" />
+            </svg>
+          </button>
+          <button
+            @click="viewMode = 'list'"
+            class="relative z-10 flex items-center justify-center w-8 h-7 rounded-full transition-colors duration-200 cursor-pointer"
+            :class="viewMode === 'list' ? 'text-primary-text' : 'text-text-secondary hover:text-text'"
+            title="List view"
           >
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" />
-          </svg>
-        </button>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+          </button>
+        </div>
         <button
           @click="dragLocked = !dragLocked"
           class="nav-btn"

@@ -254,6 +254,32 @@
   animation: container-fade-in 150ms ease both;
 }
 
+/* View mode toggle (grid/list slider) */
+#unraid-docker-folders-modern .view-mode-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 3px;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+}
+
+#unraid-docker-folders-modern .view-mode-slider {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(50% - 3px);
+  border-radius: 9999px;
+  background: var(--header-background, #ff8c2f);
+  transition: left 200ms ease;
+  pointer-events: none;
+}
+
+#unraid-docker-folders-modern .view-mode-slider.slider-right {
+  left: 50%;
+}
+
 /* Drag and drop styles */
 .sortable-ghost {
   opacity: 0.4;

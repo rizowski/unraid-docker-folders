@@ -130,7 +130,7 @@
           <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
         </svg>
       </button>
-      <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-2 min-w-[160px] z-[100]">
+      <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-2.5 px-2 min-w-[170px] z-[100]">
         <button
           class="kebab-menu-item flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-text transition text-left cursor-pointer"
           @click="menuOpen = false; $emit('edit')"
