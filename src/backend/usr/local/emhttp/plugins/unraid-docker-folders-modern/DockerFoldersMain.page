@@ -25,7 +25,25 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 (function() {
   var frame = document.getElementById('docker-folders-frame');
   var token = (typeof csrf_token === 'string') ? csrf_token : '';
-  frame.src = '/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=' + encodeURIComponent(token);
+
+  // Read Unraid CSS variables from parent document so the iframe can match the theme
+  var vars = [
+    '--text-color', '--background-color', '--border-color',
+    '--header-background', '--header-text-color',
+    '--button-background', '--button-hover', '--button-text-color',
+    '--input-background', '--input-border'
+  ];
+  var cs = getComputedStyle(document.documentElement);
+  var theme = {};
+  vars.forEach(function(v) {
+    var val = cs.getPropertyValue(v).trim();
+    if (val) theme[v] = val;
+  });
+  var themeParam = Object.keys(theme).length > 0
+    ? '&theme=' + encodeURIComponent(JSON.stringify(theme))
+    : '';
+
+  frame.src = '/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=' + encodeURIComponent(token) + themeParam;
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'docker-folders-resize') {
       frame.style.height = e.data.height + 'px';

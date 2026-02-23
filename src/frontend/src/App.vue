@@ -1,5 +1,5 @@
 <template>
-  <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text">
+  <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text bg-bg">
     <header class="flex flex-wrap justify-between items-center gap-y-3 gap-x-4 mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
       <div class="flex items-center gap-2 sm:gap-4">
         <a href="/Settings/DockerFoldersSettings" class="nav-btn" title="Settings" style="text-decoration: none;">
