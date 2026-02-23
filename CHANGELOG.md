@@ -2,10 +2,7 @@
 
 ## 2026.02.23-6
 ### Changes
-- Fix kebab menu z-index by removing CSS brightness filters that create stacking contexts
-- Fix list view hover flicker with smooth background transition
-- Fix action spinner not showing for containers inside folders (wrong ID comparison)
-- Add per-folder eye toggle to hide stopped/exited containers with hidden count badge
+- Fix z-index, hover flicker, action spinner + add hide stopped toggle
 
 ## 2026.02.23-5
 ### Changes
