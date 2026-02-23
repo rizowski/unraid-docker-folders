@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.23
+### Changes
+- Add Markdown="false" to DockerFoldersMain.page to fix styles not loading
+
 ## 2026.02.15-42
 ### Changes
 - Add container action feedback, image update checking, and pull with progress
