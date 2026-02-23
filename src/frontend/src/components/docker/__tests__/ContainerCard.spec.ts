@@ -161,4 +161,10 @@ describe('ContainerCard', () => {
     await kebab.trigger('click');
     expect(wrapper.findAll('.kebab-menu-item').length).toBeGreaterThan(0);
   });
+
+  it('list view row does not use overflow-hidden so dropdown is not clipped', () => {
+    const wrapper = mountCard({}, { view: 'list' });
+    const row = wrapper.find('.container-row');
+    expect(row.classes()).not.toContain('overflow-hidden');
+  });
 });
