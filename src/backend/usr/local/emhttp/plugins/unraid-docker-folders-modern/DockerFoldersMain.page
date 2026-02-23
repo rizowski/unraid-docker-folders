@@ -17,7 +17,20 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     <p>Expected path: <code><?= DB_PATH ?></code></p>
 </div>
 <?php else: ?>
-<link rel="stylesheet" href="<?autov('/plugins/unraid-docker-folders-modern/assets/css/app.css')?>">
-<div id="app"></div>
-<script type="module" src="<?autov('/plugins/unraid-docker-folders-modern/assets/js/app.js')?>"></script>
+<iframe id="docker-folders-frame"
+        style="width:100%;min-height:600px;border:none;"
+        scrolling="no"
+        allowfullscreen></iframe>
+<script>
+(function() {
+  var frame = document.getElementById('docker-folders-frame');
+  var token = (typeof csrf_token === 'string') ? csrf_token : '';
+  frame.src = '/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=' + encodeURIComponent(token);
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'docker-folders-resize') {
+      frame.style.height = e.data.height + 'px';
+    }
+  });
+})();
+</script>
 <?php endif; ?>
