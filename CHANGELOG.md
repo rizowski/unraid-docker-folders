@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.23-8
+### Changes
+- Unify KebabMenu component, fix responsive overflow, and add tests
+
 ## 2026.02.23-7
 ### Changes
 - Add view mode slider toggle, folder menu padding, and update mock data
