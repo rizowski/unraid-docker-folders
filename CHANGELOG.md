@@ -2,12 +2,7 @@
 
 ## 2026.02.23-5
 ### Changes
-- Fix drag-and-drop container duplication between folders
-- Equalize container card bottom padding between running and stopped states
-- Add subtle background to list view action buttons for visibility
-- Replace folder edit/trash buttons with three-dot kebab dropdown menu
-- Fix container kebab menu being clipped under folders (overflow/z-index)
-- Enable Tailwind color utilities on action buttons (remove CSS reset color override)
+- Fix drag-drop duplication, card padding, folder kebab menu, and z-index
 
 ## 2026.02.23-4
 ### Changes
