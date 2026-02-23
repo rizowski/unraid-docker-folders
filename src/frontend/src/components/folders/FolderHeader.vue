@@ -103,7 +103,7 @@
         </div>
       </div>
     </div>
-    <div class="flex items-center gap-1" @click.stop>
+    <div class="flex items-center gap-3" @click.stop>
       <button
         class="p-1.5 rounded cursor-pointer transition relative"
         :class="hideStopped ? 'text-text' : 'text-text-secondary hover:text-text'"
@@ -130,9 +130,9 @@
           <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
         </svg>
       </button>
-      <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-1 min-w-[140px] z-[100]">
+      <div v-if="menuOpen" class="absolute right-0 top-full mt-1 bg-bg border border-border rounded-lg shadow-lg py-2 min-w-[160px] z-[100]">
         <button
-          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text transition text-left cursor-pointer"
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-text transition text-left cursor-pointer"
           @click="menuOpen = false; $emit('edit')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -142,7 +142,7 @@
           Edit
         </button>
         <button
-          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text hover:text-error transition text-left cursor-pointer"
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-4 py-2.5 text-sm text-text hover:text-error transition text-left cursor-pointer"
           @click="menuOpen = false; $emit('delete')"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

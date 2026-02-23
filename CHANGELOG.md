@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.02.23-7
+### Changes
+- Add more padding to folder context menu items and spacing between eye toggle and kebab
+- Replace grid/list two-button toggle with single icon slider that shows active view mode
+
 ## 2026.02.23-6
 ### Changes
 - Fix z-index, hover flicker, action spinner + add hide stopped toggle
