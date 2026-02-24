@@ -4,7 +4,7 @@
   "description": "Modern Unraid Docker tab plugin with real-time updates",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "MOCK_API=1 vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "type-check": "vue-tsc --noEmit",

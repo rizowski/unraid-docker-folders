@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/Database.php';
+require_once dirname(__DIR__) . '/classes/CronManager.php';
 
 header('Content-Type: application/json');
 
@@ -84,6 +85,21 @@ function handlePost()
     $db->update('settings', ['value' => $value, 'updated_at' => $now], 'key = ?', [$key]);
   } else {
     $db->insert('settings', ['key' => $key, 'value' => $value, 'updated_at' => $now]);
+  }
+
+  // When update_check_schedule changes, update or remove the cron file
+  if ($key === 'update_check_schedule') {
+    CronManager::updateSchedule($value);
+  }
+
+  // When update checks are disabled entirely, also remove the cron file
+  if ($key === 'enable_update_checks' && $value === '0') {
+    CronManager::removeSchedule();
+    // Reset schedule setting to disabled
+    $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', ['update_check_schedule']);
+    if ($existing) {
+      $db->update('settings', ['value' => 'disabled', 'updated_at' => $now], 'key = ?', ['update_check_schedule']);
+    }
   }
 
   jsonResponse(['success' => true, 'key' => $key, 'value' => $value]);

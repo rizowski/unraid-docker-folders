@@ -79,6 +79,14 @@ function handlePost()
   $db = Database::getInstance();
   $containers = $dockerClient->listContainers(true);
 
+  // Load exclude patterns from settings
+  $excludePatterns = [];
+  $excludeRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'update_check_exclude'");
+  if ($excludeRow && !empty($excludeRow['value'])) {
+    $excludePatterns = array_map('trim', explode(',', $excludeRow['value']));
+    $excludePatterns = array_filter($excludePatterns, function ($p) { return $p !== ''; });
+  }
+
   // Collect unique images
   $uniqueImages = [];
   foreach ($containers as $container) {
@@ -92,6 +100,15 @@ function handlePost()
   $results = [];
 
   foreach ($uniqueImages as $imageName => $imageId) {
+    // Skip excluded images
+    $excluded = false;
+    foreach ($excludePatterns as $pattern) {
+      if (fnmatch($pattern, $imageName)) {
+        $excluded = true;
+        break;
+      }
+    }
+    if ($excluded) continue;
     $check = $dockerClient->checkImageUpdate($imageName, $imageId);
 
     // Upsert into database

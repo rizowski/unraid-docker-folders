@@ -19,6 +19,10 @@ $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
 $enableUpdateChecks = ($settings['enable_update_checks'] ?? '0') === '1';
+$updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
+$notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
+$updateCheckExclude = $settings['update_check_exclude'] ?? '';
+$postPullAction = $settings['post_pull_action'] ?? 'pull_only';
 
 // Parse CHANGELOG.md — extract the latest version section
 $changelogHtml = '';
@@ -187,6 +191,38 @@ if (file_exists($changelogPath)) {
   cursor: pointer;
 }
 
+.setting-control select {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.setting-control textarea {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  min-width: 240px;
+  min-height: 60px;
+  resize: vertical;
+}
+
+.update-settings {
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  overflow: hidden;
+}
+
+.update-settings.hidden {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .save-status {
   font-size: 12px;
   color: #4caf50;
@@ -303,8 +339,64 @@ if (file_exists($changelogPath)) {
         <div class="description">When enabled, a button appears in the header to check Docker registries for newer images. Containers with available updates show an "Update" badge and can be pulled directly. <strong>Default: Off</strong></div>
       </div>
       <div class="setting-control">
-        <input type="checkbox" id="enable-update-checks" <?= $enableUpdateChecks ? 'checked' : '' ?> onchange="saveSetting('enable_update_checks', this.checked ? '1' : '0')" />
+        <input type="checkbox" id="enable-update-checks" <?= $enableUpdateChecks ? 'checked' : '' ?> onchange="toggleUpdateSettings(this.checked)" />
         <span id="save-status-enable-update-checks" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div id="update-settings" class="update-settings <?= $enableUpdateChecks ? '' : 'hidden' ?>">
+      <div class="setting-row">
+        <div class="setting-info">
+          <label for="update-check-schedule">Automatic check schedule</label>
+          <div class="description">How often to automatically check registries for image updates in the background.</div>
+        </div>
+        <div class="setting-control">
+          <select id="update-check-schedule" onchange="saveSetting('update_check_schedule', this.value)">
+            <option value="disabled" <?= $updateCheckSchedule === 'disabled' ? 'selected' : '' ?>>Disabled</option>
+            <option value="hourly" <?= $updateCheckSchedule === 'hourly' ? 'selected' : '' ?>>Hourly</option>
+            <option value="daily" <?= $updateCheckSchedule === 'daily' ? 'selected' : '' ?>>Daily (3 AM)</option>
+            <option value="twice_daily" <?= $updateCheckSchedule === 'twice_daily' ? 'selected' : '' ?>>Twice Daily (3 AM &amp; 3 PM)</option>
+            <option value="weekly" <?= $updateCheckSchedule === 'weekly' ? 'selected' : '' ?>>Weekly (Sunday 3 AM)</option>
+          </select>
+          <span id="save-status-update-check-schedule" class="save-status">Saved</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <label for="notify-on-updates">Notify on updates</label>
+          <div class="description">Send an Unraid notification when background checks find new container updates.</div>
+        </div>
+        <div class="setting-control">
+          <input type="checkbox" id="notify-on-updates" <?= $notifyOnUpdates ? 'checked' : '' ?> onchange="saveSetting('notify_on_updates', this.checked ? '1' : '0')" />
+          <span id="save-status-notify-on-updates" class="save-status">Saved</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <label for="post-pull-action">Post-pull behavior</label>
+          <div class="description">What to do after pulling an updated image. "Pull only" requires manual apply. "Offer restart" shows a restart button. "Auto recreate" recreates the container automatically.</div>
+        </div>
+        <div class="setting-control">
+          <select id="post-pull-action" onchange="saveSetting('post_pull_action', this.value)">
+            <option value="pull_only" <?= $postPullAction === 'pull_only' ? 'selected' : '' ?>>Pull only (manual apply)</option>
+            <option value="pull_and_offer_restart" <?= $postPullAction === 'pull_and_offer_restart' ? 'selected' : '' ?>>Pull + offer restart</option>
+            <option value="pull_and_auto_recreate" <?= $postPullAction === 'pull_and_auto_recreate' ? 'selected' : '' ?>>Pull + auto recreate</option>
+          </select>
+          <span id="save-status-post-pull-action" class="save-status">Saved</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <label for="update-check-exclude">Excluded images</label>
+          <div class="description">Comma-separated image names or glob patterns to skip during update checks. Example: <code>linuxserver/plex:*,redis:*</code></div>
+        </div>
+        <div class="setting-control">
+          <textarea id="update-check-exclude" rows="3" onchange="saveSetting('update_check_exclude', this.value)"><?= htmlspecialchars($updateCheckExclude) ?></textarea>
+          <span id="save-status-update-check-exclude" class="save-status">Saved</span>
+        </div>
       </div>
     </div>
   </div>
@@ -332,5 +424,20 @@ function saveSetting(key, value) {
     }
   };
   xhr.send(body);
+}
+
+function toggleUpdateSettings(enabled) {
+  saveSetting('enable_update_checks', enabled ? '1' : '0');
+  var section = document.getElementById('update-settings');
+  if (section) {
+    if (enabled) {
+      section.classList.remove('hidden');
+    } else {
+      section.classList.add('hidden');
+      // Reset schedule to disabled when turning off update checks
+      var scheduleEl = document.getElementById('update-check-schedule');
+      if (scheduleEl) scheduleEl.value = 'disabled';
+    }
+  }
 }
 </script>

@@ -60,6 +60,9 @@
       <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1" :class="runningCount > 0 ? 'bg-primary text-primary-text' : 'bg-border text-text-secondary'" :title="`${runningCount} running / ${folder.containers.length} total`">
         {{ runningCount }}/{{ folder.containers.length }}
       </span>
+      <span v-if="folderUpdateCount > 0" class="inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1 bg-warning/20 text-warning" :title="`${folderUpdateCount} update(s) available`">
+        {{ folderUpdateCount }} update{{ folderUpdateCount > 1 ? 's' : '' }}
+      </span>
       <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
       <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0">
@@ -137,6 +140,7 @@ import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
+import { useUpdatesStore } from '@/stores/updates';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import type { Folder } from '@/types/folder';
@@ -162,16 +166,33 @@ const emit = defineEmits<{
   'toggle-hide-stopped': [];
   edit: [];
   delete: [];
+  'update-folder': [];
 }>();
 
-const folderMenuItems: KebabMenuItem[] = [
+const updatesStore = useUpdatesStore();
+
+const folderUpdateCount = computed(() => {
+  if (!settingsStore.enableUpdateChecks) return 0;
+  let count = 0;
+  for (const assoc of props.folder.containers) {
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
+    if (container && updatesStore.hasUpdate(container.image)) {
+      count++;
+    }
+  }
+  return count;
+});
+
+const folderMenuItems = computed<KebabMenuItem[]>(() => [
+  { label: `Update (${folderUpdateCount.value})`, icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update-folder', class: 'text-warning hover:text-warning', show: folderUpdateCount.value > 0 },
   { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'edit' },
   { label: 'Delete', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'delete', class: 'hover:text-error' },
-];
+]);
 
 function handleMenuSelect(action: string) {
   if (action === 'edit') emit('edit');
   else if (action === 'delete') emit('delete');
+  else if (action === 'update-folder') emit('update-folder');
 }
 
 const dockerStore = useDockerStore();

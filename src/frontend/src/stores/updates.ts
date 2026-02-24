@@ -5,6 +5,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { apiFetch } from '@/utils/csrf';
+import { useSettingsStore } from '@/stores/settings';
+import { useDockerStore } from '@/stores/docker';
 
 export interface ImageUpdateStatus {
   image: string;
@@ -17,17 +19,39 @@ export interface ImageUpdateStatus {
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
+/** Simple glob matching (supports * and ?) */
+function globMatch(pattern: string, str: string): boolean {
+  const regex = new RegExp(
+    '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$',
+  );
+  return regex.test(str);
+}
+
 export const useUpdatesStore = defineStore('updates', () => {
   const updates = ref<Record<string, ImageUpdateStatus>>({});
   const checking = ref(false);
   const lastChecked = ref<number | null>(null);
 
+  function isExcluded(imageName: string): boolean {
+    const settingsStore = useSettingsStore();
+    const excludeStr = settingsStore.updateCheckExclude;
+    if (!excludeStr) return false;
+    const patterns = excludeStr.split(',').map((p) => p.trim()).filter(Boolean);
+    return patterns.some((pattern) => globMatch(pattern, imageName));
+  }
+
   const updatesAvailableCount = computed(() => {
-    return Object.values(updates.value).filter((u) => u.update_available).length;
+    return Object.values(updates.value).filter((u) => u.update_available && !isExcluded(u.image)).length;
   });
 
   function hasUpdate(imageName: string): boolean {
+    if (isExcluded(imageName)) return false;
     return updates.value[imageName]?.update_available ?? false;
+  }
+
+  function getContainersWithUpdates() {
+    const dockerStore = useDockerStore();
+    return dockerStore.containers.filter((c) => hasUpdate(c.image));
   }
 
   async function fetchCachedUpdates() {
@@ -76,6 +100,8 @@ export const useUpdatesStore = defineStore('updates', () => {
     lastChecked,
     updatesAvailableCount,
     hasUpdate,
+    isExcluded,
+    getContainersWithUpdates,
     fetchCachedUpdates,
     checkForUpdates,
     clearUpdateForImage,

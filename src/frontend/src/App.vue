@@ -87,6 +87,14 @@
           </template>
         </button>
         <button
+          v-if="settingsStore.enableUpdateChecks && updatesStore.updatesAvailableCount > 0"
+          @click="handleUpdateAll"
+          class="nav-btn warning"
+          title="Update all containers with available updates"
+        >
+          Update All ({{ updatesStore.updatesAvailableCount }})
+        </button>
+        <button
           @click="openCreateFolderModal"
           class="nav-btn active"
         >
@@ -118,6 +126,7 @@
             @edit="openEditFolderModal"
             @delete="deleteFolder"
             @pull="handlePull"
+            @update-folder="handleUpdateFolder"
           />
         </div>
 
@@ -183,7 +192,7 @@
     <!-- Folder Edit Modal -->
     <FolderEditModal :is-open="isModalOpen" :folder="editingFolder" @close="closeModal" @save="saveFolder" />
 
-    <!-- Pull Progress Modal -->
+    <!-- Pull Progress Modal (single container) -->
     <PullProgressModal
       :is-open="!!pullingContainer"
       :image="pullingContainer?.image ?? ''"
@@ -191,6 +200,14 @@
       :managed="pullingContainer?.managed ?? null"
       @close="pullingContainer = null"
       @complete="handlePullComplete"
+    />
+
+    <!-- Batch Pull Progress Modal -->
+    <BatchPullProgressModal
+      :is-open="batchPullContainers.length > 0"
+      :containers="batchPullContainers"
+      @close="handleBatchPullClose"
+      @complete="handleBatchPullComplete"
     />
 
     <Teleport to="body">
@@ -202,6 +219,14 @@
         variant="danger"
         @confirm="confirmDeleteFolder"
         @cancel="deletingFolderId = null"
+      />
+      <ConfirmModal
+        :is-open="showBatchConfirm"
+        title="Update Containers"
+        :message="`Pull updates for ${pendingBatchContainers.length} container(s)? This will download newer images from the registry.`"
+        confirm-label="Update"
+        @confirm="confirmBatchPull"
+        @cancel="showBatchConfirm = false; pendingBatchContainers = []"
       />
     </Teleport>
   </div>
@@ -221,6 +246,7 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ConnectionStatus from '@/components/ConnectionStatus.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
+import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
 
@@ -232,6 +258,9 @@ const updatesStore = useUpdatesStore();
 
 const actionInProgress = ref<{ id: string; action: string } | null>(null);
 const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
+const batchPullContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
+const showBatchConfirm = ref(false);
+const pendingBatchContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
@@ -443,6 +472,49 @@ async function handlePullComplete(image: string) {
   updatesStore.clearUpdateForImage(image);
   await dockerStore.fetchContainers(true);
   await updatesStore.fetchCachedUpdates();
+}
+
+function handleUpdateAll() {
+  const containersWithUpdates = updatesStore.getContainersWithUpdates().map((c) => ({
+    image: c.image,
+    name: c.name,
+    managed: c.managed,
+  }));
+  if (containersWithUpdates.length === 0) return;
+  pendingBatchContainers.value = containersWithUpdates;
+  showBatchConfirm.value = true;
+}
+
+function handleUpdateFolder(folder: Folder) {
+  const containersWithUpdates: { image: string; name: string; managed: string | null }[] = [];
+  for (const assoc of folder.containers) {
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
+    if (container && updatesStore.hasUpdate(container.image)) {
+      containersWithUpdates.push({ image: container.image, name: container.name, managed: container.managed });
+    }
+  }
+  if (containersWithUpdates.length === 0) return;
+  pendingBatchContainers.value = containersWithUpdates;
+  showBatchConfirm.value = true;
+}
+
+function confirmBatchPull() {
+  showBatchConfirm.value = false;
+  batchPullContainers.value = [...pendingBatchContainers.value];
+  pendingBatchContainers.value = [];
+}
+
+async function handleBatchPullComplete() {
+  // Refresh data after batch pull completes
+  await dockerStore.fetchContainers(true);
+  await updatesStore.fetchCachedUpdates();
+}
+
+function handleBatchPullClose() {
+  batchPullContainers.value = [];
+  // Clear update flags for successfully pulled images
+  dockerStore.fetchContainers(true);
+  updatesStore.fetchCachedUpdates();
 }
 
 function openCreateFolderModal() {

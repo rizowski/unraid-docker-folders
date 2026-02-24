@@ -352,6 +352,10 @@ const settings: Record<string, string> = {
   theme: 'auto',
   distinguish_healthy: '1',
   enable_update_checks: '0',
+  update_check_schedule: 'disabled',
+  notify_on_updates: '0',
+  update_check_exclude: '',
+  post_pull_action: 'pull_only',
 };
 
 async function handleSettings(req: any, res: any) {

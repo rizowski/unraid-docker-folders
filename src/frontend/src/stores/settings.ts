@@ -14,6 +14,10 @@ export const useSettingsStore = defineStore('settings', () => {
   const replaceDockerSection = ref(false);
   const showFolderPorts = ref(true);
   const enableUpdateChecks = ref(false);
+  const updateCheckSchedule = ref('disabled');
+  const notifyOnUpdates = ref(false);
+  const updateCheckExclude = ref('');
+  const postPullAction = ref('pull_only');
   const loaded = ref(false);
 
   async function fetchSettings() {
@@ -38,6 +42,18 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('enable_update_checks' in settings) {
         enableUpdateChecks.value = settings.enable_update_checks === '1';
+      }
+      if ('update_check_schedule' in settings) {
+        updateCheckSchedule.value = settings.update_check_schedule || 'disabled';
+      }
+      if ('notify_on_updates' in settings) {
+        notifyOnUpdates.value = settings.notify_on_updates === '1';
+      }
+      if ('update_check_exclude' in settings) {
+        updateCheckExclude.value = settings.update_check_exclude || '';
+      }
+      if ('post_pull_action' in settings) {
+        postPullAction.value = settings.post_pull_action || 'pull_only';
       }
 
       loaded.value = true;
@@ -98,6 +114,58 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setUpdateCheckSchedule(value: string) {
+    updateCheckSchedule.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'update_check_schedule', value }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setNotifyOnUpdates(value: boolean) {
+    notifyOnUpdates.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'notify_on_updates', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setUpdateCheckExclude(value: string) {
+    updateCheckExclude.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'update_check_exclude', value }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setPostPullAction(value: string) {
+    postPullAction.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'post_pull_action', value }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
   async function setReplaceDockerSection(value: boolean) {
     replaceDockerSection.value = value;
 
@@ -117,12 +185,20 @@ export const useSettingsStore = defineStore('settings', () => {
     replaceDockerSection,
     showFolderPorts,
     enableUpdateChecks,
+    updateCheckSchedule,
+    notifyOnUpdates,
+    updateCheckExclude,
+    postPullAction,
     loaded,
     fetchSettings,
     setDistinguishHealthy,
     setShowStats,
     setShowFolderPorts,
     setEnableUpdateChecks,
+    setUpdateCheckSchedule,
+    setNotifyOnUpdates,
+    setUpdateCheckExclude,
+    setPostPullAction,
     setReplaceDockerSection,
   };
 });

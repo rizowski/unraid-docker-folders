@@ -222,6 +222,12 @@ find "${PLUGIN_DIR}" -type f -name "*.page" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.php" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.sql" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.sh" -exec chmod 755 {} \;
+
+# Make cron check script executable
+if [ -f "${PLUGIN_DIR}/scripts/check-updates.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/check-updates.php"
+  echo "  check-updates.php made executable"
+fi
 find "${PLUGIN_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.js" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.css" -exec chmod 644 {} \;
@@ -324,6 +330,12 @@ CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
 echo "========================================="
 echo "Removing ${PLUGIN_NAME}"
 echo "========================================="
+
+# Remove cron file if it exists
+if [ -f "/etc/cron.d/${PLUGIN_NAME}" ]; then
+  echo "Removing cron schedule..."
+  rm -f "/etc/cron.d/${PLUGIN_NAME}"
+fi
 
 # Backup data before removal
 if [ -f "${CONFIG_DIR}/data.db" ]; then
