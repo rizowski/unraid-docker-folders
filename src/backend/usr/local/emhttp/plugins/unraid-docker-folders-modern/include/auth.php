@@ -16,9 +16,13 @@
  *
  * @return string The raw request body
  */
-function getRawBody()
+function getRawBody($testOverride = null)
 {
   static $body = null;
+  if ($testOverride !== null) {
+    $body = $testOverride;
+    return $body;
+  }
   if ($body === null) {
     $body = file_get_contents('php://input') ?: '';
   }
@@ -64,9 +68,9 @@ function validateSession()
  *
  * @return string|null The system CSRF token
  */
-function getSystemCsrfToken()
+function getSystemCsrfToken($varIniPath = null)
 {
-  $varIni = '/var/local/emhttp/var.ini';
+  $varIni = $varIniPath ?? '/var/local/emhttp/var.ini';
   if (!file_exists($varIni)) {
     return null;
   }
