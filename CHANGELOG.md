@@ -2,6 +2,7 @@
 
 ## 2026.02.24
 ### Changes
+- Fix form controls using nonexistent --input-background variable
 - Fix dropdown text color on dark themes in settings page
 - Revamp settings page: dark theme, grouped sections, container exclude modal
 - Fix auth: read Unraid's Flask session cookie instead of PHP session
