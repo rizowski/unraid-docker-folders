@@ -16,11 +16,20 @@ final class AuthTest extends TestCase
 
     protected function setUp(): void
     {
+        // Fully destroy any leftover session from a previous test
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
+
+        // Force a fresh session ID so no previous session file is reused
+        session_id(bin2hex(random_bytes(8)));
+
         // Reset superglobals
         $_SERVER = [];
         $_COOKIE = [];
         $_POST = [];
         $_GET = [];
+        $_SESSION = [];
 
         // Reset getRawBody() cache
         getRawBody('');
@@ -34,6 +43,9 @@ final class AuthTest extends TestCase
 
     protected function tearDown(): void
     {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_destroy();
+        }
         if (file_exists(self::VAR_INI_PATH)) {
             unlink(self::VAR_INI_PATH);
         }
@@ -174,6 +186,72 @@ final class AuthTest extends TestCase
     {
         // Only one part (no dots) — count($parts) < 2
         $_COOKIE['session'] = 'justastring';
+        $this->assertFalse(validateSession());
+    }
+
+    // ---------------------------------------------------------------
+    // validateSession() — Unraid PHP session cookie (unraid_<md5>)
+    // ---------------------------------------------------------------
+
+    #[Test]
+    public function validateSession_returns_true_with_valid_unraid_session_cookie(): void
+    {
+        $sessionName = 'unraid_3b607542904e9e476ee1c8b91c7e6929';
+
+        // Create a real PHP session with csrf_token
+        session_name($sessionName);
+        session_start();
+        $_SESSION['csrf_token'] = 'some_csrf_token';
+        $sessionId = session_id();
+        session_write_close();
+
+        // Reset state — simulate a fresh request with only the cookie
+        $_SESSION = [];
+        $_COOKIE = [$sessionName => $sessionId];
+
+        $this->assertTrue(validateSession());
+    }
+
+    #[Test]
+    public function validateSession_returns_false_with_unraid_cookie_but_no_csrf_in_session(): void
+    {
+        $sessionName = 'unraid_aaaabbbbccccddddeeeeffffaaaabbbb';
+
+        // Create a session without csrf_token
+        session_name($sessionName);
+        session_start();
+        $_SESSION['user'] = 'admin';
+        $sessionId = session_id();
+        session_write_close();
+
+        $_SESSION = [];
+        $_COOKIE = [$sessionName => $sessionId];
+
+        $this->assertFalse(validateSession());
+    }
+
+    #[Test]
+    public function validateSession_returns_false_with_unraid_cookie_and_invalid_session_id(): void
+    {
+        $sessionName = 'unraid_aaaabbbbccccddddeeeeffffaaaabbbb';
+        $_COOKIE = [$sessionName => 'bogus_session_id_that_does_not_exist'];
+
+        $this->assertFalse(validateSession());
+    }
+
+    #[Test]
+    public function validateSession_ignores_non_unraid_cookies(): void
+    {
+        // ca_apps_referrer should NOT be treated as a session cookie
+        $_COOKIE = ['ca_apps_referrer' => 'false'];
+        $this->assertFalse(validateSession());
+    }
+
+    #[Test]
+    public function validateSession_ignores_unraid_cookie_with_wrong_hash_length(): void
+    {
+        // Too short — not a valid md5 hash
+        $_COOKIE = ['unraid_abc123' => 'some_session_id'];
         $this->assertFalse(validateSession());
     }
 
