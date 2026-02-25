@@ -351,7 +351,7 @@ const settings: Record<string, string> = {
   show_stats: '1',
   theme: 'auto',
   distinguish_healthy: '1',
-  enable_update_checks: '0',
+  enable_update_checks: '1',
   update_check_schedule: 'disabled',
   notify_on_updates: '0',
   update_check_exclude: '',
@@ -430,7 +430,32 @@ function handleStats(_req: any, res: any, params: Record<string, string>) {
 
 // --- Updates mock ---
 
-const mockUpdateChecks: Record<string, any> = {};
+const mockUpdateChecks: Record<string, any> = {
+  'linuxserver/plex:latest': {
+    image: 'linuxserver/plex:latest',
+    local_digest: 'linuxserver/plex:latest@sha256:abc123old',
+    remote_digest: 'sha256:def456new',
+    update_available: true,
+    checked_at: Math.floor(Date.now() / 1000) - 3600,
+    error: null,
+  },
+  'postgres:16-alpine': {
+    image: 'postgres:16-alpine',
+    local_digest: 'postgres:16-alpine@sha256:pg123old',
+    remote_digest: 'sha256:pg456new',
+    update_available: true,
+    checked_at: Math.floor(Date.now() / 1000) - 3600,
+    error: null,
+  },
+  'grafana/grafana:latest': {
+    image: 'grafana/grafana:latest',
+    local_digest: 'grafana/grafana:latest@sha256:graf123old',
+    remote_digest: 'sha256:graf456new',
+    update_available: true,
+    checked_at: Math.floor(Date.now() / 1000) - 3600,
+    error: null,
+  },
+};
 
 function handleUpdates(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {

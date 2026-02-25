@@ -24,6 +24,12 @@ $notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
 $updateCheckExclude = $settings['update_check_exclude'] ?? '';
 $postPullAction = $settings['post_pull_action'] ?? 'pull_only';
 
+// Count excluded images for display
+$excludeCount = 0;
+if (!empty($updateCheckExclude)) {
+  $excludeCount = count(array_filter(array_map('trim', explode(',', $updateCheckExclude)), function($p) { return $p !== ''; }));
+}
+
 // Parse CHANGELOG.md — extract the latest version section
 $changelogHtml = '';
 $changelogPath = PLUGIN_DIR . '/CHANGELOG.md';
@@ -69,11 +75,11 @@ if (file_exists($changelogPath)) {
   }
 
   if ($sections) {
-    $changelogHtml .= '<h3 style="margin:0 0 10px 0;font-size:16px;color:#333;">Latest Changes — ' . htmlspecialchars($changelogVersion ?? '') . '</h3>';
+    $changelogHtml .= '<h3 class="changelog-title">Latest Changes &mdash; ' . htmlspecialchars($changelogVersion ?? '') . '</h3>';
     foreach ($sections as $sec) {
-      $changelogHtml .= '<p style="margin:8px 0 4px;font-weight:600;font-size:13px;color:#555;">' . htmlspecialchars($sec['title']) . '</p><ul style="margin:0 0 0 16px;padding:0;font-size:13px;color:#666;">';
+      $changelogHtml .= '<p class="changelog-section">' . htmlspecialchars($sec['title']) . '</p><ul class="changelog-list">';
       foreach ($sec['items'] as $item) {
-        $changelogHtml .= '<li style="margin:2px 0;">' . $item . '</li>';
+        $changelogHtml .= '<li>' . $item . '</li>';
       }
       $changelogHtml .= '</ul>';
     }
@@ -86,7 +92,7 @@ if (file_exists($changelogPath)) {
   max-width: 800px;
   margin: 20px auto;
   padding: 20px;
-  background: white;
+  background: var(--background-color, white);
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
@@ -94,43 +100,55 @@ if (file_exists($changelogPath)) {
 .settings-header {
   margin-bottom: 30px;
   padding-bottom: 20px;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 2px solid var(--border-color, #e0e0e0);
 }
 
 .settings-header h1 {
   margin: 0 0 10px 0;
   font-size: 28px;
-  color: #333;
+  color: var(--text-color, #333);
 }
 
 .settings-header p {
   margin: 0;
-  color: #666;
+  color: color-mix(in srgb, var(--text-color, #333) 65%, transparent);
   font-size: 14px;
 }
 
 .info-box {
-  background: #f5f5f5;
-  border-left: 4px solid #2196f3;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
+  border-left: 4px solid #4caf50;
   padding: 15px;
   margin-bottom: 20px;
   border-radius: 4px;
 }
 
-.info-box h3 {
+.info-box .changelog-title {
   margin: 0 0 10px 0;
   font-size: 16px;
-  color: #333;
+  color: var(--text-color, #333);
 }
 
-.info-box p {
-  margin: 5px 0;
-  font-size: 14px;
-  color: #666;
+.info-box .changelog-section {
+  margin: 8px 0 4px;
+  font-weight: 600;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--text-color, #333) 75%, transparent);
+}
+
+.info-box .changelog-list {
+  margin: 0 0 0 16px;
+  padding: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--text-color, #333) 65%, transparent);
+}
+
+.info-box .changelog-list li {
+  margin: 2px 0;
 }
 
 .info-box code {
-  background: white;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
   padding: 2px 6px;
   border-radius: 3px;
   font-family: 'Courier New', monospace;
@@ -138,17 +156,36 @@ if (file_exists($changelogPath)) {
 }
 
 .settings-section {
-  background: #f5f5f5;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
   border-left: 4px solid #4caf50;
   padding: 15px;
   margin-bottom: 20px;
   border-radius: 4px;
 }
 
+.settings-section.beta {
+  border-left-color: #ff9800;
+}
+
 .settings-section h3 {
   margin: 0 0 15px 0;
   font-size: 16px;
-  color: #333;
+  color: var(--text-color, #333);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.badge-beta {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: #ff9800;
+  color: #fff;
+  border-radius: 4px;
 }
 
 .setting-row {
@@ -156,7 +193,7 @@ if (file_exists($changelogPath)) {
   align-items: center;
   justify-content: space-between;
   padding: 10px 0;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
 }
 
 .setting-row:last-child {
@@ -171,14 +208,18 @@ if (file_exists($changelogPath)) {
   display: block;
   font-weight: 500;
   font-size: 14px;
-  color: #333;
+  color: var(--text-color, #333);
   cursor: pointer;
 }
 
 .setting-info .description {
   font-size: 12px;
-  color: #888;
+  color: color-mix(in srgb, var(--text-color, #333) 55%, transparent);
   margin-top: 2px;
+}
+
+.setting-info .description strong {
+  color: color-mix(in srgb, var(--text-color, #333) 70%, transparent);
 }
 
 .setting-control {
@@ -193,23 +234,13 @@ if (file_exists($changelogPath)) {
 
 .setting-control select {
   padding: 6px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
   font-size: 13px;
-  background: white;
+  background: var(--input-background, white);
+  color: var(--text-color, #333);
   cursor: pointer;
   min-width: 160px;
-}
-
-.setting-control textarea {
-  padding: 6px 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: 'Courier New', monospace;
-  min-width: 240px;
-  min-height: 60px;
-  resize: vertical;
 }
 
 .update-settings {
@@ -253,21 +284,255 @@ if (file_exists($changelogPath)) {
 }
 
 .btn-primary {
-  background: #2196f3;
-  color: white;
+  background: var(--header-background, #2196f3);
+  color: var(--header-text-color, white);
 }
 
 .btn-primary:hover {
-  background: #1976d2;
+  filter: brightness(0.9);
 }
 
 .btn-secondary {
-  background: #e0e0e0;
-  color: #333;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 12%, transparent);
+  color: var(--text-color, #333);
 }
 
 .btn-secondary:hover {
-  background: #d0d0d0;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 18%, transparent);
+}
+
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 13px;
+}
+
+/* Exclude selector */
+.exclude-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.exclude-count {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--text-color, #333) 65%, transparent);
+}
+
+/* Modal */
+.exclude-modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  justify-content: center;
+  align-items: center;
+}
+
+.exclude-modal-overlay.open {
+  display: flex;
+}
+
+.exclude-modal {
+  background: var(--background-color, white);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  max-width: 520px;
+  width: 90%;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.exclude-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+}
+
+.exclude-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-color, #333);
+}
+
+.exclude-modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--text-color, #333) 50%, transparent);
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.exclude-modal-close:hover {
+  color: var(--text-color, #333);
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+}
+
+.exclude-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.exclude-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--input-background, white);
+  color: var(--text-color, #333);
+  margin-bottom: 12px;
+  box-sizing: border-box;
+}
+
+.exclude-search::placeholder {
+  color: color-mix(in srgb, var(--text-color, #333) 40%, transparent);
+}
+
+.exclude-list {
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.exclude-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #e0e0e0);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.exclude-item:last-child {
+  border-bottom: none;
+}
+
+.exclude-item:hover {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
+}
+
+.exclude-item.checked {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+}
+
+.exclude-item input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.exclude-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.exclude-item-image {
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  color: var(--text-color, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exclude-item-containers {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text-color, #333) 55%, transparent);
+  margin-top: 1px;
+}
+
+.exclude-empty {
+  padding: 20px;
+  text-align: center;
+  color: color-mix(in srgb, var(--text-color, #333) 50%, transparent);
+  font-size: 13px;
+}
+
+.exclude-custom-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.exclude-custom-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--text-color, #333) 65%, transparent);
+  margin-bottom: 6px;
+}
+
+.exclude-custom-row {
+  display: flex;
+  gap: 8px;
+}
+
+.exclude-custom-input {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  background: var(--input-background, white);
+  color: var(--text-color, #333);
+  box-sizing: border-box;
+}
+
+.exclude-custom-input::placeholder {
+  color: color-mix(in srgb, var(--text-color, #333) 40%, transparent);
+}
+
+.exclude-custom-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.exclude-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: 'Courier New', monospace;
+  color: var(--text-color, #333);
+}
+
+.exclude-tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text-color, #333) 50%, transparent);
+  padding: 0 2px;
+}
+
+.exclude-tag-remove:hover {
+  color: #f44336;
+}
+
+.exclude-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color, #e0e0e0);
 }
 </style>
 
@@ -281,13 +546,14 @@ if (file_exists($changelogPath)) {
   </div>
 
   <?php if ($changelogHtml): ?>
-  <div class="info-box" style="border-left-color: #4caf50;">
+  <div class="info-box">
     <?= $changelogHtml ?>
   </div>
   <?php endif; ?>
 
+  <!-- Display Settings -->
   <div class="settings-section">
-    <h3>Display Settings</h3>
+    <h3>Display</h3>
 
     <div class="setting-row">
       <div class="setting-info">
@@ -332,11 +598,16 @@ if (file_exists($changelogPath)) {
         <span id="save-status-show-folder-ports" class="save-status">Saved</span>
       </div>
     </div>
+  </div>
+
+  <!-- Image Updates (Beta) -->
+  <div class="settings-section beta">
+    <h3>Image Updates <span class="badge-beta">Beta</span></h3>
 
     <div class="setting-row">
       <div class="setting-info">
         <label for="enable-update-checks">Enable image update checks</label>
-        <div class="description">When enabled, a button appears in the header to check Docker registries for newer images. Containers with available updates show an "Update" badge and can be pulled directly. <strong>Default: Off</strong></div>
+        <div class="description">Check Docker registries for newer images. Containers with available updates show an "Update" badge. Images are never pulled automatically &mdash; only digest comparison is performed. <strong>Default: Off</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="enable-update-checks" <?= $enableUpdateChecks ? 'checked' : '' ?> onchange="toggleUpdateSettings(this.checked)" />
@@ -390,12 +661,15 @@ if (file_exists($changelogPath)) {
 
       <div class="setting-row">
         <div class="setting-info">
-          <label for="update-check-exclude">Excluded images</label>
-          <div class="description">Comma-separated image names or glob patterns to skip during update checks. Example: <code>linuxserver/plex:*,redis:*</code></div>
+          <label>Excluded images</label>
+          <div class="description">Images excluded from update checks. Select containers or add custom glob patterns.</div>
         </div>
         <div class="setting-control">
-          <textarea id="update-check-exclude" rows="3" onchange="saveSetting('update_check_exclude', this.value)"><?= htmlspecialchars($updateCheckExclude) ?></textarea>
-          <span id="save-status-update-check-exclude" class="save-status">Saved</span>
+          <div class="exclude-summary">
+            <span id="exclude-count" class="exclude-count"><?= $excludeCount > 0 ? $excludeCount . ' excluded' : 'None' ?></span>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openExcludeModal()">Manage</button>
+            <span id="save-status-update-check-exclude" class="save-status">Saved</span>
+          </div>
         </div>
       </div>
     </div>
@@ -405,6 +679,34 @@ if (file_exists($changelogPath)) {
     <a href="https://github.com/rizowski/unraid-docker-folders" class="btn btn-secondary" target="_blank">
       View on GitHub
     </a>
+  </div>
+</div>
+
+<!-- Exclude Images Modal -->
+<div id="exclude-modal" class="exclude-modal-overlay" onclick="if(event.target===this)closeExcludeModal()">
+  <div class="exclude-modal">
+    <div class="exclude-modal-header">
+      <h3>Exclude Images from Update Checks</h3>
+      <button class="exclude-modal-close" onclick="closeExcludeModal()">&times;</button>
+    </div>
+    <div class="exclude-modal-body">
+      <input type="text" id="exclude-search" class="exclude-search" placeholder="Filter images..." oninput="filterExcludeList()" />
+      <div id="exclude-list" class="exclude-list">
+        <div class="exclude-empty">Loading containers...</div>
+      </div>
+      <div class="exclude-custom-section">
+        <label>Custom glob patterns</label>
+        <div class="exclude-custom-row">
+          <input type="text" id="exclude-custom-input" class="exclude-custom-input" placeholder="e.g. linuxserver/*:latest" onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomPattern()}" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addCustomPattern()">Add</button>
+        </div>
+        <div id="exclude-custom-tags" class="exclude-custom-tags"></div>
+      </div>
+    </div>
+    <div class="exclude-modal-footer">
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeExcludeModal()">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" onclick="saveExclusions()">Save</button>
+    </div>
   </div>
 </div>
 
@@ -439,5 +741,193 @@ function toggleUpdateSettings(enabled) {
       if (scheduleEl) scheduleEl.value = 'disabled';
     }
   }
+}
+
+// --- Exclude Modal ---
+
+var excludeModalImages = []; // { image, containers[] }
+var excludeChecked = new Set();
+var excludeCustom = [];
+
+function getCurrentExclusions() {
+  // Parse from the PHP-provided value
+  var raw = <?= json_encode($updateCheckExclude) ?>;
+  return raw ? raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean) : [];
+}
+
+function isGlobPattern(str) {
+  return str.indexOf('*') !== -1 || str.indexOf('?') !== -1;
+}
+
+function openExcludeModal() {
+  var modal = document.getElementById('exclude-modal');
+  modal.classList.add('open');
+
+  var current = getCurrentExclusions();
+
+  // Separate exact image names from glob patterns
+  excludeCustom = current.filter(isGlobPattern);
+  var exactExcludes = new Set(current.filter(function(p) { return !isGlobPattern(p); }));
+
+  excludeChecked = exactExcludes;
+  renderCustomTags();
+
+  // Fetch containers
+  var csrfToken = (typeof window.csrf_token === 'string') ? window.csrf_token : '';
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', '/plugins/unraid-docker-folders-modern/api/containers.php?csrf_token=' + encodeURIComponent(csrfToken), true);
+  xhr.onload = function() {
+    try {
+      var data = JSON.parse(xhr.responseText);
+      var containers = data.containers || [];
+
+      // Group by image
+      var imageMap = {};
+      containers.forEach(function(c) {
+        if (!imageMap[c.image]) {
+          imageMap[c.image] = [];
+        }
+        imageMap[c.image].push(c.name);
+      });
+
+      excludeModalImages = Object.keys(imageMap).sort().map(function(image) {
+        return { image: image, containers: imageMap[image] };
+      });
+
+      // Pre-check images that match current exclusions (including glob)
+      excludeModalImages.forEach(function(item) {
+        if (exactExcludes.has(item.image)) {
+          excludeChecked.add(item.image);
+        } else {
+          // Check if any glob pattern matches
+          for (var i = 0; i < excludeCustom.length; i++) {
+            if (globMatch(excludeCustom[i], item.image)) {
+              excludeChecked.add(item.image);
+              break;
+            }
+          }
+        }
+      });
+
+      renderExcludeList();
+    } catch (e) {
+      document.getElementById('exclude-list').innerHTML = '<div class="exclude-empty">Error loading containers</div>';
+    }
+  };
+  xhr.onerror = function() {
+    document.getElementById('exclude-list').innerHTML = '<div class="exclude-empty">Error loading containers</div>';
+  };
+  xhr.send();
+}
+
+function closeExcludeModal() {
+  document.getElementById('exclude-modal').classList.remove('open');
+  document.getElementById('exclude-search').value = '';
+}
+
+function globMatch(pattern, str) {
+  var regex = new RegExp('^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*?').replace(/\?/g, '.') + '$');
+  return regex.test(str);
+}
+
+function renderExcludeList() {
+  var list = document.getElementById('exclude-list');
+  var search = document.getElementById('exclude-search').value.toLowerCase();
+
+  var filtered = excludeModalImages.filter(function(item) {
+    if (!search) return true;
+    return item.image.toLowerCase().indexOf(search) !== -1 ||
+           item.containers.some(function(c) { return c.toLowerCase().indexOf(search) !== -1; });
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div class="exclude-empty">' + (search ? 'No matching images' : 'No containers found') + '</div>';
+    return;
+  }
+
+  var html = '';
+  filtered.forEach(function(item) {
+    var checked = excludeChecked.has(item.image);
+    html += '<div class="exclude-item' + (checked ? ' checked' : '') + '" onclick="toggleExclude(\'' + escapeHtml(item.image) + '\')">';
+    html += '<input type="checkbox" ' + (checked ? 'checked' : '') + ' onclick="event.stopPropagation();toggleExclude(\'' + escapeHtml(item.image) + '\')" />';
+    html += '<div class="exclude-item-info">';
+    html += '<div class="exclude-item-image">' + escapeHtml(item.image) + '</div>';
+    html += '<div class="exclude-item-containers">Used by: ' + item.containers.map(escapeHtml).join(', ') + '</div>';
+    html += '</div></div>';
+  });
+
+  list.innerHTML = html;
+}
+
+function toggleExclude(image) {
+  if (excludeChecked.has(image)) {
+    excludeChecked.delete(image);
+  } else {
+    excludeChecked.add(image);
+  }
+  renderExcludeList();
+}
+
+function filterExcludeList() {
+  renderExcludeList();
+}
+
+function addCustomPattern() {
+  var input = document.getElementById('exclude-custom-input');
+  var pattern = input.value.trim();
+  if (!pattern) return;
+  if (excludeCustom.indexOf(pattern) === -1) {
+    excludeCustom.push(pattern);
+    renderCustomTags();
+  }
+  input.value = '';
+}
+
+function removeCustomPattern(idx) {
+  excludeCustom.splice(idx, 1);
+  renderCustomTags();
+}
+
+function renderCustomTags() {
+  var container = document.getElementById('exclude-custom-tags');
+  if (excludeCustom.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  var html = '';
+  excludeCustom.forEach(function(p, i) {
+    html += '<span class="exclude-tag">' + escapeHtml(p) + ' <button class="exclude-tag-remove" onclick="removeCustomPattern(' + i + ')">&times;</button></span>';
+  });
+  container.innerHTML = html;
+}
+
+function saveExclusions() {
+  // Combine checked images + custom patterns
+  var all = [];
+  excludeChecked.forEach(function(image) {
+    all.push(image);
+  });
+  excludeCustom.forEach(function(pattern) {
+    if (all.indexOf(pattern) === -1) {
+      all.push(pattern);
+    }
+  });
+
+  var value = all.join(',');
+  saveSetting('update_check_exclude', value);
+
+  // Update the displayed count
+  var countEl = document.getElementById('exclude-count');
+  if (countEl) {
+    countEl.textContent = all.length > 0 ? all.length + ' excluded' : 'None';
+  }
+
+  closeExcludeModal();
+}
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
 }
 </script>
