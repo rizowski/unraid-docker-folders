@@ -2,6 +2,7 @@
 
 ## 2026.02.24
 ### Changes
+- Revamp settings page: dark theme, grouped sections, container exclude modal
 - Fix auth: read Unraid's Flask session cookie instead of PHP session
 - Fix iframe auth: add credentials to all fetch calls, aggregate changelog by date
 - chore: update build script
