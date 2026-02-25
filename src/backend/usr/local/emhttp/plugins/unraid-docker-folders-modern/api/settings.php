@@ -58,7 +58,8 @@ function handlePost()
   $db = Database::getInstance();
 
   // Parse body — supports form-encoded payload field or direct JSON
-  $body = file_get_contents('php://input');
+  // Use getRawBody() (cached in auth.php) since php://input can only be read once
+  $body = getRawBody();
   $data = null;
 
   if (isset($_POST['payload'])) {

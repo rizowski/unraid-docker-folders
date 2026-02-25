@@ -32,10 +32,11 @@ function getRequestData()
     return json_decode($_POST['payload'], true);
   }
 
-  $raw = file_get_contents('php://input');
+  // Use getRawBody() (cached in auth.php) since php://input can only be read once
+  $raw = getRawBody();
 
   // Check if the raw body is URL-encoded (contains payload= field)
-  if (strpos($raw, 'payload=') !== false) {
+  if ($raw && strpos($raw, 'payload=') !== false) {
     parse_str($raw, $parsed);
     if (isset($parsed['payload'])) {
       return json_decode($parsed['payload'], true);

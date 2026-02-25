@@ -780,7 +780,7 @@ function openExcludeModal() {
   // Fetch containers
   var csrfToken = (typeof window.csrf_token === 'string') ? window.csrf_token : '';
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', '/plugins/unraid-docker-folders-modern/api/containers.php?csrf_token=' + encodeURIComponent(csrfToken), true);
+  xhr.open('GET', '/plugins/unraid-docker-folders-modern/api/containers.php', true);
   xhr.onload = function() {
     try {
       var data = JSON.parse(xhr.responseText);

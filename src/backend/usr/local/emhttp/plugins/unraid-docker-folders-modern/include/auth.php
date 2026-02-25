@@ -10,6 +10,22 @@
  */
 
 /**
+ * Read and cache php://input so it can be accessed multiple times.
+ * PHP only allows reading php://input once per request, so this
+ * caches it for both CSRF validation and API request data parsing.
+ *
+ * @return string The raw request body
+ */
+function getRawBody()
+{
+  static $body = null;
+  if ($body === null) {
+    $body = file_get_contents('php://input') ?: '';
+  }
+  return $body;
+}
+
+/**
  * Validate that the user has a valid Unraid session.
  *
  * Unraid stores its session in a Flask-style signed cookie named "session".
@@ -64,6 +80,9 @@ function getSystemCsrfToken()
  * POST: Already validated by Unraid's local_prepend.php before our code runs.
  * PUT/DELETE: We validate manually against the system token from var.ini.
  *
+ * NOTE: $_GET['csrf_token'] is NOT checked — Unraid does not support
+ * CSRF tokens via query parameters.
+ *
  * @return bool True if CSRF token is valid
  */
 function validateCsrfToken()
@@ -85,10 +104,18 @@ function validateCsrfToken()
     return false;
   }
 
-  $token = $_SERVER['HTTP_X_CSRF_TOKEN']
-    ?? $_POST['csrf_token']
-    ?? $_GET['csrf_token']
-    ?? null;
+  // Check header first
+  $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+
+  // PHP only populates $_POST for POST requests, not PUT/DELETE.
+  // Parse the cached raw body to extract the csrf_token field.
+  if ($token === null) {
+    $raw = getRawBody();
+    if ($raw && strpos($raw, 'csrf_token=') !== false) {
+      parse_str($raw, $parsed);
+      $token = $parsed['csrf_token'] ?? null;
+    }
+  }
 
   if ($token === null) {
     return false;
