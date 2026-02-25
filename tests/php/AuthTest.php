@@ -213,11 +213,12 @@ final class AuthTest extends TestCase
     }
 
     #[Test]
-    public function validateSession_returns_false_with_unraid_cookie_but_no_csrf_in_session(): void
+    public function validateSession_returns_true_with_unraid_cookie_and_any_session_data(): void
     {
         $sessionName = 'unraid_aaaabbbbccccddddeeeeffffaaaabbbb';
 
-        // Create a session without csrf_token
+        // Create a session with auth data but no csrf_token
+        // (csrf_token is added at runtime by local_prepend.php, not stored in file)
         session_name($sessionName);
         session_start();
         $_SESSION['user'] = 'admin';
@@ -227,7 +228,7 @@ final class AuthTest extends TestCase
         $_SESSION = [];
         $_COOKIE = [$sessionName => $sessionId];
 
-        $this->assertFalse(validateSession());
+        $this->assertTrue(validateSession());
     }
 
     #[Test]

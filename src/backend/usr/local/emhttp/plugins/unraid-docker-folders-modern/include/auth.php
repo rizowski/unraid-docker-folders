@@ -46,13 +46,16 @@ function validateSession()
   }
 
   // Method 2: Resume Unraid PHP session from unraid_* cookie
-  // Unraid's session cookie is named "unraid_<32-char md5 hash>"
+  // Unraid's session cookie is named "unraid_<32-char md5 hash>".
+  // The session file tracks auth state but csrf_token is added at
+  // runtime by local_prepend.php (from var.ini), not stored in the file.
+  // A non-empty session means the user authenticated via Unraid login.
   if (session_status() !== PHP_SESSION_ACTIVE) {
     foreach ($_COOKIE as $name => $value) {
       if (preg_match('/^unraid_[a-f0-9]{32}$/', $name)) {
         session_name($name);
         session_start(['read_and_close' => true]);
-        if (!empty($_SESSION['csrf_token'])) {
+        if (!empty($_SESSION)) {
           return true;
         }
         break;
