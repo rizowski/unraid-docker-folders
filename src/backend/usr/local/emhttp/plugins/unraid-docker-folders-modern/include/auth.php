@@ -10,21 +10,36 @@
  */
 
 /**
- * Validate that the user has a valid Unraid session
+ * Validate that the user has a valid Unraid session.
+ *
+ * Unraid stores its session in a Flask-style signed cookie named "session".
+ * The payload is base64url-encoded JSON containing {"csrf_token": "..."}.
+ * PHP's native session (PHPSESSID) is NOT used by Unraid, so we decode
+ * the Flask cookie directly.
  *
  * @return bool True if session is valid
  */
 function validateSession()
 {
-  if (session_status() === PHP_SESSION_NONE) {
-    session_start();
+  // Method 1: PHP session (if local_prepend.php populated it)
+  if (session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['csrf_token'])) {
+    return true;
   }
 
-  if (!isset($_SESSION['csrf_token'])) {
-    return false;
+  // Method 2: Unraid's Flask-style "session" cookie
+  // Format: base64url(json_payload).timestamp.signature
+  if (!empty($_COOKIE['session'])) {
+    $parts = explode('.', $_COOKIE['session']);
+    if (count($parts) >= 2) {
+      $payload = base64_decode(strtr($parts[0], '-_', '+/'));
+      $data = json_decode($payload, true);
+      if (is_array($data) && !empty($data['csrf_token'])) {
+        return true;
+      }
+    }
   }
 
-  return true;
+  return false;
 }
 
 /**
