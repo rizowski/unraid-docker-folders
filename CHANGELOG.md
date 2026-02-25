@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.02.24
+### Changes
+- Harden API endpoints: enable auth, add input validation, fix injection patterns
+- Add container update rework: cron scheduling, batch pulls, folder badges, exclude list
+
 ## 2026.02.23-9
 ### Changes
 - Remove Plugin Information section from settings page
