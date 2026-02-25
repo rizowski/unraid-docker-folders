@@ -32,6 +32,7 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+.phpunit.result.cache
 
 # Database (for local development)
 *.db
