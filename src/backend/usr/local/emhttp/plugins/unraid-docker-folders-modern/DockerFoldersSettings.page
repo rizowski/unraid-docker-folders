@@ -30,6 +30,15 @@ if (!empty($updateCheckExclude)) {
   $excludeCount = count(array_filter(array_map('trim', explode(',', $updateCheckExclude)), function($p) { return $p !== ''; }));
 }
 
+// Read update check log (last 100 lines)
+$updateLog = '';
+$updateLogPath = CONFIG_DIR . '/update-check.log';
+if (file_exists($updateLogPath)) {
+  $lines = file($updateLogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+  $lines = array_slice($lines, -100);
+  $updateLog = implode("\n", $lines);
+}
+
 // Parse CHANGELOG.md — extract the latest version section
 $changelogHtml = '';
 $changelogPath = PLUGIN_DIR . '/CHANGELOG.md';
@@ -539,6 +548,63 @@ if (file_exists($changelogPath)) {
   padding: 12px 20px;
   border-top: 1px solid var(--border-color, #e0e0e0);
 }
+
+/* Log viewer */
+.log-viewer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--text-color, #333) 65%, transparent);
+  padding: 4px 0;
+}
+
+.log-viewer-toggle:hover {
+  color: var(--text-color, #333);
+}
+
+.log-viewer-toggle .arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 10px;
+}
+
+.log-viewer-toggle .arrow.open {
+  transform: rotate(90deg);
+}
+
+.log-viewer {
+  display: none;
+  margin-top: 10px;
+}
+
+.log-viewer.open {
+  display: block;
+}
+
+.log-content {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 10%, transparent);
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-color, #333);
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.log-empty {
+  color: color-mix(in srgb, var(--text-color, #333) 45%, transparent);
+  font-style: italic;
+}
 </style>
 
 <div class="settings-container">
@@ -675,6 +741,15 @@ if (file_exists($changelogPath)) {
             <button type="button" class="btn btn-secondary btn-sm" onclick="openExcludeModal()">Manage</button>
             <span id="save-status-update-check-exclude" class="save-status">Saved</span>
           </div>
+        </div>
+      </div>
+
+      <div style="padding-top: 10px;">
+        <button type="button" class="log-viewer-toggle" onclick="toggleLog()">
+          <span id="log-arrow" class="arrow">&#9654;</span> Update check log
+        </button>
+        <div id="log-viewer" class="log-viewer">
+          <div id="log-content" class="log-content"><?php if ($updateLog): ?><?= htmlspecialchars($updateLog) ?><?php else: ?><span class="log-empty">No log entries yet. Logs appear after the first scheduled or manual update check.</span><?php endif; ?></div>
         </div>
       </div>
     </div>
@@ -934,6 +1009,18 @@ function escapeHtml(str) {
   var div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function toggleLog() {
+  var viewer = document.getElementById('log-viewer');
+  var arrow = document.getElementById('log-arrow');
+  var isOpen = viewer.classList.toggle('open');
+  arrow.classList.toggle('open', isOpen);
+  if (isOpen) {
+    // Scroll to bottom to show latest entries
+    var content = document.getElementById('log-content');
+    content.scrollTop = content.scrollHeight;
+  }
 }
 
 // Detect dark theme from computed background color and set color-scheme

@@ -19,6 +19,10 @@ define('BACKUP_DIR', CONFIG_DIR . '/backups');
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
 
+// Logging
+define('UPDATE_LOG_PATH', CONFIG_DIR . '/update-check.log');
+define('UPDATE_LOG_MAX_BYTES', 64 * 1024); // 64 KB max
+
 // Docker
 define('DOCKER_SOCKET', '/var/run/docker.sock');
 define('DOCKER_API_VERSION', 'v1.41');
