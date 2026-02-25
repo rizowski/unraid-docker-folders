@@ -2,6 +2,7 @@
 
 ## 2026.02.24
 ### Changes
+- Fix dropdown text color on dark themes in settings page
 - Revamp settings page: dark theme, grouped sections, container exclude modal
 - Fix auth: read Unraid's Flask session cookie instead of PHP session
 - Fix iframe auth: add credentials to all fetch calls, aggregate changelog by date
