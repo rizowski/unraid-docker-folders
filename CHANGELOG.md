@@ -2,6 +2,7 @@
 
 ## 2026.02.24
 ### Changes
+- Fix session validation for Unraid's custom session cookie
 - Add Docker-based PHPUnit tests for auth layer
 - Fix PUT/DELETE CSRF validation and folder collapse persistence
 - Fix form controls using nonexistent --input-background variable
