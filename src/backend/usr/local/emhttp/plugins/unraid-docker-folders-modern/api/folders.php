@@ -15,9 +15,7 @@ require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 // Set JSON content type
 header('Content-Type: application/json');
 
-// For development/testing, allow unauthenticated access
-// TODO: Uncomment for production
-// requireAuth();
+requireAuth();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $folderManager = new FolderManager();
@@ -54,20 +52,16 @@ try {
       break;
 
     case 'POST':
-      // TODO: Uncomment for production
-      // requireCsrf();
       handlePost($folderManager);
       break;
 
     case 'PUT':
-      // TODO: Uncomment for production
-      // requireCsrf();
+      requireCsrf();
       handlePut($folderManager);
       break;
 
     case 'DELETE':
-      // TODO: Uncomment for production
-      // requireCsrf();
+      requireCsrf();
       handleDelete($folderManager);
       break;
 

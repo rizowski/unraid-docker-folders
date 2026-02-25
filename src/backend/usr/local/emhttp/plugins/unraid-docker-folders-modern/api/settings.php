@@ -16,6 +16,8 @@ header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
+requireAuth();
+
 try {
   switch ($method) {
     case 'GET':
@@ -35,7 +37,7 @@ try {
   }
 } catch (Exception $e) {
   error_log('Settings API error: ' . $e->getMessage());
-  errorResponse($e->getMessage(), 500);
+  errorResponse('Internal server error', 500);
 }
 
 function handleGet()
@@ -77,6 +79,21 @@ function handlePost()
   $key = $data['key'];
   $value = $data['value'];
   $now = time();
+
+  // Validate key against allowlist
+  $allowedKeys = [
+    'distinguish_healthy', 'show_stats', 'replace_docker_section',
+    'show_folder_ports', 'enable_update_checks', 'update_check_schedule',
+    'notify_on_updates', 'update_check_exclude', 'post_pull_action',
+  ];
+  if (!in_array($key, $allowedKeys, true)) {
+    errorResponse('Invalid settings key', 400);
+  }
+
+  // Validate value length
+  if (is_string($value) && strlen($value) > 10000) {
+    errorResponse('Value too long', 400);
+  }
 
   // Upsert: insert or update
   $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', [$key]);

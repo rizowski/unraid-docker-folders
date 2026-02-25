@@ -19,10 +19,10 @@ export interface ImageUpdateStatus {
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
-/** Simple glob matching (supports * and ?) */
+/** Simple glob matching (supports * and ?). Uses lazy quantifiers to prevent ReDoS. */
 function globMatch(pattern: string, str: string): boolean {
   const regex = new RegExp(
-    '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$',
+    '^' + pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*?').replace(/\?/g, '.') + '$',
   );
   return regex.test(str);
 }

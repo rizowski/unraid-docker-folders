@@ -17,6 +17,8 @@ header('Content-Type: application/json');
 
 $method = $_SERVER['REQUEST_METHOD'];
 
+requireAuth();
+
 try {
   switch ($method) {
     case 'GET':
@@ -36,7 +38,7 @@ try {
   }
 } catch (Exception $e) {
   error_log('Updates API error: ' . $e->getMessage());
-  errorResponse($e->getMessage(), 500);
+  errorResponse('Internal server error', 500);
 }
 
 /**

@@ -104,7 +104,8 @@ WebSocketPublisher::publish('updates', 'checked');
 // Send Unraid notification if new updates were found
 if ($newUpdatesCount > 0 && $notifyEnabled) {
   $s = $newUpdatesCount === 1 ? '' : 's';
-  exec("/usr/local/emhttp/webGui/scripts/notify -s 'Docker Folders' -d '{$newUpdatesCount} container update{$s} available' -i normal");
+  $msg = escapeshellarg("{$newUpdatesCount} container update{$s} available");
+  exec("/usr/local/emhttp/webGui/scripts/notify -s 'Docker Folders' -d {$msg} -i normal");
 }
 
 exit(0);

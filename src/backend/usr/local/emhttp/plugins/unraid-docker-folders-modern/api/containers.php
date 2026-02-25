@@ -16,9 +16,7 @@ require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 // Set JSON content type
 header('Content-Type: application/json');
 
-// For development/testing, allow unauthenticated access
-// TODO: Uncomment for production
-// requireAuth();
+requireAuth();
 
 $method = $_SERVER['REQUEST_METHOD'];
 $dockerClient = new DockerClient();
@@ -30,8 +28,6 @@ try {
       break;
 
     case 'POST':
-      // TODO: Uncomment for production
-      // requireCsrf();
       handlePost($dockerClient);
       break;
 

@@ -79,7 +79,7 @@
                     <span class="text-xs text-text-secondary">{{ c.name }}</span>
                     <a
                       v-if="c.managed === 'dockerman'"
-                      :href="`/Docker/UpdateContainer?xmlTemplate=edit:/boot/config/plugins/dockerMan/templates-user/my-${c.name}.xml`"
+                      :href="`/Docker/UpdateContainer?xmlTemplate=edit:${encodeURIComponent('/boot/config/plugins/dockerMan/templates-user/my-' + c.name + '.xml')}`"
                       class="text-xs text-primary hover:underline"
                     >Apply Update</a>
                   </div>

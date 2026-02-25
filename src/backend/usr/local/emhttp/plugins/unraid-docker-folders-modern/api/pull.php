@@ -15,6 +15,8 @@ require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 
+requireAuth();
+
 if ($method !== 'POST') {
   header('Content-Type: application/json');
   errorResponse('Method not allowed', 405);
@@ -25,6 +27,12 @@ $image = $_GET['image'] ?? null;
 if (!$image) {
   header('Content-Type: application/json');
   errorResponse('Image parameter is required', 400);
+}
+
+// Validate image name format
+if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._\/:@-]+$/', $image) || strlen($image) > 255) {
+  header('Content-Type: application/json');
+  errorResponse('Invalid image name', 400);
 }
 
 // Set SSE headers
