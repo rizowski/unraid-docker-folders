@@ -2,6 +2,7 @@
 
 ## 2026.02.24
 ### Changes
+- Fix auth: read Unraid's Flask session cookie instead of PHP session
 - Fix iframe auth: add credentials to all fetch calls, aggregate changelog by date
 - chore: update build script
 - Harden API endpoints: enable auth, add input validation, fix injection patterns

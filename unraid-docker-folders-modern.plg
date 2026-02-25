@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.24-2">
-<!ENTITY md5 "757c33cf8954dff1872d764aed05e7b1">
+<!ENTITY version "2026.02.24-3">
+<!ENTITY md5 "1a734b6470693782ab8a4c23fb61d75d">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -21,6 +21,9 @@
 **Docker Folders Modern** — Organize your Docker containers into drag-and-drop folders with a modern Vue 3 interface, live resource stats, and real-time updates.
 
 
+
+###2026.02.24-3
+- Fix auth: read Unraid's Flask session cookie instead of PHP session
 ###2026.02.24-2
 - Fix iframe auth: add credentials to all fetch calls, aggregate changelog by date
 - chore: update build script
