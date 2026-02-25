@@ -237,14 +237,14 @@ if (file_exists($changelogPath)) {
   border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
   font-size: 13px;
-  background: var(--input-background, white);
+  background: color-mix(in srgb, var(--background-color, white), var(--text-color, #1a1a1a) 8%);
   color: var(--text-color, #333);
   cursor: pointer;
   min-width: 160px;
 }
 
 .setting-control select option {
-  background: var(--input-background, white);
+  background: var(--background-color, white);
   color: var(--text-color, #333);
 }
 
@@ -391,7 +391,7 @@ if (file_exists($changelogPath)) {
   border: 1px solid var(--border-color, #ccc);
   border-radius: 4px;
   font-size: 13px;
-  background: var(--input-background, white);
+  background: color-mix(in srgb, var(--background-color, white), var(--text-color, #1a1a1a) 8%);
   color: var(--text-color, #333);
   margin-bottom: 12px;
   box-sizing: border-box;
@@ -490,7 +490,7 @@ if (file_exists($changelogPath)) {
   border-radius: 4px;
   font-size: 13px;
   font-family: 'Courier New', monospace;
-  background: var(--input-background, white);
+  background: color-mix(in srgb, var(--background-color, white), var(--text-color, #1a1a1a) 8%);
   color: var(--text-color, #333);
   box-sizing: border-box;
 }
