@@ -99,7 +99,7 @@ export const useDockerStore = defineStore('docker', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/containers.php`);
+      const response = await apiFetch(`${API_BASE}/containers.php`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

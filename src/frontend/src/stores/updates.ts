@@ -56,7 +56,7 @@ export const useUpdatesStore = defineStore('updates', () => {
 
   async function fetchCachedUpdates() {
     try {
-      const response = await fetch(`${API_BASE}/updates.php`);
+      const response = await apiFetch(`${API_BASE}/updates.php`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       updates.value = data.updates || {};

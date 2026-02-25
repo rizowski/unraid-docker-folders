@@ -10,6 +10,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { apiFetch } from '@/utils/csrf';
 
 export interface ContainerStats {
   cpuPercent: number;
@@ -54,7 +55,7 @@ export const useStatsStore = defineStore('stats', () => {
 
     loading.value = true;
     try {
-      const response = await fetch(`${API_BASE}/stats.php?ids=${ids.join(',')}`);
+      const response = await apiFetch(`${API_BASE}/stats.php?ids=${ids.join(',')}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       const incoming = data.stats || {};

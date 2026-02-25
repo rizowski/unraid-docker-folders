@@ -44,7 +44,7 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await fetch(`${API_BASE}/folders.php`);
+      const response = await apiFetch(`${API_BASE}/folders.php`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -252,7 +252,7 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function exportConfiguration(): Promise<FolderExportConfig | null> {
     try {
-      const response = await fetch(`${API_BASE}/folders.php?action=export`);
+      const response = await apiFetch(`${API_BASE}/folders.php?action=export`);
 
       if (!response.ok) {
         throw new Error(`Failed to export configuration`);

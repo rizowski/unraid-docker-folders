@@ -108,6 +108,7 @@ echo -e "${GREEN}✓${NC} Frontend built successfully"
 echo ""
 
 # Generate CHANGELOG.md from git tags (release builds only)
+# Groups all same-day releases (e.g. 2026.02.23, 2026.02.23-2, ...-9) into one section.
 if [ "$BUILD_TYPE" == "release" ]; then
   echo -e "${YELLOW}[3/${TOTAL_STEPS}]${NC} Generating CHANGELOG.md..."
   cd "$PROJECT_ROOT"
@@ -119,47 +120,89 @@ if [ "$BUILD_TYPE" == "release" ]; then
   # Get all tags sorted by version (newest first)
   TAGS=($(git tag -l --sort=-version:refname))
 
-  for i in "${!TAGS[@]}"; do
-    TAG="${TAGS[$i]}"
-    # Strip "v" prefix for display
-    TAG_VERSION="${TAG#v}"
+  # Helper: strip -N build suffix to get base date
+  strip_build_number() {
+    echo "$1" | sed 's/-[0-9]*$//'
+  }
 
-    echo "## ${TAG_VERSION}" >> "$CHANGELOG_FILE"
-    echo "### Changes" >> "$CHANGELOG_FILE"
+  CURRENT_BASE_DATE=$(strip_build_number "$VERSION")
 
-    # Get commits between this tag and the next older tag
-    if [ $((i + 1)) -lt ${#TAGS[@]} ]; then
-      PREV_TAG="${TAGS[$((i + 1))]}"
-      COMMITS=$(git log "${PREV_TAG}..${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
-    else
-      # Oldest tag - get all commits up to this tag
-      COMMITS=$(git log "${TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
-    fi
-
-    if [ -n "$COMMITS" ]; then
-      echo "$COMMITS" >> "$CHANGELOG_FILE"
-    else
-      echo "- Release ${TAG_VERSION}" >> "$CHANGELOG_FILE"
-    fi
-
-    echo "" >> "$CHANGELOG_FILE"
-  done
-
-  # Add unreleased commits (between latest tag and HEAD) as the current version
+  # Collect unreleased commits (between latest tag and HEAD)
+  UNRELEASED=""
   if [ ${#TAGS[@]} -gt 0 ]; then
     UNRELEASED=$(git log "${TAGS[0]}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
-    if [ -n "$UNRELEASED" ]; then
-      # Prepend current version section before the rest
-      EXISTING=$(cat "$CHANGELOG_FILE")
-      echo "# Changelog" > "$CHANGELOG_FILE"
-      echo "" >> "$CHANGELOG_FILE"
-      echo "## ${VERSION}" >> "$CHANGELOG_FILE"
+  fi
+
+  # If unreleased commits exist and current date is NEW (doesn't match newest tag's date),
+  # write a standalone section for it at the top
+  WROTE_CURRENT=false
+  if [ -n "$UNRELEASED" ] && [ ${#TAGS[@]} -gt 0 ]; then
+    NEWEST_TAG_DATE=$(strip_build_number "${TAGS[0]#v}")
+    if [ "$CURRENT_BASE_DATE" != "$NEWEST_TAG_DATE" ]; then
+      echo "## ${CURRENT_BASE_DATE}" >> "$CHANGELOG_FILE"
       echo "### Changes" >> "$CHANGELOG_FILE"
       echo "$UNRELEASED" >> "$CHANGELOG_FILE"
       echo "" >> "$CHANGELOG_FILE"
-      # Append existing content without the "# Changelog" header
-      echo "$EXISTING" | tail -n +3 >> "$CHANGELOG_FILE"
+      WROTE_CURRENT=true
     fi
+  fi
+
+  # Iterate tags (newest first), grouping by base date.
+  # When the date changes, flush the previous group as one changelog section.
+  PREV_DATE=""
+  GROUP_END_TAG=""   # newest tag in the current date group
+
+  for i in "${!TAGS[@]}"; do
+    TAG="${TAGS[$i]}"
+    BASE_DATE=$(strip_build_number "${TAG#v}")
+
+    if [ "$BASE_DATE" != "$PREV_DATE" ]; then
+      # Flush previous date group
+      if [ -n "$PREV_DATE" ]; then
+        echo "## ${PREV_DATE}" >> "$CHANGELOG_FILE"
+        echo "### Changes" >> "$CHANGELOG_FILE"
+
+        # Commits from boundary tag (first of next date) to newest tag in this group
+        COMMITS=$(git log "${TAG}..${GROUP_END_TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
+
+        # Merge unreleased commits if this date matches the current build
+        if [ "$PREV_DATE" = "$CURRENT_BASE_DATE" ] && [ -n "$UNRELEASED" ] && [ "$WROTE_CURRENT" = false ]; then
+          echo "$UNRELEASED" >> "$CHANGELOG_FILE"
+          WROTE_CURRENT=true
+          [ -n "$COMMITS" ] && echo "$COMMITS" >> "$CHANGELOG_FILE"
+        elif [ -n "$COMMITS" ]; then
+          echo "$COMMITS" >> "$CHANGELOG_FILE"
+        else
+          echo "- Release ${PREV_DATE}" >> "$CHANGELOG_FILE"
+        fi
+
+        echo "" >> "$CHANGELOG_FILE"
+      fi
+
+      # Start new date group
+      PREV_DATE="$BASE_DATE"
+      GROUP_END_TAG="$TAG"
+    fi
+  done
+
+  # Flush the last (oldest) date group
+  if [ -n "$PREV_DATE" ]; then
+    echo "## ${PREV_DATE}" >> "$CHANGELOG_FILE"
+    echo "### Changes" >> "$CHANGELOG_FILE"
+
+    COMMITS=$(git log "${GROUP_END_TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
+
+    if [ "$PREV_DATE" = "$CURRENT_BASE_DATE" ] && [ -n "$UNRELEASED" ] && [ "$WROTE_CURRENT" = false ]; then
+      echo "$UNRELEASED" >> "$CHANGELOG_FILE"
+      WROTE_CURRENT=true
+      [ -n "$COMMITS" ] && echo "$COMMITS" >> "$CHANGELOG_FILE"
+    elif [ -n "$COMMITS" ]; then
+      echo "$COMMITS" >> "$CHANGELOG_FILE"
+    else
+      echo "- Release ${PREV_DATE}" >> "$CHANGELOG_FILE"
+    fi
+
+    echo "" >> "$CHANGELOG_FILE"
   fi
 
   echo -e "${GREEN}✓${NC} CHANGELOG.md generated"

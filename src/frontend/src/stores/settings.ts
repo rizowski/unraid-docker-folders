@@ -22,7 +22,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function fetchSettings() {
     try {
-      const response = await fetch(`${API_BASE}/settings.php`);
+      const response = await apiFetch(`${API_BASE}/settings.php`);
       if (!response.ok) return;
 
       const data = await response.json();

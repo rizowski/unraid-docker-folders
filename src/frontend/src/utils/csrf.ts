@@ -44,7 +44,7 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
   const method = (options.method || 'GET').toUpperCase();
 
   if (method === 'GET') {
-    return fetch(url, options);
+    return fetch(url, { ...options, credentials: 'include' });
   }
 
   const token = getCsrfToken();
@@ -65,6 +65,7 @@ export async function apiFetch(url: string, options: RequestInit = {}): Promise<
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
     },
+    credentials: 'include',
     body: body.toString(),
   });
 }
