@@ -2,6 +2,7 @@
 
 ## 2026.02.24
 ### Changes
+- Add update check logging with viewer in settings
 - Fix session check: csrf_token is runtime-only, not in session file
 - Fix session validation for Unraid's custom session cookie
 - Add Docker-based PHPUnit tests for auth layer
