@@ -2,6 +2,8 @@
 
 ## 2026.02.24
 ### Changes
+- Add Docker-based PHPUnit tests for auth layer
+- Fix PUT/DELETE CSRF validation and folder collapse persistence
 - Fix form controls using nonexistent --input-background variable
 - Fix dropdown text color on dark themes in settings page
 - Revamp settings page: dark theme, grouped sections, container exclude modal
