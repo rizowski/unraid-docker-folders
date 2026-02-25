@@ -316,6 +316,39 @@ if [ "$BUILD_TYPE" == "release" ]; then
       if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓${NC} PLG file updated"
 
+        # Insert release notes into PLG <CHANGES> section
+        echo "Updating PLG release notes..."
+
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          PLG_NOTES=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
+        else
+          PLG_NOTES=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG.*for release" || true)
+        fi
+
+        if [ -n "$PLG_NOTES" ]; then
+          # Write notes to a temp file for awk to read
+          NOTES_TMP=$(mktemp)
+          echo "" > "$NOTES_TMP"
+          echo "###${VERSION}" >> "$NOTES_TMP"
+          echo "$PLG_NOTES" >> "$NOTES_TMP"
+
+          # Insert before the first ###YYYY line in the PLG file
+          awk -v notesfile="$NOTES_TMP" '
+            /^###[0-9]/ && !inserted {
+              while ((getline line < notesfile) > 0) print line
+              close(notesfile)
+              inserted=1
+            }
+            { print }
+          ' "$PLG_FILE" > "${PLG_FILE}.tmp" && mv "${PLG_FILE}.tmp" "$PLG_FILE"
+
+          rm -f "$NOTES_TMP"
+          echo -e "${GREEN}✓${NC} Release notes added to PLG"
+        else
+          echo -e "${YELLOW}⚠${NC} No commits found for release notes"
+        fi
+
         # Check if there are changes to commit
         if git diff --quiet "$PLG_FILE"; then
           echo -e "${YELLOW}⚠${NC} No changes to PLG file (version/MD5 already up to date)"
