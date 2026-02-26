@@ -146,7 +146,7 @@
       <button
         v-if="container.state === 'running'"
         @click="confirmAction = 'stop'"
-        class="p-2 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Stop"
       >
@@ -157,7 +157,7 @@
       <button
         v-else
         @click="emit('start', container.id)"
-        class="p-2 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Start"
       >
@@ -168,7 +168,7 @@
       <button
         v-if="isRunning"
         @click="confirmAction = 'restart'"
-        class="p-2 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Restart"
       >
@@ -190,7 +190,7 @@
       <button
         v-if="!isRunning"
         @click="confirmAction = 'remove'"
-        class="p-2 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Remove"
       >
@@ -214,7 +214,7 @@
       <button
         v-if="hasUpdate"
         @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
-        class="p-2 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
         title="Pull Update"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -229,7 +229,7 @@
         :href="resolvedWebui"
         target="_blank"
         rel="noopener"
-        class="ml-auto p-2 rounded text-text-secondary hover:text-primary transition"
+        class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary hover:text-primary transition"
         title="Open WebUI"
         @click.stop
       >
@@ -244,7 +244,7 @@
         ref="kebabMenuRef"
         :items="menuItems"
         position="above"
-        button-class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text"
+        button-class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text"
         :class="{ 'ml-auto': !resolvedWebui || !isRunning }"
         @select="handleMenuAction"
       />
