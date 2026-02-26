@@ -2,6 +2,7 @@
 
 ## 2026.02.25
 ### Changes
+- Fix post-pull red X and add auto-recreate container support
 - Fix Database::prepare() not existing, use query() instead
 - Add PHP tests for checkAllImageUpdates update check logic
 - Fix iframe not shrinking on folder collapse, harden update loop
