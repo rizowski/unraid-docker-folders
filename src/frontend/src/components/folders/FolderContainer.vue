@@ -9,7 +9,7 @@
             v-for="assoc in folderContainers"
             :key="assoc.container_name"
             :container="getContainer(assoc.container_name)!"
-            :action-in-progress="actionInProgress?.id === getContainer(assoc.container_name)?.id ? actionInProgress!.action : null"
+            :action-in-progress="actionsInProgress.get(getContainer(assoc.container_name)?.id ?? '') ?? null"
             :view="view"
             @start="handleStart"
             @stop="handleStop"
@@ -58,7 +58,7 @@ const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
-const actionInProgress = ref<{ id: string; action: string } | null>(null);
+const actionsInProgress = ref<Map<string, string>>(new Map());
 
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
 const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
@@ -154,38 +154,38 @@ watch(() => props.folder.collapsed, () => {
 watch(() => settingsStore.showStats, () => registerCollapsedStats());
 
 async function handleStart(id: string) {
-  actionInProgress.value = { id, action: 'start' };
+  actionsInProgress.value.set(id, 'start');
   try {
     await dockerStore.startContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 
 async function handleStop(id: string) {
-  actionInProgress.value = { id, action: 'stop' };
+  actionsInProgress.value.set(id, 'stop');
   try {
     await dockerStore.stopContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 
 async function handleRestart(id: string) {
-  actionInProgress.value = { id, action: 'restart' };
+  actionsInProgress.value.set(id, 'restart');
   try {
     await dockerStore.restartContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 
 async function handleRemove(id: string) {
-  actionInProgress.value = { id, action: 'remove' };
+  actionsInProgress.value.set(id, 'remove');
   try {
     await dockerStore.removeContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 </script>

@@ -17,6 +17,10 @@ NC='\033[0m' # No Color
 # Configuration
 PLUGIN_NAME="unraid-docker-folders-modern"
 
+# Branch detection for release channels
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "main")
+IS_DEV=$( [ "$CURRENT_BRANCH" = "dev" ] && echo true || echo false )
+
 # Check for --release flag
 if [ "$1" == "--release" ]; then
   BASE_VERSION=$(date +%Y.%m.%d)
@@ -37,44 +41,68 @@ BACKEND_DIR="${PROJECT_ROOT}/src/backend"
 if [ "$BUILD_TYPE" == "release" ]; then
   mkdir -p "$ARCHIVE_DIR"
 
-  # Find existing archives for today's date
-  EXISTING_ARCHIVES=$(ls -1 "${ARCHIVE_DIR}/${PLUGIN_NAME}-${BASE_VERSION}"*.txz 2>/dev/null || true)
+  if [ "$IS_DEV" = true ]; then
+    # Dev channel: scan for *-devN.txz files, auto-increment devN
+    EXISTING_ARCHIVES=$(ls -1 "${ARCHIVE_DIR}/${PLUGIN_NAME}-${BASE_VERSION}-dev"*.txz 2>/dev/null || true)
 
-  if [ -z "$EXISTING_ARCHIVES" ]; then
-    # No existing archive for this date
-    VERSION="${BASE_VERSION}"
-    BUILD_NUMBER=1
+    if [ -z "$EXISTING_ARCHIVES" ]; then
+      BUILD_NUMBER=1
+    else
+      MAX_BUILD=0
+      for archive in $EXISTING_ARCHIVES; do
+        FILENAME=$(basename "$archive" .txz)
+        if [[ $FILENAME =~ ${PLUGIN_NAME}-${BASE_VERSION}-dev([0-9]+)$ ]]; then
+          BUILD_NUM=${BASH_REMATCH[1]}
+          if [ "$BUILD_NUM" -gt "$MAX_BUILD" ]; then
+            MAX_BUILD=$BUILD_NUM
+          fi
+        fi
+      done
+      BUILD_NUMBER=$((MAX_BUILD + 1))
+    fi
+
+    VERSION="${BASE_VERSION}-dev${BUILD_NUMBER}"
   else
-    # Find the highest build number
-    MAX_BUILD=0
+    # Stable channel: scan for YYYY.MM.DD[-N].txz (exclude dev builds)
+    EXISTING_ARCHIVES=$(ls -1 "${ARCHIVE_DIR}/${PLUGIN_NAME}-${BASE_VERSION}"*.txz 2>/dev/null | grep -v '\-dev' || true)
 
-    for archive in $EXISTING_ARCHIVES; do
-      # Extract filename without path and extension
-      FILENAME=$(basename "$archive" .txz)
+    if [ -z "$EXISTING_ARCHIVES" ]; then
+      # No existing archive for this date
+      VERSION="${BASE_VERSION}"
+      BUILD_NUMBER=1
+    else
+      # Find the highest build number
+      MAX_BUILD=0
 
-      # Check if it has a build number (format: YYYY.MM.DD-N)
-      if [[ $FILENAME =~ ${PLUGIN_NAME}-${BASE_VERSION}-([0-9]+)$ ]]; then
-        BUILD_NUM=${BASH_REMATCH[1]}
-        if [ "$BUILD_NUM" -gt "$MAX_BUILD" ]; then
-          MAX_BUILD=$BUILD_NUM
+      for archive in $EXISTING_ARCHIVES; do
+        # Extract filename without path and extension
+        FILENAME=$(basename "$archive" .txz)
+
+        # Check if it has a build number (format: YYYY.MM.DD-N)
+        if [[ $FILENAME =~ ${PLUGIN_NAME}-${BASE_VERSION}-([0-9]+)$ ]]; then
+          BUILD_NUM=${BASH_REMATCH[1]}
+          if [ "$BUILD_NUM" -gt "$MAX_BUILD" ]; then
+            MAX_BUILD=$BUILD_NUM
+          fi
+        elif [[ $FILENAME == "${PLUGIN_NAME}-${BASE_VERSION}" ]]; then
+          # First build (no build number suffix)
+          if [ "$MAX_BUILD" -lt 1 ]; then
+            MAX_BUILD=1
+          fi
         fi
-      elif [[ $FILENAME == "${PLUGIN_NAME}-${BASE_VERSION}" ]]; then
-        # First build (no build number suffix)
-        if [ "$MAX_BUILD" -lt 1 ]; then
-          MAX_BUILD=1
-        fi
-      fi
-    done
+      done
 
-    # Increment build number
-    BUILD_NUMBER=$((MAX_BUILD + 1))
-    VERSION="${BASE_VERSION}-${BUILD_NUMBER}"
+      # Increment build number
+      BUILD_NUMBER=$((MAX_BUILD + 1))
+      VERSION="${BASE_VERSION}-${BUILD_NUMBER}"
+    fi
   fi
 fi
 
+CHANNEL=$( [ "$IS_DEV" = true ] && echo "DEV" || echo "STABLE" )
 echo -e "${BLUE}========================================${NC}"
 echo -e "${BLUE}  Building ${PLUGIN_NAME} v${VERSION}${NC}"
-echo -e "${BLUE}  Build Type: ${BUILD_TYPE}${NC}"
+echo -e "${BLUE}  Build Type: ${BUILD_TYPE} [${CHANNEL}]${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
@@ -120,9 +148,9 @@ if [ "$BUILD_TYPE" == "release" ]; then
   # Get all tags sorted by version (newest first)
   TAGS=($(git tag -l --sort=-version:refname))
 
-  # Helper: strip -N build suffix to get base date
+  # Helper: strip -N or -devN build suffix to get base date
   strip_build_number() {
-    echo "$1" | sed 's/-[0-9]*$//'
+    echo "$1" | sed 's/-dev[0-9]*$//' | sed 's/-[0-9]*$//'
   }
 
   CURRENT_BASE_DATE=$(strip_build_number "$VERSION")
@@ -288,13 +316,14 @@ echo "MD5: ${MD5}"
 echo ""
 
 if [ "$BUILD_TYPE" == "release" ]; then
-  echo -e "${YELLOW}Release Build Complete${NC}"
+  echo -e "${YELLOW}[${CHANNEL}] Release Build Complete${NC}"
   if [ -n "$BUILD_NUMBER" ]; then
     echo "Build Number: ${BUILD_NUMBER}"
   fi
   echo ""
   echo -e "${GREEN}✓ Fully Automated Release Process Complete!${NC}"
   echo ""
+  echo "Channel: ${CHANNEL}"
   echo "Package: ${PLUGIN_NAME}-${VERSION}.txz (${ARCHIVE_SIZE})"
   echo "MD5: ${MD5}"
   echo ""
@@ -302,9 +331,13 @@ if [ "$BUILD_TYPE" == "release" ]; then
   echo "  https://github.com/rizowski/unraid-docker-folders/releases/tag/v${VERSION}"
   echo ""
   echo "Install on Unraid using:"
-  echo "  https://raw.githubusercontent.com/rizowski/unraid-docker-folders/main/unraid-docker-folders-modern.plg"
+  echo "  https://raw.githubusercontent.com/rizowski/unraid-docker-folders/${CURRENT_BRANCH}/unraid-docker-folders-modern.plg"
   echo ""
-  if [ "$BUILD_NUMBER" -gt 1 ]; then
+  if [ "$IS_DEV" = true ]; then
+    echo -e "${YELLOW}To promote to stable:${NC}"
+    echo "  git checkout main && git merge dev && ./build/build.sh --release"
+    echo ""
+  elif [ "$BUILD_NUMBER" -gt 1 ]; then
     echo -e "${YELLOW}Note: This is build #${BUILD_NUMBER} for ${BASE_VERSION}${NC}"
     echo "Previous builds exist in the archive directory."
     echo ""
@@ -345,15 +378,21 @@ if [ "$BUILD_TYPE" == "release" ]; then
       # Update PLG file with new version and MD5
       echo "Updating PLG file with version ${VERSION} and MD5 ${MD5}..."
 
-      # Use sed to update version and md5 entities
+      # Use sed to update version, md5, and pluginURL entities
       if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS sed syntax
         sed -i '' "s/<!ENTITY version \"[^\"]*\">/<!ENTITY version \"${VERSION}\">/" "$PLG_FILE"
         sed -i '' "s/<!ENTITY md5 \"[^\"]*\">/<!ENTITY md5 \"${MD5}\">/" "$PLG_FILE"
+        # Update pluginURL to point to current branch
+        sed -i '' "s|/main/&name;.plg|/${CURRENT_BRANCH}/\&name;.plg|" "$PLG_FILE"
+        sed -i '' "s|/dev/&name;.plg|/${CURRENT_BRANCH}/\&name;.plg|" "$PLG_FILE"
       else
         # Linux sed syntax
         sed -i "s/<!ENTITY version \"[^\"]*\">/<!ENTITY version \"${VERSION}\">/" "$PLG_FILE"
         sed -i "s/<!ENTITY md5 \"[^\"]*\">/<!ENTITY md5 \"${MD5}\">/" "$PLG_FILE"
+        # Update pluginURL to point to current branch
+        sed -i "s|/main/&name;.plg|/${CURRENT_BRANCH}/\&name;.plg|" "$PLG_FILE"
+        sed -i "s|/dev/&name;.plg|/${CURRENT_BRANCH}/\&name;.plg|" "$PLG_FILE"
       fi
 
       if [ $? -eq 0 ]; then
@@ -508,7 +547,13 @@ MD5: ${MD5}"
         fi
       else
         # Create new release
-        RELEASE_TITLE="Release ${VERSION}"
+        if [ "$IS_DEV" = true ]; then
+          RELEASE_TITLE="Dev Release ${VERSION}"
+          PRERELEASE_FLAG="--prerelease"
+        else
+          RELEASE_TITLE="Release ${VERSION}"
+          PRERELEASE_FLAG=""
+        fi
 
         # Generate changelog from commits since last tag
         LAST_TAG=$(git describe --tags --abbrev=0 HEAD~1 2>/dev/null || echo "")
@@ -518,17 +563,20 @@ MD5: ${MD5}"
           GH_COMMIT_LOG=$(git log --pretty=format:"- %s" --no-merges -20 | grep -v "^- Update PLG.*for release")
         fi
 
+        INSTALL_URL="https://raw.githubusercontent.com/rizowski/unraid-docker-folders/${CURRENT_BRANCH}/unraid-docker-folders-modern.plg"
+
         RELEASE_BODY="## Changes
 
 ${GH_COMMIT_LOG}
 
 ### Installation
 \`\`\`
-https://raw.githubusercontent.com/rizowski/unraid-docker-folders/main/unraid-docker-folders-modern.plg
+${INSTALL_URL}
 \`\`\`
 
 ### Package Details
 - **Version:** ${VERSION}
+- **Channel:** ${CHANNEL}
 - **Package:** ${PLUGIN_NAME}-${VERSION}.txz
 - **MD5:** \`${MD5}\`
 - **Size:** ${ARCHIVE_SIZE}"
@@ -536,6 +584,7 @@ https://raw.githubusercontent.com/rizowski/unraid-docker-folders/main/unraid-doc
         if gh release create "$TAG_NAME" \
           --title "$RELEASE_TITLE" \
           --notes "$RELEASE_BODY" \
+          $PRERELEASE_FLAG \
           "${ARCHIVE_PATH}"; then
           echo -e "${GREEN}✓${NC} GitHub release created: ${TAG_NAME}"
           echo -e "${GREEN}✓${NC} Package uploaded to release"

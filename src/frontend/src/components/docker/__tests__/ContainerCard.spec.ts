@@ -167,4 +167,49 @@ describe('ContainerCard', () => {
     const row = wrapper.find('.container-row');
     expect(row.classes()).not.toContain('overflow-hidden');
   });
+
+  describe('action loading states', () => {
+    it('shows spinner and status text when actionInProgress is set (grid)', () => {
+      const wrapper = mountCard({}, { actionInProgress: 'stop' });
+      expect(wrapper.find('.animate-spin').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Stopping...');
+    });
+
+    it('shows spinner and status text when actionInProgress is set (list)', () => {
+      const wrapper = mountCard({}, { actionInProgress: 'restart', view: 'list' });
+      expect(wrapper.find('.animate-spin').exists()).toBe(true);
+      expect(wrapper.text()).toContain('Restarting...');
+    });
+
+    it('hides action buttons when actionInProgress is set (grid)', () => {
+      const wrapper = mountCard({ state: 'running' }, { actionInProgress: 'stop' });
+      const stopBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Stop');
+      expect(stopBtn).toBeUndefined();
+    });
+
+    it('hides action buttons when actionInProgress is set (list)', () => {
+      const wrapper = mountCard({ state: 'running' }, { actionInProgress: 'stop', view: 'list' });
+      const stopBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Stop');
+      expect(stopBtn).toBeUndefined();
+    });
+
+    it('shows action buttons when actionInProgress is null', () => {
+      const wrapper = mountCard({ state: 'running' }, { actionInProgress: null });
+      const stopBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Stop');
+      expect(stopBtn).toBeTruthy();
+    });
+
+    it('displays correct text for each action type', () => {
+      const actions = [
+        { action: 'start', text: 'Starting...' },
+        { action: 'stop', text: 'Stopping...' },
+        { action: 'restart', text: 'Restarting...' },
+        { action: 'remove', text: 'Removing...' },
+      ];
+      for (const { action, text } of actions) {
+        const wrapper = mountCard({}, { actionInProgress: action });
+        expect(wrapper.text()).toContain(text);
+      }
+    });
+  });
 });
