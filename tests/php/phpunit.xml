@@ -11,5 +11,8 @@
     <testsuite name="DockerClientStats">
       <file>DockerClientStatsTest.php</file>
     </testsuite>
+    <testsuite name="UpdateCheck">
+      <file>UpdateCheckTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>
