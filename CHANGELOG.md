@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.02.25
+### Changes
+- Add logging to manual update checks, gitignore phpunit cache
+- chore: update gitignore
+
 ## 2026.02.24
 ### Changes
 - Add update check logging with viewer in settings
