@@ -2,6 +2,7 @@
 
 ## 2026.02.25
 ### Changes
+- Fix update checks only completing for first container
 - Fix build script bugs and improve robustness
 - Fix folder stats bars, add StatsBar tests, update project docs
 - Extract reusable components, refactor backend config and stats

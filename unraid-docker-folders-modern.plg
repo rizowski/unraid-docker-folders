@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.25-dev5">
-<!ENTITY md5 "4ee9b7255b98cf3f48d0b3aa2d19ad96">
+<!ENTITY version "2026.02.25-dev6">
+<!ENTITY md5 "225e437490459c15d75abccbb41088ae">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -33,6 +33,9 @@
 
 
 
+
+###2026.02.25-dev6
+- Fix update checks only completing for first container
 ###2026.02.25-dev5
 - Fix build script bugs and improve robustness
 ###2026.02.25-dev3
