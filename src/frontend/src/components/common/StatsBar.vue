@@ -12,7 +12,7 @@
     </div>
     <div v-else-if="size === 'inline'" class="flex items-center gap-1.5 text-[11px]">
       <span class="text-text w-7 text-right">{{ label }}</span>
-      <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
+      <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
         <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
       </div>
       <span class="text-text font-mono w-9 text-right">--</span>
@@ -43,7 +43,7 @@
     </div>
     <div v-else-if="size === 'inline'" class="flex items-center gap-1.5 text-[11px]">
       <span class="text-text w-7 text-right">{{ label }}</span>
-      <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
+      <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
         <div
           class="h-full rounded-full transition-all duration-300"
           :class="barColor"

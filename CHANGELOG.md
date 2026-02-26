@@ -2,6 +2,8 @@
 
 ## 2026.02.25
 ### Changes
+- Extract reusable components, refactor backend config and stats
+- Fix concurrent container action loading states, add dev/stable release channels
 - Add logging to manual update checks, gitignore phpunit cache
 - chore: update gitignore
 
