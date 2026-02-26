@@ -67,6 +67,25 @@ function handleGet()
 }
 
 /**
+ * Append a timestamped line to the update check log.
+ */
+function logUpdate($message)
+{
+  $line = '[' . date('Y-m-d H:i:s') . '] ' . $message . "\n";
+  file_put_contents(UPDATE_LOG_PATH, $line, FILE_APPEND | LOCK_EX);
+
+  if (file_exists(UPDATE_LOG_PATH) && filesize(UPDATE_LOG_PATH) > UPDATE_LOG_MAX_BYTES) {
+    $content = file_get_contents(UPDATE_LOG_PATH);
+    $keep = substr($content, -intval(UPDATE_LOG_MAX_BYTES * 0.75));
+    $pos = strpos($keep, "\n");
+    if ($pos !== false) {
+      $keep = substr($keep, $pos + 1);
+    }
+    file_put_contents(UPDATE_LOG_PATH, $keep, LOCK_EX);
+  }
+}
+
+/**
  * Check all container images for updates
  */
 function handlePost()
@@ -76,6 +95,8 @@ function handlePost()
   if ($action !== 'check') {
     errorResponse('Invalid action', 400);
   }
+
+  logUpdate('START Manual update check begun');
 
   $dockerClient = new DockerClient();
   $db = Database::getInstance();
@@ -99,7 +120,13 @@ function handlePost()
     }
   }
 
+  logUpdate('INFO Found ' . count($containers) . ' container(s), ' . count($uniqueImages) . ' unique image(s)');
+
   $results = [];
+  $checkedCount = 0;
+  $skippedCount = 0;
+  $errorCount = 0;
+  $updateCount = 0;
 
   foreach ($uniqueImages as $imageName => $imageId) {
     // Skip excluded images
@@ -110,8 +137,24 @@ function handlePost()
         break;
       }
     }
-    if ($excluded) continue;
+    if ($excluded) {
+      logUpdate('SKIP ' . $imageName . ' (excluded)');
+      $skippedCount++;
+      continue;
+    }
+
     $check = $dockerClient->checkImageUpdate($imageName, $imageId);
+    $checkedCount++;
+
+    if ($check['error']) {
+      logUpdate('ERROR ' . $imageName . ': ' . $check['error']);
+      $errorCount++;
+    } elseif ($check['update_available']) {
+      logUpdate('UPDATE ' . $imageName . ': update available');
+      $updateCount++;
+    } else {
+      logUpdate('OK ' . $imageName . ': up to date');
+    }
 
     // Upsert into database
     $stmt = $db->prepare(
@@ -135,6 +178,8 @@ function handlePost()
       'error' => $check['error'],
     ];
   }
+
+  logUpdate('DONE Checked ' . $checkedCount . ', skipped ' . $skippedCount . ', errors ' . $errorCount . ', updates ' . $updateCount);
 
   WebSocketPublisher::publish('updates', 'checked');
 
