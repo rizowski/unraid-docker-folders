@@ -2,15 +2,6 @@
 
 declare(strict_types=1);
 
-// SQLite3 constants needed by checkAllImageUpdates() for bindValue() calls.
-// The stubs ignore them, but PHP still evaluates the constant references.
-if (!defined('SQLITE3_TEXT')) {
-    define('SQLITE3_TEXT', 3);
-}
-if (!defined('SQLITE3_INTEGER')) {
-    define('SQLITE3_INTEGER', 1);
-}
-
 // Load config.php (defines constants + checkAllImageUpdates function)
 require_once __DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
 
@@ -57,19 +48,6 @@ class MockDockerClient extends DockerClient
     }
 }
 
-class StubStatement
-{
-    public function bindValue(string $param, mixed $value, int $type = 0): bool
-    {
-        return true;
-    }
-
-    public function execute(): mixed
-    {
-        return true;
-    }
-}
-
 class StubDatabase
 {
     private array $settings = [];
@@ -89,9 +67,9 @@ class StubDatabase
         return false;
     }
 
-    public function prepare(string $sql): StubStatement
+    public function query(string $sql, array $params = []): mixed
     {
-        return new StubStatement();
+        return true;
     }
 }
 
