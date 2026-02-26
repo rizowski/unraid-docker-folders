@@ -85,15 +85,49 @@ try {
   if ($success) {
     // Clear update_available flag in database
     $db = Database::getInstance();
-    $stmt = $db->prepare(
-      'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image'
+    $db->query(
+      'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image',
+      [':image' => $image, ':now' => time()]
     );
-    $stmt->bindValue(':image', $image, SQLITE3_TEXT);
-    $stmt->bindValue(':now', time(), SQLITE3_INTEGER);
-    $stmt->execute();
 
     WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
     WebSocketPublisher::publish('container', 'updated');
+
+    // Check post_pull_action setting for auto-recreate
+    $postPullAction = 'pull_only';
+    $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['post_pull_action']);
+    if ($row && !empty($row['value'])) {
+      $postPullAction = $row['value'];
+    }
+
+    if ($postPullAction === 'pull_and_auto_recreate') {
+      // Find all containers using this image and recreate them
+      $containers = $dockerClient->listContainers(true);
+      $matchingContainers = [];
+      foreach ($containers as $container) {
+        if ($container['image'] === $image) {
+          $matchingContainers[] = $container;
+        }
+      }
+
+      foreach ($matchingContainers as $container) {
+        $cName = $container['name'];
+        $cId = $container['id'];
+
+        sendSSE('recreating', ['container' => $cName, 'message' => "Recreating {$cName}..."]);
+
+        $recreateResult = $dockerClient->recreateContainer($cId);
+
+        if ($recreateResult['success']) {
+          sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
+        } else {
+          sendSSE('recreate_error', [
+            'container' => $cName,
+            'message' => "Failed to recreate {$cName}: " . ($recreateResult['error'] ?? 'Unknown error'),
+          ]);
+        }
+      }
+    }
 
     sendSSE('complete', ['message' => 'Pull complete', 'image' => $image]);
   } else {

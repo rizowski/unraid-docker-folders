@@ -57,8 +57,23 @@
             {{ errorMessage }}
           </div>
 
-          <!-- Apply update link for dockerMan containers -->
-          <div v-if="isComplete && managed === 'dockerman'" class="pt-2 border-t border-border">
+          <!-- Recreate progress -->
+          <div v-if="recreateStatus" class="flex items-center gap-2 text-sm">
+            <svg v-if="recreateStatus === 'recreating'" class="animate-spin h-4 w-4 text-primary shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            <svg v-else-if="recreateStatus === 'recreated'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success shrink-0">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-error shrink-0">
+              <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+            </svg>
+            <span class="text-text">{{ recreateMessage }}</span>
+          </div>
+
+          <!-- Apply update link for dockerMan containers (only in offer_restart mode) -->
+          <div v-if="isComplete && managed === 'dockerman' && postPullAction === 'pull_and_offer_restart'" class="pt-2 border-t border-border">
             <a
               :href="applyUpdateUrl"
               class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-text rounded text-sm font-medium no-underline hover:brightness-110 transition"
@@ -70,6 +85,11 @@
               Apply Update
             </a>
             <p class="text-xs text-text-secondary mt-1.5">Opens Unraid's container update page to apply the new image.</p>
+          </div>
+
+          <!-- Pull-only hint -->
+          <div v-if="isComplete && postPullAction === 'pull_only'" class="pt-2 border-t border-border">
+            <p class="text-xs text-text-secondary">Image pulled. Restart the container to apply the update.</p>
           </div>
         </div>
 
@@ -90,6 +110,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { getCsrfToken } from '@/utils/csrf';
+import { useSettingsStore } from '@/stores/settings';
 
 interface Props {
   isOpen: boolean;
@@ -112,11 +133,16 @@ interface LayerProgress {
   percent: number;
 }
 
+const settingsStore = useSettingsStore();
+const postPullAction = computed(() => settingsStore.postPullAction);
+
 const layers = ref<Record<string, LayerProgress>>({});
 const statusMessage = ref('Preparing...');
 const errorMessage = ref('');
 const isComplete = ref(false);
 const isDone = ref(false);
+const recreateStatus = ref<'recreating' | 'recreated' | 'recreate_error' | null>(null);
+const recreateMessage = ref('');
 let abortController: AbortController | null = null;
 
 const applyUpdateUrl = computed(() => {
@@ -134,6 +160,8 @@ function reset() {
   errorMessage.value = '';
   isComplete.value = false;
   isDone.value = false;
+  recreateStatus.value = null;
+  recreateMessage.value = '';
 }
 
 async function startPull() {
@@ -232,6 +260,18 @@ function handleSSEEvent(event: string, data: any) {
       statusMessage.value = data.message || 'Pull complete';
       isComplete.value = true;
       emit('complete', props.image);
+      break;
+    case 'recreating':
+      recreateStatus.value = 'recreating';
+      recreateMessage.value = data.message || `Recreating ${data.container}...`;
+      break;
+    case 'recreated':
+      recreateStatus.value = 'recreated';
+      recreateMessage.value = data.message || `${data.container} updated`;
+      break;
+    case 'recreate_error':
+      recreateStatus.value = 'recreate_error';
+      recreateMessage.value = data.message || `Failed to recreate ${data.container}`;
       break;
     case 'error':
       errorMessage.value = data.message || 'Pull failed';

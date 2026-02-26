@@ -72,6 +72,23 @@
               <p v-if="currentImage === img && currentStatus" class="text-xs text-text-secondary mt-1">{{ currentStatus }}</p>
               <p v-if="imageErrors[img]" class="text-xs text-error mt-1">{{ imageErrors[img] }}</p>
 
+              <!-- Recreate status -->
+              <div v-if="imageRecreateStatus[img]" class="flex items-center gap-1.5 mt-1">
+                <svg v-if="imageRecreateStatus[img].status === 'recreating'" class="animate-spin h-3 w-3 text-primary shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                </svg>
+                <svg v-else-if="imageRecreateStatus[img].status === 'recreated'" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success shrink-0">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <svg v-else xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-error shrink-0">
+                  <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
+                </svg>
+                <span class="text-xs" :class="imageRecreateStatus[img].status === 'recreate_error' ? 'text-error' : 'text-text-secondary'">
+                  {{ imageRecreateStatus[img].message }}
+                </span>
+              </div>
+
               <!-- Post-pull actions per image -->
               <div v-if="imageResults[img] === 'success' && postPullAction !== 'pull_only'" class="mt-1.5">
                 <template v-if="postPullAction === 'pull_and_offer_restart'">
@@ -163,6 +180,7 @@ const currentStatus = ref('');
 const currentLayers = ref<Record<string, LayerProgress>>({});
 const imageResults = ref<Record<string, 'success' | 'error' | 'cancelled'>>({});
 const imageErrors = ref<Record<string, string>>({});
+const imageRecreateStatus = ref<Record<string, { status: string; message: string }>>({});
 const allDone = ref(false);
 let cancelled = false;
 let abortController: AbortController | null = null;
@@ -209,6 +227,7 @@ function reset() {
   currentLayers.value = {};
   imageResults.value = {};
   imageErrors.value = {};
+  imageRecreateStatus.value = {};
   allDone.value = false;
   cancelled = false;
   abortController = null;
@@ -272,6 +291,17 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
               const percent = total > 0 ? Math.round((current / total) * 100) : (data.status === 'Pull complete' || data.status === 'Already exists' ? 100 : existing.percent);
               currentLayers.value[data.id] = { status: data.status || existing.status, current, total, percent };
               currentLayers.value = { ...currentLayers.value };
+            } else if (currentEvent === 'recreating') {
+              currentStatus.value = data.message || `Recreating ${data.container}...`;
+              imageRecreateStatus.value[image] = { status: 'recreating', message: data.message || '' };
+              imageRecreateStatus.value = { ...imageRecreateStatus.value };
+            } else if (currentEvent === 'recreated') {
+              currentStatus.value = data.message || `${data.container} updated`;
+              imageRecreateStatus.value[image] = { status: 'recreated', message: data.message || '' };
+              imageRecreateStatus.value = { ...imageRecreateStatus.value };
+            } else if (currentEvent === 'recreate_error') {
+              imageRecreateStatus.value[image] = { status: 'recreate_error', message: data.message || '' };
+              imageRecreateStatus.value = { ...imageRecreateStatus.value };
             } else if (currentEvent === 'complete') {
               result = 'success';
             } else if (currentEvent === 'error') {

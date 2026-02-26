@@ -449,6 +449,166 @@ class DockerClient
   }
 
   /**
+   * Get raw container inspect data (full Docker API response)
+   *
+   * @param string $id Container ID or name
+   * @return array|null Full inspect response or null if not found
+   */
+  public function inspectContainerRaw($id)
+  {
+    return $this->request('GET', "/containers/{$id}/json") ?: null;
+  }
+
+  /**
+   * Rename a container
+   *
+   * @param string $id Container ID or name
+   * @param string $newName New name for the container
+   * @return bool Success
+   */
+  public function renameContainer($id, $newName)
+  {
+    $response = $this->request('POST', "/containers/{$id}/rename?name=" . urlencode($newName));
+    return $response !== false;
+  }
+
+  /**
+   * Create a container from config
+   *
+   * @param string $name Container name
+   * @param array $config Container create body (Config + HostConfig + NetworkingConfig)
+   * @return string|false New container ID or false on failure
+   */
+  public function createContainer($name, $config)
+  {
+    $response = $this->request('POST', "/containers/create?name=" . urlencode($name), $config, 30);
+    if ($response && isset($response['Id'])) {
+      return $response['Id'];
+    }
+    return false;
+  }
+
+  /**
+   * Recreate a container with its current configuration but the latest image
+   *
+   * Safely: inspect → stop → rename → create → start → remove old
+   * On failure: clean up new container, rename old back, restart if needed
+   *
+   * @param string $id Container ID or name
+   * @return array ['success' => bool, 'newId' => string|null, 'error' => string|null]
+   */
+  public function recreateContainer($id)
+  {
+    $result = ['success' => false, 'newId' => null, 'error' => null];
+
+    // 1. Inspect the existing container
+    $inspect = $this->inspectContainerRaw($id);
+    if (!$inspect) {
+      $result['error'] = "Container {$id} not found";
+      return $result;
+    }
+
+    $containerName = ltrim($inspect['Name'] ?? '', '/');
+    $wasRunning = ($inspect['State']['Running'] ?? false) === true;
+    $oldId = $inspect['Id'];
+    $tempName = $containerName . '-recreating-' . time();
+    $newId = null;
+
+    // 2. Build create body from inspect data
+    $config = $inspect['Config'] ?? [];
+
+    // Remove read-only fields that shouldn't be in create body
+    unset($config['Hostname']); // Let Docker assign based on container name
+    // Keep Image, Env, Cmd, Labels, ExposedPorts, Volumes, etc.
+
+    $createBody = $config;
+    $createBody['HostConfig'] = $inspect['HostConfig'] ?? [];
+
+    // Remove read-only HostConfig fields
+    unset($createBody['HostConfig']['ContainerIDFile']);
+
+    // Build NetworkingConfig from existing networks
+    $networks = $inspect['NetworkSettings']['Networks'] ?? [];
+    if (!empty($networks)) {
+      $endpointsConfig = [];
+      foreach ($networks as $netName => $netConfig) {
+        // Only keep user-configurable fields, not dynamic ones
+        $endpointsConfig[$netName] = [
+          'IPAMConfig' => $netConfig['IPAMConfig'] ?? null,
+          'Aliases' => $netConfig['Aliases'] ?? null,
+          'Links' => $netConfig['Links'] ?? null,
+          'DriverOpts' => $netConfig['DriverOpts'] ?? null,
+        ];
+      }
+      $createBody['NetworkingConfig'] = ['EndpointsConfig' => $endpointsConfig];
+    }
+
+    try {
+      // 3. Stop container if running
+      if ($wasRunning) {
+        if (!$this->stopContainer($oldId, 30)) {
+          $result['error'] = "Failed to stop container {$containerName}";
+          return $result;
+        }
+      }
+
+      // 4. Rename old container
+      if (!$this->renameContainer($oldId, $tempName)) {
+        // Try to restart if it was running
+        if ($wasRunning) {
+          $this->startContainer($oldId);
+        }
+        $result['error'] = "Failed to rename container {$containerName}";
+        return $result;
+      }
+
+      // 5. Create new container with original name
+      $newId = $this->createContainer($containerName, $createBody);
+      if (!$newId) {
+        // Rollback: rename old container back
+        $this->renameContainer($oldId, $containerName);
+        if ($wasRunning) {
+          $this->startContainer($oldId);
+        }
+        $result['error'] = "Failed to create new container {$containerName}";
+        return $result;
+      }
+
+      // 6. Start new container if old was running
+      if ($wasRunning) {
+        if (!$this->startContainer($newId)) {
+          // Rollback: remove new, rename old back, restart
+          $this->removeContainer($newId, true);
+          $this->renameContainer($oldId, $containerName);
+          $this->startContainer($oldId);
+          $result['error'] = "Failed to start new container {$containerName}";
+          return $result;
+        }
+      }
+
+      // 7. Remove old container
+      $this->removeContainer($oldId, true);
+
+      $result['success'] = true;
+      $result['newId'] = $newId;
+      return $result;
+
+    } catch (Exception $e) {
+      // Emergency rollback
+      if ($newId) {
+        $this->removeContainer($newId, true);
+      }
+      // Try to rename old container back
+      $this->renameContainer($oldId, $containerName);
+      if ($wasRunning) {
+        $this->startContainer($oldId);
+      }
+      $result['error'] = $e->getMessage();
+      return $result;
+    }
+  }
+
+  /**
    * Pull a Docker image with progress callback
    *
    * @param string $imageName Image to pull (e.g. linuxserver/plex:latest)
