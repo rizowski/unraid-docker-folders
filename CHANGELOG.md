@@ -2,6 +2,8 @@
 
 ## 2026.02.25
 ### Changes
+- Add PHP tests for checkAllImageUpdates update check logic
+- Fix iframe not shrinking on folder collapse, harden update loop
 - Fix update check timeout and uneven card button sizing
 - Fix update checks only completing for first container
 - Fix build script bugs and improve robustness

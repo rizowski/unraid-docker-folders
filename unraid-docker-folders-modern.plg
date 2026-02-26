@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.25-dev7">
-<!ENTITY md5 "c4730136ba6993c7f8edb8c81d1f30a1">
+<!ENTITY version "2026.02.25-dev8">
+<!ENTITY md5 "edf2238522447ad9806fe13c5ae477c6">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -35,6 +35,10 @@
 
 
 
+
+###2026.02.25-dev8
+- Add PHP tests for checkAllImageUpdates update check logic
+- Fix iframe not shrinking on folder collapse, harden update loop
 ###2026.02.25-dev7
 - Fix update check timeout and uneven card button sizing
 ###2026.02.25-dev6
