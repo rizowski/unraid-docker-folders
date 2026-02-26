@@ -56,22 +56,7 @@ function handleGet()
 function handlePost()
 {
   $db = Database::getInstance();
-
-  // Parse body — supports form-encoded payload field or direct JSON
-  // Use getRawBody() (cached in auth.php) since php://input can only be read once
-  $body = getRawBody();
-  $data = null;
-
-  if (isset($_POST['payload'])) {
-    $data = json_decode($_POST['payload'], true);
-  } elseif ($body) {
-    parse_str($body, $parsed);
-    if (isset($parsed['payload'])) {
-      $data = json_decode($parsed['payload'], true);
-    } else {
-      $data = json_decode($body, true);
-    }
-  }
+  $data = getRequestData();
 
   if (!$data || !isset($data['key']) || !isset($data['value'])) {
     errorResponse('Missing key or value', 400);

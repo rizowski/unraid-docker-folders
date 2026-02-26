@@ -146,35 +146,28 @@ function validateCsrfToken()
 }
 
 /**
- * Require authentication for API endpoint
- * Exits with 401 if not authenticated
+ * Require authentication for API endpoint.
+ * Exits with 401 if not authenticated.
+ *
+ * Note: relies on config.php being loaded first (for errorResponse()).
+ * All API endpoints load config.php before auth.php, so this is safe.
  */
 function requireAuth()
 {
   if (!validateSession()) {
-    http_response_code(401);
-    header('Content-Type: application/json');
-    echo json_encode([
-      'error' => true,
-      'message' => 'Unauthorized - Please log in to Unraid',
-    ]);
-    exit();
+    errorResponse('Unauthorized - Please log in to Unraid', 401);
   }
 }
 
 /**
- * Require CSRF validation for API endpoint
- * Exits with 403 if CSRF token is invalid
+ * Require CSRF validation for API endpoint.
+ * Exits with 403 if CSRF token is invalid.
+ *
+ * Note: relies on config.php being loaded first (for errorResponse()).
  */
 function requireCsrf()
 {
   if (!validateCsrfToken()) {
-    http_response_code(403);
-    header('Content-Type: application/json');
-    echo json_encode([
-      'error' => true,
-      'message' => 'Invalid CSRF token',
-    ]);
-    exit();
+    errorResponse('Invalid CSRF token', 403);
   }
 }

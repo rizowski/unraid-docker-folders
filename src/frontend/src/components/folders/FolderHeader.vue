@@ -6,41 +6,8 @@
     @click="$emit('toggle-collapse')"
   >
     <div class="flex items-center gap-2 flex-1 min-w-0">
-      <svg
-        v-if="!dragLocked"
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing"
-      >
-        <circle cx="9" cy="5" r="1" />
-        <circle cx="9" cy="12" r="1" />
-        <circle cx="9" cy="19" r="1" />
-        <circle cx="15" cy="5" r="1" />
-        <circle cx="15" cy="12" r="1" />
-        <circle cx="15" cy="19" r="1" />
-      </svg>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="shrink-0 text-text-secondary transition-transform duration-200"
-        :class="folder.collapsed ? '-rotate-90' : ''"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
+      <DragHandle v-if="!dragLocked" handle-class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing" />
+      <ChevronIcon :expanded="!folder.collapsed" />
       <div
         v-if="containerIcons.length > 0"
         class="hidden sm:grid shrink-0 gap-0.5 mr-2"
@@ -66,45 +33,13 @@
       <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
       <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0">
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text w-7 text-right">CPU</span>
-          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
-            <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
-          </div>
-          <span class="text-text font-mono w-9 text-right">--</span>
-        </div>
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text w-7 text-right">MEM</span>
-          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
-            <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
-          </div>
-          <span class="text-text font-mono w-9 text-right">--</span>
-        </div>
+        <StatsBar label="CPU" :percent="null" size="inline" />
+        <StatsBar label="MEM" :percent="null" size="inline" />
       </div>
       <!-- Folder average stats -->
       <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text w-7 text-right">CPU</span>
-          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="folderStats.cpuPercent > 80 ? 'bg-error' : folderStats.cpuPercent > 50 ? 'bg-warning' : 'bg-success'"
-              :style="{ width: Math.min(folderStats.cpuPercent, 100) + '%' }"
-            ></div>
-          </div>
-          <span class="text-text font-mono w-9 text-right">{{ folderStats.cpuPercent.toFixed(1) }}%</span>
-        </div>
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text w-7 text-right">MEM</span>
-          <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="folderStats.memPercent > 80 ? 'bg-error' : folderStats.memPercent > 50 ? 'bg-warning' : 'bg-success'"
-              :style="{ width: Math.min(folderStats.memPercent, 100) + '%' }"
-            ></div>
-          </div>
-          <span class="text-text font-mono w-9 text-right">{{ folderStats.memPercent.toFixed(1) }}%</span>
-        </div>
+        <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
+        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
       </div>
     </div>
     <div class="flex items-center gap-3" @click.stop>
@@ -143,6 +78,9 @@ import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
+import StatsBar from '@/components/common/StatsBar.vue';
+import DragHandle from '@/components/common/DragHandle.vue';
+import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import type { Folder } from '@/types/folder';
 
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));

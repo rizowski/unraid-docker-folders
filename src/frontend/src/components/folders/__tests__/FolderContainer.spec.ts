@@ -105,9 +105,9 @@ describe('FolderContainer concurrent action loading', () => {
     // Create a folder with all three containers
     const folder = makeFolder({
       containers: [
-        { container_name: 'container-1', container_id: 'c1', position: 0 },
-        { container_name: 'container-2', container_id: 'c2', position: 1 },
-        { container_name: 'container-3', container_id: 'c3', position: 2 },
+        { id: 1, folder_id: 1, container_name: 'container-1', container_id: 'c1', position: 0 },
+        { id: 2, folder_id: 1, container_name: 'container-2', container_id: 'c2', position: 1 },
+        { id: 3, folder_id: 1, container_name: 'container-3', container_id: 'c3', position: 2 },
       ],
     });
 
