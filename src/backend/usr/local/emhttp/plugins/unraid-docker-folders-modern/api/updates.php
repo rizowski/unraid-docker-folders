@@ -77,6 +77,10 @@ function handlePost()
     errorResponse('Invalid action', 400);
   }
 
+  // Allow unlimited execution time — registry checks can take 15s each
+  set_time_limit(0);
+  ignore_user_abort(true);
+
   logUpdate('START Manual update check begun');
 
   $dockerClient = new DockerClient();

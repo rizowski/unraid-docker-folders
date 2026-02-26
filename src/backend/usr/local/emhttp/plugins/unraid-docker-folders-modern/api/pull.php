@@ -35,6 +35,10 @@ if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._\/:@-]+$/', $image) || strlen($image) 
   errorResponse('Invalid image name', 400);
 }
 
+// Allow unlimited execution time — image pulls can take minutes
+set_time_limit(0);
+ignore_user_abort(true);
+
 // Set SSE headers
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache');
