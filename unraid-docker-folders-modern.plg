@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.25-dev1">
-<!ENTITY md5 "588b424e4fac724d745b0ad8c5389a22">
+<!ENTITY version "2026.02.25-dev2">
+<!ENTITY md5 "f4461c4dbc92f6cde624f6f89d3e4098">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -30,6 +30,10 @@
 
 
 
+
+###2026.02.25-dev2
+- Extract reusable components, refactor backend config and stats
+- Fix concurrent container action loading states, add dev/stable release channels
 ###2026.02.25
 - Add logging to manual update checks, gitignore phpunit cache
 - chore: update gitignore
