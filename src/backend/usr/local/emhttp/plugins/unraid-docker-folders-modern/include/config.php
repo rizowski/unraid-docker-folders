@@ -151,40 +151,55 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
       continue;
     }
 
-    $check = $dockerClient->checkImageUpdate($imageName, $imageId);
-    $checked++;
+    // Wrap each image check in try/catch so one failure doesn't kill the loop
+    try {
+      $check = $dockerClient->checkImageUpdate($imageName, $imageId);
+      $checked++;
 
-    if ($check['error']) {
-      $log('ERROR ' . $imageName . ': ' . $check['error']);
+      if ($check['error']) {
+        $log('ERROR ' . $imageName . ': ' . $check['error']);
+        $errors++;
+      } elseif ($check['update_available']) {
+        $log('UPDATE ' . $imageName . ': update available');
+        $newUpdates++;
+      } else {
+        $log('OK ' . $imageName . ': up to date');
+      }
+
+      // Upsert into database
+      $stmt = $db->prepare(
+        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
+         VALUES (:image, :local_digest, :remote_digest, :update_available, :checked_at, :error)'
+      );
+      $stmt->bindValue(':image', $imageName, SQLITE3_TEXT);
+      $stmt->bindValue(':local_digest', $check['local_digest'], SQLITE3_TEXT);
+      $stmt->bindValue(':remote_digest', $check['remote_digest'], SQLITE3_TEXT);
+      $stmt->bindValue(':update_available', $check['update_available'] ? 1 : 0, SQLITE3_INTEGER);
+      $stmt->bindValue(':checked_at', time(), SQLITE3_INTEGER);
+      $stmt->bindValue(':error', $check['error'], SQLITE3_TEXT);
+      $stmt->execute();
+
+      $results[$imageName] = [
+        'image' => $imageName,
+        'local_digest' => $check['local_digest'],
+        'remote_digest' => $check['remote_digest'],
+        'update_available' => $check['update_available'],
+        'checked_at' => time(),
+        'error' => $check['error'],
+      ];
+    } catch (\Throwable $e) {
+      $log('FATAL ' . $imageName . ': ' . $e->getMessage());
       $errors++;
-    } elseif ($check['update_available']) {
-      $log('UPDATE ' . $imageName . ': update available');
-      $newUpdates++;
-    } else {
-      $log('OK ' . $imageName . ': up to date');
+      $checked++;
+      $results[$imageName] = [
+        'image' => $imageName,
+        'local_digest' => null,
+        'remote_digest' => null,
+        'update_available' => false,
+        'checked_at' => time(),
+        'error' => $e->getMessage(),
+      ];
     }
-
-    // Upsert into database
-    $stmt = $db->prepare(
-      'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
-       VALUES (:image, :local_digest, :remote_digest, :update_available, :checked_at, :error)'
-    );
-    $stmt->bindValue(':image', $imageName, SQLITE3_TEXT);
-    $stmt->bindValue(':local_digest', $check['local_digest'], SQLITE3_TEXT);
-    $stmt->bindValue(':remote_digest', $check['remote_digest'], SQLITE3_TEXT);
-    $stmt->bindValue(':update_available', $check['update_available'] ? 1 : 0, SQLITE3_INTEGER);
-    $stmt->bindValue(':checked_at', time(), SQLITE3_INTEGER);
-    $stmt->bindValue(':error', $check['error'], SQLITE3_TEXT);
-    $stmt->execute();
-
-    $results[$imageName] = [
-      'image' => $imageName,
-      'local_digest' => $check['local_digest'],
-      'remote_digest' => $check['remote_digest'],
-      'update_available' => $check['update_available'],
-      'checked_at' => time(),
-      'error' => $check['error'],
-    ];
   }
 
   return [
