@@ -221,6 +221,24 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
     }
   }
 
+  // Clean up stale entries for images that no longer have containers
+  // (e.g. after container recreation changed the image reference)
+  $currentImages = array_keys($uniqueImages);
+  if (!empty($currentImages)) {
+    $placeholders = implode(',', array_fill(0, count($currentImages), '?'));
+    $staleCount = $db->fetchValue(
+      "SELECT COUNT(*) FROM image_update_checks WHERE image NOT IN ({$placeholders})",
+      array_values($currentImages)
+    );
+    if ($staleCount > 0) {
+      $db->query(
+        "DELETE FROM image_update_checks WHERE image NOT IN ({$placeholders})",
+        array_values($currentImages)
+      );
+      $log('CLEANUP Removed ' . $staleCount . ' stale image_update_checks entries');
+    }
+  }
+
   return [
     'results' => $results,
     'checked' => $checked,

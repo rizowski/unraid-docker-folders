@@ -71,6 +71,11 @@ class StubDatabase
     {
         return true;
     }
+
+    public function fetchValue(string $sql, array $params = []): mixed
+    {
+        return 0;
+    }
 }
 
 // --- Tests ---------------------------------------------------------------
