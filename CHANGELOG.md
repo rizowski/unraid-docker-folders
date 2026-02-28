@@ -2,6 +2,7 @@
 
 ## 2026.02.27
 ### Changes
+- Resolve SHA image refs to tags when recreating containers
 - Fix false positive update detection after pulling images
 - Fix ExposedPorts/Volumes empty object encoding in container recreate
 - Surface Docker API errors in recreate flow, add plugin log entries
