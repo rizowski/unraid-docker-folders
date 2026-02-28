@@ -11,11 +11,22 @@ class DockerClient
 {
   private $socketPath;
   private $apiVersion;
+  private $lastError = '';
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
     $this->socketPath = $socketPath;
     $this->apiVersion = $apiVersion;
+  }
+
+  /**
+   * Get the error message from the last failed request
+   *
+   * @return string
+   */
+  public function getLastError()
+  {
+    return $this->lastError;
   }
 
   /**
@@ -547,7 +558,7 @@ class DockerClient
       // 3. Stop container if running
       if ($wasRunning) {
         if (!$this->stopContainer($oldId, 30)) {
-          $result['error'] = "Failed to stop container {$containerName}";
+          $result['error'] = "Failed to stop container {$containerName}: " . $this->lastError;
           return $result;
         }
       }
@@ -558,30 +569,32 @@ class DockerClient
         if ($wasRunning) {
           $this->startContainer($oldId);
         }
-        $result['error'] = "Failed to rename container {$containerName}";
+        $result['error'] = "Failed to rename container {$containerName}: " . $this->lastError;
         return $result;
       }
 
       // 5. Create new container with original name
       $newId = $this->createContainer($containerName, $createBody);
       if (!$newId) {
+        $createError = $this->lastError;
         // Rollback: rename old container back
         $this->renameContainer($oldId, $containerName);
         if ($wasRunning) {
           $this->startContainer($oldId);
         }
-        $result['error'] = "Failed to create new container {$containerName}";
+        $result['error'] = "Failed to create new container {$containerName}: {$createError}";
         return $result;
       }
 
       // 6. Start new container if old was running
       if ($wasRunning) {
         if (!$this->startContainer($newId)) {
+          $startError = $this->lastError;
           // Rollback: remove new, rename old back, restart
           $this->removeContainer($newId, true);
           $this->renameContainer($oldId, $containerName);
           $this->startContainer($oldId);
-          $result['error'] = "Failed to start new container {$containerName}";
+          $result['error'] = "Failed to start new container {$containerName}: {$startError}";
           return $result;
         }
       }
@@ -593,7 +606,7 @@ class DockerClient
       $result['newId'] = $newId;
       return $result;
 
-    } catch (Exception $e) {
+    } catch (\Throwable $e) {
       // Emergency rollback
       if ($newId) {
         $this->removeContainer($newId, true);
@@ -840,8 +853,11 @@ class DockerClient
    */
   private function request($method, $path, $data = null, $timeout = 5)
   {
+    $this->lastError = '';
+
     if (!file_exists($this->socketPath)) {
-      error_log("Docker socket not found: {$this->socketPath}");
+      $this->lastError = "Docker socket not found: {$this->socketPath}";
+      error_log($this->lastError);
       return false;
     }
 
@@ -867,7 +883,8 @@ class DockerClient
     curl_close($ch);
 
     if ($error) {
-      error_log("Docker API error: {$error}");
+      $this->lastError = "Docker API error: {$error}";
+      error_log($this->lastError);
       return false;
     }
 
@@ -881,14 +898,17 @@ class DockerClient
       return true;
     }
 
-    // 404 Not Found
-    if ($httpCode === 404) {
-      return false;
-    }
-
-    // Other non-200 codes
+    // Extract error message from Docker API response
     if ($httpCode < 200 || $httpCode >= 300) {
-      error_log("Docker API HTTP {$httpCode}: {$response}");
+      $errorMsg = "Docker API HTTP {$httpCode}";
+      $decoded = json_decode($response, true);
+      if ($decoded && isset($decoded['message'])) {
+        $errorMsg .= ': ' . $decoded['message'];
+      } elseif ($response) {
+        $errorMsg .= ': ' . substr($response, 0, 500);
+      }
+      $this->lastError = $errorMsg;
+      error_log($this->lastError);
       return false;
     }
 

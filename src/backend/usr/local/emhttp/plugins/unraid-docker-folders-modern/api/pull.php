@@ -83,23 +83,24 @@ try {
   });
 
   if ($success) {
+    logUpdate("PULL OK {$image}");
+
     // Post-pull operations are non-critical — never let them prevent complete/done
     try {
-      // Clear update_available flag in database
       $db = Database::getInstance();
       $db->query(
         'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image',
         [':image' => $image, ':now' => time()]
       );
     } catch (\Throwable $e) {
-      error_log('Pull post-update DB error: ' . $e->getMessage());
+      logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
     }
 
     try {
       WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
       WebSocketPublisher::publish('container', 'updated');
     } catch (\Throwable $e) {
-      error_log('Pull post-update WebSocket error: ' . $e->getMessage());
+      logUpdate("PULL WARN {$image}: WebSocket publish failed: " . $e->getMessage());
     }
 
     // Check post_pull_action setting for auto-recreate
@@ -111,11 +112,12 @@ try {
         $postPullAction = $row['value'];
       }
     } catch (\Throwable $e) {
-      error_log('Pull post-pull settings error: ' . $e->getMessage());
+      logUpdate("PULL WARN {$image}: Settings fetch failed: " . $e->getMessage());
     }
 
+    logUpdate("PULL post_pull_action={$postPullAction} for {$image}");
+
     if ($postPullAction === 'pull_and_auto_recreate') {
-      // Find all containers using this image and recreate them
       try {
         $containers = $dockerClient->listContainers(true);
         $matchingContainers = [];
@@ -125,35 +127,42 @@ try {
           }
         }
 
+        logUpdate("RECREATE Found " . count($matchingContainers) . " container(s) using {$image}");
+
         foreach ($matchingContainers as $container) {
           $cName = $container['name'];
           $cId = $container['id'];
 
+          logUpdate("RECREATE Starting recreate for {$cName} ({$cId})");
           sendSSE('recreating', ['container' => $cName, 'message' => "Recreating {$cName}..."]);
 
           $recreateResult = $dockerClient->recreateContainer($cId);
 
           if ($recreateResult['success']) {
+            logUpdate("RECREATE OK {$cName} -> new ID {$recreateResult['newId']}");
             sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
           } else {
+            $errMsg = $recreateResult['error'] ?? 'Unknown error';
+            logUpdate("RECREATE FAIL {$cName}: {$errMsg}");
             sendSSE('recreate_error', [
               'container' => $cName,
-              'message' => "Failed to recreate {$cName}: " . ($recreateResult['error'] ?? 'Unknown error'),
+              'message' => "Failed to recreate {$cName}: {$errMsg}",
             ]);
           }
         }
       } catch (\Throwable $e) {
-        error_log('Pull auto-recreate error: ' . $e->getMessage());
+        logUpdate("RECREATE ERROR {$image}: " . $e->getMessage());
         sendSSE('recreate_error', ['container' => '', 'message' => 'Auto-recreate failed: ' . $e->getMessage()]);
       }
     }
 
     sendSSE('complete', ['message' => 'Pull complete', 'image' => $image]);
   } else {
+    logUpdate("PULL FAIL {$image}");
     sendSSE('error', ['message' => 'Pull failed']);
   }
 } catch (\Throwable $e) {
-  error_log('Pull API error: ' . $e->getMessage());
+  logUpdate("PULL ERROR {$image}: " . $e->getMessage());
   sendSSE('error', ['message' => $e->getMessage()]);
 }
 
