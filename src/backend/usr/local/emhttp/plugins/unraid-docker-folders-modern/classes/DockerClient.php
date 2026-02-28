@@ -530,7 +530,17 @@ class DockerClient
 
     // Remove read-only fields that shouldn't be in create body
     unset($config['Hostname']); // Let Docker assign based on container name
-    // Keep Image, Env, Cmd, Labels, ExposedPorts, Volumes, etc.
+
+    // Ensure Image is a tag reference (e.g. "registry:latest"), not a SHA.
+    // Config.Image from inspect can be a sha256 ID which would pin the new
+    // container to the old image instead of using the updated tag.
+    $imageRef = $config['Image'] ?? '';
+    if (strpos($imageRef, 'sha256:') === 0) {
+      $imageInfo = $this->getImageInfo($imageRef);
+      if ($imageInfo && !empty($imageInfo['RepoTags'])) {
+        $config['Image'] = $imageInfo['RepoTags'][0];
+      }
+    }
 
     // Fix empty-object fields: PHP json_decode turns {} into [] (empty array),
     // but Docker expects {} (empty object) for ExposedPorts and Volumes values.
