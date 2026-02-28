@@ -2,6 +2,7 @@
 
 ## 2026.02.28
 ### Changes
+- Add inline logs panel in list view expanded details
 - Fix 502 error on container Console and Logs actions
 - Add "Clear" button to update check log viewer
 
