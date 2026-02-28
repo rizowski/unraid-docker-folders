@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.27">
-<!ENTITY md5 "7c26884fd2859d9f9a47daae3d867907">
+<!ENTITY version "2026.02.28-dev1">
+<!ENTITY md5 "113d05106df64219c287fcdddf6cc97d">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -44,6 +44,10 @@
 
 
 
+
+###2026.02.28-dev1
+- Fix 502 error on container Console and Logs actions
+- Add "Clear" button to update check log viewer
 ###2026.02.27-dev6
 - Fix stale update badges after checks find no updates
 ###2026.02.27-dev5

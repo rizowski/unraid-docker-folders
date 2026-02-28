@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.02.28
+### Changes
+- Fix 502 error on container Console and Logs actions
+- Add "Clear" button to update check log viewer
+
 ## 2026.02.27
 ### Changes
 - Fix stale update badges after checks find no updates
