@@ -248,10 +248,14 @@ function generateMockLogs(name: string, tail: number): string {
   const lines: string[] = [];
   const now = Date.now();
   for (let i = 0; i < tail; i++) {
-    const ts = new Date(now - (tail - i) * 30000).toISOString();
+    const d = new Date(now - (tail - i) * 30000);
+    // Format as YYYY-MM-DD HH:MM:SS (matches backend timestamp simplification)
+    const ts = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
     const msg = messages[i % messages.length];
     lines.push(`${ts} ${msg}`);
   }
+  // Reverse so newest lines appear first (matches backend behavior)
+  lines.reverse();
   return lines.join('\n');
 }
 

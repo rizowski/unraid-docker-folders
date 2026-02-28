@@ -473,5 +473,136 @@ describe('ContainerCard', () => {
 
       expect(wrapper.text()).toContain('Failed to load logs.');
     });
+
+    describe('auto-refresh polling', () => {
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it('auto-refreshes logs on interval when panel is open', async () => {
+        const pinia = createPinia();
+        setActivePinia(pinia);
+
+        const settingsStore = useSettingsStore();
+        settingsStore.showInlineLogs = true;
+        settingsStore.logRefreshInterval = 10;
+
+        const statsStore = useStatsStore();
+        statsStore.stats['abc123'] = { ...FAKE_STATS };
+
+        const wrapper = mount(ContainerCard, {
+          props: {
+            container: makeContainer({ state: 'running' }),
+            view: 'list' as const,
+          },
+          global: {
+            plugins: [pinia],
+            stubs: { Teleport: true },
+          },
+        });
+
+        // Expand
+        const row = wrapper.find('.container-row > div');
+        await row.trigger('click');
+        await flushPromises();
+
+        const callsAfterOpen = logsCallCount();
+        expect(callsAfterOpen).toBeGreaterThanOrEqual(1);
+
+        // Advance timer by 10 seconds
+        vi.advanceTimersByTime(10000);
+        await flushPromises();
+
+        expect(logsCallCount()).toBeGreaterThan(callsAfterOpen);
+
+        wrapper.unmount();
+      });
+
+      it('stops polling when panel is collapsed', async () => {
+        const pinia = createPinia();
+        setActivePinia(pinia);
+
+        const settingsStore = useSettingsStore();
+        settingsStore.showInlineLogs = true;
+        settingsStore.logRefreshInterval = 5;
+
+        const statsStore = useStatsStore();
+        statsStore.stats['abc123'] = { ...FAKE_STATS };
+
+        const wrapper = mount(ContainerCard, {
+          props: {
+            container: makeContainer({ state: 'running' }),
+            view: 'list' as const,
+          },
+          global: {
+            plugins: [pinia],
+            stubs: { Teleport: true },
+          },
+        });
+
+        // Expand
+        const row = wrapper.find('.container-row > div');
+        await row.trigger('click');
+        await flushPromises();
+
+        // Collapse
+        await row.trigger('click');
+        await flushPromises();
+
+        const callsAfterCollapse = logsCallCount();
+
+        // Advance timer — should NOT trigger more fetches
+        vi.advanceTimersByTime(15000);
+        await flushPromises();
+
+        expect(logsCallCount()).toBe(callsAfterCollapse);
+
+        wrapper.unmount();
+      });
+
+      it('does not poll when interval is 0 (disabled)', async () => {
+        const pinia = createPinia();
+        setActivePinia(pinia);
+
+        const settingsStore = useSettingsStore();
+        settingsStore.showInlineLogs = true;
+        settingsStore.logRefreshInterval = 0;
+
+        const statsStore = useStatsStore();
+        statsStore.stats['abc123'] = { ...FAKE_STATS };
+
+        const wrapper = mount(ContainerCard, {
+          props: {
+            container: makeContainer({ state: 'running' }),
+            view: 'list' as const,
+          },
+          global: {
+            plugins: [pinia],
+            stubs: { Teleport: true },
+          },
+        });
+
+        // Expand
+        const row = wrapper.find('.container-row > div');
+        await row.trigger('click');
+        await flushPromises();
+
+        // Initial fetch happens
+        const callsAfterOpen = logsCallCount();
+        expect(callsAfterOpen).toBeGreaterThanOrEqual(1);
+
+        // Advance timer — no additional fetches
+        vi.advanceTimersByTime(30000);
+        await flushPromises();
+
+        expect(logsCallCount()).toBe(callsAfterOpen);
+
+        wrapper.unmount();
+      });
+    });
   });
 });

@@ -82,6 +82,7 @@ function handlePost()
     'show_folder_ports', 'show_inline_logs', 'enable_update_checks',
     'update_check_schedule', 'notify_on_updates', 'update_check_exclude',
     'post_pull_action',
+    'log_refresh_interval',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);

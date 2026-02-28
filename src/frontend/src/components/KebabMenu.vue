@@ -20,8 +20,8 @@
           :href="item.href"
           :target="item.target"
           rel="noopener"
-          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text transition cursor-pointer no-underline"
-          :class="item.class"
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm transition cursor-pointer no-underline"
+          :class="item.class || 'text-text'"
           @click="menuOpen = false"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -31,8 +31,8 @@
         </a>
         <button
           v-else
-          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text transition cursor-pointer text-left border-none bg-transparent"
-          :class="item.class"
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm transition cursor-pointer text-left border-none bg-transparent"
+          :class="item.class || 'text-text'"
           @click="menuOpen = false; $emit('select', item.action!)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

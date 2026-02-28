@@ -1,23 +1,23 @@
 <template>
   <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text bg-bg">
     <header class="flex flex-wrap justify-between items-center gap-y-3 gap-x-4 mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
-      <div class="flex items-center gap-2 sm:gap-4">
-        <a href="/Settings/DockerFoldersSettings" class="nav-btn" title="Settings" style="text-decoration: none;">
+      <div class="flex items-center gap-2 sm:gap-4 min-w-0">
+        <a href="/Settings/DockerFoldersSettings" class="nav-btn shrink-0" title="Settings" style="text-decoration: none;">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </a>
-        <span class="text-sm text-text-secondary">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
+        <span class="text-xs sm:text-sm text-text-secondary truncate">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
         <ConnectionStatus />
       </div>
-      <div class="flex gap-2 sm:gap-3 items-center">
-        <div class="relative">
+      <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
+        <div class="relative w-full sm:w-auto order-last sm:order-none mt-2 sm:mt-0">
           <input
             v-model="dockerStore.searchQuery"
             type="text"
             placeholder="Search containers..."
-            class="nav-btn text-sm pl-3 pr-7 py-1 w-40 sm:w-52 border border-border rounded bg-transparent text-text placeholder:text-text-secondary focus:outline-none focus:border-text-secondary"
+            class="nav-btn text-sm pl-3 pr-7 py-2 sm:py-1 w-full sm:w-52 border border-border rounded bg-transparent text-text placeholder:text-text-secondary focus:outline-none focus:border-text-secondary"
           />
           <button
             v-if="dockerStore.searchQuery"
@@ -92,13 +92,15 @@
           class="nav-btn warning"
           title="Update all containers with available updates"
         >
-          Update All ({{ updatesStore.updatesAvailableCount }})
+          <span class="sm:hidden">Update ({{ updatesStore.updatesAvailableCount }})</span>
+          <span class="hidden sm:inline">Update All ({{ updatesStore.updatesAvailableCount }})</span>
         </button>
         <button
           @click="openCreateFolderModal"
           class="nav-btn active"
         >
-          + Create Folder
+          <span class="sm:hidden">+ New</span>
+          <span class="hidden sm:inline">+ Create Folder</span>
         </button>
       </div>
     </header>
@@ -147,7 +149,7 @@
             <div class="folder-content-inner">
               <div
                 class="container-list"
-                :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'"
+                :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'"
                 id="unfoldered-containers"
               >
                 <ContainerCard

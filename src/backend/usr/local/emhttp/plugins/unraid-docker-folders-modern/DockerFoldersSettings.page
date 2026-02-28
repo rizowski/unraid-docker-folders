@@ -19,6 +19,7 @@ $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
 $showInlineLogs = ($settings['show_inline_logs'] ?? '0') === '1';
+$logRefreshInterval = $settings['log_refresh_interval'] ?? '10';
 $enableUpdateChecks = ($settings['enable_update_checks'] ?? '0') === '1';
 $updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
 $notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
@@ -679,6 +680,24 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="show-inline-logs" <?= $showInlineLogs ? 'checked' : '' ?> onchange="saveSetting('show_inline_logs', this.checked ? '1' : '0')" />
         <span id="save-status-show-inline-logs" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="log-refresh-interval">Log refresh interval</label>
+        <div class="description">How often to auto-refresh inline logs when the panel is open. Only applies when inline logs are enabled. <strong>Default: 10 seconds</strong></div>
+      </div>
+      <div class="setting-control">
+        <select id="log-refresh-interval" onchange="saveSetting('log_refresh_interval', this.value)">
+          <option value="5" <?= $logRefreshInterval === '5' ? 'selected' : '' ?>>5 seconds</option>
+          <option value="10" <?= $logRefreshInterval === '10' ? 'selected' : '' ?>>10 seconds</option>
+          <option value="15" <?= $logRefreshInterval === '15' ? 'selected' : '' ?>>15 seconds</option>
+          <option value="30" <?= $logRefreshInterval === '30' ? 'selected' : '' ?>>30 seconds</option>
+          <option value="60" <?= $logRefreshInterval === '60' ? 'selected' : '' ?>>60 seconds</option>
+          <option value="0" <?= $logRefreshInterval === '0' ? 'selected' : '' ?>>Disabled (manual only)</option>
+        </select>
+        <span id="save-status-log-refresh-interval" class="save-status">Saved</span>
       </div>
     </div>
   </div>

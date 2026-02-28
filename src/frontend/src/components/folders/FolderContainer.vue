@@ -4,7 +4,7 @@
 
     <div class="folder-content-grid" :class="{ 'folder-content-expanded': !folder.collapsed || isSearching }">
       <div class="folder-content-inner px-2 sm:px-4">
-        <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4'" :data-folder-id="folder.id">
+        <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'" :data-folder-id="folder.id">
           <ContainerCard
             v-for="assoc in folderContainers"
             :key="assoc.container_name"

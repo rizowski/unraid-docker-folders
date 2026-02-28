@@ -98,3 +98,67 @@ describe('settings store – showInlineLogs', () => {
     expect(store.showInlineLogs).toBe(true);
   });
 });
+
+describe('settings store – logRefreshInterval', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('defaults logRefreshInterval to 10', () => {
+    const store = useSettingsStore();
+    expect(store.logRefreshInterval).toBe(10);
+  });
+
+  it('fetchSettings reads log_refresh_interval string as number', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: { log_refresh_interval: '30' } }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.logRefreshInterval).toBe(30);
+  });
+
+  it('fetchSettings defaults to 10 for non-numeric value', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: { log_refresh_interval: 'abc' } }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.logRefreshInterval).toBe(10);
+  });
+
+  it('fetchSettings reads "0" as 0 (disabled)', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: { log_refresh_interval: '0' } }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.logRefreshInterval).toBe(0);
+  });
+
+  it('setLogRefreshInterval updates ref and POSTs string value', async () => {
+    mockApiFetch.mockResolvedValueOnce({ ok: true } as Response);
+
+    const store = useSettingsStore();
+    await store.setLogRefreshInterval(30);
+
+    expect(store.logRefreshInterval).toBe(30);
+    expect(mockApiFetch).toHaveBeenCalledOnce();
+
+    const [url, opts] = mockApiFetch.mock.calls[0];
+    expect(url).toContain('settings.php');
+    expect(opts?.method).toBe('POST');
+    expect(opts?.body).toContain('log_refresh_interval');
+    expect(opts?.body).toContain('"30"');
+  });
+});

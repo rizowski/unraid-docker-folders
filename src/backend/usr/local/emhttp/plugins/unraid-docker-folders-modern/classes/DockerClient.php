@@ -136,7 +136,7 @@ class DockerClient
    */
   public function getContainerLogs($id, $tail = 100)
   {
-    $raw = $this->requestRaw('GET', "/containers/{$id}/logs?stdout=1&stderr=1&tail={$tail}");
+    $raw = $this->requestRaw('GET', "/containers/{$id}/logs?stdout=1&stderr=1&timestamps=1&tail={$tail}");
     if ($raw === false || $raw === '') {
       return '';
     }
@@ -157,6 +157,28 @@ class DockerClient
 
     // Strip ANSI escape sequences
     $output = preg_replace('/\x1b\[[0-9;]*[a-zA-Z]/', '', $output);
+
+    // Simplify Docker RFC3339Nano timestamps to YYYY-MM-DD HH:MM:SS
+    $output = preg_replace(
+      '/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\.\d+Z/',
+      '$1 $2',
+      $output
+    );
+
+    // Remove Docker's timestamp prefix when the log line already contains its own timestamp
+    $lines = explode("\n", rtrim($output, "\n"));
+    foreach ($lines as &$line) {
+      // Docker's simplified prefix is "YYYY-MM-DD HH:MM:SS " (20 chars).
+      // If the remaining content starts with a date or time pattern, strip the prefix.
+      if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (\d{4}[-\/]|\d{2}:\d{2}|\[\d{4}[-\/]|\d{2}[-\/]\w{3}[-\/])/', $line)) {
+        $line = substr($line, 20);
+      }
+    }
+    unset($line);
+
+    // Reverse line order so newest lines appear first
+    $lines = array_reverse($lines);
+    $output = implode("\n", $lines);
 
     return $output;
   }
