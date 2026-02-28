@@ -532,6 +532,22 @@ class DockerClient
     unset($config['Hostname']); // Let Docker assign based on container name
     // Keep Image, Env, Cmd, Labels, ExposedPorts, Volumes, etc.
 
+    // Fix empty-object fields: PHP json_decode turns {} into [] (empty array),
+    // but Docker expects {} (empty object) for ExposedPorts and Volumes values.
+    foreach (['ExposedPorts', 'Volumes'] as $field) {
+      if (isset($config[$field]) && is_array($config[$field])) {
+        if (empty($config[$field])) {
+          $config[$field] = (object) [];
+        } else {
+          foreach ($config[$field] as $key => $val) {
+            if (is_array($val) && empty($val)) {
+              $config[$field][$key] = (object) [];
+            }
+          }
+        }
+      }
+    }
+
     $createBody = $config;
     $createBody['HostConfig'] = $inspect['HostConfig'] ?? [];
 
