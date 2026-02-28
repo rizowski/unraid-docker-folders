@@ -83,49 +83,68 @@ try {
   });
 
   if ($success) {
-    // Clear update_available flag in database
-    $db = Database::getInstance();
-    $db->query(
-      'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image',
-      [':image' => $image, ':now' => time()]
-    );
+    // Post-pull operations are non-critical — never let them prevent complete/done
+    try {
+      // Clear update_available flag in database
+      $db = Database::getInstance();
+      $db->query(
+        'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image',
+        [':image' => $image, ':now' => time()]
+      );
+    } catch (\Throwable $e) {
+      error_log('Pull post-update DB error: ' . $e->getMessage());
+    }
 
-    WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
-    WebSocketPublisher::publish('container', 'updated');
+    try {
+      WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
+      WebSocketPublisher::publish('container', 'updated');
+    } catch (\Throwable $e) {
+      error_log('Pull post-update WebSocket error: ' . $e->getMessage());
+    }
 
     // Check post_pull_action setting for auto-recreate
     $postPullAction = 'pull_only';
-    $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['post_pull_action']);
-    if ($row && !empty($row['value'])) {
-      $postPullAction = $row['value'];
+    try {
+      $db = Database::getInstance();
+      $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['post_pull_action']);
+      if ($row && !empty($row['value'])) {
+        $postPullAction = $row['value'];
+      }
+    } catch (\Throwable $e) {
+      error_log('Pull post-pull settings error: ' . $e->getMessage());
     }
 
     if ($postPullAction === 'pull_and_auto_recreate') {
       // Find all containers using this image and recreate them
-      $containers = $dockerClient->listContainers(true);
-      $matchingContainers = [];
-      foreach ($containers as $container) {
-        if ($container['image'] === $image) {
-          $matchingContainers[] = $container;
+      try {
+        $containers = $dockerClient->listContainers(true);
+        $matchingContainers = [];
+        foreach ($containers as $container) {
+          if ($container['image'] === $image) {
+            $matchingContainers[] = $container;
+          }
         }
-      }
 
-      foreach ($matchingContainers as $container) {
-        $cName = $container['name'];
-        $cId = $container['id'];
+        foreach ($matchingContainers as $container) {
+          $cName = $container['name'];
+          $cId = $container['id'];
 
-        sendSSE('recreating', ['container' => $cName, 'message' => "Recreating {$cName}..."]);
+          sendSSE('recreating', ['container' => $cName, 'message' => "Recreating {$cName}..."]);
 
-        $recreateResult = $dockerClient->recreateContainer($cId);
+          $recreateResult = $dockerClient->recreateContainer($cId);
 
-        if ($recreateResult['success']) {
-          sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
-        } else {
-          sendSSE('recreate_error', [
-            'container' => $cName,
-            'message' => "Failed to recreate {$cName}: " . ($recreateResult['error'] ?? 'Unknown error'),
-          ]);
+          if ($recreateResult['success']) {
+            sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
+          } else {
+            sendSSE('recreate_error', [
+              'container' => $cName,
+              'message' => "Failed to recreate {$cName}: " . ($recreateResult['error'] ?? 'Unknown error'),
+            ]);
+          }
         }
+      } catch (\Throwable $e) {
+        error_log('Pull auto-recreate error: ' . $e->getMessage());
+        sendSSE('recreate_error', ['container' => '', 'message' => 'Auto-recreate failed: ' . $e->getMessage()]);
       }
     }
 
@@ -133,7 +152,7 @@ try {
   } else {
     sendSSE('error', ['message' => 'Pull failed']);
   }
-} catch (Exception $e) {
+} catch (\Throwable $e) {
   error_log('Pull API error: ' . $e->getMessage());
   sendSSE('error', ['message' => $e->getMessage()]);
 }
