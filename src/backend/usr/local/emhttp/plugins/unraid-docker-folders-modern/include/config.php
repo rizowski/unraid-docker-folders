@@ -156,6 +156,24 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
       $check = $dockerClient->checkImageUpdate($imageName, $imageId);
       $checked++;
 
+      // Suppress false positives: if we previously marked this image as
+      // up-to-date (e.g. after a pull) and the remote digest hasn't changed,
+      // the image is still current. This handles multi-arch images where
+      // local RepoDigest format differs from distribution API digest.
+      if ($check['update_available'] && !$check['error'] && $check['remote_digest']) {
+        $existing = $db->fetchOne(
+          'SELECT remote_digest, update_available FROM image_update_checks WHERE image = ?',
+          [$imageName]
+        );
+        if ($existing
+            && $existing['update_available'] == 0
+            && $existing['remote_digest']
+            && $existing['remote_digest'] === $check['remote_digest']) {
+          $check['update_available'] = false;
+          $log('OK ' . $imageName . ': remote digest unchanged since last pull, no update');
+        }
+      }
+
       if ($check['error']) {
         $log('ERROR ' . $imageName . ': ' . $check['error']);
         $errors++;

@@ -87,11 +87,19 @@ try {
 
     // Post-pull operations are non-critical — never let them prevent complete/done
     try {
+      // Get the current remote digest so the update checker knows this version
+      // was pulled and won't flag it as outdated (prevents false positives from
+      // multi-arch digest mismatches between RepoDigests and distribution API)
+      $remoteDigest = $dockerClient->getRemoteImageDigest($image);
+      $localDigest = $dockerClient->getImageDigest($image);
+
       $db = Database::getInstance();
       $db->query(
-        'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image',
-        [':image' => $image, ':now' => time()]
+        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
+         VALUES (:image, :local, :remote, 0, :now, NULL)',
+        [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
       );
+      logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
     } catch (\Throwable $e) {
       logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
     }
