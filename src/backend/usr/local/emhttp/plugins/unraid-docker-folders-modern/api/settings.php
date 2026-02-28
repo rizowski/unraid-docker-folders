@@ -58,6 +58,16 @@ function handlePost()
   $db = Database::getInstance();
   $data = getRequestData();
 
+  // Handle clear_log action
+  if (isset($data['action']) && $data['action'] === 'clear_log') {
+    $logPath = CONFIG_DIR . '/update-check.log';
+    if (file_exists($logPath)) {
+      file_put_contents($logPath, '');
+    }
+    jsonResponse(['success' => true]);
+    return;
+  }
+
   if (!$data || !isset($data['key']) || !isset($data['value'])) {
     errorResponse('Missing key or value', 400);
   }

@@ -745,9 +745,12 @@ if (file_exists($changelogPath)) {
       </div>
 
       <div style="padding-top: 10px;">
-        <button type="button" class="log-viewer-toggle" onclick="toggleLog()">
-          <span id="log-arrow" class="arrow">&#9654;</span> Update check log
-        </button>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button type="button" class="log-viewer-toggle" onclick="toggleLog()">
+            <span id="log-arrow" class="arrow">&#9654;</span> Update check log
+          </button>
+          <button type="button" id="clear-log-btn" class="btn btn-secondary btn-sm" onclick="clearLog()" style="display: none;">Clear</button>
+        </div>
         <div id="log-viewer" class="log-viewer">
           <div id="log-content" class="log-content"><?php if ($updateLog): ?><?= htmlspecialchars($updateLog) ?><?php else: ?><span class="log-empty">No log entries yet. Logs appear after the first scheduled or manual update check.</span><?php endif; ?></div>
         </div>
@@ -1014,13 +1017,33 @@ function escapeHtml(str) {
 function toggleLog() {
   var viewer = document.getElementById('log-viewer');
   var arrow = document.getElementById('log-arrow');
+  var clearBtn = document.getElementById('clear-log-btn');
   var isOpen = viewer.classList.toggle('open');
   arrow.classList.toggle('open', isOpen);
+  if (clearBtn) clearBtn.style.display = isOpen ? '' : 'none';
   if (isOpen) {
     // Scroll to bottom to show latest entries
     var content = document.getElementById('log-content');
     content.scrollTop = content.scrollHeight;
   }
+}
+
+function clearLog() {
+  var csrfToken = (typeof window.csrf_token === 'string') ? window.csrf_token : '';
+  var body = 'csrf_token=' + encodeURIComponent(csrfToken) + '&payload=' + encodeURIComponent(JSON.stringify({action: 'clear_log'}));
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/plugins/unraid-docker-folders-modern/api/settings.php', true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhr.onload = function() {
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if (data.success) {
+        document.getElementById('log-content').innerHTML = '<span class="log-empty">No log entries yet. Logs appear after the first scheduled or manual update check.</span>';
+      }
+    } catch (e) {}
+  };
+  xhr.send(body);
 }
 
 // Detect dark theme from computed background color and set color-scheme
