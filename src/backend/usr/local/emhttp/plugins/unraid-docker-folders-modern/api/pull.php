@@ -35,6 +35,10 @@ if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._\/:@-]+$/', $image) || strlen($image) 
   errorResponse('Invalid image name', 400);
 }
 
+// Allow unlimited execution time — image pulls can take minutes
+set_time_limit(0);
+ignore_user_abort(true);
+
 // Set SSE headers
 header('Content-Type: text/event-stream');
 header('Cache-Control: no-cache');
@@ -79,24 +83,94 @@ try {
   });
 
   if ($success) {
-    // Clear update_available flag in database
-    $db = Database::getInstance();
-    $stmt = $db->prepare(
-      'UPDATE image_update_checks SET update_available = 0, local_digest = remote_digest, checked_at = :now WHERE image = :image'
-    );
-    $stmt->bindValue(':image', $image, SQLITE3_TEXT);
-    $stmt->bindValue(':now', time(), SQLITE3_INTEGER);
-    $stmt->execute();
+    logUpdate("PULL OK {$image}");
 
-    WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
-    WebSocketPublisher::publish('container', 'updated');
+    // Post-pull operations are non-critical — never let them prevent complete/done
+    try {
+      // Get the current remote digest so the update checker knows this version
+      // was pulled and won't flag it as outdated (prevents false positives from
+      // multi-arch digest mismatches between RepoDigests and distribution API)
+      $remoteDigest = $dockerClient->getRemoteImageDigest($image);
+      $localDigest = $dockerClient->getImageDigest($image);
+
+      $db = Database::getInstance();
+      $db->query(
+        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
+         VALUES (:image, :local, :remote, 0, :now, NULL)',
+        [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
+      );
+      logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
+    } catch (\Throwable $e) {
+      logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
+    }
+
+    try {
+      WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
+      WebSocketPublisher::publish('container', 'updated');
+    } catch (\Throwable $e) {
+      logUpdate("PULL WARN {$image}: WebSocket publish failed: " . $e->getMessage());
+    }
+
+    // Check post_pull_action setting for auto-recreate
+    $postPullAction = 'pull_only';
+    try {
+      $db = Database::getInstance();
+      $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['post_pull_action']);
+      if ($row && !empty($row['value'])) {
+        $postPullAction = $row['value'];
+      }
+    } catch (\Throwable $e) {
+      logUpdate("PULL WARN {$image}: Settings fetch failed: " . $e->getMessage());
+    }
+
+    logUpdate("PULL post_pull_action={$postPullAction} for {$image}");
+
+    if ($postPullAction === 'pull_and_auto_recreate') {
+      try {
+        $containers = $dockerClient->listContainers(true);
+        $matchingContainers = [];
+        foreach ($containers as $container) {
+          if ($container['image'] === $image) {
+            $matchingContainers[] = $container;
+          }
+        }
+
+        logUpdate("RECREATE Found " . count($matchingContainers) . " container(s) using {$image}");
+
+        foreach ($matchingContainers as $container) {
+          $cName = $container['name'];
+          $cId = $container['id'];
+
+          logUpdate("RECREATE Starting recreate for {$cName} ({$cId})");
+          sendSSE('recreating', ['container' => $cName, 'message' => "Recreating {$cName}..."]);
+
+          $recreateResult = $dockerClient->recreateContainer($cId);
+
+          if ($recreateResult['success']) {
+            logUpdate("RECREATE OK {$cName} -> new ID {$recreateResult['newId']}");
+            sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
+          } else {
+            $errMsg = $recreateResult['error'] ?? 'Unknown error';
+            logUpdate("RECREATE FAIL {$cName}: {$errMsg}");
+            sendSSE('recreate_error', [
+              'container' => $cName,
+              'message' => "Failed to recreate {$cName}: {$errMsg}",
+            ]);
+          }
+        }
+      } catch (\Throwable $e) {
+        logUpdate("RECREATE ERROR {$image}: " . $e->getMessage());
+        sendSSE('recreate_error', ['container' => '', 'message' => 'Auto-recreate failed: ' . $e->getMessage()]);
+      }
+    }
 
     sendSSE('complete', ['message' => 'Pull complete', 'image' => $image]);
   } else {
+    logUpdate("PULL FAIL {$image}");
     sendSSE('error', ['message' => 'Pull failed']);
   }
-} catch (Exception $e) {
-  error_log('Pull API error: ' . $e->getMessage());
+} catch (\Throwable $e) {
+  logUpdate("PULL ERROR {$image}: " . $e->getMessage());
   sendSSE('error', ['message' => $e->getMessage()]);
 }
 

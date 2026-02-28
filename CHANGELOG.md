@@ -1,7 +1,26 @@
 # Changelog
 
+## 2026.02.27
+### Changes
+- Fix stale update badges after checks find no updates
+- Resolve SHA image refs to tags when recreating containers
+- Fix false positive update detection after pulling images
+- Fix ExposedPorts/Volumes empty object encoding in container recreate
+- Surface Docker API errors in recreate flow, add plugin log entries
+- Make post-pull operations resilient to prevent stream from dying
+
 ## 2026.02.25
 ### Changes
+- Fix post-pull red X and add auto-recreate container support
+- Fix Database::prepare() not existing, use query() instead
+- Add PHP tests for checkAllImageUpdates update check logic
+- Fix iframe not shrinking on folder collapse, harden update loop
+- Fix update check timeout and uneven card button sizing
+- Fix update checks only completing for first container
+- Fix build script bugs and improve robustness
+- Fix folder stats bars, add StatsBar tests, update project docs
+- Extract reusable components, refactor backend config and stats
+- Fix concurrent container action loading states, add dev/stable release channels
 - Add logging to manual update checks, gitignore phpunit cache
 - chore: update gitignore
 

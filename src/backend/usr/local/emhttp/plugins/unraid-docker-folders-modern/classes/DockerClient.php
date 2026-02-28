@@ -11,11 +11,22 @@ class DockerClient
 {
   private $socketPath;
   private $apiVersion;
+  private $lastError = '';
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
     $this->socketPath = $socketPath;
     $this->apiVersion = $apiVersion;
+  }
+
+  /**
+   * Get the error message from the last failed request
+   *
+   * @return string
+   */
+  public function getLastError()
+  {
+    return $this->lastError;
   }
 
   /**
@@ -179,51 +190,11 @@ class DockerClient
       return null;
     }
 
-    // CPU % from precpu_stats vs cpu_stats delta
-    $cpuPercent = 0.0;
-    $cpuStats = $stats['cpu_stats'] ?? [];
-    $preCpuStats = $stats['precpu_stats'] ?? [];
-
-    $cpuDelta = ($cpuStats['cpu_usage']['total_usage'] ?? 0)
-              - ($preCpuStats['cpu_usage']['total_usage'] ?? 0);
-    $systemDelta = ($cpuStats['system_cpu_usage'] ?? 0)
-                 - ($preCpuStats['system_cpu_usage'] ?? 0);
-    $onlineCpus = $cpuStats['online_cpus'] ?? 1;
-
-    if ($systemDelta > 0 && $cpuDelta >= 0) {
-      $cpuPercent = round(($cpuDelta / $systemDelta) * $onlineCpus * 100, 2);
-    }
-
-    // Memory
-    $memStats = $stats['memory_stats'] ?? [];
-    $memoryUsage = $memStats['usage'] ?? 0;
-    $memoryLimit = $memStats['limit'] ?? 1;
-    $memoryPercent = $memoryLimit > 0 ? round(($memoryUsage / $memoryLimit) * 100, 2) : 0;
-
-    // Block I/O
-    $blockRead = 0;
-    $blockWrite = 0;
-    $blkioStats = $stats['blkio_stats']['io_service_bytes_recursive'] ?? [];
-    foreach ($blkioStats as $entry) {
-      $op = strtolower($entry['op'] ?? '');
-      if ($op === 'read') {
-        $blockRead += $entry['value'] ?? 0;
-      } elseif ($op === 'write') {
-        $blockWrite += $entry['value'] ?? 0;
-      }
-    }
-
-    // Network
-    $netRx = 0;
-    $netTx = 0;
-    $networks = $stats['networks'] ?? [];
-    foreach ($networks as $iface) {
-      $netRx += $iface['rx_bytes'] ?? 0;
-      $netTx += $iface['tx_bytes'] ?? 0;
-    }
-
-    // PIDs
-    $pids = $stats['pids_stats']['current'] ?? 0;
+    $cpu = $this->calculateCpuPercent($stats);
+    $mem = $this->calculateMemoryStats($stats);
+    $blockIO = $this->calculateBlockIO($stats);
+    $netIO = $this->calculateNetworkIO($stats);
+    $pids = $this->calculatePids($stats);
 
     // Inspect for restart count and startedAt
     $inspect = $this->inspectContainer($id);
@@ -243,14 +214,14 @@ class DockerClient
     $logSize = $this->getContainerLogSize($fullId);
 
     return [
-      'cpuPercent' => $cpuPercent,
-      'memoryUsage' => $memoryUsage,
-      'memoryLimit' => $memoryLimit,
-      'memoryPercent' => $memoryPercent,
-      'blockRead' => $blockRead,
-      'blockWrite' => $blockWrite,
-      'netRx' => $netRx,
-      'netTx' => $netTx,
+      'cpuPercent' => $cpu,
+      'memoryUsage' => $mem['usage'],
+      'memoryLimit' => $mem['limit'],
+      'memoryPercent' => $mem['percent'],
+      'blockRead' => $blockIO['read'],
+      'blockWrite' => $blockIO['write'],
+      'netRx' => $netIO['rx'],
+      'netTx' => $netIO['tx'],
       'pids' => $pids,
       'restartCount' => $restartCount,
       'startedAt' => $startedAt,
@@ -375,49 +346,11 @@ class DockerClient
         continue;
       }
 
-      // CPU %
-      $cpuPercent = 0.0;
-      $cpuStats = $stats['cpu_stats'] ?? [];
-      $preCpuStats = $stats['precpu_stats'] ?? [];
-      $cpuDelta = ($cpuStats['cpu_usage']['total_usage'] ?? 0)
-                - ($preCpuStats['cpu_usage']['total_usage'] ?? 0);
-      $systemDelta = ($cpuStats['system_cpu_usage'] ?? 0)
-                   - ($preCpuStats['system_cpu_usage'] ?? 0);
-      $onlineCpus = $cpuStats['online_cpus'] ?? 1;
-      if ($systemDelta > 0 && $cpuDelta >= 0) {
-        $cpuPercent = round(($cpuDelta / $systemDelta) * $onlineCpus * 100, 2);
-      }
-
-      // Memory
-      $memStats = $stats['memory_stats'] ?? [];
-      $memoryUsage = $memStats['usage'] ?? 0;
-      $memoryLimit = $memStats['limit'] ?? 1;
-      $memoryPercent = $memoryLimit > 0 ? round(($memoryUsage / $memoryLimit) * 100, 2) : 0;
-
-      // Block I/O
-      $blockRead = 0;
-      $blockWrite = 0;
-      $blkioStats = $stats['blkio_stats']['io_service_bytes_recursive'] ?? [];
-      foreach ($blkioStats as $entry) {
-        $op = strtolower($entry['op'] ?? '');
-        if ($op === 'read') {
-          $blockRead += $entry['value'] ?? 0;
-        } elseif ($op === 'write') {
-          $blockWrite += $entry['value'] ?? 0;
-        }
-      }
-
-      // Network
-      $netRx = 0;
-      $netTx = 0;
-      $networks = $stats['networks'] ?? [];
-      foreach ($networks as $iface) {
-        $netRx += $iface['rx_bytes'] ?? 0;
-        $netTx += $iface['tx_bytes'] ?? 0;
-      }
-
-      // PIDs
-      $pids = $stats['pids_stats']['current'] ?? 0;
+      $cpu = $this->calculateCpuPercent($stats);
+      $mem = $this->calculateMemoryStats($stats);
+      $blockIO = $this->calculateBlockIO($stats);
+      $netIO = $this->calculateNetworkIO($stats);
+      $pids = $this->calculatePids($stats);
 
       // Inspect data
       $inspect = $inspectResults[$id] ?? null;
@@ -436,14 +369,14 @@ class DockerClient
       $logSize = $this->getContainerLogSize($fullId);
 
       $output[$id] = [
-        'cpuPercent' => $cpuPercent,
-        'memoryUsage' => $memoryUsage,
-        'memoryLimit' => $memoryLimit,
-        'memoryPercent' => $memoryPercent,
-        'blockRead' => $blockRead,
-        'blockWrite' => $blockWrite,
-        'netRx' => $netRx,
-        'netTx' => $netTx,
+        'cpuPercent' => $cpu,
+        'memoryUsage' => $mem['usage'],
+        'memoryLimit' => $mem['limit'],
+        'memoryPercent' => $mem['percent'],
+        'blockRead' => $blockIO['read'],
+        'blockWrite' => $blockIO['write'],
+        'netRx' => $netIO['rx'],
+        'netTx' => $netIO['tx'],
         'pids' => $pids,
         'restartCount' => $restartCount,
         'startedAt' => $startedAt,
@@ -527,6 +460,194 @@ class DockerClient
   }
 
   /**
+   * Get raw container inspect data (full Docker API response)
+   *
+   * @param string $id Container ID or name
+   * @return array|null Full inspect response or null if not found
+   */
+  public function inspectContainerRaw($id)
+  {
+    return $this->request('GET', "/containers/{$id}/json") ?: null;
+  }
+
+  /**
+   * Rename a container
+   *
+   * @param string $id Container ID or name
+   * @param string $newName New name for the container
+   * @return bool Success
+   */
+  public function renameContainer($id, $newName)
+  {
+    $response = $this->request('POST', "/containers/{$id}/rename?name=" . urlencode($newName));
+    return $response !== false;
+  }
+
+  /**
+   * Create a container from config
+   *
+   * @param string $name Container name
+   * @param array $config Container create body (Config + HostConfig + NetworkingConfig)
+   * @return string|false New container ID or false on failure
+   */
+  public function createContainer($name, $config)
+  {
+    $response = $this->request('POST', "/containers/create?name=" . urlencode($name), $config, 30);
+    if ($response && isset($response['Id'])) {
+      return $response['Id'];
+    }
+    return false;
+  }
+
+  /**
+   * Recreate a container with its current configuration but the latest image
+   *
+   * Safely: inspect → stop → rename → create → start → remove old
+   * On failure: clean up new container, rename old back, restart if needed
+   *
+   * @param string $id Container ID or name
+   * @return array ['success' => bool, 'newId' => string|null, 'error' => string|null]
+   */
+  public function recreateContainer($id)
+  {
+    $result = ['success' => false, 'newId' => null, 'error' => null];
+
+    // 1. Inspect the existing container
+    $inspect = $this->inspectContainerRaw($id);
+    if (!$inspect) {
+      $result['error'] = "Container {$id} not found";
+      return $result;
+    }
+
+    $containerName = ltrim($inspect['Name'] ?? '', '/');
+    $wasRunning = ($inspect['State']['Running'] ?? false) === true;
+    $oldId = $inspect['Id'];
+    $tempName = $containerName . '-recreating-' . time();
+    $newId = null;
+
+    // 2. Build create body from inspect data
+    $config = $inspect['Config'] ?? [];
+
+    // Remove read-only fields that shouldn't be in create body
+    unset($config['Hostname']); // Let Docker assign based on container name
+
+    // Ensure Image is a tag reference (e.g. "registry:latest"), not a SHA.
+    // Config.Image from inspect can be a sha256 ID which would pin the new
+    // container to the old image instead of using the updated tag.
+    $imageRef = $config['Image'] ?? '';
+    if (strpos($imageRef, 'sha256:') === 0) {
+      $imageInfo = $this->getImageInfo($imageRef);
+      if ($imageInfo && !empty($imageInfo['RepoTags'])) {
+        $config['Image'] = $imageInfo['RepoTags'][0];
+      }
+    }
+
+    // Fix empty-object fields: PHP json_decode turns {} into [] (empty array),
+    // but Docker expects {} (empty object) for ExposedPorts and Volumes values.
+    foreach (['ExposedPorts', 'Volumes'] as $field) {
+      if (isset($config[$field]) && is_array($config[$field])) {
+        if (empty($config[$field])) {
+          $config[$field] = (object) [];
+        } else {
+          foreach ($config[$field] as $key => $val) {
+            if (is_array($val) && empty($val)) {
+              $config[$field][$key] = (object) [];
+            }
+          }
+        }
+      }
+    }
+
+    $createBody = $config;
+    $createBody['HostConfig'] = $inspect['HostConfig'] ?? [];
+
+    // Remove read-only HostConfig fields
+    unset($createBody['HostConfig']['ContainerIDFile']);
+
+    // Build NetworkingConfig from existing networks
+    $networks = $inspect['NetworkSettings']['Networks'] ?? [];
+    if (!empty($networks)) {
+      $endpointsConfig = [];
+      foreach ($networks as $netName => $netConfig) {
+        // Only keep user-configurable fields, not dynamic ones
+        $endpointsConfig[$netName] = [
+          'IPAMConfig' => $netConfig['IPAMConfig'] ?? null,
+          'Aliases' => $netConfig['Aliases'] ?? null,
+          'Links' => $netConfig['Links'] ?? null,
+          'DriverOpts' => $netConfig['DriverOpts'] ?? null,
+        ];
+      }
+      $createBody['NetworkingConfig'] = ['EndpointsConfig' => $endpointsConfig];
+    }
+
+    try {
+      // 3. Stop container if running
+      if ($wasRunning) {
+        if (!$this->stopContainer($oldId, 30)) {
+          $result['error'] = "Failed to stop container {$containerName}: " . $this->lastError;
+          return $result;
+        }
+      }
+
+      // 4. Rename old container
+      if (!$this->renameContainer($oldId, $tempName)) {
+        // Try to restart if it was running
+        if ($wasRunning) {
+          $this->startContainer($oldId);
+        }
+        $result['error'] = "Failed to rename container {$containerName}: " . $this->lastError;
+        return $result;
+      }
+
+      // 5. Create new container with original name
+      $newId = $this->createContainer($containerName, $createBody);
+      if (!$newId) {
+        $createError = $this->lastError;
+        // Rollback: rename old container back
+        $this->renameContainer($oldId, $containerName);
+        if ($wasRunning) {
+          $this->startContainer($oldId);
+        }
+        $result['error'] = "Failed to create new container {$containerName}: {$createError}";
+        return $result;
+      }
+
+      // 6. Start new container if old was running
+      if ($wasRunning) {
+        if (!$this->startContainer($newId)) {
+          $startError = $this->lastError;
+          // Rollback: remove new, rename old back, restart
+          $this->removeContainer($newId, true);
+          $this->renameContainer($oldId, $containerName);
+          $this->startContainer($oldId);
+          $result['error'] = "Failed to start new container {$containerName}: {$startError}";
+          return $result;
+        }
+      }
+
+      // 7. Remove old container
+      $this->removeContainer($oldId, true);
+
+      $result['success'] = true;
+      $result['newId'] = $newId;
+      return $result;
+
+    } catch (\Throwable $e) {
+      // Emergency rollback
+      if ($newId) {
+        $this->removeContainer($newId, true);
+      }
+      // Try to rename old container back
+      $this->renameContainer($oldId, $containerName);
+      if ($wasRunning) {
+        $this->startContainer($oldId);
+      }
+      $result['error'] = $e->getMessage();
+      return $result;
+    }
+  }
+
+  /**
    * Pull a Docker image with progress callback
    *
    * @param string $imageName Image to pull (e.g. linuxserver/plex:latest)
@@ -580,6 +701,101 @@ class DockerClient
     }
 
     return $httpCode >= 200 && $httpCode < 300;
+  }
+
+  /**
+   * Calculate CPU usage percentage from stats delta
+   *
+   * @param array $stats Raw Docker stats
+   * @return float CPU usage percentage
+   */
+  private function calculateCpuPercent($stats)
+  {
+    $cpuStats = $stats['cpu_stats'] ?? [];
+    $preCpuStats = $stats['precpu_stats'] ?? [];
+
+    $cpuDelta = ($cpuStats['cpu_usage']['total_usage'] ?? 0)
+              - ($preCpuStats['cpu_usage']['total_usage'] ?? 0);
+    $systemDelta = ($cpuStats['system_cpu_usage'] ?? 0)
+                 - ($preCpuStats['system_cpu_usage'] ?? 0);
+    $onlineCpus = $cpuStats['online_cpus'] ?? 1;
+
+    if ($systemDelta > 0 && $cpuDelta >= 0) {
+      return round(($cpuDelta / $systemDelta) * $onlineCpus * 100, 2);
+    }
+
+    return 0.0;
+  }
+
+  /**
+   * Calculate memory usage, limit, and percentage from stats
+   *
+   * @param array $stats Raw Docker stats
+   * @return array ['usage' => int, 'limit' => int, 'percent' => float]
+   */
+  private function calculateMemoryStats($stats)
+  {
+    $memStats = $stats['memory_stats'] ?? [];
+    $usage = $memStats['usage'] ?? 0;
+    $limit = $memStats['limit'] ?? 1;
+    $percent = $limit > 0 ? round(($usage / $limit) * 100, 2) : 0;
+
+    return ['usage' => $usage, 'limit' => $limit, 'percent' => $percent];
+  }
+
+  /**
+   * Calculate block I/O read and write totals from stats
+   *
+   * @param array $stats Raw Docker stats
+   * @return array ['read' => int, 'write' => int]
+   */
+  private function calculateBlockIO($stats)
+  {
+    $read = 0;
+    $write = 0;
+    $blkioStats = $stats['blkio_stats']['io_service_bytes_recursive'] ?? [];
+
+    foreach ($blkioStats as $entry) {
+      $op = strtolower($entry['op'] ?? '');
+      if ($op === 'read') {
+        $read += $entry['value'] ?? 0;
+      } elseif ($op === 'write') {
+        $write += $entry['value'] ?? 0;
+      }
+    }
+
+    return ['read' => $read, 'write' => $write];
+  }
+
+  /**
+   * Calculate network I/O rx and tx totals from stats
+   *
+   * @param array $stats Raw Docker stats
+   * @return array ['rx' => int, 'tx' => int]
+   */
+  private function calculateNetworkIO($stats)
+  {
+    $rx = 0;
+    $tx = 0;
+    $networks = $stats['networks'] ?? [];
+
+    foreach ($networks as $iface) {
+      $rx += $iface['rx_bytes'] ?? 0;
+      $tx += $iface['tx_bytes'] ?? 0;
+    }
+
+    return ['rx' => $rx, 'tx' => $tx];
+  }
+
+  /**
+   * Calculate PID count from stats
+   *
+   * @param array $stats Raw Docker stats
+   * @return int Number of PIDs
+   */
+  private function calculatePids($stats)
+  {
+    return $stats['pids_stats']['current'] ?? 0;
   }
 
   /**
@@ -663,8 +879,11 @@ class DockerClient
    */
   private function request($method, $path, $data = null, $timeout = 5)
   {
+    $this->lastError = '';
+
     if (!file_exists($this->socketPath)) {
-      error_log("Docker socket not found: {$this->socketPath}");
+      $this->lastError = "Docker socket not found: {$this->socketPath}";
+      error_log($this->lastError);
       return false;
     }
 
@@ -690,7 +909,8 @@ class DockerClient
     curl_close($ch);
 
     if ($error) {
-      error_log("Docker API error: {$error}");
+      $this->lastError = "Docker API error: {$error}";
+      error_log($this->lastError);
       return false;
     }
 
@@ -704,14 +924,17 @@ class DockerClient
       return true;
     }
 
-    // 404 Not Found
-    if ($httpCode === 404) {
-      return false;
-    }
-
-    // Other non-200 codes
+    // Extract error message from Docker API response
     if ($httpCode < 200 || $httpCode >= 300) {
-      error_log("Docker API HTTP {$httpCode}: {$response}");
+      $errorMsg = "Docker API HTTP {$httpCode}";
+      $decoded = json_decode($response, true);
+      if ($decoded && isset($decoded['message'])) {
+        $errorMsg .= ': ' . $decoded['message'];
+      } elseif ($response) {
+        $errorMsg .= ': ' . substr($response, 0, 500);
+      }
+      $this->lastError = $errorMsg;
+      error_log($this->lastError);
       return false;
     }
 

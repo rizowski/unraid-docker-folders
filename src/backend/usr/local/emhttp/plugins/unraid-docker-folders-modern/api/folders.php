@@ -20,32 +20,6 @@ requireAuth();
 $method = $_SERVER['REQUEST_METHOD'];
 $folderManager = new FolderManager();
 
-/**
- * Read JSON request data.
- * Checks $_POST['payload'] first (form-encoded alongside csrf_token),
- * then parses php://input as URL-encoded (for PUT/DELETE where PHP
- * doesn't populate $_POST), falls back to raw JSON.
- */
-function getRequestData()
-{
-  if (isset($_POST['payload'])) {
-    return json_decode($_POST['payload'], true);
-  }
-
-  // Use getRawBody() (cached in auth.php) since php://input can only be read once
-  $raw = getRawBody();
-
-  // Check if the raw body is URL-encoded (contains payload= field)
-  if ($raw && strpos($raw, 'payload=') !== false) {
-    parse_str($raw, $parsed);
-    if (isset($parsed['payload'])) {
-      return json_decode($parsed['payload'], true);
-    }
-  }
-
-  return json_decode($raw, true);
-}
-
 try {
   switch ($method) {
     case 'GET':

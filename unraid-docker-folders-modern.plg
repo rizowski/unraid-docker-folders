@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.25">
-<!ENTITY md5 "3ea60ecdcb1e2e1e0c44fa9f90f14823">
+<!ENTITY version "2026.02.27-dev6">
+<!ENTITY md5 "47bf21c6432ad1ac6070be7e797d62e3">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -30,6 +30,52 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+###2026.02.27-dev6
+- Fix stale update badges after checks find no updates
+###2026.02.27-dev5
+- Resolve SHA image refs to tags when recreating containers
+###2026.02.27-dev4
+- Fix false positive update detection after pulling images
+###2026.02.27-dev3
+- Fix ExposedPorts/Volumes empty object encoding in container recreate
+###2026.02.27-dev2
+- Surface Docker API errors in recreate flow, add plugin log entries
+###2026.02.27-dev1
+- Make post-pull operations resilient to prevent stream from dying
+###2026.02.25-dev10
+- Fix post-pull red X and add auto-recreate container support
+###2026.02.25-dev9
+- Fix Database::prepare() not existing, use query() instead
+###2026.02.25-dev8
+- Add PHP tests for checkAllImageUpdates update check logic
+- Fix iframe not shrinking on folder collapse, harden update loop
+###2026.02.25-dev7
+- Fix update check timeout and uneven card button sizing
+###2026.02.25-dev6
+- Fix update checks only completing for first container
+###2026.02.25-dev5
+- Fix build script bugs and improve robustness
+###2026.02.25-dev3
+- Fix folder stats bars, add StatsBar tests, update project docs
+- Extract reusable components, refactor backend config and stats
+- Fix concurrent container action loading states, add dev/stable release channels
+###2026.02.25-dev2
+- Extract reusable components, refactor backend config and stats
+- Fix concurrent container action loading states, add dev/stable release channels
 ###2026.02.25
 - Add logging to manual update checks, gitignore phpunit cache
 - chore: update gitignore

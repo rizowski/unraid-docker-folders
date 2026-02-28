@@ -136,21 +136,7 @@
             class="flex items-center gap-2 mb-4 cursor-pointer select-none"
             @click="unfolderedCollapsed = !unfolderedCollapsed"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="shrink-0 text-text-secondary transition-transform duration-200"
-              :class="unfolderedCollapsed ? '-rotate-90' : ''"
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+            <ChevronIcon :expanded="!unfolderedCollapsed" />
             <h2 class="text-sm font-semibold text-text">Unfoldered Containers</h2>
             <span class="inline-flex items-center justify-center min-w-6 h-6 px-2 bg-text-secondary text-white rounded-full text-xs font-semibold">{{
               filteredUnfolderedContainers.length
@@ -168,7 +154,7 @@
                   v-for="container in filteredUnfolderedContainers"
                   :key="container.id"
                   :container="container"
-                  :action-in-progress="actionInProgress?.id === container.id ? actionInProgress.action : null"
+                  :action-in-progress="actionsInProgress.get(container.id) ?? null"
                   :view="viewMode"
 
                   @start="handleStart"
@@ -245,6 +231,7 @@ import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ConnectionStatus from '@/components/ConnectionStatus.vue';
+import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
@@ -256,7 +243,7 @@ const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
 const updatesStore = useUpdatesStore();
 
-const actionInProgress = ref<{ id: string; action: string } | null>(null);
+const actionsInProgress = ref<Map<string, string>>(new Map());
 const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
 const batchPullContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
 const showBatchConfirm = ref(false);
@@ -429,38 +416,38 @@ function initializeDragAndDrop() {
 }
 
 async function handleStart(id: string) {
-  actionInProgress.value = { id, action: 'start' };
+  actionsInProgress.value.set(id, 'start');
   try {
     await dockerStore.startContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 
 async function handleStop(id: string) {
-  actionInProgress.value = { id, action: 'stop' };
+  actionsInProgress.value.set(id, 'stop');
   try {
     await dockerStore.stopContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 
 async function handleRestart(id: string) {
-  actionInProgress.value = { id, action: 'restart' };
+  actionsInProgress.value.set(id, 'restart');
   try {
     await dockerStore.restartContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 
 async function handleRemove(id: string) {
-  actionInProgress.value = { id, action: 'remove' };
+  actionsInProgress.value.set(id, 'remove');
   try {
     await dockerStore.removeContainer(id);
   } finally {
-    actionInProgress.value = null;
+    actionsInProgress.value.delete(id);
   }
 }
 

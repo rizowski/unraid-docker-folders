@@ -23,14 +23,20 @@ const pinia = createPinia()
 app.use(pinia)
 app.mount('#app')
 
-// Notify parent frame of content height changes for iframe auto-resize
+// Notify parent frame of content height changes for iframe auto-resize.
+// Observe #app (not documentElement) and use offsetHeight (not scrollHeight)
+// so the iframe can shrink when folders collapse — scrollHeight on <html>
+// never decreases because <html> fills the iframe's current (stale) height.
 if (window.parent !== window) {
-  const sendHeight = () => {
-    window.parent.postMessage(
-      { type: 'docker-folders-resize', height: document.documentElement.scrollHeight },
-      '*'
-    )
+  const appEl = document.getElementById('app')
+  if (appEl) {
+    const sendHeight = () => {
+      window.parent.postMessage(
+        { type: 'docker-folders-resize', height: appEl.offsetHeight },
+        '*'
+      )
+    }
+    new ResizeObserver(sendHeight).observe(appEl)
+    sendHeight()
   }
-  new ResizeObserver(sendHeight).observe(document.documentElement)
-  sendHeight()
 }

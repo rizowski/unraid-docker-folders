@@ -2,26 +2,7 @@
   <!-- Grid (card) view -->
   <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen }" :data-container-id="container.id">
     <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
-      <svg
-        v-if="!dragLocked"
-        xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing"
-      >
-        <circle cx="9" cy="5" r="1" />
-        <circle cx="9" cy="12" r="1" />
-        <circle cx="9" cy="19" r="1" />
-        <circle cx="15" cy="5" r="1" />
-        <circle cx="15" cy="12" r="1" />
-        <circle cx="15" cy="19" r="1" />
-      </svg>
+      <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" />
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
@@ -31,25 +12,10 @@
     <!-- Clickable summary row -->
     <div class="flex items-center gap-2 px-4 sm:px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
       <p class="flex-1 text-[11px] text-text-secondary font-mono truncate">
-        <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ container.image }}</a>
-        <span v-else>{{ container.image }}</span>
+        <ImageLink :image="container.image" :href="imageLink" />
       </p>
       <span class="text-[11px] text-text">{{ container.status }}</span>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="shrink-0 text-text-secondary transition-transform duration-200"
-        :class="expanded ? '' : '-rotate-90'"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
+      <ChevronIcon :expanded="expanded" />
     </div>
 
     <!-- Compact ports (collapsed) -->
@@ -59,46 +25,14 @@
 
     <!-- Compact stats loading state -->
     <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
-      <div class="flex items-center gap-2 text-xs">
-        <span class="text-text w-8 shrink-0">CPU</span>
-        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
-          <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
-        </div>
-        <span class="text-text font-mono w-12 text-right shrink-0">--</span>
-      </div>
-      <div class="flex items-center gap-2 text-xs">
-        <span class="text-text w-8 shrink-0">MEM</span>
-        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
-          <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
-        </div>
-        <span class="text-text font-mono w-12 text-right shrink-0">--</span>
-      </div>
+      <StatsBar label="CPU" :percent="null" />
+      <StatsBar label="MEM" :percent="null" />
     </div>
 
     <!-- Compact stats bars (always visible for running containers) -->
     <div v-if="isRunning && containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
-      <div class="flex items-center gap-2 text-xs">
-        <span class="text-text w-8 shrink-0">CPU</span>
-        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
-          <div
-            class="h-full rounded-full transition-all duration-300"
-            :class="cpuBarColor"
-            :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
-          ></div>
-        </div>
-        <span class="text-text font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.cpuPercent) }}</span>
-      </div>
-      <div class="flex items-center gap-2 text-xs">
-        <span class="text-text w-8 shrink-0">MEM</span>
-        <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
-          <div
-            class="h-full rounded-full transition-all duration-300"
-            :class="memBarColor"
-            :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
-          ></div>
-        </div>
-        <span class="text-text font-mono w-12 text-right shrink-0">{{ formatPercent(containerStats.memoryPercent) }}</span>
-      </div>
+      <StatsBar label="CPU" :percent="containerStats.cpuPercent" />
+      <StatsBar label="MEM" :percent="containerStats.memoryPercent" />
       <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
         <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium">
           {{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}
@@ -112,8 +46,7 @@
         <template v-if="container.image">
           <span class="text-muted shrink-0">Image</span>
           <span class="text-text-secondary font-mono truncate">
-            <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ container.image }}</a>
-            <span v-else>{{ container.image }}</span>
+            <ImageLink :image="container.image" :href="imageLink" />
           </span>
         </template>
         <template v-if="networkInfo">
@@ -138,38 +71,8 @@
       <!-- Resource Usage Stats -->
       <div v-if="isRunning && containerStats" class="space-y-2 pt-2 border-t border-border">
         <p class="text-muted text-xs">Resource Usage</p>
-        <!-- CPU Bar -->
-        <div class="space-y-0.5">
-          <div class="flex justify-between text-xs">
-            <span class="text-muted">CPU</span>
-            <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
-          </div>
-          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="cpuBarColor"
-              :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
-            ></div>
-          </div>
-        </div>
-        <!-- Memory Bar -->
-        <div class="space-y-0.5">
-          <div class="flex justify-between text-xs">
-            <span class="text-muted">Memory</span>
-            <span class="text-text-secondary font-mono"
-              >{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{
-                formatPercent(containerStats.memoryPercent)
-              }})</span
-            >
-          </div>
-          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="memBarColor"
-              :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
-            ></div>
-          </div>
-        </div>
+        <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
+        <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
         <!-- Numeric Stats -->
         <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-1">
           <span class="text-muted">Block I/O</span>
@@ -243,7 +146,7 @@
       <button
         v-if="container.state === 'running'"
         @click="confirmAction = 'stop'"
-        class="p-2 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Stop"
       >
@@ -254,7 +157,7 @@
       <button
         v-else
         @click="emit('start', container.id)"
-        class="p-2 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Start"
       >
@@ -265,7 +168,7 @@
       <button
         v-if="isRunning"
         @click="confirmAction = 'restart'"
-        class="p-2 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Restart"
       >
@@ -287,7 +190,7 @@
       <button
         v-if="!isRunning"
         @click="confirmAction = 'remove'"
-        class="p-2 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
         :disabled="isActionInProgress"
         title="Remove"
       >
@@ -311,7 +214,7 @@
       <button
         v-if="hasUpdate"
         @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
-        class="p-2 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
         title="Pull Update"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -326,7 +229,7 @@
         :href="resolvedWebui"
         target="_blank"
         rel="noopener"
-        class="ml-auto p-2 rounded text-text-secondary hover:text-primary transition"
+        class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary hover:text-primary transition"
         title="Open WebUI"
         @click.stop
       >
@@ -341,7 +244,7 @@
         ref="kebabMenuRef"
         :items="menuItems"
         position="above"
-        button-class="p-2 border-none rounded cursor-pointer transition text-text-secondary hover:text-text"
+        button-class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-text-secondary hover:text-text"
         :class="{ 'ml-auto': !resolvedWebui || !isRunning }"
         @select="handleMenuAction"
       />
@@ -351,42 +254,8 @@
   <!-- List view -->
   <div v-else class="container-card-enter container-row rounded transition border-b border-border/50" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen }" :data-container-id="container.id">
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
-      <svg
-        v-if="!dragLocked"
-        xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2"
-        @click.stop
-      >
-        <circle cx="9" cy="5" r="1" />
-        <circle cx="9" cy="12" r="1" />
-        <circle cx="9" cy="19" r="1" />
-        <circle cx="15" cy="5" r="1" />
-        <circle cx="15" cy="12" r="1" />
-        <circle cx="15" cy="19" r="1" />
-      </svg>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="shrink-0 text-text-secondary transition-transform duration-200"
-        :class="expanded ? '' : '-rotate-90'"
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
+      <DragHandle v-if="!dragLocked" :size="14" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2" @click.stop />
+      <ChevronIcon :expanded="expanded" :size="12" />
       <span class="w-[3px] h-5 rounded-full shrink-0" :class="statusBarClass" :title="statusTooltip"></span>
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
 
@@ -397,8 +266,7 @@
           <span class="text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
-          <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ container.image }}</a>
-          <span v-else>{{ container.image }}</span>
+          <ImageLink :image="container.image" :href="imageLink" />
         </span>
       </div>
 
@@ -407,47 +275,15 @@
 
       <!-- Inline compact stats loading (list view) -->
       <div v-if="isRunning && showStats && !containerStats && !expanded" class="hidden md:block shrink-0 w-[140px] space-y-0.5">
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text w-7 text-right">CPU</span>
-          <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
-            <div class="h-full w-1/3 rounded-full bg-border animate-pulse"></div>
-          </div>
-          <span class="text-text font-mono w-9 text-right">--</span>
-        </div>
-        <div class="flex items-center gap-1.5 text-[11px]">
-          <span class="text-text w-7 text-right">MEM</span>
-          <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
-            <div class="h-full w-1/4 rounded-full bg-border animate-pulse"></div>
-          </div>
-          <span class="text-text font-mono w-9 text-right">--</span>
-        </div>
+        <StatsBar label="CPU" :percent="null" size="inline" />
+        <StatsBar label="MEM" :percent="null" size="inline" />
       </div>
 
       <!-- Inline compact stats (list view) -->
       <div v-if="isRunning && containerStats && !expanded" class="hidden md:flex shrink-0 items-center gap-3">
         <div class="w-[140px] space-y-0.5">
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="text-text w-7 text-right">CPU</span>
-            <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
-              <div
-                class="h-full rounded-full transition-all duration-300"
-                :class="cpuBarColor"
-                :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
-              ></div>
-            </div>
-            <span class="text-text font-mono w-9 text-right">{{ formatPercent(containerStats.cpuPercent) }}</span>
-          </div>
-          <div class="flex items-center gap-1.5 text-[11px]">
-            <span class="text-text w-7 text-right">MEM</span>
-            <div class="flex-1 h-1 stats-bar-track rounded-full overflow-hidden">
-              <div
-                class="h-full rounded-full transition-all duration-300"
-                :class="memBarColor"
-                :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
-              ></div>
-            </div>
-            <span class="text-text font-mono w-9 text-right">{{ formatPercent(containerStats.memoryPercent) }}</span>
-          </div>
+          <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="inline" />
+          <StatsBar label="MEM" :percent="containerStats.memoryPercent" size="inline" />
         </div>
         <span v-if="containerStats.restartCount > 0" class="inline-flex items-center px-1.5 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium shrink-0" :title="`${containerStats.restartCount} restart(s)`">
           {{ containerStats.restartCount }} rst
@@ -558,8 +394,7 @@
         <template v-if="container.image">
           <span class="text-muted shrink-0">Image</span>
           <span class="text-text-secondary font-mono truncate">
-            <a v-if="imageLink" :href="imageLink" target="_blank" rel="noopener" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ container.image }}</a>
-            <span v-else>{{ container.image }}</span>
+            <ImageLink :image="container.image" :href="imageLink" />
           </span>
         </template>
       </div>
@@ -585,38 +420,8 @@
       <!-- Resource Usage Stats (list view) -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-2 border-t border-border">
         <p class="text-muted text-xs">Resource Usage</p>
-        <!-- CPU Bar -->
-        <div class="space-y-0.5">
-          <div class="flex justify-between text-xs">
-            <span class="text-muted">CPU</span>
-            <span class="text-text-secondary font-mono">{{ formatPercent(containerStats.cpuPercent) }}</span>
-          </div>
-          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="cpuBarColor"
-              :style="{ width: Math.min(containerStats.cpuPercent, 100) + '%' }"
-            ></div>
-          </div>
-        </div>
-        <!-- Memory Bar -->
-        <div class="space-y-0.5">
-          <div class="flex justify-between text-xs">
-            <span class="text-muted">Memory</span>
-            <span class="text-text-secondary font-mono"
-              >{{ formatBytes(containerStats.memoryUsage) }} / {{ formatBytes(containerStats.memoryLimit) }} ({{
-                formatPercent(containerStats.memoryPercent)
-              }})</span
-            >
-          </div>
-          <div class="w-full h-1.5 stats-bar-track rounded-full overflow-hidden">
-            <div
-              class="h-full rounded-full transition-all duration-300"
-              :class="memBarColor"
-              :style="{ width: Math.min(containerStats.memoryPercent, 100) + '%' }"
-            ></div>
-          </div>
-        </div>
+        <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
+        <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
         <!-- Detailed Stats + Container Info -->
         <div class="grid grid-cols-2 gap-4 text-xs pt-0.5">
           <!-- Left column: I/O, Network, PIDs etc -->
@@ -698,15 +503,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, watch, onMounted, onUnmounted, type Ref } from 'vue';
+import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
 import type { Container } from '@/stores/docker';
-import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
+import { useContainerStats } from '@/composables/useContainerStats';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
+import StatsBar from '@/components/common/StatsBar.vue';
+import DragHandle from '@/components/common/DragHandle.vue';
+import ChevronIcon from '@/components/common/ChevronIcon.vue';
+import ImageLink from '@/components/common/ImageLink.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
@@ -767,29 +576,18 @@ function handleConfirm() {
 }
 
 const expanded = ref(false);
-const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
 const updatesStore = useUpdatesStore();
 
-const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
-
-const showStats = computed(() => settingsStore.showStats);
-const containerStats = computed(() => showStats.value ? statsStore.getStats(props.container.id) : null);
 const isRunning = computed(() => props.container.state === 'running');
 
-const cpuBarColor = computed(() => {
-  const pct = containerStats.value?.cpuPercent ?? 0;
-  if (pct > 80) return 'bg-error';
-  if (pct > 50) return 'bg-warning';
-  return 'bg-success';
+const { showStats, containerStats } = useContainerStats({
+  containerId: () => props.container.id,
+  isRunning,
+  expanded,
 });
 
-const memBarColor = computed(() => {
-  const pct = containerStats.value?.memoryPercent ?? 0;
-  if (pct > 80) return 'bg-error';
-  if (pct > 50) return 'bg-warning';
-  return 'bg-success';
-});
+const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
 
 const logSizeClass = computed(() => {
   const size = containerStats.value?.logSize ?? 0;
@@ -800,13 +598,6 @@ const logSizeClass = computed(() => {
 
 const restartClass = computed(() => {
   return (containerStats.value?.restartCount ?? 0) > 0 ? 'text-error' : 'text-text-secondary';
-});
-
-// Register running containers for compact bar polling (only when stats enabled)
-onMounted(() => {
-  if (showStats.value && isRunning.value) {
-    statsStore.registerVisible(props.container.id);
-  }
 });
 
 // State change pulse animation
@@ -820,43 +611,6 @@ watch(() => props.container.state, () => {
 });
 
 onUnmounted(() => clearTimeout(pulseTimer));
-
-// React to container state changes (start/stop)
-watch(isRunning, (running) => {
-  if (!showStats.value) return;
-  if (running) {
-    statsStore.registerVisible(props.container.id);
-  } else {
-    statsStore.unregisterVisible(props.container.id);
-  }
-});
-
-// React to showStats toggling on/off
-watch(showStats, (enabled) => {
-  if (enabled) {
-    if (isRunning.value) statsStore.registerVisible(props.container.id);
-    if (expanded.value) statsStore.registerExpanded(props.container.id);
-  } else {
-    statsStore.unregisterVisible(props.container.id);
-    statsStore.unregisterExpanded(props.container.id);
-  }
-});
-
-watch(expanded, (val) => {
-  if (!showStats.value) return;
-  if (val) {
-    statsStore.registerExpanded(props.container.id);
-  } else {
-    statsStore.unregisterExpanded(props.container.id);
-  }
-});
-
-onUnmounted(() => {
-  statsStore.unregisterVisible(props.container.id);
-  if (expanded.value) {
-    statsStore.unregisterExpanded(props.container.id);
-  }
-});
 
 const distinguishHealthy = inject<Ref<boolean>>('distinguishHealthy', ref(true));
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));

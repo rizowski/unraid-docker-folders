@@ -41,7 +41,16 @@ export const useUpdatesStore = defineStore('updates', () => {
   }
 
   const updatesAvailableCount = computed(() => {
-    return Object.values(updates.value).filter((u) => u.update_available && !isExcluded(u.image)).length;
+    // Count unique images with updates that actually match running containers,
+    // not just raw DB entries (which can include stale/orphaned image names)
+    const dockerStore = useDockerStore();
+    const imagesWithUpdates = new Set<string>();
+    for (const c of dockerStore.containers) {
+      if (hasUpdate(c.image)) {
+        imagesWithUpdates.add(c.image);
+      }
+    }
+    return imagesWithUpdates.size;
   });
 
   function hasUpdate(imageName: string): boolean {
