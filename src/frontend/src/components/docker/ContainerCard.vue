@@ -419,47 +419,81 @@
 
       <!-- Resource Usage Stats (list view) -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-2 border-t border-border">
-        <p class="text-muted text-xs">Resource Usage</p>
-        <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
-        <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
-        <!-- Detailed Stats + Container Info -->
-        <div class="grid grid-cols-2 gap-4 text-xs pt-0.5">
-          <!-- Left column: I/O, Network, PIDs etc -->
-          <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
-            <span class="text-muted">Block I/O</span>
-            <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-            <span class="text-muted">Network</span>
-            <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-            <span class="text-muted">PIDs</span>
-            <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-            <span class="text-muted">Restarts</span>
-            <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-            <span class="text-muted">Uptime</span>
-            <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-            <span class="text-muted">Image Size</span>
-            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-            <span class="text-muted">Log Size</span>
-            <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
-          </div>
-          <!-- Right column: Health, Command, Labels -->
-          <div class="space-y-2 min-w-0 content-start">
-            <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-              <template v-if="healthStatus">
-                <span class="text-muted">Health</span>
-                <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-              </template>
-              <template v-if="container.command">
-                <span class="text-muted">Command</span>
-                <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
-              </template>
-            </div>
-            <div v-if="displayLabels.length" class="space-y-1">
-              <p class="text-muted text-xs">Labels</p>
-              <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
-                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
-                  <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-                </p>
+        <div :class="shouldShowInlineLogs ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : ''">
+          <!-- Stats column -->
+          <div class="space-y-1.5">
+            <p class="text-muted text-xs">Resource Usage</p>
+            <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
+            <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
+            <!-- Detailed Stats + Container Info -->
+            <div class="grid grid-cols-2 gap-4 text-xs pt-0.5">
+              <!-- Left column: I/O, Network, PIDs etc -->
+              <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
+                <span class="text-muted">Block I/O</span>
+                <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+                <span class="text-muted">Network</span>
+                <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+                <span class="text-muted">PIDs</span>
+                <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+                <span class="text-muted">Restarts</span>
+                <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+                <span class="text-muted">Uptime</span>
+                <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+                <span class="text-muted">Image Size</span>
+                <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+                <span class="text-muted">Log Size</span>
+                <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
               </div>
+              <!-- Right column: Health, Command, Labels -->
+              <div class="space-y-2 min-w-0 content-start">
+                <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                  <template v-if="healthStatus">
+                    <span class="text-muted">Health</span>
+                    <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+                  </template>
+                  <template v-if="container.command">
+                    <span class="text-muted">Command</span>
+                    <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+                  </template>
+                </div>
+                <div v-if="displayLabels.length" class="space-y-1">
+                  <p class="text-muted text-xs">Labels</p>
+                  <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+                    <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
+                      <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Inline logs column -->
+          <div v-if="shouldShowInlineLogs" class="flex flex-col min-w-0">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-muted text-xs">Logs</p>
+              <button
+                class="flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text transition"
+                title="Refresh logs"
+                :disabled="logsLoading"
+                @click.stop="fetchLogs"
+              >
+                <svg :class="{ 'animate-spin': logsLoading }" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+            </div>
+            <div
+              ref="logPanelRef"
+              class="flex-1 rounded bg-black/5 dark:bg-white/5 border border-border/50 p-2 font-mono text-[11px] leading-relaxed text-text-secondary overflow-y-auto max-h-[300px] whitespace-pre-wrap break-all"
+            >
+              <template v-if="logsLoading && !containerLogs">
+                <span class="text-muted italic">Loading logs...</span>
+              </template>
+              <template v-else-if="containerLogs">{{ containerLogs }}</template>
+              <template v-else>
+                <span class="text-muted italic">No logs available.</span>
+              </template>
             </div>
           </div>
         </div>
@@ -503,12 +537,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
+import { computed, inject, ref, watch, nextTick, onUnmounted, type Ref } from 'vue';
 import type { Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
+import { apiFetch } from '@/utils/csrf';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
@@ -588,6 +623,40 @@ const { showStats, containerStats } = useContainerStats({
 });
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
+
+// Inline logs panel (list view only)
+const API_BASE = '/plugins/unraid-docker-folders-modern/api';
+const containerLogs = ref('');
+const logsLoading = ref(false);
+const logPanelRef = ref<HTMLElement | null>(null);
+
+const shouldShowInlineLogs = computed(
+  () => settingsStore.showInlineLogs && props.view === 'list' && expanded.value && isRunning.value,
+);
+
+async function fetchLogs() {
+  logsLoading.value = true;
+  try {
+    const res = await apiFetch(`${API_BASE}/containers.php?action=logs&id=${encodeURIComponent(props.container.name)}&tail=50`);
+    if (res.ok) {
+      const data = await res.json();
+      containerLogs.value = data.logs || '';
+      await nextTick();
+      if (logPanelRef.value) {
+        logPanelRef.value.scrollTop = logPanelRef.value.scrollHeight;
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching logs:', e);
+    containerLogs.value = 'Failed to load logs.';
+  } finally {
+    logsLoading.value = false;
+  }
+}
+
+watch(shouldShowInlineLogs, (show) => {
+  if (show) fetchLogs();
+});
 
 const logSizeClass = computed(() => {
   const size = containerStats.value?.logSize ?? 0;

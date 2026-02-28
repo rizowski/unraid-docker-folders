@@ -125,14 +125,40 @@ class DockerClient
   /**
    * Get container logs
    *
+   * Docker's /logs endpoint returns a multiplexed byte stream with 8-byte
+   * frame headers (byte 0 = stream type, bytes 4-7 = frame size big-endian,
+   * then payload). This method strips those headers and ANSI escape sequences
+   * for clean text output.
+   *
    * @param string $id Container ID or name
    * @param int $tail Number of lines from end
    * @return string Logs
    */
   public function getContainerLogs($id, $tail = 100)
   {
-    $response = $this->request('GET', "/containers/{$id}/logs?stdout=1&stderr=1&tail={$tail}");
-    return $response ?? '';
+    $raw = $this->requestRaw('GET', "/containers/{$id}/logs?stdout=1&stderr=1&tail={$tail}");
+    if ($raw === false || $raw === '') {
+      return '';
+    }
+
+    // Strip Docker multiplexed stream headers (8 bytes per frame)
+    $output = '';
+    $offset = 0;
+    $len = strlen($raw);
+    while ($offset + 8 <= $len) {
+      // bytes 4-7: payload size (big-endian uint32)
+      $frameSize = unpack('N', substr($raw, $offset + 4, 4))[1];
+      $offset += 8;
+      if ($frameSize > 0 && $offset + $frameSize <= $len) {
+        $output .= substr($raw, $offset, $frameSize);
+      }
+      $offset += $frameSize;
+    }
+
+    // Strip ANSI escape sequences
+    $output = preg_replace('/\x1b\[[0-9;]*[a-zA-Z]/', '', $output);
+
+    return $output;
   }
 
   /**
@@ -867,6 +893,54 @@ class DockerClient
         'ipAddress' => $container['NetworkSettings']['IPAddress'] ?? '',
       ],
     ];
+  }
+
+  /**
+   * Make HTTP request to Docker API and return raw response body (no JSON decode)
+   *
+   * @param string $method HTTP method
+   * @param string $path API path
+   * @param int $timeout Request timeout in seconds
+   * @return string|false Raw response body or false on error
+   */
+  private function requestRaw($method, $path, $timeout = 5)
+  {
+    $this->lastError = '';
+
+    if (!file_exists($this->socketPath)) {
+      $this->lastError = "Docker socket not found: {$this->socketPath}";
+      error_log($this->lastError);
+      return false;
+    }
+
+    $url = "http://localhost/{$this->apiVersion}{$path}";
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, $this->socketPath);
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HEADER, false);
+    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $error = curl_error($ch);
+    curl_close($ch);
+
+    if ($error) {
+      $this->lastError = "Docker API error: {$error}";
+      error_log($this->lastError);
+      return false;
+    }
+
+    if ($httpCode < 200 || $httpCode >= 300) {
+      $this->lastError = "Docker API HTTP {$httpCode}";
+      error_log($this->lastError);
+      return false;
+    }
+
+    return $response;
   }
 
   /**

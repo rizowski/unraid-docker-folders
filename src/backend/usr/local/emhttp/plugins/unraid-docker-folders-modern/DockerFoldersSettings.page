@@ -18,6 +18,7 @@ $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
+$showInlineLogs = ($settings['show_inline_logs'] ?? '0') === '1';
 $enableUpdateChecks = ($settings['enable_update_checks'] ?? '0') === '1';
 $updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
 $notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
@@ -667,6 +668,17 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="show-folder-ports" <?= $showFolderPorts ? 'checked' : '' ?> onchange="saveSetting('show_folder_ports', this.checked ? '1' : '0')" />
         <span id="save-status-show-folder-ports" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-inline-logs">Show inline logs in list view</label>
+        <div class="description">When enabled, expanding a container in list view shows a live log panel alongside resource stats. Only applies to list view. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-inline-logs" <?= $showInlineLogs ? 'checked' : '' ?> onchange="saveSetting('show_inline_logs', this.checked ? '1' : '0')" />
+        <span id="save-status-show-inline-logs" class="save-status">Saved</span>
       </div>
     </div>
   </div>

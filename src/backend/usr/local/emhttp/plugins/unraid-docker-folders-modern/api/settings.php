@@ -79,8 +79,9 @@ function handlePost()
   // Validate key against allowlist
   $allowedKeys = [
     'distinguish_healthy', 'show_stats', 'replace_docker_section',
-    'show_folder_ports', 'enable_update_checks', 'update_check_schedule',
-    'notify_on_updates', 'update_check_exclude', 'post_pull_action',
+    'show_folder_ports', 'show_inline_logs', 'enable_update_checks',
+    'update_check_schedule', 'notify_on_updates', 'update_check_exclude',
+    'post_pull_action',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);
