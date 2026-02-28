@@ -2,6 +2,7 @@
 
 ## 2026.02.27
 ### Changes
+- Surface Docker API errors in recreate flow, add plugin log entries
 - Make post-pull operations resilient to prevent stream from dying
 
 ## 2026.02.25

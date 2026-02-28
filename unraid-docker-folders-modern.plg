@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.27-dev1">
-<!ENTITY md5 "5b7ef4919e661044bbb16efffe3161bc">
+<!ENTITY version "2026.02.27-dev2">
+<!ENTITY md5 "08becad05283889627133b50de5021fb">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -39,6 +39,9 @@
 
 
 
+
+###2026.02.27-dev2
+- Surface Docker API errors in recreate flow, add plugin log entries
 ###2026.02.27-dev1
 - Make post-pull operations resilient to prevent stream from dying
 ###2026.02.25-dev10
