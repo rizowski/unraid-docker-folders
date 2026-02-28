@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.02.27
+### Changes
+- Make post-pull operations resilient to prevent stream from dying
+
 ## 2026.02.25
 ### Changes
 - Fix post-pull red X and add auto-recreate container support
