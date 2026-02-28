@@ -660,13 +660,18 @@ const resolvedWebui = computed(() => {
   return url;
 });
 
-const consoleUrl = computed(() => {
-  return `/logterminal/${encodeURIComponent(props.container.name)}/`;
-});
-
-const logsUrl = computed(() => {
-  return `/logterminal/${encodeURIComponent(props.container.name)}.log/`;
-});
+function openContainerTerminal(mode: 'console' | 'logs') {
+  const name = props.container.name;
+  const more = mode === 'logs' ? '.log' : 'sh';
+  const parentWindow = window.parent as typeof window & { openTerminal?: (tag: string, name: string, more: string) => void };
+  if (parentWindow?.openTerminal) {
+    parentWindow.openTerminal('docker', name, more);
+  } else {
+    // Fallback: open directly (dev mode or not in iframe)
+    const suffix = mode === 'logs' ? `${encodeURIComponent(name)}.log` : encodeURIComponent(name);
+    window.open(`/logterminal/${suffix}/`, '_blank');
+  }
+}
 
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 
@@ -682,8 +687,8 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning hover:text-warning', show: hasUpdate.value },
   { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
   { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
-  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value && !isCompose.value },
-  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', href: logsUrl.value, target: '_blank', show: !isCompose.value },
+  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
+  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
 ]);
@@ -691,6 +696,10 @@ const menuItems = computed<KebabMenuItem[]>(() => [
 function handleMenuAction(action: string) {
   if (action === 'update') {
     emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed });
+  } else if (action === 'console') {
+    openContainerTerminal('console');
+  } else if (action === 'logs') {
+    openContainerTerminal('logs');
   }
 }
 
