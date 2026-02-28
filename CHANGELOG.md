@@ -2,6 +2,7 @@
 
 ## 2026.02.27
 ### Changes
+- Fix stale update badges after checks find no updates
 - Resolve SHA image refs to tags when recreating containers
 - Fix false positive update detection after pulling images
 - Fix ExposedPorts/Volumes empty object encoding in container recreate
