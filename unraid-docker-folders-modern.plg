@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.28-dev10">
-<!ENTITY md5 "eb325457565f56a13e64d57674f90326">
+<!ENTITY version "2026.02.28-dev11">
+<!ENTITY md5 "1582d0b2d0b9bec5839368124ddb7345">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -47,6 +47,9 @@
 
 
 
+
+###2026.02.28-dev11
+- Show container actions in kebab menu only for mobile list view
 ###2026.02.28-dev10
 - Mobile responsive overhaul, inline logs polish, and kebab menu improvements
 ###2026.02.28-dev2

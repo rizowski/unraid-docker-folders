@@ -2,6 +2,7 @@
 
 ## 2026.02.28
 ### Changes
+- Show container actions in kebab menu only for mobile list view
 - Mobile responsive overhaul, inline logs polish, and kebab menu improvements
 - Add inline logs panel in list view expanded details
 - Fix 502 error on container Console and Logs actions
