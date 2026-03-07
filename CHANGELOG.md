@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.03.06
+### Changes
+- Release 2026.03.06
+
 ## 2026.02.28
 ### Changes
 - Show container actions in kebab menu only for mobile list view

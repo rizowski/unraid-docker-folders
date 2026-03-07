@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.06-dev1">
-<!ENTITY md5 "9d098c3f7da7613f3c7c236975a2ad51">
+<!ENTITY version "2026.03.06-dev2">
+<!ENTITY md5 "bf5ec101a1b6a019674b4afd204e3ee4">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -319,6 +319,16 @@ find "${PLUGIN_DIR}" -type f -name "*.sh" -exec chmod 755 {} \;
 if [ -f "${PLUGIN_DIR}/scripts/check-updates.php" ]; then
   chmod 755 "${PLUGIN_DIR}/scripts/check-updates.php"
   echo "  check-updates.php made executable"
+fi
+
+# Make restore-cron script executable and run it to restore schedule from DB
+if [ -f "${PLUGIN_DIR}/scripts/restore-cron.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/restore-cron.php"
+  CRON_OUTPUT=$(/usr/bin/php "${PLUGIN_DIR}/scripts/restore-cron.php" 2>&1)
+  if [ -n "$CRON_OUTPUT" ]; then
+    echo "  $CRON_OUTPUT"
+    echo "$CRON_OUTPUT" >> "${LOG_FILE}"
+  fi
 fi
 find "${PLUGIN_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.js" -exec chmod 644 {} \;
