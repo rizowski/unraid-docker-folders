@@ -49,7 +49,18 @@ try {
  */
 function handleGet($dockerClient)
 {
+  $action = $_GET['action'] ?? null;
   $id = $_GET['id'] ?? null;
+
+  if ($action === 'logs') {
+    if (!$id) {
+      errorResponse('Container ID is required', 400);
+    }
+    $tail = isset($_GET['tail']) ? max(1, min(500, (int)$_GET['tail'])) : 50;
+    $logs = $dockerClient->getContainerLogs($id, $tail);
+    jsonResponse(['logs' => $logs]);
+    return;
+  }
 
   if ($id) {
     // Get specific container

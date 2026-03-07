@@ -227,8 +227,46 @@ function parseUrl(url: string) {
 
 // --- Route handlers ---
 
+function generateMockLogs(name: string, tail: number): string {
+  const messages = [
+    `[info] ${name} started successfully`,
+    `[info] Listening on port 8080`,
+    `[debug] Health check passed`,
+    `[info] Processing request from 172.17.0.1`,
+    `[warn] High memory usage detected`,
+    `[info] Connection established to database`,
+    `[debug] Cache hit ratio: 94.2%`,
+    `[info] Scheduled task completed`,
+    `[error] Connection timeout to upstream, retrying...`,
+    `[info] Retry successful`,
+    `[debug] GC pause: 12ms`,
+    `[info] Configuration reloaded`,
+    `[warn] Slow query detected (1.2s)`,
+    `[info] Backup completed successfully`,
+    `[debug] Worker thread pool: 4/8 active`,
+  ];
+  const lines: string[] = [];
+  const now = Date.now();
+  for (let i = 0; i < tail; i++) {
+    const d = new Date(now - (tail - i) * 30000);
+    // Format as YYYY-MM-DD HH:MM:SS (matches backend timestamp simplification)
+    const ts = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    const msg = messages[i % messages.length];
+    lines.push(`${ts} ${msg}`);
+  }
+  // Reverse so newest lines appear first (matches backend behavior)
+  lines.reverse();
+  return lines.join('\n');
+}
+
 async function handleContainers(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {
+    if (params.action === 'logs') {
+      const container = containers.find((c) => c.id === params.id || c.name === params.id);
+      const name = container?.name || params.id || 'unknown';
+      const tail = Math.min(500, Math.max(1, parseInt(params.tail || '50', 10) || 50));
+      return json(res, { logs: generateMockLogs(name, tail) });
+    }
     return json(res, { containers, count: containers.length, cached: false });
   }
 

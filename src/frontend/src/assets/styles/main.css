@@ -38,6 +38,9 @@
   font-size: 16px;
   line-height: 1.5;
   box-sizing: border-box;
+  /* Prevent horizontal overflow from pushing the iframe wider on mobile */
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 /* Reset all elements inside our app to border-box */
@@ -75,7 +78,7 @@
   font-weight: bold;
   letter-spacing: 1px;
   text-transform: uppercase;
-  padding: 8px 14px;
+  padding: 6px 10px;
   border: 1px solid var(--border-color, #e0e0e0);
   border-radius: 4px;
   color: var(--text-color, #303030);
@@ -88,6 +91,13 @@
   margin: 0;
   min-width: 0;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+@media (min-width: 640px) {
+  #unraid-docker-folders-modern button.nav-btn,
+  #unraid-docker-folders-modern a.nav-btn {
+    padding: 8px 14px;
+  }
 }
 
 #unraid-docker-folders-modern button.nav-btn:hover,
@@ -171,10 +181,13 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
 }
 
-/* Kebab menu items: ensure button items match link item padding
-   (the global button reset sets padding: 0 which overrides Tailwind) */
+/* Kebab menu items: ensure button items match link items
+   (the global button reset sets padding: 0 and font-size: inherit
+   which override Tailwind's py-2 px-3 and text-sm) */
 #unraid-docker-folders-modern button.kebab-menu-item {
   padding: 0.5rem 0.75rem; /* py-2 px-3 */
+  font-size: 0.875rem; /* text-sm — match <a> menu items */
+  line-height: 1.25rem;
 }
 
 /* Kebab menu hover: lighter than border/50 for dark themes */
@@ -284,6 +297,20 @@
 
 #unraid-docker-folders-modern .view-mode-slider.slider-right {
   left: 50%;
+}
+
+/* New log line highlight — fade from accent to transparent */
+@keyframes log-line-highlight {
+  from {
+    background: color-mix(in srgb, var(--header-background, #ff8c2f) 25%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+
+#unraid-docker-folders-modern .log-line-new {
+  animation: log-line-highlight 2s ease-out;
 }
 
 /* Drag and drop styles */

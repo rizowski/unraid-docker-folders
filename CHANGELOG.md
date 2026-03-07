@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.03.06
+### Changes
+- Release 2026.03.06
+
+## 2026.02.28
+### Changes
+- Show container actions in kebab menu only for mobile list view
+- Mobile responsive overhaul, inline logs polish, and kebab menu improvements
+- Add inline logs panel in list view expanded details
+- Fix 502 error on container Console and Logs actions
+- Add "Clear" button to update check log viewer
+
 ## 2026.02.27
 ### Changes
 - Fix stale update badges after checks find no updates

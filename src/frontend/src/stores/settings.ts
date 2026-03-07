@@ -13,6 +13,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const showStats = ref(true);
   const replaceDockerSection = ref(false);
   const showFolderPorts = ref(true);
+  const showInlineLogs = ref(false);
+  const logRefreshInterval = ref(10);
   const enableUpdateChecks = ref(false);
   const updateCheckSchedule = ref('disabled');
   const notifyOnUpdates = ref(false);
@@ -39,6 +41,13 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('show_folder_ports' in settings) {
         showFolderPorts.value = settings.show_folder_ports !== '0';
+      }
+      if ('show_inline_logs' in settings) {
+        showInlineLogs.value = settings.show_inline_logs === '1';
+      }
+      if ('log_refresh_interval' in settings) {
+        const parsed = parseInt(settings.log_refresh_interval, 10);
+        logRefreshInterval.value = Number.isNaN(parsed) ? 10 : parsed;
       }
       if ('enable_update_checks' in settings) {
         enableUpdateChecks.value = settings.enable_update_checks === '1';
@@ -95,6 +104,32 @@ export const useSettingsStore = defineStore('settings', () => {
       await apiFetch(`${API_BASE}/settings.php`, {
         method: 'POST',
         body: JSON.stringify({ key: 'show_folder_ports', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setShowInlineLogs(value: boolean) {
+    showInlineLogs.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'show_inline_logs', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setLogRefreshInterval(value: number) {
+    logRefreshInterval.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'log_refresh_interval', value: String(value) }),
       });
     } catch (e) {
       console.error('Error saving setting:', e);
@@ -184,6 +219,8 @@ export const useSettingsStore = defineStore('settings', () => {
     showStats,
     replaceDockerSection,
     showFolderPorts,
+    showInlineLogs,
+    logRefreshInterval,
     enableUpdateChecks,
     updateCheckSchedule,
     notifyOnUpdates,
@@ -194,6 +231,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setDistinguishHealthy,
     setShowStats,
     setShowFolderPorts,
+    setShowInlineLogs,
+    setLogRefreshInterval,
     setEnableUpdateChecks,
     setUpdateCheckSchedule,
     setNotifyOnUpdates,

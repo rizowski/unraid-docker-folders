@@ -1,6 +1,6 @@
 <template>
   <!-- Grid (card) view -->
-  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen }" :data-container-id="container.id">
+  <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen, 'col-span-full': expanded }" :data-container-id="container.id">
     <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
       <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" />
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
@@ -11,16 +11,16 @@
 
     <!-- Clickable summary row -->
     <div class="flex items-center gap-2 px-4 sm:px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
-      <p class="flex-1 text-[11px] text-text-secondary font-mono truncate">
+      <p class="flex-1 text-[11px] text-text-secondary font-mono truncate min-w-0">
         <ImageLink :image="container.image" :href="imageLink" />
       </p>
-      <span class="text-[11px] text-text">{{ container.status }}</span>
+      <span class="text-[11px] text-text shrink-0">{{ container.status }}</span>
       <ChevronIcon :expanded="expanded" />
     </div>
 
     <!-- Compact ports (collapsed) -->
     <div v-if="compactPorts && !expanded" class="px-4 sm:px-6 pb-0.5">
-      <span class="text-[11px] text-text font-mono">Ports: {{ compactPorts }}</span>
+      <span class="text-[11px] text-text font-mono truncate block">Ports: {{ compactPorts }}</span>
     </div>
 
     <!-- Compact stats loading state -->
@@ -59,8 +59,8 @@
         </template>
         <template v-if="displayMounts.length">
           <span class="text-muted shrink-0">Volumes</span>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
-            <p v-for="mount in displayMounts" :key="mount.destination" class="whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
+          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-hidden">
+            <p v-for="mount in displayMounts" :key="mount.destination" class="sm:whitespace-nowrap truncate sm:overflow-visible sm:text-clip" :title="`${mount.source} -> ${mount.destination}`">
               <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
             </p>
           </div>
@@ -263,7 +263,7 @@
         <div class="flex items-center gap-3 min-w-0">
           <span class="text-xs font-semibold text-text truncate">{{ container.name }}</span>
           <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
-          <span class="text-[11px] text-text-secondary truncate">{{ container.status }}</span>
+          <span class="hidden sm:inline text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
           <ImageLink :image="container.image" :href="imageLink" />
@@ -306,7 +306,7 @@
           :href="resolvedWebui"
           target="_blank"
           rel="noopener"
-          class="flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition"
+          class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition"
           title="Open WebUI"
           @click.stop
         >
@@ -319,7 +319,7 @@
         <button
           v-if="container.state === 'running'"
           @click="confirmAction = 'stop'"
-          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Stop"
         >
@@ -330,7 +330,7 @@
         <button
           v-else
           @click="emit('start', container.id)"
-          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Start"
         >
@@ -341,7 +341,7 @@
         <button
           v-if="isRunning"
           @click="confirmAction = 'restart'"
-          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Restart"
         >
@@ -353,7 +353,7 @@
         <button
           v-if="!isRunning"
           @click="confirmAction = 'remove'"
-          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
           :disabled="isActionInProgress"
           title="Remove"
         >
@@ -367,7 +367,7 @@
         <button
           v-if="hasUpdate"
           @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
-          class="action-btn flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
+          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
           title="Pull Update"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -389,7 +389,7 @@
     </div>
 
     <!-- List accordion details -->
-    <div v-if="expanded" class="px-2 sm:px-4 pb-4 pt-2 border-t border-border ml-2 sm:ml-10 space-y-3 text-sm">
+    <div v-if="expanded" class="px-2 sm:px-4 pb-4 pt-2 border-t border-border space-y-3 text-sm">
       <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
         <template v-if="container.image">
           <span class="text-muted shrink-0">Image</span>
@@ -409,7 +409,7 @@
         <div v-if="displayMounts.length">
           <p class="text-muted text-xs mb-1">Volumes</p>
           <div class="text-text-secondary font-mono text-xs space-y-0.5 overflow-x-auto">
-            <p v-for="mount in displayMounts" :key="mount.destination" class="whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
+            <p v-for="mount in displayMounts" :key="mount.destination" class="sm:whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
               <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
             </p>
           </div>
@@ -419,47 +419,88 @@
 
       <!-- Resource Usage Stats (list view) -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-2 border-t border-border">
-        <p class="text-muted text-xs">Resource Usage</p>
-        <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
-        <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
-        <!-- Detailed Stats + Container Info -->
-        <div class="grid grid-cols-2 gap-4 text-xs pt-0.5">
-          <!-- Left column: I/O, Network, PIDs etc -->
-          <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
-            <span class="text-muted">Block I/O</span>
-            <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-            <span class="text-muted">Network</span>
-            <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-            <span class="text-muted">PIDs</span>
-            <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-            <span class="text-muted">Restarts</span>
-            <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-            <span class="text-muted">Uptime</span>
-            <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-            <span class="text-muted">Image Size</span>
-            <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-            <span class="text-muted">Log Size</span>
-            <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
-          </div>
-          <!-- Right column: Health, Command, Labels -->
-          <div class="space-y-2 min-w-0 content-start">
-            <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-              <template v-if="healthStatus">
-                <span class="text-muted">Health</span>
-                <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-              </template>
-              <template v-if="container.command">
-                <span class="text-muted">Command</span>
-                <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
-              </template>
-            </div>
-            <div v-if="displayLabels.length" class="space-y-1">
-              <p class="text-muted text-xs">Labels</p>
-              <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
-                <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
-                  <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-                </p>
+        <div :class="shouldShowInlineLogs ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : ''">
+          <!-- Stats column -->
+          <div class="space-y-1.5">
+            <p class="text-muted text-xs">Resource Usage</p>
+            <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
+            <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
+            <!-- Detailed Stats + Container Info -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-0.5">
+              <!-- Left column: I/O, Network, PIDs etc -->
+              <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
+                <span class="text-muted">Block I/O</span>
+                <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+                <span class="text-muted">Network</span>
+                <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+                <span class="text-muted">PIDs</span>
+                <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
+                <span class="text-muted">Restarts</span>
+                <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
+                <span class="text-muted">Uptime</span>
+                <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+                <span class="text-muted">Image Size</span>
+                <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+                <span class="text-muted">Log Size</span>
+                <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
               </div>
+              <!-- Right column: Health, Command, Labels -->
+              <div class="space-y-2 min-w-0 content-start">
+                <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+                  <template v-if="healthStatus">
+                    <span class="text-muted">Health</span>
+                    <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
+                  </template>
+                  <template v-if="container.command">
+                    <span class="text-muted">Command</span>
+                    <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+                  </template>
+                </div>
+                <div v-if="displayLabels.length" class="space-y-1">
+                  <p class="text-muted text-xs">Labels</p>
+                  <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+                    <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
+                      <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Inline logs column -->
+          <div v-if="shouldShowInlineLogs" class="flex flex-col min-w-0">
+            <div class="flex items-center justify-between mb-1">
+              <p class="text-muted text-xs">Logs</p>
+              <button
+                class="flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text transition"
+                title="Refresh logs"
+                :disabled="logsLoading"
+                @click.stop="fetchLogs"
+              >
+                <svg :class="{ 'animate-spin': logsLoading }" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="1 4 1 10 7 10" />
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+                </svg>
+              </button>
+            </div>
+            <div
+              ref="logPanelRef"
+              class="flex-1 rounded bg-black/5 dark:bg-white/5 border border-border/50 p-2 font-mono text-[11px] leading-relaxed text-text-secondary overflow-y-auto max-h-[300px] break-all"
+            >
+              <template v-if="logsLoading && logLines.length === 0">
+                <span class="text-muted italic">Loading logs...</span>
+              </template>
+              <template v-else-if="logLines.length > 0">
+                <div
+                  v-for="(line, idx) in logLines"
+                  :key="idx"
+                  class="whitespace-pre-wrap"
+                  :class="{ 'log-line-new': idx < newLineCount }"
+                >{{ line }}</div>
+              </template>
+              <template v-else>
+                <span class="text-muted italic">No logs available.</span>
+              </template>
             </div>
           </div>
         </div>
@@ -508,7 +549,9 @@ import type { Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
+import { useIsMobile } from '@/composables/useIsMobile';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
+import { apiFetch } from '@/utils/csrf';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
@@ -519,6 +562,7 @@ import ImageLink from '@/components/common/ImageLink.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
+const isMobile = useIsMobile();
 const kebabMenuRef = ref<InstanceType<typeof KebabMenu> | null>(null);
 const menuOpen = computed(() => kebabMenuRef.value?.menuOpen ?? false);
 
@@ -589,6 +633,77 @@ const { showStats, containerStats } = useContainerStats({
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
 
+// Inline logs panel (list view only)
+const API_BASE = '/plugins/unraid-docker-folders-modern/api';
+const logLines = ref<string[]>([]);
+const newLineCount = ref(0);
+const logsLoading = ref(false);
+const logPanelRef = ref<HTMLElement | null>(null);
+const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
+
+const shouldShowInlineLogs = computed(
+  () => settingsStore.showInlineLogs && props.view === 'list' && expanded.value && isRunning.value,
+);
+
+async function fetchLogs() {
+  logsLoading.value = true;
+  try {
+    const res = await apiFetch(`${API_BASE}/containers.php?action=logs&id=${encodeURIComponent(props.container.name)}&tail=50`);
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.logs || '';
+      const prevFirst = logLines.value[0] || '';
+      const lines = raw ? raw.split('\n') : [];
+
+      // Determine how many lines at the top are new (logs are newest-first)
+      if (prevFirst && lines.length > 0) {
+        const prevIdx = lines.indexOf(prevFirst);
+        newLineCount.value = prevIdx > 0 ? prevIdx : 0;
+      } else {
+        newLineCount.value = 0;
+      }
+
+      logLines.value = lines;
+    }
+  } catch (e) {
+    console.error('Error fetching logs:', e);
+    logLines.value = ['Failed to load logs.'];
+    newLineCount.value = 0;
+  } finally {
+    logsLoading.value = false;
+  }
+}
+
+function startLogPolling() {
+  stopLogPolling();
+  fetchLogs();
+  const interval = settingsStore.logRefreshInterval;
+  if (interval > 0) {
+    logRefreshTimer.value = setInterval(fetchLogs, interval * 1000);
+  }
+}
+
+function stopLogPolling() {
+  if (logRefreshTimer.value !== null) {
+    clearInterval(logRefreshTimer.value);
+    logRefreshTimer.value = null;
+  }
+}
+
+watch(shouldShowInlineLogs, (show) => {
+  if (show) {
+    startLogPolling();
+  } else {
+    stopLogPolling();
+  }
+});
+
+watch(() => settingsStore.logRefreshInterval, () => {
+  if (shouldShowInlineLogs.value) {
+    startLogPolling();
+  }
+});
+
 const logSizeClass = computed(() => {
   const size = containerStats.value?.logSize ?? 0;
   if (size > 1_073_741_824) return 'text-error';
@@ -610,7 +725,10 @@ watch(() => props.container.state, () => {
   pulseTimer = setTimeout(() => { stateChangePulse.value = false; }, 600);
 });
 
-onUnmounted(() => clearTimeout(pulseTimer));
+onUnmounted(() => {
+  clearTimeout(pulseTimer);
+  stopLogPolling();
+});
 
 const distinguishHealthy = inject<Ref<boolean>>('distinguishHealthy', ref(true));
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
@@ -660,13 +778,18 @@ const resolvedWebui = computed(() => {
   return url;
 });
 
-const consoleUrl = computed(() => {
-  return `/logterminal/${encodeURIComponent(props.container.name)}/`;
-});
-
-const logsUrl = computed(() => {
-  return `/logterminal/${encodeURIComponent(props.container.name)}.log/`;
-});
+function openContainerTerminal(mode: 'console' | 'logs') {
+  const name = props.container.name;
+  const more = mode === 'logs' ? '.log' : 'sh';
+  const parentWindow = window.parent as typeof window & { openTerminal?: (tag: string, name: string, more: string) => void };
+  if (parentWindow?.openTerminal) {
+    parentWindow.openTerminal('docker', name, more);
+  } else {
+    // Fallback: open directly (dev mode or not in iframe)
+    const suffix = mode === 'logs' ? `${encodeURIComponent(name)}.log` : encodeURIComponent(name);
+    window.open(`/logterminal/${suffix}/`, '_blank');
+  }
+}
 
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 
@@ -679,18 +802,34 @@ const projectUrl = computed(() => {
 });
 
 const menuItems = computed<KebabMenuItem[]>(() => [
-  { label: 'Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning hover:text-warning', show: hasUpdate.value },
+  { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: props.view === 'list' && isMobile.value && !isRunning.value },
+  { label: 'Restart', icon: 'M1 4v6h6|M3.51 15a9 9 0 1 0 2.13-9.36L1 10', action: 'restart', class: 'text-primary', show: props.view === 'list' && isMobile.value && isRunning.value },
+  { label: 'Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning', show: hasUpdate.value },
   { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
   { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
-  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', href: consoleUrl.value, target: '_blank', show: isRunning.value && !isCompose.value },
-  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', href: logsUrl.value, target: '_blank', show: !isCompose.value },
+  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
+  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
+  { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
+  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
 ]);
 
 function handleMenuAction(action: string) {
-  if (action === 'update') {
+  if (action === 'stop') {
+    confirmAction.value = 'stop';
+  } else if (action === 'start') {
+    emit('start', props.container.id);
+  } else if (action === 'restart') {
+    confirmAction.value = 'restart';
+  } else if (action === 'remove') {
+    confirmAction.value = 'remove';
+  } else if (action === 'update') {
     emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed });
+  } else if (action === 'console') {
+    openContainerTerminal('console');
+  } else if (action === 'logs') {
+    openContainerTerminal('logs');
   }
 }
 
@@ -741,7 +880,11 @@ const displayMounts = computed(() => {
   const mounts = props.container.mounts;
   if (!mounts?.length) return [];
   return mounts.slice(0, 2).map((m) => {
-    const srcShort = m.Source.length > 30 ? '...' + m.Source.slice(-27) : m.Source;
+    // Show full path — strip /mnt/user/ prefix for brevity on Unraid shares
+    let srcShort = m.Source;
+    if (srcShort.startsWith('/mnt/user/')) {
+      srcShort = srcShort.slice('/mnt/user/'.length);
+    }
     return { destination: m.Destination, source: m.Source, sourceShort: srcShort };
   });
 });

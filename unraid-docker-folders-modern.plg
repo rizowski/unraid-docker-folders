@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.02.27">
-<!ENTITY md5 "7c26884fd2859d9f9a47daae3d867907">
+<!ENTITY version "2026.03.06-dev4">
+<!ENTITY md5 "4f8aab7dd7ddba8b11e3fd66d6c3f8fb">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -44,6 +44,19 @@
 
 
 
+
+
+
+
+###2026.02.28-dev11
+- Show container actions in kebab menu only for mobile list view
+###2026.02.28-dev10
+- Mobile responsive overhaul, inline logs polish, and kebab menu improvements
+###2026.02.28-dev2
+- Add inline logs panel in list view expanded details
+###2026.02.28-dev1
+- Fix 502 error on container Console and Logs actions
+- Add "Clear" button to update check log viewer
 ###2026.02.27-dev6
 - Fix stale update badges after checks find no updates
 ###2026.02.27-dev5
@@ -306,6 +319,16 @@ find "${PLUGIN_DIR}" -type f -name "*.sh" -exec chmod 755 {} \;
 if [ -f "${PLUGIN_DIR}/scripts/check-updates.php" ]; then
   chmod 755 "${PLUGIN_DIR}/scripts/check-updates.php"
   echo "  check-updates.php made executable"
+fi
+
+# Make restore-cron script executable and run it to restore schedule from DB
+if [ -f "${PLUGIN_DIR}/scripts/restore-cron.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/restore-cron.php"
+  CRON_OUTPUT=$(/usr/bin/php "${PLUGIN_DIR}/scripts/restore-cron.php" 2>&1)
+  if [ -n "$CRON_OUTPUT" ]; then
+    echo "  $CRON_OUTPUT"
+    echo "$CRON_OUTPUT" >> "${LOG_FILE}"
+  fi
 fi
 find "${PLUGIN_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.js" -exec chmod 644 {} \;
