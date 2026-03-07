@@ -12,6 +12,7 @@ class DockerClient
   private $socketPath;
   private $apiVersion;
   private $lastError = '';
+  private $imageInfoCache = [];
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
@@ -91,7 +92,7 @@ class DockerClient
    */
   public function stopContainer($id, $timeout = 10)
   {
-    $response = $this->request('POST', "/containers/{$id}/stop?t={$timeout}");
+    $response = $this->request('POST', "/containers/{$id}/stop?t={$timeout}", null, $timeout + 5);
     return $response !== false;
   }
 
@@ -104,7 +105,7 @@ class DockerClient
    */
   public function restartContainer($id, $timeout = 10)
   {
-    $response = $this->request('POST', "/containers/{$id}/restart?t={$timeout}");
+    $response = $this->request('POST', "/containers/{$id}/restart?t={$timeout}", null, $timeout + 5);
     return $response !== false;
   }
 
@@ -579,16 +580,8 @@ class DockerClient
     // Remove read-only fields that shouldn't be in create body
     unset($config['Hostname']); // Let Docker assign based on container name
 
-    // Ensure Image is a tag reference (e.g. "registry:latest"), not a SHA.
-    // Config.Image from inspect can be a sha256 ID which would pin the new
-    // container to the old image instead of using the updated tag.
-    $imageRef = $config['Image'] ?? '';
-    if (strpos($imageRef, 'sha256:') === 0) {
-      $imageInfo = $this->getImageInfo($imageRef);
-      if ($imageInfo && !empty($imageInfo['RepoTags'])) {
-        $config['Image'] = $imageInfo['RepoTags'][0];
-      }
-    }
+    // Ensure Image is a tag reference, not a SHA digest
+    $config['Image'] = $this->resolveImageTag($config['Image'] ?? '', $containerName);
 
     // Fix empty-object fields: PHP json_decode turns {} into [] (empty array),
     // but Docker expects {} (empty object) for ExposedPorts and Volumes values.
@@ -847,6 +840,82 @@ class DockerClient
   }
 
   /**
+   * Resolve a SHA256 image digest to a human-readable tag.
+   *
+   * After a pull + recreate the container's Image field may be a sha256 digest
+   * pointing to the OLD (now untagged) image. Fallback chain:
+   *   1. Unraid's dockerMan XML template (most reliable — has exact user-configured tag)
+   *   2. RepoTags on the image (works if image still has tags)
+   *   3. Original SHA reference (last resort)
+   *
+   * @param string $imageRef Image reference (tag or sha256 digest)
+   * @param string $containerName Container name for template lookup (optional)
+   * @return string Resolved tag or original reference
+   */
+  private function resolveImageTag($imageRef, $containerName = '')
+  {
+    if (!$imageRef || strpos($imageRef, 'sha256:') !== 0) {
+      return $imageRef;
+    }
+
+    // 1. Unraid's dockerMan template is the most reliable source — it has the
+    //    exact user-configured image:tag regardless of Docker's internal state.
+    if ($containerName) {
+      $tag = $this->getImageFromTemplate($containerName);
+      if ($tag) {
+        return $tag;
+      }
+    }
+
+    // 2. Try RepoTags from the image metadata
+    if (!isset($this->imageInfoCache[$imageRef])) {
+      $this->imageInfoCache[$imageRef] = $this->getImageInfo($imageRef);
+    }
+    $imageInfo = $this->imageInfoCache[$imageRef];
+
+    if ($imageInfo && !empty($imageInfo['RepoTags'])) {
+      return $imageInfo['RepoTags'][0];
+    }
+
+    return $imageRef;
+  }
+
+  /**
+   * Read the image reference from an Unraid dockerMan XML template.
+   *
+   * Templates are stored in /boot/config/plugins/dockerMan/templates-user/
+   * with a "my-" prefix (e.g. my-plex.xml). If the prefixed file isn't found,
+   * falls back to searching all XML files for a matching <Name> element.
+   *
+   * @param string $containerName Container name
+   * @return string|null Image reference or null if not found
+   */
+  private function getImageFromTemplate($containerName)
+  {
+    $safeName = basename($containerName);
+    $templateDir = '/boot/config/plugins/dockerMan/templates-user';
+
+    // Try the standard "my-" prefixed path first
+    $xml = @simplexml_load_file($templateDir . '/my-' . $safeName . '.xml');
+    if ($xml && !empty($xml->Repository)) {
+      return (string) $xml->Repository;
+    }
+
+    // Fallback: scan all templates for one with a matching <Name>
+    $files = @glob($templateDir . '/*.xml');
+    if ($files) {
+      foreach ($files as $file) {
+        $xml = @simplexml_load_file($file);
+        if ($xml && isset($xml->Name) && (string) $xml->Name === $containerName && !empty($xml->Repository)) {
+          return (string) $xml->Repository;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Format container from list endpoint
    *
    * @param array $container Raw container data
@@ -855,10 +924,11 @@ class DockerClient
   private function formatContainer($container)
   {
     $labels = $container['Labels'] ?? [];
+    $name = ltrim($container['Names'][0] ?? '', '/');
     return [
       'id' => $container['Id'],
-      'name' => ltrim($container['Names'][0] ?? '', '/'),
-      'image' => $container['Image'],
+      'name' => $name,
+      'image' => $this->resolveImageTag($container['Image'], $name),
       'imageId' => $container['ImageID'] ?? '',
       'command' => $container['Command'] ?? '',
       'created' => $container['Created'],
@@ -883,10 +953,11 @@ class DockerClient
    */
   private function formatContainerDetail($container)
   {
+    $name = ltrim($container['Name'] ?? '', '/');
     return [
       'id' => $container['Id'],
-      'name' => ltrim($container['Name'] ?? '', '/'),
-      'image' => $container['Config']['Image'] ?? '',
+      'name' => $name,
+      'image' => $this->resolveImageTag($container['Config']['Image'] ?? '', $name),
       'imageId' => $container['Image'] ?? '',
       'created' => $container['Created'],
       'path' => $container['Path'] ?? '',

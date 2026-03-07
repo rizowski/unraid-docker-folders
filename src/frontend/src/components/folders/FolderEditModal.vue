@@ -1,6 +1,6 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]" @click="handleOverlayClick">
+  <div v-if="isOpen" class="absolute bg-black/50 flex items-center justify-center z-[1000]" :style="overlayStyle" @click="handleOverlayClick">
     <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
@@ -78,6 +78,7 @@
 import { ref, watch, computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useParentViewport } from '@/composables/useParentViewport';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -94,6 +95,14 @@ const emit = defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+
+const { visibleTop, visibleHeight } = useParentViewport();
+const overlayStyle = computed(() => ({
+  top: visibleTop.value + 'px',
+  left: '0',
+  width: '100%',
+  height: visibleHeight.value + 'px',
+}));
 
 const isEditing = computed(() => !!props.folder);
 
