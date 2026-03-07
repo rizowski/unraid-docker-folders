@@ -2,7 +2,11 @@
 
 ## 2026.03.06
 ### Changes
+- Fix CHANGELOG.md entries for 2026.03.06 release
 - Fix SHA digest stored as container image, stop/restart timeouts, cron restore on boot, and modal viewport centering in iframe
+
+## 2026.02.28
+### Changes
 - Show container actions in kebab menu only for mobile list view
 - Mobile responsive overhaul, inline logs polish, and kebab menu improvements
 - Add inline logs panel in list view expanded details
