@@ -40,11 +40,5 @@ if (window.parent !== window) {
     }
     new ResizeObserver(sendHeight).observe(appEl)
     sendHeight()
-
-    // Re-send height periodically while a modal sets a min-height floor,
-    // since the ResizeObserver only fires on #app size changes.
-    setInterval(() => {
-      if (getIframeMinHeight() > 0) sendHeight()
-    }, 200)
   }
 }
