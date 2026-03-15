@@ -2,6 +2,7 @@
 
 ## 2026.03.15
 ### Changes
+- Fix modal clipping in iframe: direct height floor + correct max-height
 - Fix compose modal visibility in iframe and title color
 - Fix compose import file migration, modal z-index, and editor styling
 - Fix compose UI: controls visibility, import banner, mock data alignment
