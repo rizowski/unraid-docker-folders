@@ -2,6 +2,7 @@
 
 ## 2026.03.15
 ### Changes
+- Fix compose UI: controls visibility, import banner, mock data alignment
 - Add Docker Compose management feature
 - Fix CHANGELOG.md entries for 2026.03.06 release
 - Fix SHA digest stored as container image, stop/restart timeouts, cron restore on boot, and modal viewport centering in iframe
