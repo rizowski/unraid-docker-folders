@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.15-dev2">
-<!ENTITY md5 "78eb3c36d16eabc24b349cc4421c9c0a">
+<!ENTITY version "2026.03.15-dev3">
+<!ENTITY md5 "83dfd392d091008e9158e7081df51a16">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -51,6 +51,9 @@
 
 
 
+
+###2026.03.15-dev3
+- Fix compose import file migration, modal z-index, and editor styling
 ###2026.03.15-dev2
 - Fix compose UI: controls visibility, import banner, mock data alignment
 ###2026.03.15-dev1

@@ -2,6 +2,7 @@
 
 ## 2026.03.15
 ### Changes
+- Fix compose import file migration, modal z-index, and editor styling
 - Fix compose UI: controls visibility, import banner, mock data alignment
 - Add Docker Compose management feature
 - Fix CHANGELOG.md entries for 2026.03.06 release
