@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { getIframeMinHeight } from '@/composables/useParentViewport'
 import './assets/styles/main.css'
 
 // Apply Unraid theme CSS variables passed from parent iframe host
@@ -31,12 +32,19 @@ if (window.parent !== window) {
   const appEl = document.getElementById('app')
   if (appEl) {
     const sendHeight = () => {
+      const height = Math.max(appEl.offsetHeight, getIframeMinHeight())
       window.parent.postMessage(
-        { type: 'docker-folders-resize', height: appEl.offsetHeight },
+        { type: 'docker-folders-resize', height },
         '*'
       )
     }
     new ResizeObserver(sendHeight).observe(appEl)
     sendHeight()
+
+    // Re-send height periodically while a modal sets a min-height floor,
+    // since the ResizeObserver only fires on #app size changes.
+    setInterval(() => {
+      if (getIframeMinHeight() > 0) sendHeight()
+    }, 200)
   }
 }

@@ -1,6 +1,16 @@
 import { ref, watch, onMounted, onUnmounted, type WatchSource } from 'vue';
 
 /**
+ * Minimum iframe height floor, set by modals to prevent the ResizeObserver
+ * from shrinking the iframe while an overlay is open. Exported so main.ts
+ * can incorporate it into the height message sent to the parent frame.
+ */
+let _iframeMinHeight = 0;
+export function getIframeMinHeight() {
+  return _iframeMinHeight;
+}
+
+/**
  * Tracks the parent window's visible viewport area relative to this iframe.
  *
  * When the app runs inside an iframe with scrolling="no", the iframe is sized
@@ -79,34 +89,21 @@ export function useParentViewport() {
     }
   });
 
-  const appEl = document.getElementById('app');
-
-  function applyMinHeight() {
-    if (appEl) {
-      appEl.style.minHeight = (visibleTop.value + visibleHeight.value) + 'px';
-    }
-  }
-
-  function clearMinHeight() {
-    if (appEl) {
-      appEl.style.minHeight = '';
-    }
-  }
-
   /**
-   * Keep #app min-height in sync with the viewport while `isOpen` is true,
-   * so the iframe grows tall enough for an absolutely-positioned overlay.
-   * Cleans up on close and on component unmount.
+   * While `isOpen` is true, set a global iframe min-height floor so the
+   * parent frame keeps the iframe tall enough for the overlay. Updates
+   * reactively when the viewport scrolls/resizes. Cleans up on close
+   * and on component unmount.
    */
   function useViewportFitWhileOpen(isOpen: WatchSource<boolean>) {
     watch([isOpen, visibleTop, visibleHeight], ([open]) => {
       if (open) {
-        applyMinHeight();
+        _iframeMinHeight = visibleTop.value + visibleHeight.value;
       } else {
-        clearMinHeight();
+        _iframeMinHeight = 0;
       }
     });
-    onUnmounted(() => clearMinHeight());
+    onUnmounted(() => { _iframeMinHeight = 0; });
   }
 
   return { visibleTop, visibleHeight, useViewportFitWhileOpen };
