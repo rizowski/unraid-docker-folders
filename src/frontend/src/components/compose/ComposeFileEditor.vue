@@ -1,7 +1,7 @@
 <template>
   <Transition name="modal">
   <div v-if="isOpen" class="absolute bg-black/50 flex items-center justify-center z-[1000]" :style="overlayStyle" @click="$emit('close')">
-    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] flex flex-col" :style="{ maxHeight: (visibleHeight * 0.9) + 'px' }" @click.stop>
+    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] flex flex-col" :style="{ maxHeight: (cappedHeight * 0.9) + 'px' }" @click.stop>
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
         <h2 class="text-xl font-semibold text-text">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
@@ -113,13 +113,15 @@ defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
 
-const { visibleTop, visibleHeight, useViewportFitWhileOpen } = useParentViewport();
-useViewportFitWhileOpen(() => props.isOpen);
+const { visibleTop, visibleHeight } = useParentViewport();
+const cappedHeight = computed(() =>
+  Math.min(visibleHeight.value, document.documentElement.scrollHeight - visibleTop.value)
+);
 const overlayStyle = computed(() => ({
   top: visibleTop.value + 'px',
   left: '0',
   width: '100%',
-  height: visibleHeight.value + 'px',
+  height: cappedHeight.value + 'px',
 }));
 
 const tabs = [

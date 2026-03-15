@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
-import { getIframeMinHeight } from '@/composables/useParentViewport'
 import './assets/styles/main.css'
 
 // Apply Unraid theme CSS variables passed from parent iframe host
@@ -32,7 +31,7 @@ if (window.parent !== window) {
   const appEl = document.getElementById('app')
   if (appEl) {
     const sendHeight = () => {
-      const height = Math.max(appEl.offsetHeight, getIframeMinHeight())
+      const height = appEl.offsetHeight
       window.parent.postMessage(
         { type: 'docker-folders-resize', height },
         '*'

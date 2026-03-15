@@ -1,14 +1,4 @@
-import { ref, watch, onMounted, onUnmounted, type WatchSource } from 'vue';
-
-/**
- * Minimum iframe height floor, set by modals to prevent the ResizeObserver
- * from shrinking the iframe while an overlay is open. Exported so main.ts
- * can incorporate it into the height message sent to the parent frame.
- */
-let _iframeMinHeight = 0;
-export function getIframeMinHeight() {
-  return _iframeMinHeight;
-}
+import { ref, onMounted, onUnmounted } from 'vue';
 
 /**
  * Tracks the parent window's visible viewport area relative to this iframe.
@@ -89,45 +79,5 @@ export function useParentViewport() {
     }
   });
 
-  /**
-   * Lock parent scroll and set a one-time iframe height floor while
-   * `isOpen` is true. This prevents the feedback loop where growing the
-   * iframe changes the scroll geometry which grows the iframe again.
-   */
-  function useViewportFitWhileOpen(isOpen: WatchSource<boolean>) {
-    let savedOverflow = '';
-
-    function lock() {
-      // Lock parent page scroll to prevent background scrolling behind modal
-      try {
-        const parentBody = (inIframe ? window.parent : window).document.body;
-        savedOverflow = parentBody.style.overflow;
-        parentBody.style.overflow = 'hidden';
-      } catch { /* cross-origin */ }
-
-      // Set iframe height floor once and notify parent directly
-      _iframeMinHeight = visibleTop.value + visibleHeight.value;
-      if (inIframe) {
-        const appEl = document.getElementById('app');
-        const height = Math.max(appEl?.offsetHeight ?? 0, _iframeMinHeight);
-        window.parent.postMessage({ type: 'docker-folders-resize', height }, '*');
-      }
-    }
-
-    function unlock() {
-      try {
-        const parentBody = (inIframe ? window.parent : window).document.body;
-        parentBody.style.overflow = savedOverflow;
-      } catch { /* cross-origin */ }
-      _iframeMinHeight = 0;
-    }
-
-    watch(isOpen, (open) => {
-      if (open) lock(); else unlock();
-    });
-
-    onUnmounted(() => unlock());
-  }
-
-  return { visibleTop, visibleHeight, useViewportFitWhileOpen };
+  return { visibleTop, visibleHeight };
 }
