@@ -11,32 +11,34 @@
       </div>
 
       <!-- Tabs -->
-      <div class="flex border-b border-border shrink-0">
+      <div class="flex shrink-0 border-b border-border">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           @click="activeTab = tab.id"
-          class="px-4 py-2 text-sm font-medium border-none bg-transparent cursor-pointer transition"
-          :class="activeTab === tab.id ? 'text-primary border-b-2 border-primary' : 'text-text-secondary hover:text-text'"
+          class="px-4 py-2.5 text-sm font-medium bg-transparent cursor-pointer transition-colors"
+          :class="activeTab === tab.id
+            ? 'text-primary border-b-2 border-primary border-t-0 border-x-0 -mb-px'
+            : 'text-text-secondary hover:text-text border-none'"
         >{{ tab.label }}</button>
       </div>
 
       <!-- Content -->
-      <div class="flex-1 overflow-auto p-4 sm:p-6">
+      <div class="flex-1 overflow-auto p-4 sm:p-6 flex flex-col min-h-0">
         <div v-if="loading" class="text-center py-8 text-text-secondary">Loading...</div>
 
-        <div v-else-if="activeTab === 'compose'">
-          <div v-if="composePath" class="text-xs text-text-secondary mb-2 font-mono">{{ composePath }}</div>
+        <div v-else-if="activeTab === 'compose'" class="flex flex-col flex-1 min-h-0">
+          <div v-if="composePath" class="text-xs text-text-secondary mb-2 font-mono truncate">{{ composePath }}</div>
           <textarea
             v-model="composeContent"
             :readonly="readOnly"
-            class="w-full h-[400px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary"
+            class="w-full flex-1 min-h-[300px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
             :class="{ 'opacity-70': readOnly }"
             spellcheck="false"
           ></textarea>
         </div>
 
-        <div v-else-if="activeTab === 'env'">
+        <div v-else-if="activeTab === 'env'" class="flex flex-col flex-1 min-h-0">
           <div class="mb-3">
             <label class="block mb-1 text-sm font-medium text-text">Env File Path</label>
             <div class="flex gap-2">
@@ -55,11 +57,11 @@
               >Save Path</button>
             </div>
           </div>
-          <div v-if="envFilePath" class="text-xs text-text-secondary mb-2 font-mono">{{ envFilePath }}</div>
+          <div v-if="envFilePath" class="text-xs text-text-secondary mb-2 font-mono truncate">{{ envFilePath }}</div>
           <textarea
             v-model="envContent"
             :readonly="readOnly"
-            class="w-full h-[350px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary"
+            class="w-full flex-1 min-h-[250px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
             :class="{ 'opacity-70': readOnly }"
             placeholder="KEY=value"
             spellcheck="false"

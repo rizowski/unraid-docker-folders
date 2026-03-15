@@ -767,35 +767,56 @@ class ComposeManager
         $autostart = strtolower(trim($this->readMetadataFile($projectPath . '/autostart') ?? '')) === 'true';
         $isIndirect = file_exists($projectPath . '/indirect');
 
-        // Determine compose file path and working directory
-        $workingDir = null;
-        $composeFile = null;
+        // Determine source compose file path and working directory
+        $sourceDir = null;
+        $sourceComposeFile = null;
 
         if ($isIndirect) {
           // Indirect: the file contains a path to the actual compose location
           $indirectPath = $this->readMetadataFile($projectPath . '/indirect');
           if ($indirectPath && is_dir($indirectPath)) {
-            $workingDir = $indirectPath;
+            $sourceDir = $indirectPath;
           }
         } else {
           // Direct: compose file is in the project directory
-          $workingDir = $projectPath;
+          $sourceDir = $projectPath;
         }
 
-        // Look for actual compose file
-        if ($workingDir) {
+        // Find actual compose file in source
+        if ($sourceDir) {
           foreach (['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'] as $candidate) {
-            if (file_exists($workingDir . '/' . $candidate)) {
-              $composeFile = $workingDir . '/' . $candidate;
+            if (file_exists($sourceDir . '/' . $candidate)) {
+              $sourceComposeFile = $sourceDir . '/' . $candidate;
               break;
             }
           }
         }
 
-        // Read env file path
+        // Copy files into our own plugin directory so stacks are self-contained
+        $destDir = COMPOSE_STACKS_DIR . '/' . $projectName;
+        if (!is_dir($destDir)) {
+          @mkdir($destDir, 0755, true);
+        }
+
+        $workingDir = $destDir;
+        $composeFile = null;
         $envFile = null;
-        if ($workingDir && file_exists($workingDir . '/.env')) {
-          $envFile = $workingDir . '/.env';
+
+        if ($sourceComposeFile && file_exists($sourceComposeFile)) {
+          $destFile = $destDir . '/' . basename($sourceComposeFile);
+          if (@copy($sourceComposeFile, $destFile)) {
+            $composeFile = $destFile;
+          } else {
+            $result['errors'][] = $projectName . ': failed to copy compose file';
+          }
+        }
+
+        // Copy .env if it exists in source
+        if ($sourceDir && file_exists($sourceDir . '/.env')) {
+          $destEnv = $destDir . '/.env';
+          if (@copy($sourceDir . '/.env', $destEnv)) {
+            $envFile = $destEnv;
+          }
         }
 
         $now = time();

@@ -16,6 +16,9 @@ define('CONFIG_DIR', '/boot/config/plugins/' . PLUGIN_NAME);
 define('DATA_DIR', CONFIG_DIR . '/data');
 define('BACKUP_DIR', CONFIG_DIR . '/backups');
 
+// Compose stacks storage (self-contained copies of imported compose files)
+define('COMPOSE_STACKS_DIR', CONFIG_DIR . '/compose-stacks');
+
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
 
