@@ -106,6 +106,7 @@
     </header>
 
     <main class="min-h-[200px]">
+      <ComposeSetupBanner />
       <div v-if="isLoading" class="text-center py-8 px-6 text-text-secondary">
         <p>Loading...</p>
       </div>
@@ -129,6 +130,8 @@
             @delete="deleteFolder"
             @pull="handlePull"
             @update-folder="handleUpdateFolder"
+            @edit-compose="openComposeEditor"
+            @view-logs="openComposeLogs"
           />
         </div>
 
@@ -180,6 +183,21 @@
     <!-- Folder Edit Modal -->
     <FolderEditModal :is-open="isModalOpen" :folder="editingFolder" @close="closeModal" @save="saveFolder" />
 
+    <!-- Compose File Editor -->
+    <ComposeFileEditor
+      :is-open="composeEditorOpen"
+      :project-name="composeEditorProject"
+      :read-only="composeStore.composePluginInstalled"
+      @close="composeEditorOpen = false"
+    />
+
+    <!-- Compose Logs -->
+    <ComposeLogs
+      :is-open="composeLogsOpen"
+      :project-name="composeEditorProject"
+      @close="composeLogsOpen = false"
+    />
+
     <!-- Pull Progress Modal (single container) -->
     <PullProgressModal
       :is-open="!!pullingContainer"
@@ -227,9 +245,13 @@ import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
+import { useComposeStore } from '@/stores/compose';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
+import ComposeSetupBanner from '@/components/compose/ComposeSetupBanner.vue';
+import ComposeFileEditor from '@/components/compose/ComposeFileEditor.vue';
+import ComposeLogs from '@/components/compose/ComposeLogs.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ConnectionStatus from '@/components/ConnectionStatus.vue';
@@ -244,6 +266,7 @@ const folderStore = useFolderStore();
 const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
 const updatesStore = useUpdatesStore();
+const composeStore = useComposeStore();
 
 const actionsInProgress = ref<Map<string, string>>(new Map());
 const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
@@ -266,6 +289,21 @@ provide('distinguishHealthy', toRef(settingsStore, 'distinguishHealthy'));
 provide('dragLocked', dragLocked);
 const isModalOpen = ref(false);
 const editingFolder = ref<Folder | null>(null);
+
+// Compose modal state
+const composeEditorOpen = ref(false);
+const composeLogsOpen = ref(false);
+const composeEditorProject = ref('');
+
+function openComposeEditor(project: string) {
+  composeEditorProject.value = project;
+  composeEditorOpen.value = true;
+}
+
+function openComposeLogs(project: string) {
+  composeEditorProject.value = project;
+  composeLogsOpen.value = true;
+}
 
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
@@ -314,10 +352,12 @@ watch(
 
 async function loadData() {
   try {
-    await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
+    await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings(), composeStore.fetchStatus()]);
     if (settingsStore.enableUpdateChecks) {
       await updatesStore.fetchCachedUpdates();
     }
+    // Load compose stacks after containers (needs compose_project labels)
+    await composeStore.fetchStacks();
     // Pre-fetch stats for all running containers so data is ready before components mount
     if (settingsStore.showStats) {
       const runningIds = dockerStore.containers

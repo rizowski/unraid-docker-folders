@@ -9,6 +9,7 @@
 import { ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useComposeStore } from '@/stores/compose';
 import { useUpdatesStore } from '@/stores/updates';
 import { useSettingsStore } from '@/stores/settings';
 import type { ConnectionStatus, WebSocketEvent } from '@/types/websocket';
@@ -38,6 +39,11 @@ function handleEvent(event: WebSocketEvent) {
     dockerStore.fetchContainers();
   } else if (event.entity === 'folder') {
     folderStore.fetchFolders();
+  } else if (event.entity === 'compose') {
+    const composeStore = useComposeStore();
+    composeStore.fetchStacks();
+    // Compose changes often affect container state too
+    dockerStore.fetchContainers();
   } else if (event.entity === 'updates') {
     const settingsStore = useSettingsStore();
     if (settingsStore.enableUpdateChecks) {

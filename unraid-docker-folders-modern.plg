@@ -334,6 +334,22 @@ if [ -f "${PLUGIN_DIR}/scripts/restore-cron.php" ]; then
     echo "$CRON_OUTPUT" >> "${LOG_FILE}"
   fi
 fi
+
+# Make compose scripts executable
+if [ -f "${PLUGIN_DIR}/scripts/compose-autostart.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/compose-autostart.php"
+  echo "  compose-autostart.php made executable"
+fi
+if [ -f "${PLUGIN_DIR}/scripts/compose-shutdown.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/compose-shutdown.php"
+  echo "  compose-shutdown.php made executable"
+fi
+
+# Make event hook scripts executable
+if [ -d "${PLUGIN_DIR}/event" ]; then
+  chmod 755 "${PLUGIN_DIR}/event/"*
+  echo "  Event hook scripts made executable"
+fi
 find "${PLUGIN_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.js" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.css" -exec chmod 644 {} \;
