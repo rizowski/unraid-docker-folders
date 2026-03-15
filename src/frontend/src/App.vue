@@ -184,23 +184,19 @@
     <FolderEditModal :is-open="isModalOpen" :folder="editingFolder" @close="closeModal" @save="saveFolder" />
 
     <!-- Compose File Editor -->
-    <Teleport to="body">
-      <ComposeFileEditor
-        :is-open="composeEditorOpen"
-        :project-name="composeEditorProject"
-        :read-only="composeStore.composePluginInstalled"
-        @close="composeEditorOpen = false"
-      />
-    </Teleport>
+    <ComposeFileEditor
+      :is-open="composeEditorOpen"
+      :project-name="composeEditorProject"
+      :read-only="composeStore.composePluginInstalled"
+      @close="composeEditorOpen = false"
+    />
 
     <!-- Compose Logs -->
-    <Teleport to="body">
-      <ComposeLogs
-        :is-open="composeLogsOpen"
-        :project-name="composeEditorProject"
-        @close="composeLogsOpen = false"
-      />
-    </Teleport>
+    <ComposeLogs
+      :is-open="composeLogsOpen"
+      :project-name="composeEditorProject"
+      @close="composeLogsOpen = false"
+    />
 
     <!-- Pull Progress Modal (single container) -->
     <PullProgressModal

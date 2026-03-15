@@ -1,4 +1,4 @@
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted, type WatchSource } from 'vue';
 
 /**
  * Tracks the parent window's visible viewport area relative to this iframe.
@@ -79,5 +79,35 @@ export function useParentViewport() {
     }
   });
 
-  return { visibleTop, visibleHeight };
+  const appEl = document.getElementById('app');
+
+  function applyMinHeight() {
+    if (appEl) {
+      appEl.style.minHeight = (visibleTop.value + visibleHeight.value) + 'px';
+    }
+  }
+
+  function clearMinHeight() {
+    if (appEl) {
+      appEl.style.minHeight = '';
+    }
+  }
+
+  /**
+   * Keep #app min-height in sync with the viewport while `isOpen` is true,
+   * so the iframe grows tall enough for an absolutely-positioned overlay.
+   * Cleans up on close and on component unmount.
+   */
+  function useViewportFitWhileOpen(isOpen: WatchSource<boolean>) {
+    watch([isOpen, visibleTop, visibleHeight], ([open]) => {
+      if (open) {
+        applyMinHeight();
+      } else {
+        clearMinHeight();
+      }
+    });
+    onUnmounted(() => clearMinHeight());
+  }
+
+  return { visibleTop, visibleHeight, useViewportFitWhileOpen };
 }

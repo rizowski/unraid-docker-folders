@@ -4,7 +4,7 @@
     <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] max-h-[90vh] flex flex-col" @click.stop>
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
-        <h2 class="text-xl font-semibold">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
+        <h2 class="text-xl font-semibold text-text">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -113,7 +113,8 @@ defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
 
-const { visibleTop, visibleHeight } = useParentViewport();
+const { visibleTop, visibleHeight, useViewportFitWhileOpen } = useParentViewport();
+useViewportFitWhileOpen(() => props.isOpen);
 const overlayStyle = computed(() => ({
   top: visibleTop.value + 'px',
   left: '0',
