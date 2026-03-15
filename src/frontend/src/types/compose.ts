@@ -20,6 +20,7 @@ export interface ComposeStatus {
   compose_version: string | null;
   compose_plugin_installed: boolean;
   management_enabled: boolean;
+  compose_plugin_data_exists?: boolean;
 }
 
 export interface ComposeImportResult {

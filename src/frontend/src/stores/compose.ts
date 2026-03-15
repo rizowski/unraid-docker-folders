@@ -17,6 +17,7 @@ export const useComposeStore = defineStore('compose', () => {
     compose_version: null,
     compose_plugin_installed: false,
     management_enabled: false,
+    compose_plugin_data_exists: false,
   });
   const loading = ref(false);
   const error = ref<string | null>(null);

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="stack" class="flex items-center gap-1" @click.stop>
+  <div class="flex items-center gap-1" @click.stop>
     <!-- Stack Up -->
     <button
       v-if="composeStore.composeAvailable"
@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 
 const props = defineProps<{
@@ -61,8 +61,6 @@ defineEmits<{
 
 const composeStore = useComposeStore();
 const actionInProgress = ref<string | null>(null);
-
-const stack = computed(() => composeStore.getStackByProject(props.projectName));
 
 async function handleUp() {
   actionInProgress.value = 'up';

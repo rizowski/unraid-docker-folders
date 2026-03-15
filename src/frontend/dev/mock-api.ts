@@ -587,16 +587,16 @@ function handlePull(req: any, res: any, params: Record<string, string>) {
 
 const mockComposeStacks = [
   {
-    project_name: 'media-stack',
-    working_dir: '/mnt/user/appdata/media-stack',
-    compose_file: '/mnt/user/appdata/media-stack/docker-compose.yml',
+    project_name: 'db-stack',
+    working_dir: '/mnt/user/appdata/db-stack',
+    compose_file: '/mnt/user/appdata/db-stack/docker-compose.yml',
     env_file: null,
     autostart: true,
     autostart_force_recreate: false,
-    description: 'Media server stack',
+    description: 'Database stack',
     imported_from: null,
-    services_running: 3,
-    services_total: 3,
+    services_running: 4,
+    services_total: 4,
     created_at: Date.now() / 1000,
     updated_at: Date.now() / 1000,
   },
@@ -613,7 +613,7 @@ function handleCompose(req: any, res: any, params: Record<string, string>) {
         compose_version: '2.32.4',
         compose_plugin_installed: false,
         management_enabled: true,
-        compose_plugin_data_exists: false,
+        compose_plugin_data_exists: true,
       });
     }
 
