@@ -2,6 +2,7 @@
 
 ## 2026.03.15
 ### Changes
+- Fix modal clipping: cap overlay to available iframe space instead of expanding iframe
 - Fix scroll feedback loop: lock parent scroll while modal is open
 - Fix modal clipping in iframe: direct height floor + correct max-height
 - Fix compose modal visibility in iframe and title color
