@@ -1,9 +1,14 @@
 # Changelog
 
-## 2026.03.06
+## 2026.03.15
 ### Changes
+- Add Docker Compose management feature
 - Fix CHANGELOG.md entries for 2026.03.06 release
 - Fix SHA digest stored as container image, stop/restart timeouts, cron restore on boot, and modal viewport centering in iframe
+
+## 2026.03.06
+### Changes
+- Release 2026.03.06
 
 ## 2026.02.28
 ### Changes

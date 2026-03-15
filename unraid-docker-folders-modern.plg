@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.06-2">
-<!ENTITY md5 "d6e3045e705386a11bf5c8d8f9da21e8">
+<!ENTITY version "2026.03.15-dev1">
+<!ENTITY md5 "98918c1bb518bd878aa15050ba291482">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -49,6 +49,9 @@
 
 
 
+
+###2026.03.15-dev1
+- Add Docker Compose management feature
 ###2026.03.06-2
 - Fix CHANGELOG.md entries for 2026.03.06 release
 - Fix SHA digest stored as container image, stop/restart timeouts, cron restore on boot, and modal viewport centering in iframe
