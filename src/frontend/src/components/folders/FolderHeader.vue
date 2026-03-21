@@ -67,6 +67,7 @@
         </svg>
         <span v-if="hideStopped && hiddenCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-text-secondary text-white rounded-full text-[10px] font-bold">{{ hiddenCount }}</span>
       </button>
+      <span class="p-1.5 rounded" :class="allAutostart ? 'text-success' : 'text-text-secondary opacity-30'" :title="allAutostart ? 'All containers set to autostart' : 'Not all containers set to autostart'"><IconAutostart :size="16" /></span>
     <KebabMenu
       ref="kebabMenu"
       :items="folderMenuItems"
@@ -91,6 +92,7 @@ import ComposeControls from '@/components/compose/ComposeControls.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
+import IconAutostart from '@/components/icons/IconAutostart.vue';
 import type { Folder } from '@/types/folder';
 
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
@@ -137,6 +139,15 @@ const folderUpdateCount = computed(() => {
 const composeStack = computed(() =>
   props.folder.compose_project ? composeStore.getStackByProject(props.folder.compose_project) : null
 );
+
+const allAutostart = computed(() => {
+  const containers = props.folder.containers;
+  if (containers.length === 0) return false;
+  return containers.every((assoc) => {
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
+    return container?.autostart === true;
+  });
+});
 
 const folderMenuItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [

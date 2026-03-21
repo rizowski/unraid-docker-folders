@@ -143,115 +143,18 @@
         </div>
       </template>
       <template v-else>
-      <button
-        v-if="container.state === 'running'"
-        @click="confirmAction = 'stop'"
-        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="isActionInProgress"
-        title="Stop"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-          <rect x="4" y="4" width="16" height="16" rx="2" />
-        </svg>
-      </button>
-      <button
-        v-else
-        @click="emit('start', container.id)"
-        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="isActionInProgress"
-        title="Start"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-          <polygon points="6,3 20,12 6,21" />
-        </svg>
-      </button>
-      <button
-        v-if="isRunning"
-        @click="confirmAction = 'restart'"
-        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="isActionInProgress"
-        title="Restart"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <polyline points="1 4 1 10 7 10" />
-          <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-        </svg>
-      </button>
-      <button
-        v-if="!isRunning"
-        @click="confirmAction = 'remove'"
-        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        :disabled="isActionInProgress"
-        title="Remove"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-          <line x1="10" y1="11" x2="10" y2="17" />
-          <line x1="14" y1="11" x2="14" y2="17" />
-        </svg>
-      </button>
-      <button
-        v-if="hasUpdate"
-        @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
-        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
-        title="Pull Update"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-      </button>
+      <button v-if="container.state === 'running'" @click="confirmAction = 'stop'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="20" /></button>
+      <button v-else @click="emit('start', container.id)" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Start"><IconPlay :size="20" /></button>
+      <button v-if="isRunning" @click="confirmAction = 'restart'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="20" /></button>
+      <button v-if="!isRunning" @click="confirmAction = 'remove'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="20" /></button>
+      <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="20" /></button>
       </template>
       <!-- Autostart toggle -->
-      <button
-        v-if="container.managed === 'dockerman'"
-        @click.stop="handleToggleAutostart"
-        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-        :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'"
-        :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
-          <line x1="12" y1="2" x2="12" y2="12" />
-        </svg>
-      </button>
-      <a
-        v-if="resolvedWebui && isRunning"
-        :href="resolvedWebui"
-        target="_blank"
-        rel="noopener"
-        class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary hover:text-primary transition"
-        title="Open WebUI"
-        @click.stop
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="2" y1="12" x2="22" y2="12" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-        </svg>
-      </a>
+      <button v-if="container.managed === 'dockerman'" @click.stop="handleToggleAutostart" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="20" /></button>
+      <span v-else class="flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="Autostart not available (not managed by Unraid Docker Manager)"><IconAutostart :size="20" /></span>
+      <!-- WebUI (always shown, disabled when no webui) -->
+      <a v-if="resolvedWebui && isRunning" :href="resolvedWebui" target="_blank" rel="noopener" class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary hover:text-primary transition" title="Open WebUI" @click.stop><IconGlobe :size="20" /></a>
+      <span v-else class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary opacity-30" title="No WebUI configured. Set the WebUI field in the container's Unraid template to enable this."><IconGlobe :size="20" /></span>
       <!-- Kebab menu -->
       <KebabMenu
         ref="kebabMenuRef"
@@ -314,81 +217,16 @@
           </div>
         </template>
         <template v-else>
-        <a
-          v-if="resolvedWebui && isRunning"
-          :href="resolvedWebui"
-          target="_blank"
-          rel="noopener"
-          class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition"
-          title="Open WebUI"
-          @click.stop
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="2" y1="12" x2="22" y2="12" />
-            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-          </svg>
-        </a>
-        <button
-          v-if="container.state === 'running'"
-          @click="confirmAction = 'stop'"
-          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="isActionInProgress"
-          title="Stop"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-            <rect x="4" y="4" width="16" height="16" rx="2" />
-          </svg>
-        </button>
-        <button
-          v-else
-          @click="emit('start', container.id)"
-          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="isActionInProgress"
-          title="Start"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-            <polygon points="6,3 20,12 6,21" />
-          </svg>
-        </button>
-        <button
-          v-if="isRunning"
-          @click="confirmAction = 'restart'"
-          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="isActionInProgress"
-          title="Restart"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
-        </button>
-        <button
-          v-if="!isRunning"
-          @click="confirmAction = 'remove'"
-          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          :disabled="isActionInProgress"
-          title="Remove"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <line x1="10" y1="11" x2="10" y2="17" />
-            <line x1="14" y1="11" x2="14" y2="17" />
-          </svg>
-        </button>
-        <button
-          v-if="hasUpdate"
-          @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })"
-          class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white"
-          title="Pull Update"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-        </button>
+        <!-- WebUI (always shown, disabled when no webui) -->
+        <a v-if="resolvedWebui && isRunning" :href="resolvedWebui" target="_blank" rel="noopener" class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition" title="Open WebUI" @click.stop><IconGlobe :size="18" /></a>
+        <span v-else class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="No WebUI configured. Set the WebUI field in the container's Unraid template to enable this."><IconGlobe :size="18" /></span>
+        <button v-if="container.state === 'running'" @click="confirmAction = 'stop'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="18" /></button>
+        <button v-else @click="emit('start', container.id)" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Start"><IconPlay :size="18" /></button>
+        <button v-if="isRunning" @click="confirmAction = 'restart'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="18" /></button>
+        <button v-if="!isRunning" @click="confirmAction = 'remove'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="18" /></button>
+        <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="18" /></button>
+        <button v-if="container.managed === 'dockerman'" @click.stop="handleToggleAutostart" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="18" /></button>
+        <span v-else class="action-btn hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="Autostart not available (not managed by Unraid Docker Manager)"><IconAutostart :size="18" /></span>
         </template>
         <!-- Kebab menu -->
         <KebabMenu
@@ -572,6 +410,13 @@ import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
+import IconPlay from '@/components/icons/IconPlay.vue';
+import IconStop from '@/components/icons/IconStop.vue';
+import IconRestart from '@/components/icons/IconRestart.vue';
+import IconTrash from '@/components/icons/IconTrash.vue';
+import IconDownload from '@/components/icons/IconDownload.vue';
+import IconGlobe from '@/components/icons/IconGlobe.vue';
+import IconAutostart from '@/components/icons/IconAutostart.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
@@ -830,6 +675,7 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
+  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
 ]);
@@ -845,6 +691,8 @@ function handleMenuAction(action: string) {
     confirmAction.value = 'remove';
   } else if (action === 'update') {
     emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed });
+  } else if (action === 'toggle-autostart') {
+    handleToggleAutostart();
   } else if (action === 'console') {
     openContainerTerminal('console');
   } else if (action === 'logs') {
