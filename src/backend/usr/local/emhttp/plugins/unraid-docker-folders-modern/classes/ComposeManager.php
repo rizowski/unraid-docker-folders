@@ -21,7 +21,7 @@ class ComposeManager
   const COMPOSE_VERSION = '2.32.4';
 
   /** SHA256 of the linux-x86_64 binary for the above version */
-  const COMPOSE_SHA256 = '8d47ce7ca63e5a1e1e3b24ad7c06e47890e5f98d7a4dfd0e82a3af16b6e3b994';
+  const COMPOSE_SHA256 = 'ed1917fb54db184192ea9d0717bcd59e3662ea79db48bff36d3475516c480a6b';
 
   /** Path where compose_plugin stores its projects */
   const COMPOSE_PLUGIN_PROJECTS = '/boot/config/plugins/compose.manager/projects';
