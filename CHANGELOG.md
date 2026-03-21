@@ -2,6 +2,7 @@
 
 ## 2026.03.21
 ### Changes
+- Fix modal buttons and tabs overridden by Unraid button reset
 - Fix modal overlay coverage, sizing, tab styling; add compose export feature
 
 ## 2026.03.15

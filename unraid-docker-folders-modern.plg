@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.21-dev1">
-<!ENTITY md5 "9aafceb22dcadaf0c92c24c24a3cce21">
+<!ENTITY version "2026.03.21-dev2">
+<!ENTITY md5 "0eea0ebea00633005e8072a2d5810d49">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -57,6 +57,9 @@
 
 
 
+
+###2026.03.21-dev2
+- Fix modal buttons and tabs overridden by Unraid button reset
 ###2026.03.21-dev1
 - Fix modal overlay coverage, sizing, tab styling; add compose export feature
 ###2026.03.15-dev7
