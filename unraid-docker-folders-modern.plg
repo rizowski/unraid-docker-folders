@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.21-dev4">
-<!ENTITY md5 "fa0002dc764cd41e3a5e0e749eec9ff6">
+<!ENTITY version "2026.03.21-dev5">
+<!ENTITY md5 "904a329c57aa344cc210703f91311185">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -60,6 +60,9 @@
 
 
 
+
+###2026.03.21-dev5
+- Render compose modal in parent page DOM to avoid iframe clipping
 ###2026.03.21-dev4
 - Lock parent scroll when modal open via wheel/touch/key event prevention
 ###2026.03.21-dev3

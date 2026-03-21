@@ -2,6 +2,7 @@
 
 ## 2026.03.21
 ### Changes
+- Render compose modal in parent page DOM to avoid iframe clipping
 - Lock parent scroll when modal open via wheel/touch/key event prevention
 - Elevate iframe z-index when modal open; fix input/textarea styling
 - Fix modal buttons and tabs overridden by Unraid button reset
