@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.03.21
+### Changes
+- Fix modal overlay coverage, sizing, tab styling; add compose export feature
+
 ## 2026.03.15
 ### Changes
 - Fix modal clipping: cap overlay to available iframe space instead of expanding iframe
