@@ -23,6 +23,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     webui: null,
     labels: {},
     autostart: false,
+    autostartDelay: 0,
     ...overrides,
   };
 }

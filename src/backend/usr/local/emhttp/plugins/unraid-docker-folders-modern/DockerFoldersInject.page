@@ -51,8 +51,13 @@ if (!$replaceDockersSection) return;
     }
 
     if (containerSection) {
-      // Walk up to find the outermost single-child wrapper
+      // If we found a tbody/thead, walk up to the parent table first
       var target = containerSection;
+      if (target.tagName === 'TBODY' || target.tagName === 'THEAD') {
+        target = target.closest('table') || target;
+      }
+
+      // Walk up to find the outermost single-child wrapper
       while (target.parentElement) {
         var parent = target.parentElement;
         if (parent === document.body || parent.id === 'content_all' || parent.id === 'tab1' ||
@@ -70,7 +75,7 @@ if (!$replaceDockersSection) return;
       // Wrap native section in a collapsed accordion
       var accordion = document.createElement('details');
       accordion.className = 'native-docker-accordion';
-      accordion.style.cssText = 'margin-top:12px;';
+      accordion.style.cssText = 'margin-top:12px;width:100%;';
 
       var summary = document.createElement('summary');
       summary.style.cssText = 'cursor:pointer;padding:8px 12px;font-size:13px;user-select:none;';

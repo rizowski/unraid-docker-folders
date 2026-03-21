@@ -52,7 +52,9 @@ class DockerClient
     $containers = [];
     foreach ($response as $container) {
       $formatted = $this->formatContainer($container);
-      $formatted['autostart'] = $autostartMap[$formatted['name']] ?? false;
+      $autostartInfo = $autostartMap[$formatted['name']] ?? null;
+      $formatted['autostart'] = $autostartInfo ? $autostartInfo['autostart'] : false;
+      $formatted['autostartDelay'] = $autostartInfo ? $autostartInfo['autostartDelay'] : 0;
       $containers[] = $formatted;
     }
 
@@ -959,19 +961,35 @@ class DockerClient
     }
 
     foreach ($files as $file) {
-      // Extract container name from filename: my-<name>.xml
-      $basename = basename($file, '.xml');
-      $name = substr($basename, 3); // Remove 'my-' prefix
+      // Skip .bak files
+      if (substr($file, -4) === '.bak') continue;
 
       $xml = @file_get_contents($file);
       if ($xml === false) continue;
 
-      // Quick regex to avoid full XML parse for each file
-      if (preg_match('/<Autostart>(true|false)<\/Autostart>/i', $xml, $m)) {
-        $map[$name] = strtolower($m[1]) === 'true';
-      } else {
-        $map[$name] = false;
+      // Read the <Name> element to get the actual container name
+      // (filename casing may not match Docker container name)
+      $name = null;
+      if (preg_match('/<Name>([^<]+)<\/Name>/', $xml, $nm)) {
+        $name = trim($nm[1]);
       }
+      if (!$name) {
+        // Fallback to filename
+        $basename = basename($file, '.xml');
+        $name = substr($basename, 3);
+      }
+
+      $autostart = false;
+      if (preg_match('/<Autostart>(true|false)<\/Autostart>/i', $xml, $m)) {
+        $autostart = strtolower($m[1]) === 'true';
+      }
+
+      $delay = 0;
+      if (preg_match('/<AutostartDelay>(\d+)<\/AutostartDelay>/', $xml, $d)) {
+        $delay = (int) $d[1];
+      }
+
+      $map[$name] = ['autostart' => $autostart, 'autostartDelay' => $delay];
     }
 
     return $map;

@@ -391,6 +391,18 @@
       @confirm="handleConfirm"
       @cancel="confirmAction = null"
     />
+    <InputModal
+      :is-open="showDelayModal"
+      title="Autostart Delay"
+      :description="`Set delay before ${container.name} starts automatically (in seconds).`"
+      :initial-value="String(container.autostartDelay)"
+      placeholder="0"
+      suffix="Seconds to wait before starting this container on boot."
+      input-type="number"
+      confirm-label="Save"
+      @confirm="handleDelayConfirm"
+      @cancel="showDelayModal = false"
+    />
   </Teleport>
 </template>
 
@@ -404,6 +416,7 @@ import { useIsMobile } from '@/composables/useIsMobile';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 import { apiFetch } from '@/utils/csrf';
 import ConfirmModal from '@/components/ConfirmModal.vue';
+import InputModal from '@/components/InputModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
@@ -461,6 +474,14 @@ async function handleToggleAutostart() {
 }
 
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
+const showDelayModal = ref(false);
+
+async function handleDelayConfirm(value: string) {
+  const delay = Math.max(0, parseInt(value) || 0);
+  const { useDockerStore } = await import('@/stores/docker');
+  await useDockerStore().toggleAutostart(props.container.name, true, delay);
+  showDelayModal.value = false;
+}
 
 const confirmModalConfig = computed(() => {
   switch (confirmAction.value) {
@@ -676,11 +697,12 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
   { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
+  { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: props.container.managed === 'dockerman' && props.container.autostart },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
 ]);
 
-function handleMenuAction(action: string) {
+async function handleMenuAction(action: string) {
   if (action === 'stop') {
     confirmAction.value = 'stop';
   } else if (action === 'start') {
@@ -693,6 +715,8 @@ function handleMenuAction(action: string) {
     emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed });
   } else if (action === 'toggle-autostart') {
     handleToggleAutostart();
+  } else if (action === 'set-autostart-delay') {
+    showDelayModal.value = true;
   } else if (action === 'console') {
     openContainerTerminal('console');
   } else if (action === 'logs') {

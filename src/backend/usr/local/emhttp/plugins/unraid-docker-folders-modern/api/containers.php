@@ -115,10 +115,30 @@ function handlePost($dockerClient)
     }
     $data = getRequestData();
     $enabled = !empty($data['enabled']);
+    $delay = isset($data['delay']) ? max(0, (int)$data['delay']) : null;
 
-    $xmlPath = '/boot/config/plugins/dockerMan/templates-user/my-' . $name . '.xml';
+    // Find the XML template — try direct name first, then scan for <Name> match
+    $templateDir = '/boot/config/plugins/dockerMan/templates-user';
+    $xmlPath = $templateDir . '/my-' . $name . '.xml';
     if (!file_exists($xmlPath)) {
-      errorResponse('Container template not found (not managed by Unraid Docker Manager)', 404);
+      // Scan for matching <Name> element (handles case mismatches)
+      $xmlPath = null;
+      $files = @glob($templateDir . '/my-*.xml');
+      if ($files) {
+        foreach ($files as $f) {
+          if (substr($f, -4) === '.bak') continue;
+          $content = @file_get_contents($f);
+          if ($content && preg_match('/<Name>([^<]+)<\/Name>/', $content, $nm)) {
+            if (trim($nm[1]) === $name) {
+              $xmlPath = $f;
+              break;
+            }
+          }
+        }
+      }
+      if (!$xmlPath) {
+        errorResponse('Container template not found (not managed by Unraid Docker Manager)', 404);
+      }
     }
 
     $xml = @file_get_contents($xmlPath);
@@ -133,20 +153,31 @@ function handlePost($dockerClient)
       errorResponse('Failed to parse container template XML', 500);
     }
 
+    // Update Autostart
     $autostartNodes = $doc->getElementsByTagName('Autostart');
     if ($autostartNodes->length > 0) {
       $autostartNodes->item(0)->nodeValue = $enabled ? 'true' : 'false';
     } else {
       $root = $doc->documentElement;
-      $node = $doc->createElement('Autostart', $enabled ? 'true' : 'false');
-      $root->appendChild($node);
+      $root->appendChild($doc->createElement('Autostart', $enabled ? 'true' : 'false'));
+    }
+
+    // Update AutostartDelay if provided
+    if ($delay !== null) {
+      $delayNodes = $doc->getElementsByTagName('AutostartDelay');
+      if ($delayNodes->length > 0) {
+        $delayNodes->item(0)->nodeValue = (string)$delay;
+      } else {
+        $root = $doc->documentElement;
+        $root->appendChild($doc->createElement('AutostartDelay', (string)$delay));
+      }
     }
 
     if (@$doc->save($xmlPath) === false) {
       errorResponse('Failed to save container template', 500);
     }
 
-    jsonResponse(['success' => true, 'autostart' => $enabled]);
+    jsonResponse(['success' => true, 'autostart' => $enabled, 'autostartDelay' => $delay]);
   }
 
   if (!$id) {
