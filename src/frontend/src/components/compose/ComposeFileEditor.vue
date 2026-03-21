@@ -5,7 +5,7 @@
     <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
     <!-- Modal centered in visible viewport -->
     <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="$emit('close')">
-    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] flex flex-col" :style="{ maxHeight: (visibleHeight * 0.85) + 'px' }" @click.stop>
+    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] h-[85%] flex flex-col" @click.stop>
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
         <h2 class="text-xl font-semibold text-text">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
@@ -15,15 +15,13 @@
       </div>
 
       <!-- Tabs -->
-      <div class="flex shrink-0 border-b border-border px-2">
+      <div class="flex shrink-0 gap-2 px-4 sm:px-6 py-2 border-b border-border">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           @click="activeTab = tab.id"
-          class="px-4 py-2 text-sm font-medium cursor-pointer transition-colors -mb-px"
-          :class="activeTab === tab.id
-            ? 'text-text bg-bg border border-border border-b-bg-card rounded-t-md'
-            : 'text-text-secondary hover:text-text bg-transparent border border-transparent hover:bg-bg/50 rounded-t-md'"
+          class="nav-btn"
+          :class="{ active: activeTab === tab.id }"
         >{{ tab.label }}</button>
       </div>
 
@@ -57,7 +55,7 @@
               <button
                 v-if="!readOnly && envPath !== originalEnvPath"
                 @click="saveEnvPath"
-                class="px-3 py-1.5 rounded text-xs font-medium cursor-pointer bg-primary text-primary-text border-none hover:brightness-90 transition"
+                class="nav-btn active"
               >Save Path</button>
             </div>
           </div>
@@ -80,14 +78,15 @@
         </span>
         <span v-else></span>
         <div class="flex gap-2">
-          <button type="button" @click="$emit('close')" class="py-2 px-6 border-none rounded text-sm font-medium cursor-pointer bg-border text-text hover:brightness-90 transition">
+          <button type="button" @click="$emit('close')" class="nav-btn">
             {{ readOnly ? 'Close' : 'Cancel' }}
           </button>
           <button
             v-if="!readOnly"
             @click="handleSave"
             :disabled="saving"
-            class="py-2 px-6 border-none rounded text-sm font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition disabled:opacity-50 disabled:cursor-not-allowed"
+            class="nav-btn active"
+            :class="{ 'opacity-50 cursor-not-allowed': saving }"
           >
             {{ saving ? 'Saving...' : 'Save' }}
           </button>

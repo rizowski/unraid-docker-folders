@@ -5,7 +5,7 @@
     <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
     <!-- Modal centered in visible viewport -->
     <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="$emit('close')">
-    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[800px] w-[95%] flex flex-col" :style="{ maxHeight: (visibleHeight * 0.85) + 'px' }" @click.stop>
+    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[800px] w-[95%] h-[85%] flex flex-col" @click.stop>
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
         <h2 class="text-xl font-semibold text-text">Logs - {{ projectName }}</h2>
@@ -32,7 +32,8 @@
         <button
           @click="fetchLogs"
           :disabled="loading"
-          class="px-3 py-1 rounded text-xs font-medium cursor-pointer bg-border text-text border-none hover:brightness-90 transition disabled:opacity-50"
+          class="nav-btn"
+          :class="{ 'opacity-50 cursor-not-allowed': loading }"
         >
           {{ loading ? 'Loading...' : 'Refresh' }}
         </button>
@@ -48,7 +49,7 @@
 
       <!-- Footer -->
       <div class="flex justify-end p-4 sm:p-6 border-t border-border shrink-0">
-        <button @click="$emit('close')" class="py-2 px-6 border-none rounded text-sm font-medium cursor-pointer bg-border text-text hover:brightness-90 transition">Close</button>
+        <button @click="$emit('close')" class="nav-btn">Close</button>
       </div>
     </div>
     </div>

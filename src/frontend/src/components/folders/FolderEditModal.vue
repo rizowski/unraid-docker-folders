@@ -69,8 +69,8 @@
         </div>
 
         <div class="flex justify-end gap-2 pt-6 border-t border-border">
-          <button type="button" @click="$emit('close')" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-border text-text hover:brightness-90 transition">Cancel</button>
-          <button type="submit" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition disabled:opacity-50 disabled:cursor-not-allowed" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
+          <button type="button" @click="$emit('close')" class="nav-btn">Cancel</button>
+          <button type="submit" class="nav-btn active" :class="{ 'opacity-50 cursor-not-allowed': !formData.name }" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
         </div>
       </form>
     </div>
