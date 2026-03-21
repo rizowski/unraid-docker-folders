@@ -52,9 +52,21 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
       if (e.data.open) {
         frame.style.position = 'relative';
         frame.style.zIndex = '999';
+        frame._scrollLock = function(ev) { ev.preventDefault(); };
+        frame._keyLock = function(ev) {
+          if ([32, 33, 34, 35, 36, 38, 40].indexOf(ev.keyCode) !== -1) ev.preventDefault();
+        };
+        window.addEventListener('wheel', frame._scrollLock, { passive: false });
+        window.addEventListener('touchmove', frame._scrollLock, { passive: false });
+        window.addEventListener('keydown', frame._keyLock);
       } else {
         frame.style.position = '';
         frame.style.zIndex = '';
+        if (frame._scrollLock) {
+          window.removeEventListener('wheel', frame._scrollLock);
+          window.removeEventListener('touchmove', frame._scrollLock);
+          window.removeEventListener('keydown', frame._keyLock);
+        }
       }
     }
   });
