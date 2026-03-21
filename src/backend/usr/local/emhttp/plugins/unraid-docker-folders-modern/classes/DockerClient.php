@@ -945,51 +945,60 @@ class DockerClient
    * @return array Formatted container
    */
   /**
-   * Build a name->autostart map from Unraid dockerMan XML templates
+   * Build a name->autostart map from Unraid's autostart file and XML templates.
+   *
+   * Unraid stores which containers autostart in /var/lib/docker/unraid-autostart
+   * (flat file, one container name per line). Autostart delay is stored in the
+   * XML templates at /boot/config/plugins/dockerMan/templates-user/.
    */
   private function getAutostartMap()
   {
     $map = [];
+
+    // Read autostart names from Unraid's flat file (authoritative source)
+    $autostartFile = '/var/lib/docker/unraid-autostart';
+    $autostartNames = [];
+    if (file_exists($autostartFile)) {
+      $lines = @file($autostartFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+      if ($lines) {
+        $autostartNames = array_map('trim', $lines);
+      }
+    }
+
+    // Build delay map from XML templates
+    $delayMap = [];
     $templateDir = '/boot/config/plugins/dockerMan/templates-user';
-    if (!is_dir($templateDir)) {
-      return $map;
+    if (is_dir($templateDir)) {
+      $files = glob($templateDir . '/my-*.xml');
+      if ($files) {
+        foreach ($files as $file) {
+          if (substr($file, -4) === '.bak') continue;
+          $xml = @file_get_contents($file);
+          if ($xml === false) continue;
+
+          $name = null;
+          if (preg_match('/<Name>([^<]+)<\/Name>/', $xml, $nm)) {
+            $name = trim($nm[1]);
+          }
+          if (!$name) continue;
+
+          $delay = 0;
+          if (preg_match('/<AutostartDelay>(\d+)<\/AutostartDelay>/', $xml, $d)) {
+            $delay = (int) $d[1];
+          }
+          $delayMap[$name] = $delay;
+        }
+      }
     }
 
-    $files = glob($templateDir . '/my-*.xml');
-    if (!$files) {
-      return $map;
-    }
-
-    foreach ($files as $file) {
-      // Skip .bak files
-      if (substr($file, -4) === '.bak') continue;
-
-      $xml = @file_get_contents($file);
-      if ($xml === false) continue;
-
-      // Read the <Name> element to get the actual container name
-      // (filename casing may not match Docker container name)
-      $name = null;
-      if (preg_match('/<Name>([^<]+)<\/Name>/', $xml, $nm)) {
-        $name = trim($nm[1]);
-      }
-      if (!$name) {
-        // Fallback to filename
-        $basename = basename($file, '.xml');
-        $name = substr($basename, 3);
-      }
-
-      $autostart = false;
-      if (preg_match('/<Autostart>(true|false)<\/Autostart>/i', $xml, $m)) {
-        $autostart = strtolower($m[1]) === 'true';
-      }
-
-      $delay = 0;
-      if (preg_match('/<AutostartDelay>(\d+)<\/AutostartDelay>/', $xml, $d)) {
-        $delay = (int) $d[1];
-      }
-
-      $map[$name] = ['autostart' => $autostart, 'autostartDelay' => $delay];
+    // Combine: autostart from flat file, delay from XML
+    // Include all known container names from both sources
+    $allNames = array_unique(array_merge($autostartNames, array_keys($delayMap)));
+    foreach ($allNames as $name) {
+      $map[$name] = [
+        'autostart' => in_array($name, $autostartNames),
+        'autostartDelay' => $delayMap[$name] ?? 0,
+      ];
     }
 
     return $map;

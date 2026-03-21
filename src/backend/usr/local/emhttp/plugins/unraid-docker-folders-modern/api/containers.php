@@ -117,64 +117,57 @@ function handlePost($dockerClient)
     $enabled = !empty($data['enabled']);
     $delay = isset($data['delay']) ? max(0, (int)$data['delay']) : null;
 
-    // Find the XML template — try direct name first, then scan for <Name> match
-    $templateDir = '/boot/config/plugins/dockerMan/templates-user';
-    $xmlPath = $templateDir . '/my-' . $name . '.xml';
-    if (!file_exists($xmlPath)) {
-      // Scan for matching <Name> element (handles case mismatches)
-      $xmlPath = null;
-      $files = @glob($templateDir . '/my-*.xml');
-      if ($files) {
-        foreach ($files as $f) {
-          if (substr($f, -4) === '.bak') continue;
-          $content = @file_get_contents($f);
-          if ($content && preg_match('/<Name>([^<]+)<\/Name>/', $content, $nm)) {
-            if (trim($nm[1]) === $name) {
+    // Update Unraid's autostart flat file (authoritative source)
+    $autostartFile = '/var/lib/docker/unraid-autostart';
+    $autostartNames = [];
+    if (file_exists($autostartFile)) {
+      $lines = @file($autostartFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+      if ($lines) $autostartNames = array_map('trim', $lines);
+    }
+
+    if ($enabled && !in_array($name, $autostartNames)) {
+      $autostartNames[] = $name;
+    } elseif (!$enabled) {
+      $autostartNames = array_filter($autostartNames, function($n) use ($name) { return $n !== $name; });
+    }
+
+    if (@file_put_contents($autostartFile, implode(PHP_EOL, $autostartNames) . PHP_EOL) === false) {
+      errorResponse('Failed to update autostart file', 500);
+    }
+
+    // Update AutostartDelay in XML template if delay provided
+    if ($delay !== null) {
+      $templateDir = '/boot/config/plugins/dockerMan/templates-user';
+      $xmlPath = $templateDir . '/my-' . $name . '.xml';
+      if (!file_exists($xmlPath)) {
+        // Scan for matching <Name> element
+        $files = @glob($templateDir . '/my-*.xml');
+        if ($files) {
+          foreach ($files as $f) {
+            if (substr($f, -4) === '.bak') continue;
+            $content = @file_get_contents($f);
+            if ($content && preg_match('/<Name>([^<]+)<\/Name>/', $content, $nm) && trim($nm[1]) === $name) {
               $xmlPath = $f;
               break;
             }
           }
         }
       }
-      if (!$xmlPath) {
-        errorResponse('Container template not found (not managed by Unraid Docker Manager)', 404);
+
+      if (file_exists($xmlPath)) {
+        $doc = new DOMDocument();
+        $doc->preserveWhiteSpace = true;
+        $doc->formatOutput = false;
+        if (@$doc->loadXML(@file_get_contents($xmlPath))) {
+          $delayNodes = $doc->getElementsByTagName('AutostartDelay');
+          if ($delayNodes->length > 0) {
+            $delayNodes->item(0)->nodeValue = (string)$delay;
+          } else {
+            $doc->documentElement->appendChild($doc->createElement('AutostartDelay', (string)$delay));
+          }
+          @$doc->save($xmlPath);
+        }
       }
-    }
-
-    $xml = @file_get_contents($xmlPath);
-    if ($xml === false) {
-      errorResponse('Failed to read container template', 500);
-    }
-
-    $doc = new DOMDocument();
-    $doc->preserveWhiteSpace = true;
-    $doc->formatOutput = false;
-    if (!@$doc->loadXML($xml)) {
-      errorResponse('Failed to parse container template XML', 500);
-    }
-
-    // Update Autostart
-    $autostartNodes = $doc->getElementsByTagName('Autostart');
-    if ($autostartNodes->length > 0) {
-      $autostartNodes->item(0)->nodeValue = $enabled ? 'true' : 'false';
-    } else {
-      $root = $doc->documentElement;
-      $root->appendChild($doc->createElement('Autostart', $enabled ? 'true' : 'false'));
-    }
-
-    // Update AutostartDelay if provided
-    if ($delay !== null) {
-      $delayNodes = $doc->getElementsByTagName('AutostartDelay');
-      if ($delayNodes->length > 0) {
-        $delayNodes->item(0)->nodeValue = (string)$delay;
-      } else {
-        $root = $doc->documentElement;
-        $root->appendChild($doc->createElement('AutostartDelay', (string)$delay));
-      }
-    }
-
-    if (@$doc->save($xmlPath) === false) {
-      errorResponse('Failed to save container template', 500);
     }
 
     jsonResponse(['success' => true, 'autostart' => $enabled, 'autostartDelay' => $delay]);
