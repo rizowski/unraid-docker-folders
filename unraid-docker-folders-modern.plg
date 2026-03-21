@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.06-2">
-<!ENTITY md5 "d6e3045e705386a11bf5c8d8f9da21e8">
+<!ENTITY version "2026.03.21-dev5">
+<!ENTITY md5 "904a329c57aa344cc210703f91311185">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -49,6 +49,42 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+###2026.03.21-dev5
+- Render compose modal in parent page DOM to avoid iframe clipping
+###2026.03.21-dev4
+- Lock parent scroll when modal open via wheel/touch/key event prevention
+###2026.03.21-dev3
+- Elevate iframe z-index when modal open; fix input/textarea styling
+###2026.03.21-dev2
+- Fix modal buttons and tabs overridden by Unraid button reset
+###2026.03.21-dev1
+- Fix modal overlay coverage, sizing, tab styling; add compose export feature
+###2026.03.15-dev7
+- Fix modal clipping: cap overlay to available iframe space instead of expanding iframe
+###2026.03.15-dev6
+- Fix scroll feedback loop: lock parent scroll while modal is open
+###2026.03.15-dev5
+- Fix modal clipping in iframe: direct height floor + correct max-height
+###2026.03.15-dev4
+- Fix compose modal visibility in iframe and title color
+###2026.03.15-dev3
+- Fix compose import file migration, modal z-index, and editor styling
+###2026.03.15-dev2
+- Fix compose UI: controls visibility, import banner, mock data alignment
+###2026.03.15-dev1
+- Add Docker Compose management feature
 ###2026.03.06-2
 - Fix CHANGELOG.md entries for 2026.03.06 release
 - Fix SHA digest stored as container image, stop/restart timeouts, cron restore on boot, and modal viewport centering in iframe
@@ -333,6 +369,22 @@ if [ -f "${PLUGIN_DIR}/scripts/restore-cron.php" ]; then
     echo "  $CRON_OUTPUT"
     echo "$CRON_OUTPUT" >> "${LOG_FILE}"
   fi
+fi
+
+# Make compose scripts executable
+if [ -f "${PLUGIN_DIR}/scripts/compose-autostart.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/compose-autostart.php"
+  echo "  compose-autostart.php made executable"
+fi
+if [ -f "${PLUGIN_DIR}/scripts/compose-shutdown.php" ]; then
+  chmod 755 "${PLUGIN_DIR}/scripts/compose-shutdown.php"
+  echo "  compose-shutdown.php made executable"
+fi
+
+# Make event hook scripts executable
+if [ -d "${PLUGIN_DIR}/event" ]; then
+  chmod 755 "${PLUGIN_DIR}/event/"*
+  echo "  Event hook scripts made executable"
 fi
 find "${PLUGIN_DIR}" -type f -name "*.html" -exec chmod 644 {} \;
 find "${PLUGIN_DIR}" -type f -name "*.js" -exec chmod 644 {} \;

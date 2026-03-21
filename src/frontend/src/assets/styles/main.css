@@ -5,6 +5,7 @@
   --color-text-secondary: var(--text-color-secondary, #666666);
   --color-bg: var(--background-color, #f2f2f2);
   --color-bg-card: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 3%);
+  --color-bg-input: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 8%);
   --color-border: var(--border-color, #e0e0e0);
   --color-primary: var(--header-background, #ff8c2f);
   --color-primary-text: var(--header-text-color, #ffffff);
@@ -119,9 +120,9 @@
 }
 
 /* Neutralize Unraid's input styles */
-#unraid-docker-folders-modern input,
-#unraid-docker-folders-modern select,
-#unraid-docker-folders-modern textarea {
+#unraid-docker-folders-modern input:not(.styled-input),
+#unraid-docker-folders-modern select:not(.styled-input),
+#unraid-docker-folders-modern textarea:not(.styled-input) {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -131,6 +132,27 @@
   width: auto;
   padding: 0;
   margin: 0;
+}
+
+/* Styled inputs: opt-in class for inputs/textareas that need full styling */
+#unraid-docker-folders-modern .styled-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  color: var(--color-text);
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 12px;
+  margin: 0;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+
+#unraid-docker-folders-modern .styled-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
 }
 
 /* Neutralize Unraid's p { text-align: justify } and p:empty { display: none } */

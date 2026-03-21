@@ -1,6 +1,10 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen" class="absolute bg-black/50 flex items-center justify-center z-[1000]" :style="overlayStyle" @click="handleOverlayClick">
+  <div v-if="isOpen" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
+    <!-- Full-document dark backdrop -->
+    <div class="absolute inset-0 bg-black/50" @click="handleOverlayClick"></div>
+    <!-- Modal centered in visible viewport -->
+    <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="handleOverlayClick">
     <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
@@ -65,10 +69,11 @@
         </div>
 
         <div class="flex justify-end gap-2 pt-6 border-t border-border">
-          <button type="button" @click="$emit('close')" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-border text-text hover:brightness-90 transition">Cancel</button>
-          <button type="submit" class="py-2 px-6 border-none rounded text-base font-medium cursor-pointer bg-button text-button-text hover:bg-button-hover transition disabled:opacity-50 disabled:cursor-not-allowed" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
+          <button type="button" @click="$emit('close')" class="nav-btn">Cancel</button>
+          <button type="submit" class="nav-btn active" :class="{ 'opacity-50 cursor-not-allowed': !formData.name }" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
         </div>
       </form>
+    </div>
     </div>
   </div>
   </Transition>
@@ -79,6 +84,7 @@ import { ref, watch, computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useModalElevation } from '@/composables/useModalElevation';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -96,8 +102,12 @@ const emit = defineEmits<{
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 
+useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
-const overlayStyle = computed(() => ({
+const totalHeight = computed(() =>
+  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
+);
+const viewportStyle = computed(() => ({
   top: visibleTop.value + 'px',
   left: '0',
   width: '100%',

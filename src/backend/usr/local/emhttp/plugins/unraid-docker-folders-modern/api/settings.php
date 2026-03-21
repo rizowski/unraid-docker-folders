@@ -83,6 +83,7 @@ function handlePost()
     'update_check_schedule', 'notify_on_updates', 'update_check_exclude',
     'post_pull_action',
     'log_refresh_interval',
+    'compose_export_dir',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);

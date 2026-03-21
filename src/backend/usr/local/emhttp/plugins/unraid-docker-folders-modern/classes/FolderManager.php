@@ -8,6 +8,7 @@
  */
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/ComposeManager.php';
 
 class FolderManager
 {
@@ -452,6 +453,16 @@ class FolderManager
       } else {
         $folderId = (int) $foldersByProject[$projectName]['id'];
       }
+
+      // Upsert compose_stacks metadata from Docker labels
+      $firstContainer = $projectContainers[0];
+      $labels = $firstContainer['labels'] ?? [];
+      $workingDir = $labels['com.docker.compose.project.working_dir'] ?? null;
+      $configFiles = $labels['com.docker.compose.project.config_files'] ?? null;
+      $composeFile = $configFiles ? explode(',', $configFiles)[0] : null;
+
+      $composeManager = new ComposeManager();
+      $composeManager->upsertStack($projectName, $workingDir, $composeFile);
 
       // Assign unassigned containers to the compose folder
       foreach ($projectContainers as $container) {

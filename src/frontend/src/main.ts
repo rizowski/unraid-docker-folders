@@ -31,8 +31,9 @@ if (window.parent !== window) {
   const appEl = document.getElementById('app')
   if (appEl) {
     const sendHeight = () => {
+      const height = appEl.offsetHeight
       window.parent.postMessage(
-        { type: 'docker-folders-resize', height: appEl.offsetHeight },
+        { type: 'docker-folders-resize', height },
         '*'
       )
     }

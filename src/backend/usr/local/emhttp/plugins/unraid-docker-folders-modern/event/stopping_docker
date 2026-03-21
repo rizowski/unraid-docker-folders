@@ -1,0 +1,3 @@
+#!/bin/bash
+# Gracefully stop autostart compose stacks before Docker shuts down
+/usr/bin/php /usr/local/emhttp/plugins/unraid-docker-folders-modern/scripts/compose-shutdown.php >> /boot/config/plugins/unraid-docker-folders-modern/install.log 2>&1

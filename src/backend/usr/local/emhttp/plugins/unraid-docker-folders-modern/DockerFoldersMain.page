@@ -21,6 +21,48 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         style="width:100%;min-height:600px;border:none;"
         scrolling="no"
         allowfullscreen></iframe>
+
+<!-- Parent-page modal overlay (rendered outside iframe to avoid clipping) -->
+<div id="dfm-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;font-family:clear-sans,sans-serif;">
+  <div id="dfm-modal-card" style="background:var(--background-color,#1a1a1a);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);width:95%;max-width:750px;height:85vh;display:flex;flex-direction:column;overflow:hidden;" onclick="event.stopPropagation()">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;">
+      <h2 id="dfm-modal-title" style="margin:0;font-size:20px;font-weight:600;"></h2>
+      <button onclick="dfmCloseModal()" style="background:none;border:none;color:var(--text-color,#f2f2f2);cursor:pointer;padding:4px;font-size:20px;line-height:1;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">&times;</button>
+    </div>
+    <!-- Tabs -->
+    <div style="display:flex;gap:8px;padding:8px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;">
+      <button id="dfm-tab-compose" onclick="dfmSwitchTab('compose')" style="padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;border:1px solid var(--border-color,#333);">Compose File</button>
+      <button id="dfm-tab-env" onclick="dfmSwitchTab('env')" style="padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;border:1px solid transparent;">Environment</button>
+    </div>
+    <!-- Content -->
+    <div style="flex:1;overflow:auto;padding:16px 24px;display:flex;flex-direction:column;min-height:0;">
+      <!-- Compose tab -->
+      <div id="dfm-content-compose" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+        <div id="dfm-compose-path" style="font-size:12px;opacity:0.6;margin-bottom:8px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        <textarea id="dfm-compose-textarea" style="flex:1;min-height:200px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:14px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;resize:vertical;box-sizing:border-box;width:100%;" spellcheck="false"></textarea>
+      </div>
+      <!-- Env tab -->
+      <div id="dfm-content-env" style="display:none;flex-direction:column;flex:1;min-height:0;">
+        <div style="margin-bottom:12px;">
+          <label style="display:block;margin-bottom:4px;font-size:14px;font-weight:500;">Env File Path</label>
+          <input id="dfm-env-path" type="text" placeholder=".env (default)" style="width:100%;padding:8px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:14px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;box-sizing:border-box;" />
+        </div>
+        <div id="dfm-env-file-path" style="font-size:12px;opacity:0.6;margin-bottom:8px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+        <textarea id="dfm-env-textarea" placeholder="KEY=value" style="flex:1;min-height:200px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:14px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;resize:vertical;box-sizing:border-box;width:100%;" spellcheck="false"></textarea>
+      </div>
+    </div>
+    <!-- Footer -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;border-top:1px solid var(--border-color,#333);flex-shrink:0;">
+      <span id="dfm-save-status" style="font-size:13px;"></span>
+      <div style="display:flex;gap:8px;">
+        <button onclick="dfmCloseModal()" id="dfm-btn-cancel" style="padding:8px 20px;border:1px solid var(--border-color,#333);border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;background:color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent);color:var(--text-color,#f2f2f2);">Close</button>
+        <button onclick="dfmSaveModal()" id="dfm-btn-save" style="display:none;padding:8px 20px;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;background:var(--header-background,#ff8c2f);color:var(--header-text-color,#fff);">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 (function() {
   var frame = document.getElementById('docker-folders-frame');
@@ -44,9 +86,128 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     : '';
 
   frame.src = '/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=' + encodeURIComponent(token) + themeParam;
+
+  // Parent-page modal state
+  var modalData = null;
+  var activeTab = 'compose';
+
+  window.dfmSwitchTab = function(tab) {
+    activeTab = tab;
+    var composeContent = document.getElementById('dfm-content-compose');
+    var envContent = document.getElementById('dfm-content-env');
+    var tabCompose = document.getElementById('dfm-tab-compose');
+    var tabEnv = document.getElementById('dfm-tab-env');
+
+    if (tab === 'compose') {
+      composeContent.style.display = 'flex';
+      envContent.style.display = 'none';
+      tabCompose.style.background = 'var(--header-background,#ff8c2f)';
+      tabCompose.style.color = 'var(--header-text-color,#fff)';
+      tabCompose.style.borderColor = 'transparent';
+      tabEnv.style.background = 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)';
+      tabEnv.style.color = 'var(--text-color,#f2f2f2)';
+      tabEnv.style.borderColor = 'var(--border-color,#333)';
+    } else {
+      composeContent.style.display = 'none';
+      envContent.style.display = 'flex';
+      tabEnv.style.background = 'var(--header-background,#ff8c2f)';
+      tabEnv.style.color = 'var(--header-text-color,#fff)';
+      tabEnv.style.borderColor = 'transparent';
+      tabCompose.style.background = 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)';
+      tabCompose.style.color = 'var(--text-color,#f2f2f2)';
+      tabCompose.style.borderColor = 'var(--border-color,#333)';
+    }
+  };
+
+  function showModal(data) {
+    modalData = data;
+    activeTab = 'compose';
+
+    document.getElementById('dfm-modal-title').textContent = data.title || 'Compose';
+    document.getElementById('dfm-compose-textarea').value = data.composeContent || '';
+    document.getElementById('dfm-compose-textarea').readOnly = !!data.readOnly;
+    document.getElementById('dfm-compose-path').textContent = data.composePath || '';
+    document.getElementById('dfm-env-textarea').value = data.envContent || '';
+    document.getElementById('dfm-env-textarea').readOnly = !!data.readOnly;
+    document.getElementById('dfm-env-path').value = data.envPath || '';
+    document.getElementById('dfm-env-file-path').textContent = data.envFilePath || '';
+    document.getElementById('dfm-save-status').textContent = '';
+
+    // Show/hide save button based on readOnly
+    document.getElementById('dfm-btn-save').style.display = data.readOnly ? 'none' : '';
+    document.getElementById('dfm-btn-cancel').textContent = data.readOnly ? 'Close' : 'Cancel';
+
+    // Reset to compose tab
+    dfmSwitchTab('compose');
+
+    // Show overlay
+    var overlay = document.getElementById('dfm-modal-overlay');
+    overlay.style.display = 'flex';
+  }
+
+  window.dfmCloseModal = function() {
+    document.getElementById('dfm-modal-overlay').style.display = 'none';
+    modalData = null;
+    // Tell iframe the modal closed
+    frame.contentWindow.postMessage({ type: 'docker-folders-modal-action', action: 'close' }, '*');
+  };
+
+  window.dfmSaveModal = function() {
+    if (!modalData) return;
+    var content, tab;
+    if (activeTab === 'compose') {
+      content = document.getElementById('dfm-compose-textarea').value;
+      tab = 'compose';
+    } else {
+      content = document.getElementById('dfm-env-textarea').value;
+      tab = 'env';
+    }
+    // Tell iframe to save
+    frame.contentWindow.postMessage({
+      type: 'docker-folders-modal-action',
+      action: 'save',
+      tab: tab,
+      content: content,
+      projectName: modalData.projectName
+    }, '*');
+  };
+
+  // Close modal on overlay click
+  document.getElementById('dfm-modal-overlay').addEventListener('click', function(ev) {
+    if (ev.target === this) dfmCloseModal();
+  });
+
+  // Close modal on Escape key
+  document.addEventListener('keydown', function(ev) {
+    if (ev.key === 'Escape' && document.getElementById('dfm-modal-overlay').style.display === 'flex') {
+      dfmCloseModal();
+    }
+  });
+
   window.addEventListener('message', function(e) {
     if (e.data && e.data.type === 'docker-folders-resize') {
       frame.style.height = e.data.height + 'px';
+    }
+    // Modal open/close from iframe
+    if (e.data && e.data.type === 'docker-folders-modal') {
+      if (e.data.open && e.data.modal) {
+        showModal(e.data.modal);
+      } else if (!e.data.open) {
+        document.getElementById('dfm-modal-overlay').style.display = 'none';
+        modalData = null;
+      }
+    }
+    // Save result from iframe
+    if (e.data && e.data.type === 'docker-folders-modal-result') {
+      var statusEl = document.getElementById('dfm-save-status');
+      if (e.data.success) {
+        statusEl.style.color = '#4caf50';
+        statusEl.textContent = 'Saved';
+        setTimeout(function() { statusEl.textContent = ''; }, 2000);
+      } else {
+        statusEl.style.color = '#f44336';
+        statusEl.textContent = e.data.error || 'Failed to save';
+      }
     }
   });
 })();

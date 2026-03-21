@@ -583,6 +583,101 @@ function handlePull(req: any, res: any, params: Record<string, string>) {
   req.on('close', () => clearInterval(interval));
 }
 
+// --- Mock Compose Data ---
+
+const mockComposeStacks = [
+  {
+    project_name: 'db-stack',
+    working_dir: '/mnt/user/appdata/db-stack',
+    compose_file: '/mnt/user/appdata/db-stack/docker-compose.yml',
+    env_file: null,
+    autostart: true,
+    autostart_force_recreate: false,
+    description: 'Database stack',
+    imported_from: null,
+    services_running: 4,
+    services_total: 4,
+    created_at: Date.now() / 1000,
+    updated_at: Date.now() / 1000,
+  },
+];
+
+function handleCompose(req: any, res: any, params: Record<string, string>) {
+  const action = params.action;
+  const project = params.project;
+
+  if (req.method === 'GET') {
+    if (action === 'status') {
+      return json(res, {
+        compose_available: true,
+        compose_version: '2.32.4',
+        compose_plugin_installed: false,
+        management_enabled: true,
+        compose_plugin_data_exists: true,
+      });
+    }
+
+    if (action === 'list') {
+      return json(res, { stacks: mockComposeStacks, count: mockComposeStacks.length });
+    }
+
+    if (action === 'file' && project) {
+      return json(res, {
+        success: true,
+        content: 'version: "3.8"\nservices:\n  app:\n    image: nginx:latest\n    ports:\n      - "8080:80"\n',
+        path: `/mnt/user/appdata/${project}/docker-compose.yml`,
+      });
+    }
+
+    if (action === 'env' && project) {
+      return json(res, {
+        success: true,
+        content: 'TZ=America/New_York\nPUID=1000\nPGID=1000\n',
+        path: `/mnt/user/appdata/${project}/.env`,
+      });
+    }
+
+    if (action === 'logs' && project) {
+      return json(res, {
+        success: true,
+        output: `${project}-app-1  | 2024-01-01 12:00:00 Starting application...\n${project}-app-1  | 2024-01-01 12:00:01 Listening on port 8080\n`,
+      });
+    }
+
+    if (project) {
+      const stack = mockComposeStacks.find((s) => s.project_name === project);
+      return stack ? json(res, { stack }) : json(res, { error: true, message: 'Stack not found' }, 404);
+    }
+  }
+
+  if (req.method === 'POST') {
+    if (action === 'install_binary') {
+      return json(res, {
+        success: true,
+        status: { compose_available: true, compose_version: '2.32.4', compose_plugin_installed: false, management_enabled: true },
+      });
+    }
+
+    if (action === 'up' || action === 'down' || action === 'restart' || action === 'pull') {
+      return json(res, { success: true, output: `Stack ${project} ${action} completed`, error: null });
+    }
+
+    if (action === 'save_file' || action === 'save_env') {
+      return json(res, { success: true });
+    }
+
+    if (action === 'autostart' || action === 'set_env_path') {
+      return json(res, { success: true });
+    }
+
+    if (action === 'import') {
+      return json(res, { success: true, stacks_imported: 0, stacks_skipped: 0, errors: [] });
+    }
+  }
+
+  json(res, { error: true, message: 'Not found' }, 404);
+}
+
 // --- Vite plugin ---
 
 export function mockApiPlugin(): Plugin {
@@ -610,6 +705,8 @@ export function mockApiPlugin(): Plugin {
             handleUpdates(req, res, params);
           } else if (endpoint === 'pull.php') {
             handlePull(req, res, params);
+          } else if (endpoint === 'compose.php') {
+            handleCompose(req, res, params);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }

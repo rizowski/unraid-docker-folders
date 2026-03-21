@@ -1,6 +1,6 @@
 <template>
   <div class="mb-2">
-    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" />
+    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @view-logs="(p) => emit('view-logs', p)" />
 
     <div class="folder-content-grid" :class="{ 'folder-content-expanded': !folder.collapsed || isSearching }">
       <div class="folder-content-inner px-2 sm:px-4">
@@ -52,6 +52,8 @@ const emit = defineEmits<{
   delete: [id: number];
   pull: [data: { image: string; name: string; managed: string | null }];
   'update-folder': [folder: Folder];
+  'edit-compose': [project: string];
+  'view-logs': [project: string];
 }>();
 
 const dockerStore = useDockerStore();

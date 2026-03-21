@@ -33,7 +33,7 @@
           ref="cancelBtn"
           type="button"
           @click="$emit('cancel')"
-          class="py-2 px-5 border-none rounded text-sm font-medium cursor-pointer bg-border text-text hover:brightness-90 transition"
+          class="nav-btn"
         >
           Cancel
         </button>
@@ -41,8 +41,8 @@
           ref="confirmBtn"
           type="button"
           @click="$emit('confirm')"
-          class="py-2 px-5 border-none rounded text-sm font-medium cursor-pointer transition"
-          :class="variant === 'danger' ? 'bg-error text-white hover:brightness-90' : 'bg-primary text-primary-text hover:brightness-90'"
+          class="nav-btn"
+          :class="variant === 'danger' ? 'warning' : 'active'"
         >
           {{ confirmLabel }}
         </button>
@@ -54,6 +54,7 @@
 
 <script setup lang="ts">
 import { watch, ref, nextTick } from 'vue';
+import { useModalElevation } from '@/composables/useModalElevation';
 
 interface Props {
   isOpen: boolean;
@@ -73,6 +74,7 @@ defineEmits<{
   cancel: [];
 }>();
 
+useModalElevation(() => props.isOpen);
 const confirmBtn = ref<HTMLButtonElement | null>(null);
 
 watch(() => props.isOpen, (open) => {

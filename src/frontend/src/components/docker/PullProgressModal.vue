@@ -1,7 +1,8 @@
 <template>
   <Teleport to="body">
-    <div v-if="isOpen" class="modal-enter absolute z-[1000] flex items-center justify-center p-4" :style="overlayStyle">
+    <div v-if="isOpen" class="modal-enter absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
       <div class="absolute inset-0 bg-black/50" @click="handleClose"></div>
+      <div class="absolute flex items-center justify-center p-4" :style="viewportStyle">
       <div class="relative bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-border">
@@ -103,6 +104,7 @@
           </button>
         </div>
       </div>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -112,6 +114,7 @@ import { ref, computed, watch } from 'vue';
 import { getCsrfToken } from '@/utils/csrf';
 import { useSettingsStore } from '@/stores/settings';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useModalElevation } from '@/composables/useModalElevation';
 
 interface Props {
   isOpen: boolean;
@@ -137,8 +140,12 @@ interface LayerProgress {
 const settingsStore = useSettingsStore();
 const postPullAction = computed(() => settingsStore.postPullAction);
 
+useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
-const overlayStyle = computed(() => ({
+const totalHeight = computed(() =>
+  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
+);
+const viewportStyle = computed(() => ({
   top: visibleTop.value + 'px',
   left: '0',
   width: '100%',

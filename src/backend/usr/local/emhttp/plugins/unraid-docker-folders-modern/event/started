@@ -1,0 +1,3 @@
+#!/bin/bash
+# Auto-start compose stacks when Docker starts
+/usr/bin/php /usr/local/emhttp/plugins/unraid-docker-folders-modern/scripts/compose-autostart.php >> /boot/config/plugins/unraid-docker-folders-modern/install.log 2>&1 &

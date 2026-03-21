@@ -1,9 +1,28 @@
 # Changelog
 
-## 2026.03.06
+## 2026.03.21
 ### Changes
+- Render compose modal in parent page DOM to avoid iframe clipping
+- Lock parent scroll when modal open via wheel/touch/key event prevention
+- Elevate iframe z-index when modal open; fix input/textarea styling
+- Fix modal buttons and tabs overridden by Unraid button reset
+- Fix modal overlay coverage, sizing, tab styling; add compose export feature
+
+## 2026.03.15
+### Changes
+- Fix modal clipping: cap overlay to available iframe space instead of expanding iframe
+- Fix scroll feedback loop: lock parent scroll while modal is open
+- Fix modal clipping in iframe: direct height floor + correct max-height
+- Fix compose modal visibility in iframe and title color
+- Fix compose import file migration, modal z-index, and editor styling
+- Fix compose UI: controls visibility, import banner, mock data alignment
+- Add Docker Compose management feature
 - Fix CHANGELOG.md entries for 2026.03.06 release
 - Fix SHA digest stored as container image, stop/restart timeouts, cron restore on boot, and modal viewport centering in iframe
+
+## 2026.03.06
+### Changes
+- Release 2026.03.06
 
 ## 2026.02.28
 ### Changes
