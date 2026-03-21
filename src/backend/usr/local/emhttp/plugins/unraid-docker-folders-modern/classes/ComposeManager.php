@@ -139,7 +139,14 @@ class ComposeManager
    */
   public function hasComposePluginData()
   {
-    return is_dir(self::COMPOSE_PLUGIN_PROJECTS);
+    if (!is_dir(self::COMPOSE_PLUGIN_PROJECTS)) {
+      return false;
+    }
+    // Don't show import banner if we already imported
+    $imported = $this->db->fetchOne(
+      "SELECT COUNT(*) as cnt FROM compose_stacks WHERE imported_from = 'compose_plugin'"
+    );
+    return !$imported || (int)$imported['cnt'] === 0;
   }
 
   /**

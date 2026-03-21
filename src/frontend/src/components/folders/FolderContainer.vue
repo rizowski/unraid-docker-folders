@@ -19,8 +19,20 @@
           />
         </div>
         <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
-          <p>No containers in this folder</p>
-          <p class="text-sm italic">Drag containers here to organize them</p>
+          <template v-if="folder.compose_project">
+            <p>Stack is not running</p>
+            <p class="text-sm italic mb-3">Start the stack to see its containers</p>
+            <button
+              v-if="composeStore.managementEnabled"
+              class="nav-btn active"
+              @click="handleStackUp"
+              :disabled="stackStarting"
+            >{{ stackStarting ? 'Starting...' : 'Start Stack' }}</button>
+          </template>
+          <template v-else>
+            <p>No containers in this folder</p>
+            <p class="text-sm italic">Drag containers here to organize them</p>
+          </template>
         </div>
       </div>
     </div>
@@ -31,6 +43,7 @@
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
@@ -58,8 +71,23 @@ const emit = defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+const composeStore = useComposeStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
+const stackStarting = ref(false);
+
+async function handleStackUp() {
+  if (!props.folder.compose_project) return;
+  stackStarting.value = true;
+  try {
+    await composeStore.stackUp(props.folder.compose_project);
+    // Refresh containers so syncComposeStacks can associate them
+    await dockerStore.fetchContainers();
+    await folderStore.fetchFolders();
+  } finally {
+    stackStarting.value = false;
+  }
+}
 const actionsInProgress = ref<Map<string, string>>(new Map());
 
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
