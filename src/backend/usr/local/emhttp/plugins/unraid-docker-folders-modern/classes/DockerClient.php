@@ -45,10 +45,15 @@ class DockerClient
       return [];
     }
 
+    // Build autostart lookup from Unraid XML templates
+    $autostartMap = $this->getAutostartMap();
+
     // Transform Docker API response to our format
     $containers = [];
     foreach ($response as $container) {
-      $containers[] = $this->formatContainer($container);
+      $formatted = $this->formatContainer($container);
+      $formatted['autostart'] = $autostartMap[$formatted['name']] ?? false;
+      $containers[] = $formatted;
     }
 
     return $containers;
@@ -937,6 +942,41 @@ class DockerClient
    * @param array $container Raw container data
    * @return array Formatted container
    */
+  /**
+   * Build a name->autostart map from Unraid dockerMan XML templates
+   */
+  private function getAutostartMap()
+  {
+    $map = [];
+    $templateDir = '/boot/config/plugins/dockerMan/templates-user';
+    if (!is_dir($templateDir)) {
+      return $map;
+    }
+
+    $files = glob($templateDir . '/my-*.xml');
+    if (!$files) {
+      return $map;
+    }
+
+    foreach ($files as $file) {
+      // Extract container name from filename: my-<name>.xml
+      $basename = basename($file, '.xml');
+      $name = substr($basename, 3); // Remove 'my-' prefix
+
+      $xml = @file_get_contents($file);
+      if ($xml === false) continue;
+
+      // Quick regex to avoid full XML parse for each file
+      if (preg_match('/<Autostart>(true|false)<\/Autostart>/i', $xml, $m)) {
+        $map[$name] = strtolower($m[1]) === 'true';
+      } else {
+        $map[$name] = false;
+      }
+    }
+
+    return $map;
+  }
+
   private function formatContainer($container)
   {
     $labels = $container['Labels'] ?? [];

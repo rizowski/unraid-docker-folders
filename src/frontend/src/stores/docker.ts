@@ -36,6 +36,7 @@ export interface Container {
   managed: string | null;
   webui: string | null;
   labels: Record<string, string>;
+  autostart: boolean;
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -196,6 +197,27 @@ export const useDockerStore = defineStore('docker', () => {
     }
   }
 
+  async function toggleAutostart(name: string, enabled: boolean): Promise<boolean> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/containers.php?action=autostart&name=${encodeURIComponent(name)}`,
+        { method: 'POST', body: JSON.stringify({ enabled }) }
+      );
+      if (!response.ok) {
+        throw new Error('Failed to update autostart');
+      }
+      // Update local state immediately
+      const container = containers.value.find(c => c.name === name);
+      if (container) {
+        container.autostart = enabled;
+      }
+      return true;
+    } catch (e) {
+      console.error('Error toggling autostart:', e);
+      return false;
+    }
+  }
+
   return {
     // State
     containers,
@@ -215,5 +237,6 @@ export const useDockerStore = defineStore('docker', () => {
     stopContainer,
     restartContainer,
     removeContainer,
+    toggleAutostart,
   };
 });

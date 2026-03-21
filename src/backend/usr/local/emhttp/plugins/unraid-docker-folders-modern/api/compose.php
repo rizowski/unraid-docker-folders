@@ -135,6 +135,26 @@ function handlePost($composeManager)
     jsonResponse($result);
   }
 
+  // Create new stack
+  if ($action === 'create') {
+    $data = getRequestData();
+    $projectName = $data['project_name'] ?? null;
+    if (!$projectName) {
+      errorResponse('Project name is required', 400);
+    }
+    $composeContent = $data['compose_content'] ?? '';
+    $envContent = $data['env_content'] ?? '';
+
+    $result = $composeManager->createStack($projectName, $composeContent, $envContent);
+    if (!$result['success']) {
+      errorResponse($result['error'], 400);
+    }
+
+    WebSocketPublisher::publish('compose', 'create', ['project' => $projectName]);
+    WebSocketPublisher::publish('folders', 'updated');
+    jsonResponse($result);
+  }
+
   // Import from compose_plugin
   if ($action === 'import') {
     $result = $composeManager->importFromComposePlugin();

@@ -337,6 +337,35 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
+  async function createStack(
+    projectName: string,
+    composeContent: string,
+    envContent: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await apiFetch(`${API_BASE}/compose.php?action=create`, {
+        method: 'POST',
+        body: JSON.stringify({
+          project_name: projectName,
+          compose_content: composeContent,
+          env_content: envContent,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.message || 'Failed to create stack' };
+      }
+
+      // Refresh stacks and folders
+      await Promise.all([fetchStacks(true), fetchStatus()]);
+      return { success: true };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      return { success: false, error: msg };
+    }
+  }
+
   return {
     // State
     stacks,
@@ -356,6 +385,7 @@ export const useComposeStore = defineStore('compose', () => {
     fetchStatus,
     fetchStacks,
     installBinary,
+    createStack,
     stackUp,
     stackDown,
     stackRestart,

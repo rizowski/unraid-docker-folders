@@ -103,12 +103,54 @@ function handlePost($dockerClient)
   $action = $_GET['action'] ?? null;
   $id = $_GET['id'] ?? null;
 
-  if (!$id) {
-    errorResponse('Container ID is required', 400);
-  }
-
   if (!$action) {
     errorResponse('Action is required', 400);
+  }
+
+  // Autostart toggle (uses container name, not ID)
+  if ($action === 'autostart') {
+    $name = $_GET['name'] ?? null;
+    if (!$name) {
+      errorResponse('Container name is required', 400);
+    }
+    $data = getRequestData();
+    $enabled = !empty($data['enabled']);
+
+    $xmlPath = '/boot/config/plugins/dockerMan/templates-user/my-' . $name . '.xml';
+    if (!file_exists($xmlPath)) {
+      errorResponse('Container template not found (not managed by Unraid Docker Manager)', 404);
+    }
+
+    $xml = @file_get_contents($xmlPath);
+    if ($xml === false) {
+      errorResponse('Failed to read container template', 500);
+    }
+
+    $doc = new DOMDocument();
+    $doc->preserveWhiteSpace = true;
+    $doc->formatOutput = false;
+    if (!@$doc->loadXML($xml)) {
+      errorResponse('Failed to parse container template XML', 500);
+    }
+
+    $autostartNodes = $doc->getElementsByTagName('Autostart');
+    if ($autostartNodes->length > 0) {
+      $autostartNodes->item(0)->nodeValue = $enabled ? 'true' : 'false';
+    } else {
+      $root = $doc->documentElement;
+      $node = $doc->createElement('Autostart', $enabled ? 'true' : 'false');
+      $root->appendChild($node);
+    }
+
+    if (@$doc->save($xmlPath) === false) {
+      errorResponse('Failed to save container template', 500);
+    }
+
+    jsonResponse(['success' => true, 'autostart' => $enabled]);
+  }
+
+  if (!$id) {
+    errorResponse('Container ID is required', 400);
   }
 
   $success = false;

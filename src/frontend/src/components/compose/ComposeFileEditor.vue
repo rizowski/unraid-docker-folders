@@ -8,7 +8,16 @@
     <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] h-[85%] flex flex-col" @click.stop>
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
-        <h2 class="text-xl font-semibold text-text">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
+        <div v-if="mode === 'create'" class="flex items-center gap-3 flex-1 mr-4">
+          <h2 class="text-xl font-semibold text-text shrink-0">Create Stack</h2>
+          <input
+            v-model="newProjectName"
+            type="text"
+            placeholder="Stack name"
+            class="styled-input flex-1"
+          />
+        </div>
+        <h2 v-else class="text-xl font-semibold text-text">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
@@ -88,7 +97,7 @@
             class="nav-btn active"
             :class="{ 'opacity-50 cursor-not-allowed': saving }"
           >
-            {{ saving ? 'Saving...' : 'Save' }}
+            {{ saving ? (mode === 'create' ? 'Creating...' : 'Saving...') : (mode === 'create' ? 'Create' : 'Save') }}
           </button>
         </div>
       </div>
@@ -107,11 +116,15 @@ interface Props {
   isOpen: boolean;
   projectName: string;
   readOnly?: boolean;
+  mode?: 'edit' | 'create';
 }
 
 const props = withDefaults(defineProps<Props>(), {
   readOnly: false,
+  mode: 'edit',
 });
+
+const newProjectName = ref('');
 
 const emit = defineEmits<{ close: [] }>();
 
@@ -151,11 +164,45 @@ const envFilePath = ref<string | null>(null);
 const envPath = ref('');
 const originalEnvPath = ref('');
 
-watch(() => [props.isOpen, props.projectName], async () => {
-  if (!props.isOpen || !props.projectName) return;
+watch(() => [props.isOpen, props.projectName, props.mode], async () => {
+  if (!props.isOpen) return;
 
   activeTab.value = 'compose';
   saveStatus.value = null;
+
+  // Create mode: set defaults, no data to fetch
+  if (props.mode === 'create') {
+    newProjectName.value = '';
+    composeContent.value = "version: \"3.8\"\nservices:\n  app:\n    image: \n    ports:\n      - \"8080:80\"\n";
+    composePath.value = null;
+    envContent.value = '';
+    envFilePath.value = null;
+    envPath.value = '';
+    originalEnvPath.value = '';
+    loading.value = false;
+
+    if (useParentModal) {
+      window.parent.postMessage({
+        type: 'docker-folders-modal',
+        open: true,
+        modal: {
+          kind: 'compose-create',
+          title: 'Create Stack',
+          readOnly: false,
+          projectName: '',
+          composeContent: composeContent.value,
+          composePath: null,
+          envContent: '',
+          envPath: '',
+          envFilePath: null,
+        }
+      }, '*');
+    }
+    return;
+  }
+
+  // Edit mode: fetch existing data
+  if (!props.projectName) return;
   loading.value = true;
 
   try {
@@ -205,8 +252,24 @@ function handleParentMessage(e: MessageEvent) {
 
   if (e.data.action === 'close') {
     emit('close');
+  } else if (e.data.action === 'create' && e.data.projectName) {
+    handleParentCreate(e.data.projectName, e.data.composeContent, e.data.envContent);
   } else if (e.data.action === 'save' && e.data.projectName) {
     handleParentSave(e.data.tab, e.data.content, e.data.projectName);
+  }
+}
+
+async function handleParentCreate(projectName: string, composeContent: string, envContent: string) {
+  const { useFolderStore } = await import('@/stores/folders');
+  const result = await composeStore.createStack(projectName, composeContent, envContent);
+  window.parent.postMessage({
+    type: 'docker-folders-modal-result',
+    success: result.success,
+    error: result.error || null,
+  }, '*');
+  if (result.success) {
+    await useFolderStore().fetchFolders();
+    setTimeout(() => emit('close'), 1500);
   }
 }
 
@@ -253,18 +316,33 @@ async function handleSave() {
   saveStatus.value = null;
 
   try {
-    let success = true;
-
-    if (activeTab.value === 'compose') {
-      success = await composeStore.saveComposeFile(props.projectName, composeContent.value);
+    if (props.mode === 'create') {
+      if (!newProjectName.value.trim()) {
+        saveStatus.value = 'Project name is required';
+        return;
+      }
+      const result = await composeStore.createStack(
+        newProjectName.value.trim(),
+        composeContent.value,
+        envContent.value
+      );
+      saveStatus.value = result.success ? 'saved' : (result.error || 'Failed to create');
+      if (result.success) {
+        const { useFolderStore } = await import('@/stores/folders');
+        await useFolderStore().fetchFolders();
+        setTimeout(() => emit('close'), 1500);
+      }
     } else {
-      success = await composeStore.saveEnvFile(props.projectName, envContent.value);
-    }
-
-    saveStatus.value = success ? 'saved' : 'Failed to save';
-
-    if (success) {
-      setTimeout(() => { saveStatus.value = null; }, 2000);
+      let success = true;
+      if (activeTab.value === 'compose') {
+        success = await composeStore.saveComposeFile(props.projectName, composeContent.value);
+      } else {
+        success = await composeStore.saveEnvFile(props.projectName, envContent.value);
+      }
+      saveStatus.value = success ? 'saved' : 'Failed to save';
+      if (success) {
+        setTimeout(() => { saveStatus.value = null; }, 2000);
+      }
     }
   } finally {
     saving.value = false;

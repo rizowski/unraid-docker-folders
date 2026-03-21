@@ -96,6 +96,14 @@
           <span class="hidden sm:inline">Update All ({{ updatesStore.updatesAvailableCount }})</span>
         </button>
         <button
+          v-if="composeStore.composeAvailable && composeStore.managementEnabled"
+          @click="openCreateStack"
+          class="nav-btn active"
+        >
+          <span class="sm:hidden">+ Stack</span>
+          <span class="hidden sm:inline">+ Create Stack</span>
+        </button>
+        <button
           @click="openCreateFolderModal"
           class="nav-btn active"
         >
@@ -187,7 +195,8 @@
     <ComposeFileEditor
       :is-open="composeEditorOpen"
       :project-name="composeEditorProject"
-      :read-only="composeStore.composePluginInstalled"
+      :read-only="composeStore.composePluginInstalled && composeEditorMode !== 'create'"
+      :mode="composeEditorMode"
       @close="composeEditorOpen = false"
     />
 
@@ -292,11 +301,19 @@ const editingFolder = ref<Folder | null>(null);
 
 // Compose modal state
 const composeEditorOpen = ref(false);
+const composeEditorMode = ref<'edit' | 'create'>('edit');
 const composeLogsOpen = ref(false);
 const composeEditorProject = ref('');
 
 function openComposeEditor(project: string) {
   composeEditorProject.value = project;
+  composeEditorMode.value = 'edit';
+  composeEditorOpen.value = true;
+}
+
+function openCreateStack() {
+  composeEditorProject.value = '';
+  composeEditorMode.value = 'create';
   composeEditorOpen.value = true;
 }
 

@@ -27,7 +27,10 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   <div id="dfm-modal-card" style="background:var(--background-color,#1a1a1a);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);width:95%;max-width:750px;height:85vh;display:flex;flex-direction:column;overflow:hidden;" onclick="event.stopPropagation()">
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;">
-      <h2 id="dfm-modal-title" style="margin:0;font-size:20px;font-weight:600;"></h2>
+      <div style="display:flex;align-items:center;gap:12px;flex:1;margin-right:16px;">
+        <h2 id="dfm-modal-title" style="margin:0;font-size:20px;font-weight:600;white-space:nowrap;"></h2>
+        <input id="dfm-project-name" type="text" placeholder="Stack name" style="display:none;flex:1;padding:6px 12px;font-size:16px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;font-family:inherit;" />
+      </div>
       <button onclick="dfmCloseModal()" style="background:none;border:none;color:var(--text-color,#f2f2f2);cursor:pointer;padding:4px;font-size:20px;line-height:1;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">&times;</button>
     </div>
     <!-- Tabs -->
@@ -123,10 +126,14 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     modalData = data;
     activeTab = 'compose';
 
+    var isCreate = data.kind === 'compose-create';
     document.getElementById('dfm-modal-title').textContent = data.title || 'Compose';
+    document.getElementById('dfm-project-name').style.display = isCreate ? '' : 'none';
+    document.getElementById('dfm-project-name').value = '';
     document.getElementById('dfm-compose-textarea').value = data.composeContent || '';
     document.getElementById('dfm-compose-textarea').readOnly = !!data.readOnly;
     document.getElementById('dfm-compose-path').textContent = data.composePath || '';
+    document.getElementById('dfm-compose-path').style.display = isCreate ? 'none' : '';
     document.getElementById('dfm-env-textarea').value = data.envContent || '';
     document.getElementById('dfm-env-textarea').readOnly = !!data.readOnly;
     document.getElementById('dfm-env-path').value = data.envPath || '';
@@ -135,6 +142,7 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 
     // Show/hide save button based on readOnly
     document.getElementById('dfm-btn-save').style.display = data.readOnly ? 'none' : '';
+    document.getElementById('dfm-btn-save').textContent = isCreate ? 'Create' : 'Save';
     document.getElementById('dfm-btn-cancel').textContent = data.readOnly ? 'Close' : 'Cancel';
 
     // Reset to compose tab
@@ -154,6 +162,27 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 
   window.dfmSaveModal = function() {
     if (!modalData) return;
+
+    // Create mode
+    if (modalData.kind === 'compose-create') {
+      var projectName = document.getElementById('dfm-project-name').value.trim();
+      if (!projectName) {
+        var s = document.getElementById('dfm-save-status');
+        s.style.color = '#f44336';
+        s.textContent = 'Stack name is required';
+        return;
+      }
+      frame.contentWindow.postMessage({
+        type: 'docker-folders-modal-action',
+        action: 'create',
+        projectName: projectName,
+        composeContent: document.getElementById('dfm-compose-textarea').value,
+        envContent: document.getElementById('dfm-env-textarea').value
+      }, '*');
+      return;
+    }
+
+    // Edit mode
     var content, tab;
     if (activeTab === 'compose') {
       content = document.getElementById('dfm-compose-textarea').value;
@@ -162,7 +191,6 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
       content = document.getElementById('dfm-env-textarea').value;
       tab = 'env';
     }
-    // Tell iframe to save
     frame.contentWindow.postMessage({
       type: 'docker-folders-modal-action',
       action: 'save',

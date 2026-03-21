@@ -224,6 +224,19 @@
         </svg>
       </button>
       </template>
+      <!-- Autostart toggle -->
+      <button
+        v-if="container.managed === 'dockerman'"
+        @click.stop="handleToggleAutostart"
+        class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
+        :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'"
+        :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+          <line x1="12" y1="2" x2="12" y2="12" />
+        </svg>
+      </button>
       <a
         v-if="resolvedWebui && isRunning"
         :href="resolvedWebui"
@@ -595,6 +608,12 @@ const actionStatusText = computed(() => {
     default: return '';
   }
 });
+
+// Autostart toggle
+async function handleToggleAutostart() {
+  const { useDockerStore } = await import('@/stores/docker');
+  await useDockerStore().toggleAutostart(props.container.name, !props.container.autostart);
+}
 
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
 

@@ -261,6 +261,81 @@ class ComposeManager
   }
 
   /**
+   * Create a new compose stack with initial files and folder
+   */
+  public function createStack($projectName, $composeContent = '', $envContent = '')
+  {
+    // Validate project name (alphanumeric, hyphens, underscores)
+    if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/', $projectName)) {
+      return ['success' => false, 'error' => 'Invalid project name. Use only letters, numbers, hyphens, and underscores.'];
+    }
+
+    // Check if stack already exists
+    $existing = $this->db->fetchOne(
+      'SELECT project_name FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+    if ($existing) {
+      return ['success' => false, 'error' => "Stack '{$projectName}' already exists"];
+    }
+
+    // Create stack directory
+    $stackDir = COMPOSE_STACKS_DIR . '/' . $projectName;
+    if (!is_dir($stackDir)) {
+      if (!@mkdir($stackDir, 0755, true)) {
+        return ['success' => false, 'error' => 'Failed to create stack directory'];
+      }
+    }
+
+    // Write compose file
+    $composeFile = $stackDir . '/docker-compose.yml';
+    if (empty($composeContent)) {
+      $composeContent = "version: \"3.8\"\nservices:\n  app:\n    image: \n";
+    }
+    if (@file_put_contents($composeFile, $composeContent) === false) {
+      return ['success' => false, 'error' => 'Failed to write compose file'];
+    }
+
+    // Write env file if provided
+    if (!empty($envContent)) {
+      $envFile = $stackDir . '/.env';
+      @file_put_contents($envFile, $envContent);
+    }
+
+    // Create database record
+    $now = time();
+    $this->db->insert('compose_stacks', [
+      'project_name' => $projectName,
+      'working_dir' => $stackDir,
+      'compose_file' => $composeFile,
+      'env_file' => !empty($envContent) ? $stackDir . '/.env' : null,
+      'autostart' => 0,
+      'autostart_force_recreate' => 0,
+      'description' => null,
+      'imported_from' => null,
+      'created_at' => $now,
+      'updated_at' => $now,
+    ]);
+
+    // Create linked folder
+    require_once __DIR__ . '/FolderManager.php';
+    $folderManager = new FolderManager();
+    $existingFolder = $this->db->fetchOne(
+      'SELECT id FROM folders WHERE compose_project = ?',
+      [$projectName]
+    );
+    if (!$existingFolder) {
+      $folderManager->createFolder([
+        'name' => $projectName,
+        'icon' => 'layer-group',
+        'compose_project' => $projectName,
+      ]);
+    }
+
+    return ['success' => true, 'project_name' => $projectName];
+  }
+
+  /**
    * Update autostart settings for a stack
    */
   public function setAutostart($projectName, $enabled, $forceRecreate = false)
