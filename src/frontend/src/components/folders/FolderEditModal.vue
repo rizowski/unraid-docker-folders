@@ -84,6 +84,7 @@ import { ref, watch, computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useModalElevation } from '@/composables/useModalElevation';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -101,6 +102,7 @@ const emit = defineEmits<{
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 
+useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
   Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)

@@ -48,6 +48,15 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     if (e.data && e.data.type === 'docker-folders-resize') {
       frame.style.height = e.data.height + 'px';
     }
+    if (e.data && e.data.type === 'docker-folders-modal') {
+      if (e.data.open) {
+        frame.style.position = 'relative';
+        frame.style.zIndex = '999';
+      } else {
+        frame.style.position = '';
+        frame.style.zIndex = '';
+      }
+    }
   });
 })();
 </script>

@@ -146,6 +146,7 @@ import { ref, computed, watch } from 'vue';
 import { getCsrfToken } from '@/utils/csrf';
 import { useSettingsStore } from '@/stores/settings';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useModalElevation } from '@/composables/useModalElevation';
 
 interface PullContainer {
   image: string;
@@ -175,6 +176,7 @@ interface LayerProgress {
 const settingsStore = useSettingsStore();
 const postPullAction = computed(() => settingsStore.postPullAction);
 
+useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
   Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)

@@ -54,6 +54,7 @@
 
 <script setup lang="ts">
 import { watch, ref, nextTick } from 'vue';
+import { useModalElevation } from '@/composables/useModalElevation';
 
 interface Props {
   isOpen: boolean;
@@ -73,6 +74,7 @@ defineEmits<{
   cancel: [];
 }>();
 
+useModalElevation(() => props.isOpen);
 const confirmBtn = ref<HTMLButtonElement | null>(null);
 
 watch(() => props.isOpen, (open) => {

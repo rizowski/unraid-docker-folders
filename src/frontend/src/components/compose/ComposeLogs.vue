@@ -61,6 +61,7 @@
 import { ref, watch, onUnmounted, computed } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useModalElevation } from '@/composables/useModalElevation';
 
 interface Props {
   isOpen: boolean;
@@ -72,6 +73,7 @@ defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
 
+useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
   Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)

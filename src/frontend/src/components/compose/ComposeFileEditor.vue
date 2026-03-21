@@ -34,7 +34,7 @@
           <textarea
             v-model="composeContent"
             :readonly="readOnly"
-            class="w-full flex-1 min-h-[120px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
+            class="styled-input flex-1 min-h-[120px]"
             :class="{ 'opacity-70': readOnly }"
             spellcheck="false"
           ></textarea>
@@ -49,7 +49,7 @@
                 type="text"
                 :readonly="readOnly"
                 placeholder=".env (default)"
-                class="flex-1 py-1.5 px-3 border border-border rounded bg-bg text-text text-sm font-mono focus:outline-none focus:border-primary"
+                class="styled-input flex-1"
                 :class="{ 'opacity-70': readOnly }"
               />
               <button
@@ -63,7 +63,7 @@
           <textarea
             v-model="envContent"
             :readonly="readOnly"
-            class="w-full flex-1 min-h-[120px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
+            class="styled-input flex-1 min-h-[120px]"
             :class="{ 'opacity-70': readOnly }"
             placeholder="KEY=value"
             spellcheck="false"
@@ -102,6 +102,7 @@
 import { ref, watch, computed } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useModalElevation } from '@/composables/useModalElevation';
 
 interface Props {
   isOpen: boolean;
@@ -117,6 +118,7 @@ defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
 
+useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
   Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
