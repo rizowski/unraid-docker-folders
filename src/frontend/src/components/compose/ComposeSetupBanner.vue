@@ -101,6 +101,14 @@ async function handleImport() {
   try {
     const result = await composeStore.importFromComposePlugin();
     importResult.value = result;
+    // Refresh containers + folders so syncComposeStacks can associate
+    // any running compose containers with the newly created folders
+    const { useDockerStore } = await import('@/stores/docker');
+    const { useFolderStore } = await import('@/stores/folders');
+    await Promise.all([
+      useDockerStore().fetchContainers(),
+      useFolderStore().fetchFolders(),
+    ]);
   } finally {
     importing.value = false;
   }

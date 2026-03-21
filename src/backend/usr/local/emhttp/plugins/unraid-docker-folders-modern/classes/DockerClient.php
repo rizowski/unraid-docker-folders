@@ -45,10 +45,17 @@ class DockerClient
       return [];
     }
 
+    // Build autostart lookup from Unraid XML templates
+    $autostartMap = $this->getAutostartMap();
+
     // Transform Docker API response to our format
     $containers = [];
     foreach ($response as $container) {
-      $containers[] = $this->formatContainer($container);
+      $formatted = $this->formatContainer($container);
+      $autostartInfo = $autostartMap[$formatted['name']] ?? null;
+      $formatted['autostart'] = $autostartInfo ? $autostartInfo['autostart'] : false;
+      $formatted['autostartDelay'] = $autostartInfo ? $autostartInfo['autostartDelay'] : 0;
+      $containers[] = $formatted;
     }
 
     return $containers;
@@ -120,6 +127,16 @@ class DockerClient
   {
     $params = $force ? '?force=1' : '';
     $response = $this->request('DELETE', "/containers/{$id}{$params}");
+    return $response !== false;
+  }
+
+  /**
+   * Remove a Docker image
+   */
+  public function removeImage($imageId, $force = false)
+  {
+    $params = $force ? '?force=1' : '';
+    $response = $this->request('DELETE', "/images/" . urlencode($imageId) . $params);
     return $response !== false;
   }
 
@@ -605,6 +622,22 @@ class DockerClient
     // Remove read-only HostConfig fields
     unset($createBody['HostConfig']['ContainerIDFile']);
 
+    // Fix PortBindings: PHP json_decode turns {} into [] (empty array),
+    // but Docker expects an object/map for PortBindings and each binding value.
+    if (isset($createBody['HostConfig']['PortBindings'])) {
+      $pb = $createBody['HostConfig']['PortBindings'];
+      if (is_array($pb) && empty($pb)) {
+        $createBody['HostConfig']['PortBindings'] = (object) [];
+      } elseif (is_array($pb)) {
+        foreach ($pb as $port => $bindings) {
+          if (is_array($bindings) && empty($bindings)) {
+            $pb[$port] = [];
+          }
+        }
+        $createBody['HostConfig']['PortBindings'] = (object) $pb;
+      }
+    }
+
     // Build NetworkingConfig from existing networks
     $networks = $inspect['NetworkSettings']['Networks'] ?? [];
     if (!empty($networks)) {
@@ -921,6 +954,66 @@ class DockerClient
    * @param array $container Raw container data
    * @return array Formatted container
    */
+  /**
+   * Build a name->autostart map from Unraid's autostart file and XML templates.
+   *
+   * Unraid stores which containers autostart in /var/lib/docker/unraid-autostart
+   * (flat file, one container name per line). Autostart delay is stored in the
+   * XML templates at /boot/config/plugins/dockerMan/templates-user/.
+   */
+  private function getAutostartMap()
+  {
+    $map = [];
+
+    // Read autostart names from Unraid's flat file (authoritative source)
+    $autostartFile = '/var/lib/docker/unraid-autostart';
+    $autostartNames = [];
+    if (file_exists($autostartFile)) {
+      $lines = @file($autostartFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+      if ($lines) {
+        $autostartNames = array_map('trim', $lines);
+      }
+    }
+
+    // Build delay map from XML templates
+    $delayMap = [];
+    $templateDir = '/boot/config/plugins/dockerMan/templates-user';
+    if (is_dir($templateDir)) {
+      $files = glob($templateDir . '/my-*.xml');
+      if ($files) {
+        foreach ($files as $file) {
+          if (substr($file, -4) === '.bak') continue;
+          $xml = @file_get_contents($file);
+          if ($xml === false) continue;
+
+          $name = null;
+          if (preg_match('/<Name>([^<]+)<\/Name>/', $xml, $nm)) {
+            $name = trim($nm[1]);
+          }
+          if (!$name) continue;
+
+          $delay = 0;
+          if (preg_match('/<AutostartDelay>(\d+)<\/AutostartDelay>/', $xml, $d)) {
+            $delay = (int) $d[1];
+          }
+          $delayMap[$name] = $delay;
+        }
+      }
+    }
+
+    // Combine: autostart from flat file, delay from XML
+    // Include all known container names from both sources
+    $allNames = array_unique(array_merge($autostartNames, array_keys($delayMap)));
+    foreach ($allNames as $name) {
+      $map[$name] = [
+        'autostart' => in_array($name, $autostartNames),
+        'autostartDelay' => $delayMap[$name] ?? 0,
+      ];
+    }
+
+    return $map;
+  }
+
   private function formatContainer($container)
   {
     $labels = $container['Labels'] ?? [];

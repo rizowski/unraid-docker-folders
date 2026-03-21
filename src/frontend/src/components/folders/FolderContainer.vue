@@ -19,8 +19,25 @@
           />
         </div>
         <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
-          <p>No containers in this folder</p>
-          <p class="text-sm italic">Drag containers here to organize them</p>
+          <template v-if="folder.compose_project">
+            <p>Stack is not running</p>
+            <p class="text-sm italic mb-3">Start the stack to see its containers</p>
+            <button
+              v-if="composeStore.managementEnabled"
+              class="nav-btn active"
+              @click="handleStackUp"
+              :disabled="stackStarting"
+            >
+              <svg v-if="stackStarting" class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              {{ stackStarting ? 'Starting...' : 'Start Stack' }}
+            </button>
+            <pre v-if="stackOutput" class="mt-3 text-left text-xs font-mono text-text-secondary bg-bg p-3 rounded overflow-auto max-h-[200px] mx-4">{{ stackOutput }}</pre>
+            <p v-if="stackError" class="mt-3 text-sm text-error">{{ stackError }}</p>
+          </template>
+          <template v-else>
+            <p>No containers in this folder</p>
+            <p class="text-sm italic">Drag containers here to organize them</p>
+          </template>
         </div>
       </div>
     </div>
@@ -31,6 +48,7 @@
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
@@ -58,8 +76,36 @@ const emit = defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+const composeStore = useComposeStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
+const stackStarting = ref(false);
+const stackOutput = ref<string | null>(null);
+const stackError = ref<string | null>(null);
+
+async function handleStackUp() {
+  if (!props.folder.compose_project) return;
+  stackStarting.value = true;
+  stackOutput.value = null;
+  stackError.value = null;
+  try {
+    const result = await composeStore.stackUp(props.folder.compose_project);
+    if (result && !result.success) {
+      stackError.value = result.error || 'Failed to start stack';
+    } else if (result?.output) {
+      stackOutput.value = result.output;
+    }
+    // Refresh containers so syncComposeStacks can associate them
+    await Promise.all([
+      dockerStore.fetchContainers(),
+      folderStore.fetchFolders(),
+    ]);
+  } catch (e) {
+    stackError.value = e instanceof Error ? e.message : 'Failed to start stack';
+  } finally {
+    stackStarting.value = false;
+  }
+}
 const actionsInProgress = ref<Map<string, string>>(new Map());
 
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
@@ -70,6 +116,9 @@ const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
 const folderContainers = computed(() => {
   let list = props.folder.containers || [];
+  // Filter out associations where the container no longer exists in Docker
+  // (e.g. after docker compose down removes containers)
+  list = list.filter((assoc) => !!getContainer(assoc.container_name));
   if (isSearching.value) {
     const q = dockerStore.searchQuery.trim().toLowerCase();
     list = list.filter((assoc) => {
@@ -182,10 +231,10 @@ async function handleRestart(id: string) {
   }
 }
 
-async function handleRemove(id: string) {
+async function handleRemove(id: string, removeImage = false) {
   actionsInProgress.value.set(id, 'remove');
   try {
-    await dockerStore.removeContainer(id);
+    await dockerStore.removeContainer(id, removeImage);
   } finally {
     actionsInProgress.value.delete(id);
   }

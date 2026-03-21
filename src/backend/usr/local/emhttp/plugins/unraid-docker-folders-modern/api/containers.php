@@ -103,12 +103,78 @@ function handlePost($dockerClient)
   $action = $_GET['action'] ?? null;
   $id = $_GET['id'] ?? null;
 
-  if (!$id) {
-    errorResponse('Container ID is required', 400);
-  }
-
   if (!$action) {
     errorResponse('Action is required', 400);
+  }
+
+  // Autostart toggle (uses container name, not ID)
+  if ($action === 'autostart') {
+    $name = $_GET['name'] ?? null;
+    if (!$name) {
+      errorResponse('Container name is required', 400);
+    }
+    $data = getRequestData();
+    $enabled = !empty($data['enabled']);
+    $delay = isset($data['delay']) ? max(0, (int)$data['delay']) : null;
+
+    // Update Unraid's autostart flat file (authoritative source)
+    $autostartFile = '/var/lib/docker/unraid-autostart';
+    $autostartNames = [];
+    if (file_exists($autostartFile)) {
+      $lines = @file($autostartFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+      if ($lines) $autostartNames = array_map('trim', $lines);
+    }
+
+    if ($enabled && !in_array($name, $autostartNames)) {
+      $autostartNames[] = $name;
+    } elseif (!$enabled) {
+      $autostartNames = array_filter($autostartNames, function($n) use ($name) { return $n !== $name; });
+    }
+
+    if (@file_put_contents($autostartFile, implode(PHP_EOL, $autostartNames) . PHP_EOL) === false) {
+      errorResponse('Failed to update autostart file', 500);
+    }
+
+    // Update AutostartDelay in XML template if delay provided
+    if ($delay !== null) {
+      $templateDir = '/boot/config/plugins/dockerMan/templates-user';
+      $xmlPath = $templateDir . '/my-' . $name . '.xml';
+      if (!file_exists($xmlPath)) {
+        // Scan for matching <Name> element
+        $files = @glob($templateDir . '/my-*.xml');
+        if ($files) {
+          foreach ($files as $f) {
+            if (substr($f, -4) === '.bak') continue;
+            $content = @file_get_contents($f);
+            if ($content && preg_match('/<Name>([^<]+)<\/Name>/', $content, $nm) && trim($nm[1]) === $name) {
+              $xmlPath = $f;
+              break;
+            }
+          }
+        }
+      }
+
+      if (file_exists($xmlPath)) {
+        $doc = new DOMDocument();
+        $doc->preserveWhiteSpace = true;
+        $doc->formatOutput = false;
+        if (@$doc->loadXML(@file_get_contents($xmlPath))) {
+          $delayNodes = $doc->getElementsByTagName('AutostartDelay');
+          if ($delayNodes->length > 0) {
+            $delayNodes->item(0)->nodeValue = (string)$delay;
+          } else {
+            $doc->documentElement->appendChild($doc->createElement('AutostartDelay', (string)$delay));
+          }
+          @$doc->save($xmlPath);
+        }
+      }
+    }
+
+    jsonResponse(['success' => true, 'autostart' => $enabled, 'autostartDelay' => $delay]);
+  }
+
+  if (!$id) {
+    errorResponse('Container ID is required', 400);
   }
 
   $success = false;
@@ -132,8 +198,27 @@ function handlePost($dockerClient)
 
     case 'remove':
       $force = isset($_GET['force']) && $_GET['force'] === '1';
+      // Get container info before removing (need name and image for cleanup)
+      $containerInfo = $dockerClient->inspectContainerRaw($id);
+      $containerName = $containerInfo ? ltrim($containerInfo['Name'] ?? '', '/') : null;
+      $containerImage = $containerInfo['Image'] ?? null;
+
       $success = $dockerClient->removeContainer($id, $force);
       $message = $success ? 'Container removed successfully' : 'Failed to remove container';
+
+      if ($success && $containerName) {
+        // Clean up folder associations
+        require_once dirname(__DIR__) . '/classes/FolderManager.php';
+        $folderManager = new FolderManager();
+        $folderManager->removeContainerByName($containerName);
+        WebSocketPublisher::publish('folders', 'updated');
+
+        // Optionally remove the image
+        $data = getRequestData();
+        if (!empty($data['remove_image']) && $containerImage) {
+          $dockerClient->removeImage($containerImage, true);
+        }
+      }
       break;
 
     default:

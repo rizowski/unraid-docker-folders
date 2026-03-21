@@ -267,7 +267,8 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
       const tail = Math.min(500, Math.max(1, parseInt(params.tail || '50', 10) || 50));
       return json(res, { logs: generateMockLogs(name, tail) });
     }
-    return json(res, { containers, count: containers.length, cached: false });
+    const containersWithAutostart = containers.map(c => ({ ...c, autostart: c.autostart ?? (c as any).state === 'running' }));
+    return json(res, { containers: containersWithAutostart, count: containersWithAutostart.length, cached: false });
   }
 
   if (req.method === 'POST') {

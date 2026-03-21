@@ -21,7 +21,7 @@ class ComposeManager
   const COMPOSE_VERSION = '2.32.4';
 
   /** SHA256 of the linux-x86_64 binary for the above version */
-  const COMPOSE_SHA256 = '8d47ce7ca63e5a1e1e3b24ad7c06e47890e5f98d7a4dfd0e82a3af16b6e3b994';
+  const COMPOSE_SHA256 = 'ed1917fb54db184192ea9d0717bcd59e3662ea79db48bff36d3475516c480a6b';
 
   /** Path where compose_plugin stores its projects */
   const COMPOSE_PLUGIN_PROJECTS = '/boot/config/plugins/compose.manager/projects';
@@ -139,7 +139,14 @@ class ComposeManager
    */
   public function hasComposePluginData()
   {
-    return is_dir(self::COMPOSE_PLUGIN_PROJECTS);
+    if (!is_dir(self::COMPOSE_PLUGIN_PROJECTS)) {
+      return false;
+    }
+    // Don't show import banner if we already imported
+    $imported = $this->db->fetchOne(
+      "SELECT COUNT(*) as cnt FROM compose_stacks WHERE imported_from = 'compose_plugin'"
+    );
+    return !$imported || (int)$imported['cnt'] === 0;
   }
 
   /**
@@ -251,6 +258,81 @@ class ComposeManager
         'updated_at' => $now,
       ]);
     }
+  }
+
+  /**
+   * Create a new compose stack with initial files and folder
+   */
+  public function createStack($projectName, $composeContent = '', $envContent = '')
+  {
+    // Validate project name (alphanumeric, hyphens, underscores)
+    if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/', $projectName)) {
+      return ['success' => false, 'error' => 'Invalid project name. Use only letters, numbers, hyphens, and underscores.'];
+    }
+
+    // Check if stack already exists
+    $existing = $this->db->fetchOne(
+      'SELECT project_name FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+    if ($existing) {
+      return ['success' => false, 'error' => "Stack '{$projectName}' already exists"];
+    }
+
+    // Create stack directory
+    $stackDir = COMPOSE_STACKS_DIR . '/' . $projectName;
+    if (!is_dir($stackDir)) {
+      if (!@mkdir($stackDir, 0755, true)) {
+        return ['success' => false, 'error' => 'Failed to create stack directory'];
+      }
+    }
+
+    // Write compose file
+    $composeFile = $stackDir . '/docker-compose.yml';
+    if (empty($composeContent)) {
+      $composeContent = "version: \"3.8\"\nservices:\n  app:\n    image: \n";
+    }
+    if (@file_put_contents($composeFile, $composeContent) === false) {
+      return ['success' => false, 'error' => 'Failed to write compose file'];
+    }
+
+    // Write env file if provided
+    if (!empty($envContent)) {
+      $envFile = $stackDir . '/.env';
+      @file_put_contents($envFile, $envContent);
+    }
+
+    // Create database record
+    $now = time();
+    $this->db->insert('compose_stacks', [
+      'project_name' => $projectName,
+      'working_dir' => $stackDir,
+      'compose_file' => $composeFile,
+      'env_file' => !empty($envContent) ? $stackDir . '/.env' : null,
+      'autostart' => 0,
+      'autostart_force_recreate' => 0,
+      'description' => null,
+      'imported_from' => null,
+      'created_at' => $now,
+      'updated_at' => $now,
+    ]);
+
+    // Create linked folder
+    require_once __DIR__ . '/FolderManager.php';
+    $folderManager = new FolderManager();
+    $existingFolder = $this->db->fetchOne(
+      'SELECT id FROM folders WHERE compose_project = ?',
+      [$projectName]
+    );
+    if (!$existingFolder) {
+      $folderManager->createFolder([
+        'name' => $projectName,
+        'icon' => 'layer-group',
+        'compose_project' => $projectName,
+      ]);
+    }
+
+    return ['success' => true, 'project_name' => $projectName];
   }
 
   /**

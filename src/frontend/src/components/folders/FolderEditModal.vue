@@ -1,11 +1,5 @@
 <template>
-  <Transition name="modal">
-  <div v-if="isOpen" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
-    <!-- Full-document dark backdrop -->
-    <div class="absolute inset-0 bg-black/50" @click="handleOverlayClick"></div>
-    <!-- Modal centered in visible viewport -->
-    <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="handleOverlayClick">
-    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
+  <BaseModal :is-open="isOpen" max-width="500px" @close="handleOverlayClick">
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
@@ -73,18 +67,14 @@
           <button type="submit" class="nav-btn active" :class="{ 'opacity-50 cursor-not-allowed': !formData.name }" :disabled="!formData.name">{{ isEditing ? 'Save Changes' : 'Create Folder' }}</button>
         </div>
       </form>
-    </div>
-    </div>
-  </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
-import { useParentViewport } from '@/composables/useParentViewport';
-import { useModalElevation } from '@/composables/useModalElevation';
+import BaseModal from '@/components/BaseModal.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -101,18 +91,6 @@ const emit = defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
-
-useModalElevation(() => props.isOpen);
-const { visibleTop, visibleHeight } = useParentViewport();
-const totalHeight = computed(() =>
-  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
-);
-const viewportStyle = computed(() => ({
-  top: visibleTop.value + 'px',
-  left: '0',
-  width: '100%',
-  height: visibleHeight.value + 'px',
-}));
 
 const isEditing = computed(() => !!props.folder);
 

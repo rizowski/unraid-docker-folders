@@ -31,8 +31,8 @@
         @edit-compose="(p) => emit('edit-compose', p)"
         @view-logs="(p) => emit('view-logs', p)"
       />
-      <span class="shrink-0 inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1" :class="runningCount > 0 ? 'bg-primary text-primary-text' : 'bg-border text-text-secondary'" :title="`${runningCount} running / ${folder.containers.length} total`">
-        {{ runningCount }}/{{ folder.containers.length }}
+      <span class="shrink-0 inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1" :class="runningCount > 0 ? 'bg-primary text-primary-text' : 'bg-border text-text-secondary'" :title="`${runningCount} running / ${existingContainerCount} total`">
+        {{ runningCount }}/{{ existingContainerCount }}
       </span>
       <span v-if="folderUpdateCount > 0" class="shrink-0 inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1 bg-warning/20 text-warning" :title="`${folderUpdateCount} update(s) available`">
         <span class="hidden sm:inline">{{ folderUpdateCount }} update{{ folderUpdateCount > 1 ? 's' : '' }}</span>
@@ -67,6 +67,7 @@
         </svg>
         <span v-if="hideStopped && hiddenCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-text-secondary text-white rounded-full text-[10px] font-bold">{{ hiddenCount }}</span>
       </button>
+      <span class="p-1.5 rounded" :class="allAutostart ? 'text-success' : 'text-text-secondary opacity-30'" :title="allAutostart ? 'All containers set to autostart' : 'Not all containers set to autostart'"><IconAutostart :size="16" /></span>
     <KebabMenu
       ref="kebabMenu"
       :items="folderMenuItems"
@@ -76,6 +77,18 @@
     />
     </div>
   </div>
+  <InputModal
+    :is-open="showDelayModal"
+    title="Folder Autostart Delay"
+    :description="`Set delay before all containers in &quot;${folder.name}&quot; start automatically (in seconds).`"
+    :initial-value="String(folderAutostartDelay)"
+    placeholder="0"
+    suffix="Seconds to wait before starting containers on boot. Applied to all containers in this folder."
+    input-type="number"
+    confirm-label="Save"
+    @confirm="handleFolderDelayConfirm"
+    @cancel="showDelayModal = false"
+  />
 </template>
 
 <script setup lang="ts">
@@ -91,6 +104,8 @@ import ComposeControls from '@/components/compose/ComposeControls.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
+import IconAutostart from '@/components/icons/IconAutostart.vue';
+import InputModal from '@/components/InputModal.vue';
 import type { Folder } from '@/types/folder';
 
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
@@ -138,6 +153,33 @@ const composeStack = computed(() =>
   props.folder.compose_project ? composeStore.getStackByProject(props.folder.compose_project) : null
 );
 
+// Only count containers that still exist in Docker (filters out deleted/orphaned associations)
+const existingContainers = computed(() =>
+  props.folder.containers.filter((assoc) =>
+    dockerStore.containers.some((c) => c.name === assoc.container_name)
+  )
+);
+const existingContainerCount = computed(() => existingContainers.value.length);
+
+const allAutostart = computed(() => {
+  const containers = existingContainers.value;
+  if (containers.length === 0) return false;
+  return containers.every((assoc) => {
+    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
+    return container?.autostart === true;
+  });
+});
+
+const folderAutostartDelay = computed(() => {
+  const delays = props.folder.containers
+    .map((assoc) => dockerStore.containers.find((c) => c.name === assoc.container_name))
+    .filter((c) => c?.managed === 'dockerman')
+    .map((c) => c!.autostartDelay);
+  if (delays.length === 0) return 0;
+  // Show common delay if all the same, otherwise 0
+  return delays.every((d) => d === delays[0]) ? delays[0] : 0;
+});
+
 const folderMenuItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [
     { label: `Update (${folderUpdateCount.value})`, icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update-folder', class: 'text-warning hover:text-warning', show: folderUpdateCount.value > 0 },
@@ -151,6 +193,18 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
       { label: 'Edit Compose', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'compose-edit' },
       { label: 'Stack Logs', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', action: 'compose-logs' },
       { label: composeStack.value?.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', show: composeStore.managementEnabled },
+    );
+  }
+
+  // Autostart controls for non-compose folders with dockerman containers
+  const hasDockermanContainers = props.folder.containers.some((assoc) => {
+    const c = dockerStore.containers.find((c) => c.name === assoc.container_name);
+    return c?.managed === 'dockerman';
+  });
+  if (hasDockermanContainers && !props.folder.compose_project) {
+    items.push(
+      { label: allAutostart.value ? 'Disable Autostart (all)' : 'Enable Autostart (all)', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-folder-autostart', class: allAutostart.value ? 'text-success' : '' },
+      { label: `Autostart Delay: ${folderAutostartDelay.value}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-folder-autostart-delay', show: allAutostart.value },
     );
   }
 
@@ -176,7 +230,28 @@ async function handleMenuSelect(action: string) {
     emit('view-logs', props.folder.compose_project);
   } else if (action === 'compose-toggle-autostart' && props.folder.compose_project && composeStack.value) {
     await composeStore.setAutostart(props.folder.compose_project, !composeStack.value.autostart);
+  } else if (action === 'toggle-folder-autostart') {
+    const enable = !allAutostart.value;
+    const names = props.folder.containers
+      .map((a) => dockerStore.containers.find((c) => c.name === a.container_name))
+      .filter((c) => c?.managed === 'dockerman')
+      .map((c) => c!.name);
+    await Promise.all(names.map((n) => dockerStore.toggleAutostart(n, enable)));
+  } else if (action === 'set-folder-autostart-delay') {
+    showDelayModal.value = true;
   }
+}
+
+const showDelayModal = ref(false);
+
+async function handleFolderDelayConfirm(value: string) {
+  const delay = Math.max(0, parseInt(value) || 0);
+  const names = props.folder.containers
+    .map((a) => dockerStore.containers.find((c) => c.name === a.container_name))
+    .filter((c) => c?.managed === 'dockerman')
+    .map((c) => c!.name);
+  await Promise.all(names.map((n) => dockerStore.toggleAutostart(n, true, delay)));
+  showDelayModal.value = false;
 }
 
 const dockerStore = useDockerStore();

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Iframe Test - Unraid Simulation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: sans-serif;
+      background: #1a1a1a;
+      color: #f2f2f2;
+      --text-color: #f2f2f2;
+      --background-color: #1a1a1a;
+      --border-color: #333;
+      --header-background: #ff8c2f;
+      --header-text-color: #fff;
+    }
+
+    /* Simulate Unraid top nav */
+    .fake-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #262626;
+      padding: 12px 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .fake-nav span { cursor: pointer; }
+    .fake-nav span.active { color: #ff8c2f; }
+
+    /* Simulate content above/around the iframe */
+    .fake-container-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid #333;
+      background: #222;
+      position: relative;
+      z-index: 10;
+    }
+    .fake-container-row .icon {
+      width: 40px; height: 40px;
+      background: #444; border-radius: 6px;
+    }
+    .fake-container-row .info { flex: 1; }
+    .fake-container-row .name { font-weight: bold; font-size: 14px; }
+    .fake-container-row .image { font-size: 11px; color: #888; font-family: monospace; }
+    .fake-container-row .stats { font-size: 12px; color: #666; }
+
+    /* Simulate bottom bar */
+    .fake-bottom-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 100;
+      background: #262626;
+      padding: 10px 20px;
+      border-top: 1px solid #333;
+      display: flex;
+      gap: 10px;
+    }
+    .fake-bottom-bar button {
+      padding: 6px 14px;
+      border: 1px solid #ff8c2f;
+      background: transparent;
+      color: #ff8c2f;
+      border-radius: 4px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+
+    iframe {
+      width: 100%;
+      min-height: 600px;
+      border: none;
+    }
+
+    .section-label {
+      padding: 8px 20px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #666;
+      background: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+  <div class="fake-nav">
+    <span>Dashboard</span>
+    <span>Main</span>
+    <span>Settings</span>
+    <span class="active">Docker</span>
+    <span>Apps</span>
+    <span>Stats</span>
+  </div>
+
+  <!-- Fake containers above the iframe -->
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info">
+      <div class="name">plex</div>
+      <div class="image">linuxserver/plex:latest</div>
+    </div>
+    <div class="stats">CPU 2.3% MEM 1.8%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info">
+      <div class="name">postgres</div>
+      <div class="image">postgres:16-alpine</div>
+    </div>
+    <div class="stats">CPU 0.1% MEM 0.5%</div>
+  </div>
+
+  <div class="section-label">Docker Folders Plugin (iframe below)</div>
+
+  <iframe id="docker-folders-frame" scrolling="no"></iframe>
+
+  <!-- Fake containers below the iframe -->
+  <div class="section-label">Native Docker Containers</div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info">
+      <div class="name">grafana</div>
+      <div class="image">grafana/grafana:latest</div>
+    </div>
+    <div class="stats">CPU 0.3% MEM 1.2%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info">
+      <div class="name">nginx</div>
+      <div class="image">nginx:alpine</div>
+    </div>
+    <div class="stats">CPU 0.0% MEM 0.1%</div>
+  </div>
+
+  <div class="fake-bottom-bar">
+    <button>Add Container</button>
+    <button>Start All</button>
+    <button>Stop All</button>
+    <button>Check for Updates</button>
+    <button>Update All</button>
+  </div>
+
+  <script>
+    var frame = document.getElementById('docker-folders-frame');
+    frame.src = '/index.html';
+
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'docker-folders-resize') {
+        frame.style.height = e.data.height + 'px';
+      }
+      if (e.data && e.data.type === 'docker-folders-modal') {
+        if (e.data.open) {
+          frame.style.position = 'relative';
+          frame.style.zIndex = '999';
+          document.body.style.overflow = 'hidden';
+        } else {
+          frame.style.position = '';
+          frame.style.zIndex = '';
+          document.body.style.overflow = '';
+        }
+      }
+    });
+  </script>
+</body>
+</html>

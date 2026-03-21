@@ -22,6 +22,8 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     managed: 'dockerman',
     webui: null,
     labels: {},
+    autostart: false,
+    autostartDelay: 0,
     ...overrides,
   };
 }

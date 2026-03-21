@@ -36,6 +36,8 @@ export interface Container {
   managed: string | null;
   webui: string | null;
   labels: Record<string, string>;
+  autostart: boolean;
+  autostartDelay: number;
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -176,22 +178,48 @@ export const useDockerStore = defineStore('docker', () => {
     }
   }
 
-  async function removeContainer(id: string): Promise<boolean> {
+  async function removeContainer(id: string, removeImage = false): Promise<boolean> {
     try {
       const response = await apiFetch(`${API_BASE}/containers.php?action=remove&id=${id}`, {
         method: 'POST',
+        body: removeImage ? JSON.stringify({ remove_image: true }) : undefined,
       });
 
       if (!response.ok) {
         throw new Error(`Failed to remove container`);
       }
 
-      // Refresh container list
-      await fetchContainers();
+      // Refresh containers and folders (backend cleans up associations)
+      const { useFolderStore } = await import('./folders');
+      await Promise.all([fetchContainers(), useFolderStore().fetchFolders()]);
 
       return true;
     } catch (e) {
       console.error('Error removing container:', e);
+      return false;
+    }
+  }
+
+  async function toggleAutostart(name: string, enabled: boolean, delay?: number): Promise<boolean> {
+    try {
+      const body: Record<string, unknown> = { enabled };
+      if (delay !== undefined) body.delay = delay;
+      const response = await apiFetch(
+        `${API_BASE}/containers.php?action=autostart&name=${encodeURIComponent(name)}`,
+        { method: 'POST', body: JSON.stringify(body) }
+      );
+      if (!response.ok) {
+        throw new Error('Failed to update autostart');
+      }
+      // Update local state immediately
+      const container = containers.value.find(c => c.name === name);
+      if (container) {
+        container.autostart = enabled;
+        if (delay !== undefined) container.autostartDelay = delay;
+      }
+      return true;
+    } catch (e) {
+      console.error('Error toggling autostart:', e);
       return false;
     }
   }
@@ -215,5 +243,6 @@ export const useDockerStore = defineStore('docker', () => {
     stopContainer,
     restartContainer,
     removeContainer,
+    toggleAutostart,
   };
 });

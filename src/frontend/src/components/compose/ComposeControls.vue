@@ -1,10 +1,10 @@
 <template>
   <div class="flex items-center gap-1" @click.stop>
-    <!-- Stack Up -->
+    <!-- Stack Up (show when not fully running) -->
     <button
-      v-if="composeStore.composeAvailable"
+      v-if="!isFullyRunning || actionInProgress === 'up'"
       :disabled="!composeStore.managementEnabled || actionInProgress !== null"
-      :title="composeStore.composePluginInstalled ? 'Disabled: compose.manager plugin is installed' : 'Start stack'"
+      :title="buttonTitle('Start stack')"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
       @click="handleUp"
     >
@@ -12,16 +12,17 @@
       <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
     </button>
 
-    <!-- Stack Down -->
+    <!-- Stack Down (show when has running services) -->
     <button
-      v-if="composeStore.composeAvailable"
+      v-if="isRunning || actionInProgress === 'down'"
       :disabled="!composeStore.managementEnabled || actionInProgress !== null"
-      :title="composeStore.composePluginInstalled ? 'Disabled: compose.manager plugin is installed' : 'Stop stack'"
+      :title="buttonTitle('Stop stack')"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-red-400 disabled:opacity-40 disabled:cursor-not-allowed"
       @click="handleDown"
     >
       <svg v-if="actionInProgress === 'down'" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-      <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+      <!-- Square stop icon -->
+      <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
     </button>
 
     <!-- Edit Compose -->
@@ -47,8 +48,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useComposeStore } from '@/stores/compose';
+import { useDockerStore } from '@/stores/docker';
+import { useFolderStore } from '@/stores/folders';
 
 const props = defineProps<{
   projectName: string;
@@ -60,12 +63,33 @@ defineEmits<{
 }>();
 
 const composeStore = useComposeStore();
+const dockerStore = useDockerStore();
+const folderStore = useFolderStore();
 const actionInProgress = ref<string | null>(null);
+
+const stack = computed(() => composeStore.getStackByProject(props.projectName));
+const isRunning = computed(() => (stack.value?.services_running ?? 0) > 0);
+const isFullyRunning = computed(() => {
+  const s = stack.value;
+  if (!s || s.services_total === 0) return false;
+  return s.services_running >= s.services_total;
+});
+
+function buttonTitle(defaultTitle: string): string {
+  if (!composeStore.composeAvailable) return 'Docker Compose not installed';
+  if (composeStore.composePluginInstalled) return 'Disabled: compose.manager plugin is installed';
+  return defaultTitle;
+}
 
 async function handleUp() {
   actionInProgress.value = 'up';
   try {
     await composeStore.stackUp(props.projectName);
+    // Refresh so syncComposeStacks associates containers with folders
+    await Promise.all([
+      dockerStore.fetchContainers(),
+      folderStore.fetchFolders(),
+    ]);
   } finally {
     actionInProgress.value = null;
   }
@@ -75,6 +99,11 @@ async function handleDown() {
   actionInProgress.value = 'down';
   try {
     await composeStore.stackDown(props.projectName);
+    // Refresh to update container/folder state
+    await Promise.all([
+      dockerStore.fetchContainers(),
+      folderStore.fetchFolders(),
+    ]);
   } finally {
     actionInProgress.value = null;
   }
