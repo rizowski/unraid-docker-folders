@@ -869,6 +869,75 @@ class ComposeManager
   }
 
   /**
+   * Export all compose stack configs to a target directory
+   */
+  public function exportConfigs($exportDir = null)
+  {
+    if (!$exportDir) {
+      $exportDir = COMPOSE_STACKS_DIR;
+    }
+
+    // Validate path is absolute
+    if ($exportDir[0] !== '/') {
+      return ['success' => false, 'error' => 'Export directory must be an absolute path'];
+    }
+
+    // Create directory if needed
+    if (!is_dir($exportDir)) {
+      if (!@mkdir($exportDir, 0755, true)) {
+        return ['success' => false, 'error' => 'Failed to create export directory: ' . $exportDir];
+      }
+    }
+
+    if (!is_writable($exportDir)) {
+      return ['success' => false, 'error' => 'Export directory is not writable: ' . $exportDir];
+    }
+
+    $stacks = $this->db->fetchAll('SELECT project_name FROM compose_stacks');
+    $exported = 0;
+    $errors = [];
+
+    foreach ($stacks as $stack) {
+      $projectName = $stack['project_name'];
+      $projectDir = $exportDir . '/' . $projectName;
+
+      if (!is_dir($projectDir)) {
+        if (!@mkdir($projectDir, 0755, true)) {
+          $errors[] = "Failed to create directory for $projectName";
+          continue;
+        }
+      }
+
+      // Copy compose file
+      $compose = $this->getComposeFileContent($projectName);
+      if ($compose['success'] && !empty($compose['content'])) {
+        $filename = basename($compose['path'] ?? 'docker-compose.yml');
+        if (@file_put_contents($projectDir . '/' . $filename, $compose['content']) === false) {
+          $errors[] = "Failed to write compose file for $projectName";
+          continue;
+        }
+      }
+
+      // Copy env file
+      $env = $this->getEnvFileContent($projectName);
+      if ($env['success'] && !empty($env['content'])) {
+        if (@file_put_contents($projectDir . '/.env', $env['content']) === false) {
+          $errors[] = "Failed to write env file for $projectName";
+        }
+      }
+
+      $exported++;
+    }
+
+    return [
+      'success' => true,
+      'exported' => $exported,
+      'errors' => $errors,
+      'path' => $exportDir,
+    ];
+  }
+
+  /**
    * Read a metadata text file, returning trimmed content or null
    */
   private function readMetadataFile($path)

@@ -1,7 +1,11 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen" class="absolute bg-black/50 flex items-center justify-center z-[1000]" :style="overlayStyle" @click="$emit('close')">
-    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] flex flex-col" :style="{ maxHeight: (cappedHeight * 0.9) + 'px' }" @click.stop>
+  <div v-if="isOpen" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
+    <!-- Full-document dark backdrop -->
+    <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
+    <!-- Modal centered in visible viewport -->
+    <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="$emit('close')">
+    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] flex flex-col" :style="{ maxHeight: (visibleHeight * 0.85) + 'px' }" @click.stop>
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
         <h2 class="text-xl font-semibold text-text">{{ readOnly ? 'View' : 'Edit' }} Compose - {{ projectName }}</h2>
@@ -11,15 +15,15 @@
       </div>
 
       <!-- Tabs -->
-      <div class="flex shrink-0 border-b border-border">
+      <div class="flex shrink-0 border-b border-border px-2">
         <button
           v-for="tab in tabs"
           :key="tab.id"
           @click="activeTab = tab.id"
-          class="px-4 py-2.5 text-sm font-medium bg-transparent cursor-pointer transition-colors"
+          class="px-4 py-2 text-sm font-medium cursor-pointer transition-colors -mb-px"
           :class="activeTab === tab.id
-            ? 'text-primary border-b-2 border-primary border-t-0 border-x-0 -mb-px'
-            : 'text-text-secondary hover:text-text border-none'"
+            ? 'text-text bg-bg border border-border border-b-bg-card rounded-t-md'
+            : 'text-text-secondary hover:text-text bg-transparent border border-transparent hover:bg-bg/50 rounded-t-md'"
         >{{ tab.label }}</button>
       </div>
 
@@ -32,7 +36,7 @@
           <textarea
             v-model="composeContent"
             :readonly="readOnly"
-            class="w-full flex-1 min-h-[300px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
+            class="w-full flex-1 min-h-[120px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
             :class="{ 'opacity-70': readOnly }"
             spellcheck="false"
           ></textarea>
@@ -61,7 +65,7 @@
           <textarea
             v-model="envContent"
             :readonly="readOnly"
-            class="w-full flex-1 min-h-[250px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
+            class="w-full flex-1 min-h-[120px] p-3 border border-border rounded bg-bg text-text text-sm font-mono resize-y focus:outline-none focus:border-primary box-border"
             :class="{ 'opacity-70': readOnly }"
             placeholder="KEY=value"
             spellcheck="false"
@@ -90,6 +94,7 @@
         </div>
       </div>
     </div>
+    </div>
   </div>
   </Transition>
 </template>
@@ -114,14 +119,14 @@ defineEmits<{ close: [] }>();
 const composeStore = useComposeStore();
 
 const { visibleTop, visibleHeight } = useParentViewport();
-const cappedHeight = computed(() =>
-  Math.min(visibleHeight.value, document.documentElement.scrollHeight - visibleTop.value)
+const totalHeight = computed(() =>
+  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
 );
-const overlayStyle = computed(() => ({
+const viewportStyle = computed(() => ({
   top: visibleTop.value + 'px',
   left: '0',
   width: '100%',
-  height: cappedHeight.value + 'px',
+  height: visibleHeight.value + 'px',
 }));
 
 const tabs = [

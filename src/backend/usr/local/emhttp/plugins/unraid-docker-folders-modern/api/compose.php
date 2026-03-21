@@ -120,6 +120,21 @@ function handlePost($composeManager)
     ]);
   }
 
+  // Export compose configs to directory
+  if ($action === 'export_configs') {
+    $db = Database::getInstance();
+    $exportDirSetting = $db->fetchOne("SELECT value FROM settings WHERE key = 'compose_export_dir'");
+    $exportDir = ($exportDirSetting && !empty($exportDirSetting['value']))
+      ? $exportDirSetting['value']
+      : COMPOSE_STACKS_DIR;
+
+    $result = $composeManager->exportConfigs($exportDir);
+    if (!$result['success']) {
+      errorResponse($result['error'], 500);
+    }
+    jsonResponse($result);
+  }
+
   // Import from compose_plugin
   if ($action === 'import') {
     $result = $composeManager->importFromComposePlugin();

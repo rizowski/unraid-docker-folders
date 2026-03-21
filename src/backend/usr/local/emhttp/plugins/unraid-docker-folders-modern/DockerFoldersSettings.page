@@ -25,6 +25,7 @@ $updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
 $notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
 $updateCheckExclude = $settings['update_check_exclude'] ?? '';
 $postPullAction = $settings['post_pull_action'] ?? 'pull_only';
+$composeExportDir = $settings['compose_export_dir'] ?? COMPOSE_STACKS_DIR;
 
 // Count excluded images for display
 $excludeCount = 0;
@@ -789,6 +790,36 @@ if (file_exists($changelogPath)) {
     </div>
   </div>
 
+  <!-- Compose Export -->
+  <div class="settings-section">
+    <h3>Compose Export</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="compose-export-dir">Export directory</label>
+        <div class="description">Directory where compose configs will be exported. Each stack gets its own subdirectory with docker-compose.yml and .env files. <strong>Default: <?= htmlspecialchars(COMPOSE_STACKS_DIR) ?></strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="text" id="compose-export-dir"
+               value="<?= htmlspecialchars($composeExportDir) ?>"
+               style="padding: 6px 10px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; font-size: 13px; background: color-mix(in srgb, var(--background-color, white), var(--text-color, #1a1a1a) 8%); color: var(--text-color, #333); min-width: 300px; font-family: 'Courier New', monospace;"
+               onchange="saveSetting('compose_export_dir', this.value)" />
+        <span id="save-status-compose-export-dir" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label>Export compose configs</label>
+        <div class="description">Copy all compose stack configurations (docker-compose.yml and .env files) to the export directory. This does not affect running stacks.</div>
+      </div>
+      <div class="setting-control">
+        <button type="button" class="btn btn-primary btn-sm" onclick="exportComposeConfigs()">Export Now</button>
+        <span id="export-status" class="save-status">Exported</span>
+      </div>
+    </div>
+  </div>
+
   <div class="action-buttons">
     <a href="https://github.com/rizowski/unraid-docker-folders" class="btn btn-secondary" target="_blank">
       View on GitHub
@@ -1073,6 +1104,40 @@ function clearLog() {
         document.getElementById('log-content').innerHTML = '<span class="log-empty">No log entries yet. Logs appear after the first scheduled or manual update check.</span>';
       }
     } catch (e) {}
+  };
+  xhr.send(body);
+}
+
+function exportComposeConfigs() {
+  var statusEl = document.getElementById('export-status');
+  statusEl.textContent = 'Exporting...';
+  statusEl.classList.add('visible');
+
+  var csrfToken = (typeof window.csrf_token === 'string') ? window.csrf_token : '';
+  var body = 'csrf_token=' + encodeURIComponent(csrfToken);
+
+  var xhr = new XMLHttpRequest();
+  xhr.open('POST', '/plugins/unraid-docker-folders-modern/api/compose.php?action=export_configs', true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+  xhr.onload = function() {
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if (data.success) {
+        statusEl.textContent = 'Exported ' + data.exported + ' stack(s) to ' + data.path;
+        if (data.errors && data.errors.length > 0) {
+          statusEl.textContent += ' (' + data.errors.length + ' error(s))';
+        }
+      } else {
+        statusEl.textContent = 'Error: ' + (data.message || 'Unknown error');
+      }
+    } catch (e) {
+      statusEl.textContent = 'Error: Invalid response';
+    }
+    setTimeout(function() { statusEl.classList.remove('visible'); }, 5000);
+  };
+  xhr.onerror = function() {
+    statusEl.textContent = 'Error: Network failure';
+    setTimeout(function() { statusEl.classList.remove('visible'); }, 5000);
   };
   xhr.send(body);
 }

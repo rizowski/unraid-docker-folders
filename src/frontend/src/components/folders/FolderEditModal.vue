@@ -1,6 +1,10 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen" class="absolute bg-black/50 flex items-center justify-center z-[1000]" :style="overlayStyle" @click="handleOverlayClick">
+  <div v-if="isOpen" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
+    <!-- Full-document dark backdrop -->
+    <div class="absolute inset-0 bg-black/50" @click="handleOverlayClick"></div>
+    <!-- Modal centered in visible viewport -->
+    <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="handleOverlayClick">
     <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[500px] w-[90%] max-h-[90vh] overflow-auto" @click.stop>
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
@@ -70,6 +74,7 @@
         </div>
       </form>
     </div>
+    </div>
   </div>
   </Transition>
 </template>
@@ -97,7 +102,10 @@ const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 
 const { visibleTop, visibleHeight } = useParentViewport();
-const overlayStyle = computed(() => ({
+const totalHeight = computed(() =>
+  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
+);
+const viewportStyle = computed(() => ({
   top: visibleTop.value + 'px',
   left: '0',
   width: '100%',
