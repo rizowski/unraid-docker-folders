@@ -1,6 +1,6 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
+  <div v-if="isOpen && !useParentModal" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
     <!-- Full-document dark backdrop -->
     <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
     <!-- Modal centered in visible viewport -->
@@ -99,10 +99,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentViewport } from '@/composables/useParentViewport';
-import { useModalElevation } from '@/composables/useModalElevation';
 
 interface Props {
   isOpen: boolean;
@@ -114,11 +113,12 @@ const props = withDefaults(defineProps<Props>(), {
   readOnly: false,
 });
 
-defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
+const inIframe = window.parent !== window;
 
-useModalElevation(() => props.isOpen);
+// Viewport tracking (only used for in-iframe fallback rendering)
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
   Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
@@ -129,6 +129,10 @@ const viewportStyle = computed(() => ({
   width: '100%',
   height: visibleHeight.value + 'px',
 }));
+
+// When in iframe, the modal renders in the parent page DOM.
+// This flag controls whether the local template renders.
+const useParentModal = inIframe;
 
 const tabs = [
   { id: 'compose' as const, label: 'Compose File' },
@@ -169,12 +173,80 @@ watch(() => [props.isOpen, props.projectName], async () => {
     const stack = composeStore.getStackByProject(props.projectName);
     envPath.value = stack?.env_file || '';
     originalEnvPath.value = envPath.value;
+
+    // If in iframe, send data to parent page modal
+    if (useParentModal) {
+      window.parent.postMessage({
+        type: 'docker-folders-modal',
+        open: true,
+        modal: {
+          kind: 'compose-editor',
+          title: (props.readOnly ? 'View' : 'Edit') + ' Compose - ' + props.projectName,
+          readOnly: props.readOnly,
+          projectName: props.projectName,
+          composeContent: composeContent.value,
+          composePath: composePath.value,
+          envContent: envContent.value,
+          envPath: envPath.value,
+          envFilePath: envFilePath.value,
+        }
+      }, '*');
+    }
   } catch (e) {
     console.error('Failed to load compose files:', e);
   } finally {
     loading.value = false;
   }
 }, { immediate: true });
+
+// Listen for parent modal actions (save/close)
+function handleParentMessage(e: MessageEvent) {
+  if (!e.data || e.data.type !== 'docker-folders-modal-action') return;
+
+  if (e.data.action === 'close') {
+    emit('close');
+  } else if (e.data.action === 'save' && e.data.projectName) {
+    handleParentSave(e.data.tab, e.data.content, e.data.projectName);
+  }
+}
+
+async function handleParentSave(tab: string, content: string, projectName: string) {
+  let success = true;
+  try {
+    if (tab === 'compose') {
+      success = await composeStore.saveComposeFile(projectName, content);
+    } else {
+      success = await composeStore.saveEnvFile(projectName, content);
+    }
+  } catch {
+    success = false;
+  }
+  // Send result back to parent modal
+  window.parent.postMessage({
+    type: 'docker-folders-modal-result',
+    success,
+    error: success ? null : 'Failed to save',
+  }, '*');
+}
+
+onMounted(() => {
+  if (useParentModal) {
+    window.addEventListener('message', handleParentMessage);
+  }
+});
+
+onUnmounted(() => {
+  if (useParentModal) {
+    window.removeEventListener('message', handleParentMessage);
+  }
+});
+
+// Close parent modal when isOpen goes false
+watch(() => props.isOpen, (open) => {
+  if (!open && useParentModal) {
+    window.parent.postMessage({ type: 'docker-folders-modal', open: false }, '*');
+  }
+});
 
 async function handleSave() {
   saving.value = true;

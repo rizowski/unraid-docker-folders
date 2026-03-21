@@ -29,10 +29,16 @@ export function useParentViewport() {
       const iframe = window.frameElement as HTMLIFrameElement | null;
       if (iframe) {
         const rect = iframe.getBoundingClientRect();
+        const parentHeight = window.parent.innerHeight;
         // rect.top is the iframe's position relative to parent viewport
         // When scrolled, rect.top goes negative
         visibleTop.value = Math.max(0, -rect.top);
-        visibleHeight.value = window.parent.innerHeight;
+        // Constrain visibleHeight to the portion of the parent viewport
+        // that actually overlaps with the iframe. When the iframe starts
+        // partway down the page (rect.top > 0), the visible area is smaller
+        // than the full parent viewport.
+        const iframeVisibleTop = Math.max(0, rect.top);
+        visibleHeight.value = parentHeight - iframeVisibleTop;
       }
     } catch {
       // Cross-origin: fall back to own viewport
