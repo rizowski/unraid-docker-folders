@@ -2,6 +2,9 @@
 
 ## 2026.03.21
 ### Changes
+- add test files
+- Fix compose SHA256 hash, empty folder UX, and import banner persistence
+- Fix Docker Compose v2.32.4 SHA256 hash after upstream binary update
 - Render compose modal in parent page DOM to avoid iframe clipping
 - Lock parent scroll when modal open via wheel/touch/key event prevention
 - Elevate iframe z-index when modal open; fix input/textarea styling
