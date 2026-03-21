@@ -389,8 +389,13 @@
       :confirm-label="confirmModalConfig.label"
       :variant="confirmModalConfig.variant"
       @confirm="handleConfirm"
-      @cancel="confirmAction = null"
-    />
+      @cancel="confirmAction = null; removeImageToo = false"
+    >
+      <label v-if="confirmAction === 'remove'" class="flex items-center gap-2 mt-3 text-sm text-text-secondary cursor-pointer">
+        <input type="checkbox" v-model="removeImageToo" class="cursor-pointer" />
+        Also delete the image ({{ container.image }})
+      </label>
+    </ConfirmModal>
     <InputModal
       :is-open="showDelayModal"
       title="Autostart Delay"
@@ -451,7 +456,7 @@ const emit = defineEmits<{
   start: [id: string];
   stop: [id: string];
   restart: [id: string];
-  remove: [id: string];
+  remove: [id: string, removeImage: boolean];
   pull: [data: { image: string; name: string; managed: string | null }];
 }>();
 
@@ -474,6 +479,7 @@ async function handleToggleAutostart() {
 }
 
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
+const removeImageToo = ref(false);
 const showDelayModal = ref(false);
 
 async function handleDelayConfirm(value: string) {
@@ -501,7 +507,8 @@ function handleConfirm() {
   confirmAction.value = null;
   if (action === 'stop') emit('stop', props.container.id);
   else if (action === 'restart') emit('restart', props.container.id);
-  else if (action === 'remove') emit('remove', props.container.id);
+  else if (action === 'remove') emit('remove', props.container.id, removeImageToo.value);
+  removeImageToo.value = false;
 }
 
 const expanded = ref(false);

@@ -198,8 +198,27 @@ function handlePost($dockerClient)
 
     case 'remove':
       $force = isset($_GET['force']) && $_GET['force'] === '1';
+      // Get container info before removing (need name and image for cleanup)
+      $containerInfo = $dockerClient->inspectContainerRaw($id);
+      $containerName = $containerInfo ? ltrim($containerInfo['Name'] ?? '', '/') : null;
+      $containerImage = $containerInfo['Image'] ?? null;
+
       $success = $dockerClient->removeContainer($id, $force);
       $message = $success ? 'Container removed successfully' : 'Failed to remove container';
+
+      if ($success && $containerName) {
+        // Clean up folder associations
+        require_once dirname(__DIR__) . '/classes/FolderManager.php';
+        $folderManager = new FolderManager();
+        $folderManager->removeContainerByName($containerName);
+        WebSocketPublisher::publish('folders', 'updated');
+
+        // Optionally remove the image
+        $data = getRequestData();
+        if (!empty($data['remove_image']) && $containerImage) {
+          $dockerClient->removeImage($containerImage, true);
+        }
+      }
       break;
 
     default:

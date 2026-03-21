@@ -131,6 +131,16 @@ class DockerClient
   }
 
   /**
+   * Remove a Docker image
+   */
+  public function removeImage($imageId, $force = false)
+  {
+    $params = $force ? '?force=1' : '';
+    $response = $this->request('DELETE', "/images/" . urlencode($imageId) . $params);
+    return $response !== false;
+  }
+
+  /**
    * Get container logs
    *
    * Docker's /logs endpoint returns a multiplexed byte stream with 8-byte

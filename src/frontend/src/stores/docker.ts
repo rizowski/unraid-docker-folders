@@ -178,18 +178,20 @@ export const useDockerStore = defineStore('docker', () => {
     }
   }
 
-  async function removeContainer(id: string): Promise<boolean> {
+  async function removeContainer(id: string, removeImage = false): Promise<boolean> {
     try {
       const response = await apiFetch(`${API_BASE}/containers.php?action=remove&id=${id}`, {
         method: 'POST',
+        body: removeImage ? JSON.stringify({ remove_image: true }) : undefined,
       });
 
       if (!response.ok) {
         throw new Error(`Failed to remove container`);
       }
 
-      // Refresh container list
-      await fetchContainers();
+      // Refresh containers and folders (backend cleans up associations)
+      const { useFolderStore } = await import('./folders');
+      await Promise.all([fetchContainers(), useFolderStore().fetchFolders()]);
 
       return true;
     } catch (e) {

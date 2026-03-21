@@ -480,6 +480,18 @@ class FolderManager
   }
 
   /**
+   * Remove a container from all folders by name.
+   * Called when a container is deleted from Docker.
+   */
+  public function removeContainerByName($containerName)
+  {
+    return $this->db->execute(
+      'DELETE FROM container_folders WHERE container_name = ?',
+      [$containerName]
+    );
+  }
+
+  /**
    * Get statistics
    *
    * @return array Folder statistics

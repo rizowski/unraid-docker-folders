@@ -231,10 +231,10 @@ async function handleRestart(id: string) {
   }
 }
 
-async function handleRemove(id: string) {
+async function handleRemove(id: string, removeImage = false) {
   actionsInProgress.value.set(id, 'remove');
   try {
-    await dockerStore.removeContainer(id);
+    await dockerStore.removeContainer(id, removeImage);
   } finally {
     actionsInProgress.value.delete(id);
   }
