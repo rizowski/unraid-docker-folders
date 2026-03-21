@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Iframe Test - Unraid Simulation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: sans-serif;
+      background: #1a1a1a;
+      color: #f2f2f2;
+      --text-color: #f2f2f2;
+      --background-color: #1a1a1a;
+      --border-color: #333;
+      --header-background: #ff8c2f;
+      --header-text-color: #fff;
+    }
+
+    /* Simulate Unraid top nav */
+    .fake-nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: #262626;
+      padding: 12px 20px;
+      border-bottom: 1px solid #333;
+      display: flex;
+      gap: 20px;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .fake-nav span { cursor: pointer; }
+    .fake-nav span.active { color: #ff8c2f; }
+
+    /* Simulate content above/around the iframe */
+    .fake-container-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 20px;
+      border-bottom: 1px solid #333;
+      background: #222;
+      position: relative;
+      z-index: 10;
+    }
+    .fake-container-row .icon {
+      width: 40px; height: 40px;
+      background: #444; border-radius: 6px;
+    }
+    .fake-container-row .info { flex: 1; }
+    .fake-container-row .name { font-weight: bold; font-size: 14px; }
+    .fake-container-row .image { font-size: 11px; color: #888; font-family: monospace; }
+    .fake-container-row .stats { font-size: 12px; color: #666; }
+
+    /* Simulate bottom bar */
+    .fake-bottom-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 100;
+      background: #262626;
+      padding: 10px 20px;
+      border-top: 1px solid #333;
+      display: flex;
+      gap: 10px;
+    }
+    .fake-bottom-bar button {
+      padding: 6px 14px;
+      border: 1px solid #ff8c2f;
+      background: transparent;
+      color: #ff8c2f;
+      border-radius: 4px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+
+    iframe {
+      width: 100%;
+      min-height: 600px;
+      border: none;
+    }
+
+    .section-label {
+      padding: 8px 20px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #666;
+      background: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+  <div class="fake-nav">
+    <span>Dashboard</span>
+    <span>Main</span>
+    <span>Settings</span>
+    <span class="active">Docker</span>
+    <span>Apps</span>
+    <span>Stats</span>
+  </div>
+
+  <!-- Fake containers above the iframe -->
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info">
+      <div class="name">plex</div>
+      <div class="image">linuxserver/plex:latest</div>
+    </div>
+    <div class="stats">CPU 2.3% MEM 1.8%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info">
+      <div class="name">postgres</div>
+      <div class="image">postgres:16-alpine</div>
+    </div>
+    <div class="stats">CPU 0.1% MEM 0.5%</div>
+  </div>
+
+  <div class="section-label">Docker Folders Plugin (iframe below)</div>
+
+  <iframe id="docker-folders-frame" scrolling="no"></iframe>
+
+  <!-- Fake containers below the iframe -->
+  <div class="section-label">Native Docker Containers</div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">grafana</div><div class="image">grafana/grafana:latest</div></div>
+    <div class="stats">CPU 0.3% MEM 1.2%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">nginx</div><div class="image">nginx:alpine</div></div>
+    <div class="stats">CPU 0.0% MEM 0.1%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">traefik</div><div class="image">traefik:v3</div></div>
+    <div class="stats">CPU 0.5% MEM 0.8%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">prometheus</div><div class="image">prom/prometheus:latest</div></div>
+    <div class="stats">CPU 1.2% MEM 3.4%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">loki</div><div class="image">grafana/loki:latest</div></div>
+    <div class="stats">CPU 0.8% MEM 2.1%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">tempo</div><div class="image">grafana/tempo:latest</div></div>
+    <div class="stats">CPU 0.4% MEM 1.5%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">pihole</div><div class="image">pihole/pihole:latest</div></div>
+    <div class="stats">CPU 0.2% MEM 0.9%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">wireguard</div><div class="image">linuxserver/wireguard:latest</div></div>
+    <div class="stats">CPU 0.1% MEM 0.3%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">portainer</div><div class="image">portainer/portainer-ce:latest</div></div>
+    <div class="stats">CPU 0.6% MEM 1.8%</div>
+  </div>
+  <div class="fake-container-row">
+    <div class="icon"></div>
+    <div class="info"><div class="name">sonarr</div><div class="image">linuxserver/sonarr:latest</div></div>
+    <div class="stats">CPU 0.3% MEM 2.5%</div>
+  </div>
+
+  <div class="fake-bottom-bar">
+    <button>Add Container</button>
+    <button>Start All</button>
+    <button>Stop All</button>
+    <button>Check for Updates</button>
+    <button>Update All</button>
+  </div>
+
+  <!-- Parent-page modal overlay -->
+  <div id="dfm-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;font-family:sans-serif;" onclick="if(event.target===this)dfmCloseModal()">
+    <div style="background:#1a1a1a;color:#f2f2f2;border:1px solid #333;border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);width:95%;max-width:750px;height:85vh;display:flex;flex-direction:column;overflow:hidden;" onclick="event.stopPropagation()">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid #333;flex-shrink:0;">
+        <h2 id="dfm-modal-title" style="margin:0;font-size:20px;font-weight:600;"></h2>
+        <button onclick="dfmCloseModal()" style="background:none;border:none;color:#f2f2f2;cursor:pointer;padding:4px;font-size:20px;line-height:1;">&times;</button>
+      </div>
+      <div style="display:flex;gap:8px;padding:8px 24px;border-bottom:1px solid #333;flex-shrink:0;">
+        <button id="dfm-tab-compose" onclick="dfmSwitchTab('compose')" style="padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;text-transform:uppercase;border:1px solid #333;background:#ff8c2f;color:#fff;">Compose File</button>
+        <button id="dfm-tab-env" onclick="dfmSwitchTab('env')" style="padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;text-transform:uppercase;border:1px solid #333;background:rgba(255,255,255,0.06);color:#f2f2f2;">Environment</button>
+      </div>
+      <div style="flex:1;overflow:auto;padding:16px 24px;display:flex;flex-direction:column;min-height:0;">
+        <div id="dfm-content-compose" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+          <div id="dfm-compose-path" style="font-size:12px;opacity:0.6;margin-bottom:8px;font-family:monospace;"></div>
+          <textarea id="dfm-compose-textarea" style="flex:1;min-height:200px;padding:12px;font-family:monospace;font-size:14px;background:rgba(255,255,255,0.08);color:#f2f2f2;border:1px solid #333;border-radius:4px;resize:vertical;box-sizing:border-box;width:100%;" spellcheck="false"></textarea>
+        </div>
+        <div id="dfm-content-env" style="display:none;flex-direction:column;flex:1;min-height:0;">
+          <div style="margin-bottom:12px;">
+            <label style="display:block;margin-bottom:4px;font-size:14px;font-weight:500;">Env File Path</label>
+            <input id="dfm-env-path" type="text" placeholder=".env (default)" style="width:100%;padding:8px 12px;font-family:monospace;font-size:14px;background:rgba(255,255,255,0.08);color:#f2f2f2;border:1px solid #333;border-radius:4px;box-sizing:border-box;" />
+          </div>
+          <div id="dfm-env-file-path" style="font-size:12px;opacity:0.6;margin-bottom:8px;font-family:monospace;"></div>
+          <textarea id="dfm-env-textarea" placeholder="KEY=value" style="flex:1;min-height:200px;padding:12px;font-family:monospace;font-size:14px;background:rgba(255,255,255,0.08);color:#f2f2f2;border:1px solid #333;border-radius:4px;resize:vertical;box-sizing:border-box;width:100%;" spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;border-top:1px solid #333;flex-shrink:0;">
+        <span id="dfm-save-status" style="font-size:13px;"></span>
+        <div style="display:flex;gap:8px;">
+          <button onclick="dfmCloseModal()" id="dfm-btn-cancel" style="padding:8px 20px;border:1px solid #333;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;background:rgba(255,255,255,0.06);color:#f2f2f2;">Close</button>
+          <button onclick="dfmSaveModal()" id="dfm-btn-save" style="display:none;padding:8px 20px;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;background:#ff8c2f;color:#fff;">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var frame = document.getElementById('docker-folders-frame');
+    var modalData = null;
+    var activeTab = 'compose';
+    frame.src = '/index.html';
+
+    window.dfmSwitchTab = function(tab) {
+      activeTab = tab;
+      document.getElementById('dfm-content-compose').style.display = tab === 'compose' ? 'flex' : 'none';
+      document.getElementById('dfm-content-env').style.display = tab === 'env' ? 'flex' : 'none';
+      document.getElementById('dfm-tab-compose').style.background = tab === 'compose' ? '#ff8c2f' : 'rgba(255,255,255,0.06)';
+      document.getElementById('dfm-tab-compose').style.color = tab === 'compose' ? '#fff' : '#f2f2f2';
+      document.getElementById('dfm-tab-env').style.background = tab === 'env' ? '#ff8c2f' : 'rgba(255,255,255,0.06)';
+      document.getElementById('dfm-tab-env').style.color = tab === 'env' ? '#fff' : '#f2f2f2';
+    };
+
+    window.dfmCloseModal = function() {
+      document.getElementById('dfm-modal-overlay').style.display = 'none';
+      modalData = null;
+      frame.contentWindow.postMessage({ type: 'docker-folders-modal-action', action: 'close' }, '*');
+    };
+
+    window.dfmSaveModal = function() {
+      if (!modalData) return;
+      var content = activeTab === 'compose'
+        ? document.getElementById('dfm-compose-textarea').value
+        : document.getElementById('dfm-env-textarea').value;
+      frame.contentWindow.postMessage({
+        type: 'docker-folders-modal-action', action: 'save',
+        tab: activeTab, content: content, projectName: modalData.projectName
+      }, '*');
+    };
+
+    document.addEventListener('keydown', function(ev) {
+      if (ev.key === 'Escape' && document.getElementById('dfm-modal-overlay').style.display === 'flex') dfmCloseModal();
+    });
+
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'docker-folders-resize') {
+        frame.style.height = e.data.height + 'px';
+      }
+      if (e.data && e.data.type === 'docker-folders-modal') {
+        if (e.data.open && e.data.modal) {
+          modalData = e.data.modal;
+          activeTab = 'compose';
+          document.getElementById('dfm-modal-title').textContent = e.data.modal.title || 'Compose';
+          document.getElementById('dfm-compose-textarea').value = e.data.modal.composeContent || '';
+          document.getElementById('dfm-compose-textarea').readOnly = !!e.data.modal.readOnly;
+          document.getElementById('dfm-compose-path').textContent = e.data.modal.composePath || '';
+          document.getElementById('dfm-env-textarea').value = e.data.modal.envContent || '';
+          document.getElementById('dfm-env-textarea').readOnly = !!e.data.modal.readOnly;
+          document.getElementById('dfm-env-path').value = e.data.modal.envPath || '';
+          document.getElementById('dfm-env-file-path').textContent = e.data.modal.envFilePath || '';
+          document.getElementById('dfm-save-status').textContent = '';
+          document.getElementById('dfm-btn-save').style.display = e.data.modal.readOnly ? 'none' : '';
+          document.getElementById('dfm-btn-cancel').textContent = e.data.modal.readOnly ? 'Close' : 'Cancel';
+          dfmSwitchTab('compose');
+          document.getElementById('dfm-modal-overlay').style.display = 'flex';
+        } else if (!e.data.open) {
+          document.getElementById('dfm-modal-overlay').style.display = 'none';
+          modalData = null;
+        }
+      }
+      if (e.data && e.data.type === 'docker-folders-modal-result') {
+        var s = document.getElementById('dfm-save-status');
+        s.style.color = e.data.success ? '#4caf50' : '#f44336';
+        s.textContent = e.data.success ? 'Saved' : (e.data.error || 'Failed');
+        if (e.data.success) setTimeout(function() { s.textContent = ''; }, 2000);
+      }
+    });
+  </script>
+</body>
+</html>
