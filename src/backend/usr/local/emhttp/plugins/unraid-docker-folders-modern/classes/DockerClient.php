@@ -605,6 +605,22 @@ class DockerClient
     // Remove read-only HostConfig fields
     unset($createBody['HostConfig']['ContainerIDFile']);
 
+    // Fix PortBindings: PHP json_decode turns {} into [] (empty array),
+    // but Docker expects an object/map for PortBindings and each binding value.
+    if (isset($createBody['HostConfig']['PortBindings'])) {
+      $pb = $createBody['HostConfig']['PortBindings'];
+      if (is_array($pb) && empty($pb)) {
+        $createBody['HostConfig']['PortBindings'] = (object) [];
+      } elseif (is_array($pb)) {
+        foreach ($pb as $port => $bindings) {
+          if (is_array($bindings) && empty($bindings)) {
+            $pb[$port] = [];
+          }
+        }
+        $createBody['HostConfig']['PortBindings'] = (object) $pb;
+      }
+    }
+
     // Build NetworkingConfig from existing networks
     $networks = $inspect['NetworkSettings']['Networks'] ?? [];
     if (!empty($networks)) {

@@ -27,7 +27,12 @@
               class="nav-btn active"
               @click="handleStackUp"
               :disabled="stackStarting"
-            >{{ stackStarting ? 'Starting...' : 'Start Stack' }}</button>
+            >
+              <svg v-if="stackStarting" class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+              {{ stackStarting ? 'Starting...' : 'Start Stack' }}
+            </button>
+            <pre v-if="stackOutput" class="mt-3 text-left text-xs font-mono text-text-secondary bg-bg p-3 rounded overflow-auto max-h-[200px] mx-4">{{ stackOutput }}</pre>
+            <p v-if="stackError" class="mt-3 text-sm text-error">{{ stackError }}</p>
           </template>
           <template v-else>
             <p>No containers in this folder</p>
@@ -75,15 +80,28 @@ const composeStore = useComposeStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
 const stackStarting = ref(false);
+const stackOutput = ref<string | null>(null);
+const stackError = ref<string | null>(null);
 
 async function handleStackUp() {
   if (!props.folder.compose_project) return;
   stackStarting.value = true;
+  stackOutput.value = null;
+  stackError.value = null;
   try {
-    await composeStore.stackUp(props.folder.compose_project);
+    const result = await composeStore.stackUp(props.folder.compose_project);
+    if (result && !result.success) {
+      stackError.value = result.error || 'Failed to start stack';
+    } else if (result?.output) {
+      stackOutput.value = result.output;
+    }
     // Refresh containers so syncComposeStacks can associate them
-    await dockerStore.fetchContainers();
-    await folderStore.fetchFolders();
+    await Promise.all([
+      dockerStore.fetchContainers(),
+      folderStore.fetchFolders(),
+    ]);
+  } catch (e) {
+    stackError.value = e instanceof Error ? e.message : 'Failed to start stack';
   } finally {
     stackStarting.value = false;
   }
@@ -98,6 +116,9 @@ const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
 const folderContainers = computed(() => {
   let list = props.folder.containers || [];
+  // Filter out associations where the container no longer exists in Docker
+  // (e.g. after docker compose down removes containers)
+  list = list.filter((assoc) => !!getContainer(assoc.container_name));
   if (isSearching.value) {
     const q = dockerStore.searchQuery.trim().toLowerCase();
     list = list.filter((assoc) => {
