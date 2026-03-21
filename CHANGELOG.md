@@ -2,6 +2,7 @@
 
 ## 2026.03.21
 ### Changes
+- Fix autostart detection, add delay support, modal UIs, accordion width
 - Extract icons into reusable components; uniform sizes; always-visible globe/autostart
 - Add Create Stack button and container autostart toggle
 - Fix compose UX: conditional play/stop, container sync, PortBindings
