@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.21-dev2">
-<!ENTITY md5 "0eea0ebea00633005e8072a2d5810d49">
+<!ENTITY version "2026.03.21-dev3">
+<!ENTITY md5 "665079caf35fd24648fa4a90e4876ba3">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -58,6 +58,9 @@
 
 
 
+
+###2026.03.21-dev3
+- Elevate iframe z-index when modal open; fix input/textarea styling
 ###2026.03.21-dev2
 - Fix modal buttons and tabs overridden by Unraid button reset
 ###2026.03.21-dev1
