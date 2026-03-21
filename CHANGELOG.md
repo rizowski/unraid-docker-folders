@@ -2,6 +2,7 @@
 
 ## 2026.03.21
 ### Changes
+- Fix compose UX: conditional play/stop, container sync, PortBindings
 - add test files
 - Fix compose SHA256 hash, empty folder UX, and import banner persistence
 - Fix Docker Compose v2.32.4 SHA256 hash after upstream binary update
