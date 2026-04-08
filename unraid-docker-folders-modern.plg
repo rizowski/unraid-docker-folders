@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.21">
-<!ENTITY md5 "71b882cc5a69071012d92561cd4f967e">
+<!ENTITY version "2026.04.07-dev1">
+<!ENTITY md5 "f1d6e43aebb22508100a9c5f90f41996">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -70,6 +70,9 @@
 
 
 
+
+###2026.04.07-dev1
+- Render all modals in parent window to escape iframe clipping
 ###2026.03.21-dev14
 - Fix folder counts, cleanup deleted containers, unify modals, delete image option
 ###2026.03.21-dev13

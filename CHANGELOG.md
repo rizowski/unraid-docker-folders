@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.04.07
+### Changes
+- Render all modals in parent window to escape iframe clipping
+
 ## 2026.03.21
 ### Changes
 - Fix folder counts, cleanup deleted containers, unify modals, delete image option
