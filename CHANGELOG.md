@@ -2,6 +2,7 @@
 
 ## 2026.04.07
 ### Changes
+- Fix compose plugin import banner for users without compose.manager
 - Render all modals in parent window to escape iframe clipping
 
 ## 2026.03.21
