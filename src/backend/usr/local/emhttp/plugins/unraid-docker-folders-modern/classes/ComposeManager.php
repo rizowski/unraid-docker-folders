@@ -29,6 +29,14 @@ class ComposeManager
   /** Path to compose_plugin installation */
   const COMPOSE_PLUGIN_DIR = '/usr/local/emhttp/plugins/compose.manager';
 
+  /** Recognised compose file names, in lookup order */
+  const COMPOSE_FILENAMES = [
+    'docker-compose.yml',
+    'docker-compose.yaml',
+    'compose.yml',
+    'compose.yaml',
+  ];
+
   public function __construct()
   {
     $this->db = Database::getInstance();
@@ -139,14 +147,55 @@ class ComposeManager
    */
   public function hasComposePluginData()
   {
-    if (!is_dir(self::COMPOSE_PLUGIN_PROJECTS)) {
-      return false;
-    }
-    // Don't show import banner if we already imported
+    // Check the DB first — O(1) on an indexed table and avoids touching
+    // the /boot flash device on the common "already imported" path.
     $imported = $this->db->fetchOne(
       "SELECT COUNT(*) as cnt FROM compose_stacks WHERE imported_from = 'compose_plugin'"
     );
-    return !$imported || (int)$imported['cnt'] === 0;
+    if ($imported && (int)$imported['cnt'] > 0) {
+      return false;
+    }
+
+    // On Unraid, /boot/config/plugins/compose.manager can linger as a
+    // stale artifact from a partial install or Community Apps metadata,
+    // so require at least one real project subdirectory before prompting.
+    return $this->composePluginHasRealProjects();
+  }
+
+  private function composePluginHasRealProjects()
+  {
+    $dirs = @scandir(self::COMPOSE_PLUGIN_PROJECTS);
+    if ($dirs === false) {
+      return false;
+    }
+
+    foreach ($dirs as $dir) {
+      if ($dir === '.' || $dir === '..') continue;
+      $projectPath = self::COMPOSE_PLUGIN_PROJECTS . '/' . $dir;
+      if (!is_dir($projectPath)) continue;
+
+      if (
+        file_exists($projectPath . '/name') ||
+        file_exists($projectPath . '/indirect') ||
+        $this->findComposeFile($projectPath) !== null
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  private function findComposeFile($dir)
+  {
+    $dir = rtrim($dir, '/');
+    foreach (self::COMPOSE_FILENAMES as $name) {
+      $path = $dir . '/' . $name;
+      if (file_exists($path)) {
+        return $path;
+      }
+    }
+    return null;
   }
 
   /**
@@ -699,14 +748,12 @@ class ComposeManager
 
     // Fall back to working_dir + common filenames
     if (!empty($stack['working_dir'])) {
-      $dir = rtrim($stack['working_dir'], '/');
-      foreach (['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'] as $name) {
-        if (file_exists($dir . '/' . $name)) {
-          return $dir . '/' . $name;
-        }
+      $found = $this->findComposeFile($stack['working_dir']);
+      if ($found !== null) {
+        return $found;
       }
       // Default to docker-compose.yml even if it doesn't exist yet
-      return $dir . '/docker-compose.yml';
+      return rtrim($stack['working_dir'], '/') . '/docker-compose.yml';
     }
 
     return null;
@@ -866,12 +913,7 @@ class ComposeManager
 
         // Find actual compose file in source
         if ($sourceDir) {
-          foreach (['docker-compose.yml', 'docker-compose.yaml', 'compose.yml', 'compose.yaml'] as $candidate) {
-            if (file_exists($sourceDir . '/' . $candidate)) {
-              $sourceComposeFile = $sourceDir . '/' . $candidate;
-              break;
-            }
-          }
+          $sourceComposeFile = $this->findComposeFile($sourceDir);
         }
 
         // Copy files into our own plugin directory so stacks are self-contained

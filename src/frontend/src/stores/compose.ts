@@ -308,7 +308,7 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
-  async function importFromComposePlugin(): Promise<ComposeImportResult | null> {
+  async function importFromComposePlugin(): Promise<ComposeImportResult> {
     loading.value = true;
     error.value = null;
 
@@ -318,20 +318,26 @@ export const useComposeStore = defineStore('compose', () => {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Import failed');
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Import failed (HTTP ${response.status})`);
       }
 
-      const result = await response.json();
+      const result: ComposeImportResult = await response.json();
 
       // Refresh stacks and status
       await Promise.all([fetchStacks(true), fetchStatus()]);
 
       return result;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error';
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      error.value = msg;
       console.error('Error importing from compose plugin:', e);
-      return null;
+      return {
+        success: false,
+        stacks_imported: 0,
+        stacks_skipped: 0,
+        errors: [msg],
+      };
     } finally {
       loading.value = false;
     }
