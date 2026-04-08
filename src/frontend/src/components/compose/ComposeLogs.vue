@@ -1,12 +1,9 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
-    <!-- Full-document dark backdrop -->
+  <div v-if="isOpen && !inIframe" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
     <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
-    <!-- Modal centered in visible viewport -->
     <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="$emit('close')">
     <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[800px] w-[95%] h-[85%] flex flex-col" @click.stop>
-      <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
         <h2 class="text-xl font-semibold text-text">Logs - {{ projectName }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
@@ -14,7 +11,6 @@
         </button>
       </div>
 
-      <!-- Controls -->
       <div class="flex items-center gap-3 px-4 sm:px-6 py-2 border-b border-border shrink-0">
         <label class="flex items-center gap-2 text-sm text-text-secondary">
           Tail:
@@ -39,7 +35,6 @@
         </button>
       </div>
 
-      <!-- Log output -->
       <div class="flex-1 overflow-auto p-4 sm:p-6">
         <pre v-if="logOutput" class="text-xs font-mono text-text whitespace-pre-wrap break-all leading-relaxed m-0">{{ logOutput }}</pre>
         <div v-else-if="loading" class="text-center py-8 text-text-secondary">Loading logs...</div>
@@ -47,7 +42,6 @@
         <div v-if="logError" class="mt-2 text-sm text-error">{{ logError }}</div>
       </div>
 
-      <!-- Footer -->
       <div class="flex justify-end p-4 sm:p-6 border-t border-border shrink-0">
         <button @click="$emit('close')" class="nav-btn">Close</button>
       </div>
@@ -61,7 +55,7 @@
 import { ref, watch, onUnmounted, computed } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentViewport } from '@/composables/useParentViewport';
-import { useModalElevation } from '@/composables/useModalElevation';
+import { useParentModal } from '@/composables/useParentModal';
 
 interface Props {
   isOpen: boolean;
@@ -69,14 +63,14 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-defineEmits<{ close: [] }>();
+
+const emit = defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
 
-useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
-  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
+  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value),
 );
 const viewportStyle = computed(() => ({
   top: visibleTop.value + 'px',
@@ -92,11 +86,83 @@ const tailCount = ref(100);
 const autoRefresh = ref(false);
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
+const parentModal = useParentModal({
+  onAction({ actionId, values }) {
+    if (actionId === 'close') {
+      emit('close');
+      return;
+    }
+    if (actionId === 'refresh') {
+      const tail = values.tail;
+      if (tail != null) tailCount.value = Number(tail) || 100;
+      const auto = values.autoRefresh;
+      // checkbox-list returns a string[] of checked ids
+      if (Array.isArray(auto)) autoRefresh.value = auto.includes('on');
+      fetchLogs();
+    }
+  },
+});
+
+const { inIframe } = parentModal;
+
+function openParent() {
+  parentModal.open({
+    kind: 'compose-logs',
+    title: `Logs - ${props.projectName}`,
+    size: 'lg',
+    fillHeight: true,
+    fields: [
+      {
+        type: 'select',
+        id: 'tail',
+        label: 'Tail',
+        value: tailCount.value,
+        options: [
+          { value: 50, label: '50 lines' },
+          { value: 100, label: '100 lines' },
+          { value: 200, label: '200 lines' },
+          { value: 500, label: '500 lines' },
+        ],
+      },
+      {
+        type: 'checkbox-list',
+        id: 'autoRefresh',
+        items: [{ id: 'on', label: 'Auto-refresh (every 5s)', checked: autoRefresh.value }],
+      },
+      {
+        type: 'log',
+        id: 'log',
+        content: logOutput.value || (loading.value ? 'Loading logs...' : 'No logs available'),
+        fillHeight: true,
+      },
+    ],
+    actions: [
+      { id: 'refresh', label: 'Refresh', variant: 'default' },
+      { id: 'close', label: 'Close', variant: 'primary' },
+    ],
+  });
+}
+
+function patchLogContent() {
+  if (!inIframe) return;
+  parentModal.update({
+    fields: [
+      {
+        id: 'log',
+        content: logError.value
+          ? `${logOutput.value || ''}\n\n[Error] ${logError.value}`
+          : logOutput.value || (loading.value ? 'Loading logs...' : 'No logs available'),
+      },
+    ],
+  });
+}
+
 async function fetchLogs() {
   if (!props.projectName) return;
 
   loading.value = true;
   logError.value = null;
+  patchLogContent();
 
   try {
     const result = await composeStore.getLogs(props.projectName, tailCount.value);
@@ -106,15 +172,18 @@ async function fetchLogs() {
     }
   } finally {
     loading.value = false;
+    patchLogContent();
   }
 }
 
 watch(() => [props.isOpen, props.projectName], () => {
   if (props.isOpen && props.projectName) {
+    if (inIframe) openParent();
     fetchLogs();
   } else {
     logOutput.value = '';
     logError.value = null;
+    if (inIframe && !props.isOpen) parentModal.close();
   }
 }, { immediate: true });
 

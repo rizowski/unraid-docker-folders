@@ -1,5 +1,5 @@
 <template>
-  <BaseModal :is-open="isOpen" max-width="500px" @close="handleOverlayClick">
+  <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="500px" @close="handleOverlayClick">
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
         <h2 class="text-2xl font-semibold">{{ isEditing ? 'Edit Folder' : 'Create Folder' }}</h2>
         <button class="flex items-center justify-center w-8 h-8 rounded-full border-none bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition" @click="$emit('close')" aria-label="Close">
@@ -75,6 +75,7 @@ import { ref, watch, computed } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import BaseModal from '@/components/BaseModal.vue';
+import { useParentModal } from '@/composables/useParentModal';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 
 interface Props {
@@ -121,26 +122,103 @@ function toggleContainer(id: string) {
   selectedContainerIds.value = next;
 }
 
+const parentModal = useParentModal({
+  onAction({ actionId, values }) {
+    if (actionId === 'save') {
+      const name = typeof values.name === 'string' ? values.name.trim() : '';
+      const color = typeof values.color === 'string' ? values.color : '#ff8c2f';
+      if (!name) return;
+      const containerIds = Array.isArray(values.containers) ? (values.containers as string[]) : [];
+      emit('save', { name, color }, containerIds);
+    } else {
+      emit('close');
+    }
+  },
+});
+
+const { inIframe } = parentModal;
+
+function openParent() {
+  const initialName = props.folder?.name || '';
+  const initialColor = props.folder?.color || '#ff8c2f';
+  const existingContainerNames = new Set(
+    (props.folder?.containers || []).map((c) => c.container_name),
+  );
+
+  parentModal.open({
+    kind: 'folder-edit',
+    title: isEditing.value ? 'Edit Folder' : 'Create Folder',
+    size: 'md',
+    fields: [
+      {
+        type: 'input',
+        id: 'name',
+        label: 'Folder Name *',
+        value: initialName,
+        placeholder: 'Enter folder name',
+        required: true,
+        autofocus: true,
+      },
+      {
+        type: 'color',
+        id: 'color',
+        label: 'Color',
+        value: initialColor,
+        caption: "Choose a color for the folder's left border",
+      },
+      ...(availableContainers.value.length > 0
+        ? [
+            {
+              type: 'checkbox-list' as const,
+              id: 'containers',
+              label: 'Add Containers',
+              caption: 'Select unfoldered containers to add to this folder',
+              items: availableContainers.value.map((c) => ({
+                id: c.id,
+                label: c.name,
+                icon: c.icon || undefined,
+                state: c.state,
+                checked: existingContainerNames.has(c.name),
+              })),
+            },
+          ]
+        : []),
+    ],
+    actions: [
+      { id: 'cancel', label: 'Cancel', variant: 'default' },
+      {
+        id: 'save',
+        label: isEditing.value ? 'Save Changes' : 'Create Folder',
+        variant: 'primary',
+        disabledWhenEmpty: 'name',
+      },
+    ],
+  });
+}
+
 // Reset form when modal opens/closes or folder changes
 watch(
   () => [props.isOpen, props.folder],
   () => {
     selectedContainerIds.value = new Set();
     if (props.isOpen && props.folder) {
-      // Editing existing folder
       formData.value = {
         name: props.folder.name,
         color: props.folder.color || '#ff8c2f',
       };
     } else if (props.isOpen) {
-      // Creating new folder
       formData.value = {
         name: '',
         color: '#ff8c2f',
       };
     }
+
+    if (inIframe) {
+      if (props.isOpen) openParent();
+      else parentModal.close();
+    }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 function handleOverlayClick() {

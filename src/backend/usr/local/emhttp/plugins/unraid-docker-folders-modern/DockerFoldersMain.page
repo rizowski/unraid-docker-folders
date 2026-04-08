@@ -22,46 +22,22 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         scrolling="no"
         allowfullscreen></iframe>
 
-<!-- Parent-page modal overlay (rendered outside iframe to avoid clipping) -->
-<div id="dfm-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;font-family:clear-sans,sans-serif;">
-  <div id="dfm-modal-card" style="background:var(--background-color,#1a1a1a);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);width:95%;max-width:750px;height:85vh;display:flex;flex-direction:column;overflow:hidden;" onclick="event.stopPropagation()">
+<!-- Generic parent-page modal overlay (rendered outside iframe to avoid clipping) -->
+<div id="dfm-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;font-family:clear-sans,sans-serif;padding:16px;box-sizing:border-box;">
+  <div id="dfm-modal-card" style="background:var(--background-color,#1a1a1a);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);width:95%;max-width:500px;display:flex;flex-direction:column;overflow:hidden;max-height:90vh;" onclick="event.stopPropagation()">
     <!-- Header -->
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;">
-      <div style="display:flex;align-items:center;gap:12px;flex:1;margin-right:16px;">
-        <h2 id="dfm-modal-title" style="margin:0;font-size:20px;font-weight:600;white-space:nowrap;"></h2>
-        <input id="dfm-project-name" type="text" placeholder="Stack name" style="display:none;flex:1;padding:6px 12px;font-size:16px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;font-family:inherit;" />
-      </div>
-      <button onclick="dfmCloseModal()" style="background:none;border:none;color:var(--text-color,#f2f2f2);cursor:pointer;padding:4px;font-size:20px;line-height:1;opacity:0.7;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">&times;</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;gap:12px;">
+      <h2 id="dfm-modal-title" style="margin:0;font-size:18px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></h2>
+      <button id="dfm-modal-close" type="button" style="background:none;border:none;color:var(--text-color,#f2f2f2);cursor:pointer;padding:4px;font-size:24px;line-height:1;opacity:0.7;flex-shrink:0;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">&times;</button>
     </div>
-    <!-- Tabs -->
-    <div style="display:flex;gap:8px;padding:8px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;">
-      <button id="dfm-tab-compose" onclick="dfmSwitchTab('compose')" style="padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;border:1px solid var(--border-color,#333);">Compose File</button>
-      <button id="dfm-tab-env" onclick="dfmSwitchTab('env')" style="padding:6px 14px;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;letter-spacing:0.5px;text-transform:uppercase;border:1px solid transparent;">Environment</button>
-    </div>
-    <!-- Content -->
-    <div style="flex:1;overflow:auto;padding:16px 24px;display:flex;flex-direction:column;min-height:0;">
-      <!-- Compose tab -->
-      <div id="dfm-content-compose" style="display:flex;flex-direction:column;flex:1;min-height:0;">
-        <div id="dfm-compose-path" style="font-size:12px;opacity:0.6;margin-bottom:8px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-        <textarea id="dfm-compose-textarea" style="flex:1;min-height:200px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:14px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;resize:vertical;box-sizing:border-box;width:100%;" spellcheck="false"></textarea>
-      </div>
-      <!-- Env tab -->
-      <div id="dfm-content-env" style="display:none;flex-direction:column;flex:1;min-height:0;">
-        <div style="margin-bottom:12px;">
-          <label style="display:block;margin-bottom:4px;font-size:14px;font-weight:500;">Env File Path</label>
-          <input id="dfm-env-path" type="text" placeholder=".env (default)" style="width:100%;padding:8px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:14px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;box-sizing:border-box;" />
-        </div>
-        <div id="dfm-env-file-path" style="font-size:12px;opacity:0.6;margin-bottom:8px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
-        <textarea id="dfm-env-textarea" placeholder="KEY=value" style="flex:1;min-height:200px;padding:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:14px;background:color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:4px;resize:vertical;box-sizing:border-box;width:100%;" spellcheck="false"></textarea>
-      </div>
-    </div>
+    <!-- Tabs bar (hidden unless descriptor has tabs) -->
+    <div id="dfm-modal-tabs" style="display:none;gap:8px;padding:8px 24px;border-bottom:1px solid var(--border-color,#333);flex-shrink:0;"></div>
+    <!-- Body -->
+    <div id="dfm-modal-body" style="flex:1;overflow:auto;padding:20px 24px;display:flex;flex-direction:column;min-height:0;gap:16px;"></div>
     <!-- Footer -->
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 24px;border-top:1px solid var(--border-color,#333);flex-shrink:0;">
-      <span id="dfm-save-status" style="font-size:13px;"></span>
-      <div style="display:flex;gap:8px;">
-        <button onclick="dfmCloseModal()" id="dfm-btn-cancel" style="padding:8px 20px;border:1px solid var(--border-color,#333);border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;background:color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent);color:var(--text-color,#f2f2f2);">Close</button>
-        <button onclick="dfmSaveModal()" id="dfm-btn-save" style="display:none;padding:8px 20px;border:none;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer;background:var(--header-background,#ff8c2f);color:var(--header-text-color,#fff);">Save</button>
-      </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 24px;border-top:1px solid var(--border-color,#333);flex-shrink:0;gap:12px;">
+      <span id="dfm-modal-status" style="font-size:13px;"></span>
+      <div id="dfm-modal-actions" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;"></div>
     </div>
   </div>
 </div>
@@ -90,152 +66,836 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 
   frame.src = '/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=' + encodeURIComponent(token) + themeParam;
 
-  // Parent-page modal state
-  var modalData = null;
-  var activeTab = 'compose';
+  // ============================================================
+  // Generic parent-page modal shell
+  // ============================================================
 
-  window.dfmSwitchTab = function(tab) {
-    activeTab = tab;
-    var composeContent = document.getElementById('dfm-content-compose');
-    var envContent = document.getElementById('dfm-content-env');
-    var tabCompose = document.getElementById('dfm-tab-compose');
-    var tabEnv = document.getElementById('dfm-tab-env');
+  var overlayEl = document.getElementById('dfm-modal-overlay');
+  var cardEl = document.getElementById('dfm-modal-card');
+  var titleEl = document.getElementById('dfm-modal-title');
+  var tabsEl = document.getElementById('dfm-modal-tabs');
+  var bodyEl = document.getElementById('dfm-modal-body');
+  var actionsEl = document.getElementById('dfm-modal-actions');
+  var statusEl = document.getElementById('dfm-modal-status');
 
-    if (tab === 'compose') {
-      composeContent.style.display = 'flex';
-      envContent.style.display = 'none';
-      tabCompose.style.background = 'var(--header-background,#ff8c2f)';
-      tabCompose.style.color = 'var(--header-text-color,#fff)';
-      tabCompose.style.borderColor = 'transparent';
-      tabEnv.style.background = 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)';
-      tabEnv.style.color = 'var(--text-color,#f2f2f2)';
-      tabEnv.style.borderColor = 'var(--border-color,#333)';
-    } else {
-      composeContent.style.display = 'none';
-      envContent.style.display = 'flex';
-      tabEnv.style.background = 'var(--header-background,#ff8c2f)';
-      tabEnv.style.color = 'var(--header-text-color,#fff)';
-      tabEnv.style.borderColor = 'transparent';
-      tabCompose.style.background = 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)';
-      tabCompose.style.color = 'var(--text-color,#f2f2f2)';
-      tabCompose.style.borderColor = 'var(--border-color,#333)';
-    }
-  };
+  // Current modal state
+  var currentId = null;        // descriptor.id of the currently-open modal
+  var currentDescriptor = null;
+  var fieldNodes = {};         // fieldId -> { root, refs } for targeted patches
+  var actionNodes = {};        // actionId -> { button, spec }
+  var activeTab = null;
+  var dismissable = true;
 
-  function showModal(data) {
-    modalData = data;
-    activeTab = 'compose';
+  // Size -> max-width mapping
+  var SIZE_MAP = { sm: '420px', md: '560px', lg: '760px', xl: '960px' };
 
-    var isCreate = data.kind === 'compose-create';
-    document.getElementById('dfm-modal-title').textContent = data.title || 'Compose';
-    document.getElementById('dfm-project-name').style.display = isCreate ? '' : 'none';
-    document.getElementById('dfm-project-name').value = '';
-    document.getElementById('dfm-compose-textarea').value = data.composeContent || '';
-    document.getElementById('dfm-compose-textarea').readOnly = !!data.readOnly;
-    document.getElementById('dfm-compose-path').textContent = data.composePath || '';
-    document.getElementById('dfm-compose-path').style.display = isCreate ? 'none' : '';
-    document.getElementById('dfm-env-textarea').value = data.envContent || '';
-    document.getElementById('dfm-env-textarea').readOnly = !!data.readOnly;
-    document.getElementById('dfm-env-path').value = data.envPath || '';
-    document.getElementById('dfm-env-file-path').textContent = data.envFilePath || '';
-    document.getElementById('dfm-save-status').textContent = '';
+  // ----- Helpers -----
 
-    // Show/hide save button based on readOnly
-    document.getElementById('dfm-btn-save').style.display = data.readOnly ? 'none' : '';
-    document.getElementById('dfm-btn-save').textContent = isCreate ? 'Create' : 'Save';
-    document.getElementById('dfm-btn-cancel').textContent = data.readOnly ? 'Close' : 'Cancel';
-
-    // Reset to compose tab
-    dfmSwitchTab('compose');
-
-    // Show overlay
-    var overlay = document.getElementById('dfm-modal-overlay');
-    overlay.style.display = 'flex';
+  function clearChildren(el) {
+    while (el.firstChild) el.removeChild(el.firstChild);
   }
 
-  window.dfmCloseModal = function() {
-    document.getElementById('dfm-modal-overlay').style.display = 'none';
-    modalData = null;
-    // Tell iframe the modal closed
-    frame.contentWindow.postMessage({ type: 'docker-folders-modal-action', action: 'close' }, '*');
+  function styleObj(el, styles) {
+    for (var k in styles) {
+      if (Object.prototype.hasOwnProperty.call(styles, k)) {
+        el.style[k] = styles[k];
+      }
+    }
+  }
+
+  function inputBaseStyles() {
+    return {
+      width: '100%',
+      padding: '8px 12px',
+      fontSize: '14px',
+      background: 'color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 8%)',
+      color: 'var(--text-color,#f2f2f2)',
+      border: '1px solid var(--border-color,#333)',
+      borderRadius: '4px',
+      boxSizing: 'border-box',
+      fontFamily: 'inherit'
+    };
+  }
+
+  function monoInputStyles() {
+    var s = inputBaseStyles();
+    s.fontFamily = 'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace';
+    return s;
+  }
+
+  function makeLabel(text) {
+    var label = document.createElement('label');
+    label.textContent = text;
+    styleObj(label, {
+      display: 'block',
+      marginBottom: '6px',
+      fontSize: '13px',
+      fontWeight: '500'
+    });
+    return label;
+  }
+
+  function makeCaption(text) {
+    var caption = document.createElement('div');
+    caption.textContent = text;
+    styleObj(caption, {
+      marginTop: '6px',
+      fontSize: '12px',
+      opacity: '0.65'
+    });
+    return caption;
+  }
+
+  // ----- Field renderers -----
+
+  function renderHtmlField(field) {
+    var wrap = document.createElement('div');
+    wrap.innerHTML = field.html || '';
+    return { root: wrap, refs: { content: wrap } };
+  }
+
+  function renderTextField(field) {
+    var p = document.createElement('p');
+    p.textContent = field.text || '';
+    p.style.margin = '0';
+    p.style.fontSize = '14px';
+    p.style.lineHeight = '1.5';
+    var variant = field.variant || 'default';
+    if (variant === 'muted') p.style.opacity = '0.7';
+    else if (variant === 'error') p.style.color = '#f44336';
+    else if (variant === 'success') p.style.color = '#4caf50';
+    return { root: p, refs: { text: p } };
+  }
+
+  function renderHeadingField(field) {
+    var h = document.createElement('h3');
+    h.textContent = field.text || '';
+    styleObj(h, {
+      margin: '0',
+      fontSize: '16px',
+      fontWeight: '600'
+    });
+    return { root: h, refs: { text: h } };
+  }
+
+  function renderInputField(field) {
+    var wrap = document.createElement('div');
+    if (field.label) wrap.appendChild(makeLabel(field.label));
+    var input = document.createElement('input');
+    input.type = field.inputType || 'text';
+    input.value = field.value || '';
+    if (field.placeholder) input.placeholder = field.placeholder;
+    if (field.required) input.required = true;
+    if (field.pattern) input.pattern = field.pattern;
+    styleObj(input, inputBaseStyles());
+    wrap.appendChild(input);
+    if (field.suffix) wrap.appendChild(makeCaption(field.suffix));
+    if (field.autofocus) setTimeout(function() { input.focus(); input.select && input.select(); }, 50);
+    // Enter submits first primary action
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitDefaultAction();
+      }
+    });
+    input.addEventListener('input', refreshActionStates);
+    return { root: wrap, refs: { input: input } };
+  }
+
+  function renderTextareaField(field) {
+    var wrap = document.createElement('div');
+    if (field.fillHeight) {
+      styleObj(wrap, { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' });
+    }
+    if (field.label) wrap.appendChild(makeLabel(field.label));
+    if (field.caption) {
+      var cap = document.createElement('div');
+      cap.textContent = field.caption;
+      styleObj(cap, {
+        fontSize: '12px',
+        opacity: '0.6',
+        marginBottom: '6px',
+        fontFamily: 'monospace',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      });
+      wrap.appendChild(cap);
+    }
+    var ta = document.createElement('textarea');
+    ta.value = field.value || '';
+    if (field.placeholder) ta.placeholder = field.placeholder;
+    if (field.readOnly) ta.readOnly = true;
+    ta.spellcheck = false;
+    var styles = field.monospace !== false ? monoInputStyles() : inputBaseStyles();
+    styles.minHeight = '160px';
+    styles.resize = 'vertical';
+    if (field.fillHeight) {
+      styles.flex = '1';
+      styles.resize = 'none';
+    }
+    if (field.readOnly) styles.opacity = '0.75';
+    styleObj(ta, styles);
+    wrap.appendChild(ta);
+    return { root: wrap, refs: { textarea: ta } };
+  }
+
+  function renderColorField(field) {
+    var wrap = document.createElement('div');
+    if (field.label) wrap.appendChild(makeLabel(field.label));
+    var row = document.createElement('div');
+    styleObj(row, { display: 'flex', gap: '8px', alignItems: 'center' });
+    var colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.value = field.value || '#ff8c2f';
+    styleObj(colorInput, {
+      width: '60px',
+      height: '38px',
+      border: '1px solid var(--border-color,#333)',
+      borderRadius: '4px',
+      cursor: 'pointer',
+      background: 'transparent'
+    });
+    var textInput = document.createElement('input');
+    textInput.type = 'text';
+    textInput.value = field.value || '#ff8c2f';
+    textInput.pattern = '^#[0-9A-Fa-f]{6}$';
+    var textStyles = inputBaseStyles();
+    textStyles.flex = '1';
+    styleObj(textInput, textStyles);
+    colorInput.addEventListener('input', function() { textInput.value = colorInput.value; });
+    textInput.addEventListener('input', function() {
+      if (/^#[0-9A-Fa-f]{6}$/.test(textInput.value)) colorInput.value = textInput.value;
+    });
+    row.appendChild(colorInput);
+    row.appendChild(textInput);
+    wrap.appendChild(row);
+    if (field.caption) wrap.appendChild(makeCaption(field.caption));
+    return { root: wrap, refs: { color: colorInput, text: textInput } };
+  }
+
+  function renderCheckboxListField(field) {
+    var wrap = document.createElement('div');
+    if (field.label) wrap.appendChild(makeLabel(field.label));
+    if (field.caption) {
+      var cap = document.createElement('div');
+      cap.textContent = field.caption;
+      styleObj(cap, { fontSize: '12px', opacity: '0.65', marginBottom: '8px' });
+      wrap.appendChild(cap);
+    }
+    var list = document.createElement('div');
+    styleObj(list, {
+      maxHeight: '220px',
+      overflow: 'auto',
+      border: '1px solid var(--border-color,#333)',
+      borderRadius: '4px'
+    });
+    var checkboxes = {};
+    (field.items || []).forEach(function(item) {
+      var row = document.createElement('label');
+      styleObj(row, {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        padding: '8px 12px',
+        cursor: 'pointer',
+        borderBottom: '1px solid color-mix(in srgb,var(--border-color,#333) 40%,transparent)'
+      });
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!item.checked;
+      cb.style.cursor = 'pointer';
+      row.appendChild(cb);
+      if (item.icon) {
+        var img = document.createElement('img');
+        img.src = item.icon;
+        img.alt = '';
+        styleObj(img, { width: '18px', height: '18px', objectFit: 'contain', flexShrink: '0' });
+        row.appendChild(img);
+      }
+      var name = document.createElement('span');
+      name.textContent = item.label;
+      name.style.flex = '1';
+      name.style.fontSize = '14px';
+      row.appendChild(name);
+      if (item.state) {
+        var badge = document.createElement('span');
+        badge.textContent = item.state;
+        styleObj(badge, {
+          marginLeft: 'auto',
+          padding: '2px 8px',
+          borderRadius: '999px',
+          fontSize: '11px',
+          fontWeight: '600',
+          textTransform: 'uppercase',
+          background: item.state === 'running' ? '#d1fae5' : '#fee2e2',
+          color: item.state === 'running' ? '#065f46' : '#991b1b'
+        });
+        row.appendChild(badge);
+      }
+      list.appendChild(row);
+      checkboxes[item.id] = cb;
+    });
+    wrap.appendChild(list);
+    return { root: wrap, refs: { checkboxes: checkboxes } };
+  }
+
+  function renderProgressListField(field) {
+    var wrap = document.createElement('div');
+    styleObj(wrap, { display: 'flex', flexDirection: 'column', gap: '8px' });
+    var itemNodes = {};
+    (field.items || []).forEach(function(item) {
+      var node = buildProgressItem(item);
+      itemNodes[item.id] = node;
+      wrap.appendChild(node.root);
+    });
+    return { root: wrap, refs: { itemNodes: itemNodes, container: wrap } };
+  }
+
+  function buildProgressItem(item) {
+    var row = document.createElement('div');
+    styleObj(row, {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+      padding: '8px 10px',
+      border: '1px solid color-mix(in srgb,var(--border-color,#333) 50%,transparent)',
+      borderRadius: '6px'
+    });
+    var top = document.createElement('div');
+    styleObj(top, { display: 'flex', alignItems: 'center', gap: '8px' });
+    var label = document.createElement('span');
+    label.textContent = item.label || '';
+    styleObj(label, {
+      fontSize: '12px',
+      fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace',
+      flex: '1',
+      minWidth: '0',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap'
+    });
+    var status = document.createElement('span');
+    status.textContent = item.status || '';
+    styleObj(status, { fontSize: '11px', opacity: '0.75', flexShrink: '0' });
+    top.appendChild(label);
+    top.appendChild(status);
+    row.appendChild(top);
+    var barTrack = document.createElement('div');
+    styleObj(barTrack, {
+      height: '6px',
+      background: 'color-mix(in srgb,var(--text-color,#f2f2f2) 10%,transparent)',
+      borderRadius: '999px',
+      overflow: 'hidden'
+    });
+    var barFill = document.createElement('div');
+    var pct = Math.min(Math.max(item.percent || 0, 0), 100);
+    styleObj(barFill, {
+      height: '100%',
+      width: pct + '%',
+      background: barColor(item.state, pct),
+      transition: 'width 0.25s ease, background 0.25s ease',
+      borderRadius: '999px'
+    });
+    barTrack.appendChild(barFill);
+    row.appendChild(barTrack);
+    var sublabel = document.createElement('div');
+    sublabel.textContent = item.sublabel || '';
+    styleObj(sublabel, { fontSize: '11px', opacity: '0.65', display: item.sublabel ? 'block' : 'none' });
+    row.appendChild(sublabel);
+    return { root: row, label: label, status: status, barFill: barFill, sublabel: sublabel };
+  }
+
+  function barColor(state, pct) {
+    if (state === 'error') return '#f44336';
+    if (state === 'cancelled') return 'color-mix(in srgb,var(--text-color,#f2f2f2) 30%,transparent)';
+    if (state === 'done' || pct >= 100) return '#4caf50';
+    return 'var(--header-background,#ff8c2f)';
+  }
+
+  function patchProgressItem(node, patch) {
+    if (patch.label != null) node.label.textContent = patch.label;
+    if (patch.status != null) node.status.textContent = patch.status;
+    if (patch.percent != null) {
+      var pct = Math.min(Math.max(patch.percent, 0), 100);
+      node.barFill.style.width = pct + '%';
+      node.barFill.style.background = barColor(patch.state || '', pct);
+    } else if (patch.state != null) {
+      node.barFill.style.background = barColor(patch.state, parseFloat(node.barFill.style.width) || 0);
+    }
+    if (patch.sublabel != null) {
+      node.sublabel.textContent = patch.sublabel;
+      node.sublabel.style.display = patch.sublabel ? 'block' : 'none';
+    }
+  }
+
+  function renderLogField(field) {
+    var wrap = document.createElement('div');
+    if (field.fillHeight) {
+      styleObj(wrap, { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' });
+    }
+    if (field.caption) {
+      var cap = document.createElement('div');
+      cap.textContent = field.caption;
+      styleObj(cap, { fontSize: '12px', opacity: '0.6', marginBottom: '6px' });
+      wrap.appendChild(cap);
+    }
+    var pre = document.createElement('pre');
+    pre.textContent = field.content || '';
+    styleObj(pre, {
+      margin: '0',
+      padding: '12px',
+      background: 'color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 5%)',
+      color: 'var(--text-color,#f2f2f2)',
+      border: '1px solid var(--border-color,#333)',
+      borderRadius: '4px',
+      fontSize: '12px',
+      fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace',
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-all',
+      overflow: 'auto',
+      lineHeight: '1.5',
+      boxSizing: 'border-box'
+    });
+    if (field.fillHeight) {
+      pre.style.flex = '1';
+      pre.style.minHeight = '0';
+    } else {
+      pre.style.maxHeight = '400px';
+    }
+    wrap.appendChild(pre);
+    return { root: wrap, refs: { pre: pre } };
+  }
+
+  function renderStatusField(field) {
+    var wrap = document.createElement('div');
+    styleObj(wrap, { display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' });
+    var icon = document.createElement('span');
+    if (field.spinner) {
+      icon.textContent = '⏳';
+    } else if (field.variant === 'success') {
+      icon.textContent = '✓';
+      icon.style.color = '#4caf50';
+    } else if (field.variant === 'error') {
+      icon.textContent = '✗';
+      icon.style.color = '#f44336';
+    } else {
+      icon.textContent = 'ℹ';
+    }
+    icon.style.flexShrink = '0';
+    var msg = document.createElement('span');
+    msg.textContent = field.message || '';
+    msg.style.flex = '1';
+    wrap.appendChild(icon);
+    wrap.appendChild(msg);
+    return { root: wrap, refs: { icon: icon, message: msg } };
+  }
+
+  function renderSelectField(field) {
+    var wrap = document.createElement('div');
+    if (field.label) wrap.appendChild(makeLabel(field.label));
+    var sel = document.createElement('select');
+    styleObj(sel, inputBaseStyles());
+    (field.options || []).forEach(function(opt) {
+      var o = document.createElement('option');
+      o.value = String(opt.value);
+      o.textContent = opt.label;
+      if (String(opt.value) === String(field.value)) o.selected = true;
+      sel.appendChild(o);
+    });
+    wrap.appendChild(sel);
+    return { root: wrap, refs: { select: sel } };
+  }
+
+  // Dispatch table
+  var RENDERERS = {
+    html: renderHtmlField,
+    text: renderTextField,
+    heading: renderHeadingField,
+    input: renderInputField,
+    textarea: renderTextareaField,
+    color: renderColorField,
+    'checkbox-list': renderCheckboxListField,
+    'progress-list': renderProgressListField,
+    log: renderLogField,
+    status: renderStatusField,
+    select: renderSelectField
   };
 
-  window.dfmSaveModal = function() {
-    if (!modalData) return;
+  function renderField(field) {
+    var renderer = RENDERERS[field.type];
+    if (!renderer) return null;
+    var result = renderer(field);
+    result.field = field;
+    return result;
+  }
 
-    // Create mode
-    if (modalData.kind === 'compose-create') {
-      var projectName = document.getElementById('dfm-project-name').value.trim();
-      if (!projectName) {
-        var s = document.getElementById('dfm-save-status');
-        s.style.color = '#f44336';
-        s.textContent = 'Stack name is required';
-        return;
+  function renderTabs(tabs) {
+    clearChildren(tabsEl);
+    if (!tabs || !tabs.length) {
+      tabsEl.style.display = 'none';
+      return;
+    }
+    tabsEl.style.display = 'flex';
+    tabs.forEach(function(tab) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = tab.label;
+      btn.dataset.tabId = tab.id;
+      styleObj(btn, {
+        padding: '6px 14px',
+        borderRadius: '4px',
+        fontSize: '13px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        letterSpacing: '0.5px',
+        textTransform: 'uppercase',
+        border: '1px solid var(--border-color,#333)',
+        background: 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)',
+        color: 'var(--text-color,#f2f2f2)',
+        fontFamily: 'inherit'
+      });
+      btn.addEventListener('click', function() { switchTab(tab.id); });
+      tabsEl.appendChild(btn);
+    });
+    updateTabStyles();
+  }
+
+  function updateTabStyles() {
+    Array.prototype.forEach.call(tabsEl.children, function(btn) {
+      var isActive = btn.dataset.tabId === activeTab;
+      btn.style.background = isActive ? 'var(--header-background,#ff8c2f)' : 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)';
+      btn.style.color = isActive ? 'var(--header-text-color,#fff)' : 'var(--text-color,#f2f2f2)';
+      btn.style.borderColor = isActive ? 'transparent' : 'var(--border-color,#333)';
+    });
+  }
+
+  function switchTab(tabId) {
+    activeTab = tabId;
+    updateTabStyles();
+    updateFieldVisibility();
+  }
+
+  function updateFieldVisibility() {
+    Object.keys(fieldNodes).forEach(function(fid) {
+      var entry = fieldNodes[fid];
+      var tab = entry.field && entry.field.tab;
+      if (!tab) return;
+      entry.root.style.display = (tab === activeTab) ? '' : 'none';
+    });
+  }
+
+  function renderActions(actions) {
+    clearChildren(actionsEl);
+    actionNodes = {};
+    (actions || []).forEach(function(action) {
+      if (action.hidden) return;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = action.label;
+      var variant = action.variant || 'default';
+      var styles = {
+        padding: '8px 18px',
+        border: '1px solid var(--border-color,#333)',
+        borderRadius: '4px',
+        fontSize: '13px',
+        fontWeight: '600',
+        cursor: 'pointer',
+        fontFamily: 'inherit'
+      };
+      if (variant === 'primary') {
+        styles.background = 'var(--header-background,#ff8c2f)';
+        styles.color = 'var(--header-text-color,#fff)';
+        styles.border = 'none';
+      } else if (variant === 'danger') {
+        styles.background = '#dc2626';
+        styles.color = '#fff';
+        styles.border = 'none';
+      } else {
+        styles.background = 'color-mix(in srgb,var(--text-color,#f2f2f2) 6%,transparent)';
+        styles.color = 'var(--text-color,#f2f2f2)';
       }
+      styleObj(btn, styles);
+      btn.addEventListener('click', function() { sendAction(action.id); });
+      actionsEl.appendChild(btn);
+      actionNodes[action.id] = { button: btn, spec: action };
+    });
+    refreshActionStates();
+  }
+
+  function refreshActionStates() {
+    Object.keys(actionNodes).forEach(function(aid) {
+      var entry = actionNodes[aid];
+      var disableField = entry.spec.disabledWhenEmpty;
+      if (!disableField) return;
+      var fieldEntry = fieldNodes[disableField];
+      if (!fieldEntry) return;
+      var input = fieldEntry.refs && fieldEntry.refs.input;
+      var empty = input ? !String(input.value || '').trim() : false;
+      entry.button.disabled = empty;
+      entry.button.style.opacity = empty ? '0.5' : '1';
+      entry.button.style.cursor = empty ? 'not-allowed' : 'pointer';
+    });
+  }
+
+  function collectValues() {
+    var values = {};
+    Object.keys(fieldNodes).forEach(function(fid) {
+      var entry = fieldNodes[fid];
+      var refs = entry.refs || {};
+      if (refs.input) values[fid] = refs.input.value;
+      else if (refs.textarea) values[fid] = refs.textarea.value;
+      else if (refs.select) values[fid] = refs.select.value;
+      else if (refs.color) values[fid] = refs.text ? refs.text.value : refs.color.value;
+      else if (refs.checkboxes) {
+        var selected = [];
+        Object.keys(refs.checkboxes).forEach(function(cid) {
+          if (refs.checkboxes[cid].checked) selected.push(cid);
+        });
+        values[fid] = selected;
+      }
+    });
+    return values;
+  }
+
+  function sendAction(actionId) {
+    if (!currentId) return;
+    frame.contentWindow.postMessage({
+      type: 'docker-folders-modal-action',
+      id: currentId,
+      actionId: actionId,
+      values: collectValues(),
+      activeTab: activeTab
+    }, '*');
+  }
+
+  function submitDefaultAction() {
+    // Prefer the first primary action, falling back to last non-cancel action
+    var primary = null;
+    var fallback = null;
+    Object.keys(actionNodes).forEach(function(aid) {
+      var entry = actionNodes[aid];
+      if (entry.button.disabled) return;
+      if (entry.spec.variant === 'primary' && !primary) primary = aid;
+      if (aid !== 'cancel' && aid !== 'close') fallback = aid;
+    });
+    var target = primary || fallback;
+    if (target) sendAction(target);
+  }
+
+  function openModal(descriptor) {
+    currentId = descriptor.id;
+    currentDescriptor = descriptor;
+    dismissable = descriptor.dismissable !== false;
+    titleEl.textContent = descriptor.title || '';
+    statusEl.textContent = '';
+    statusEl.style.color = '';
+
+    // Size
+    var maxWidth = SIZE_MAP[descriptor.size || 'md'] || SIZE_MAP.md;
+    cardEl.style.maxWidth = maxWidth;
+    if (descriptor.fillHeight) {
+      cardEl.style.height = '85vh';
+    } else {
+      cardEl.style.height = '';
+    }
+
+    // Tabs
+    activeTab = descriptor.activeTab || (descriptor.tabs && descriptor.tabs[0] && descriptor.tabs[0].id) || null;
+    renderTabs(descriptor.tabs);
+
+    // Body
+    clearChildren(bodyEl);
+    fieldNodes = {};
+    (descriptor.fields || []).forEach(function(field) {
+      var rendered = renderField(field);
+      if (!rendered) return;
+      bodyEl.appendChild(rendered.root);
+      if (field.id) fieldNodes[field.id] = rendered;
+    });
+    updateFieldVisibility();
+
+    // Actions
+    renderActions(descriptor.actions);
+
+    overlayEl.style.display = 'flex';
+  }
+
+  function closeModal(fromIframe) {
+    overlayEl.style.display = 'none';
+    clearChildren(bodyEl);
+    clearChildren(actionsEl);
+    clearChildren(tabsEl);
+    fieldNodes = {};
+    actionNodes = {};
+    titleEl.textContent = '';
+    statusEl.textContent = '';
+    var wasId = currentId;
+    currentId = null;
+    currentDescriptor = null;
+    activeTab = null;
+    if (!fromIframe && wasId) {
       frame.contentWindow.postMessage({
         type: 'docker-folders-modal-action',
-        action: 'create',
-        projectName: projectName,
-        composeContent: document.getElementById('dfm-compose-textarea').value,
-        envContent: document.getElementById('dfm-env-textarea').value
+        id: wasId,
+        actionId: 'close',
+        values: {},
+        activeTab: null
       }, '*');
+    }
+  }
+
+  function patchModal(id, patch) {
+    if (id !== currentId || !patch) return;
+
+    if (patch.title != null) titleEl.textContent = patch.title;
+    if (patch.dismissable != null) dismissable = !!patch.dismissable;
+    if (patch.activeTab != null) switchTab(patch.activeTab);
+    if (patch.actions) renderActions(patch.actions);
+
+    if (patch.fields) {
+      patch.fields.forEach(function(fieldPatch) {
+        var entry = fieldNodes[fieldPatch.id];
+        if (!entry) return;
+        applyFieldPatch(entry, fieldPatch);
+      });
+      refreshActionStates();
+    }
+  }
+
+  function applyFieldPatch(entry, patch) {
+    var refs = entry.refs || {};
+    var fieldType = entry.field && entry.field.type;
+
+    // Text / heading
+    if ((fieldType === 'text' || fieldType === 'heading') && patch.text != null) {
+      if (refs.text) refs.text.textContent = patch.text;
+    }
+    // HTML
+    if (fieldType === 'html' && patch.html != null) {
+      if (refs.content) refs.content.innerHTML = patch.html;
+    }
+    // Input
+    if (fieldType === 'input' && patch.value != null) {
+      if (refs.input) refs.input.value = patch.value;
+    }
+    // Textarea
+    if (fieldType === 'textarea') {
+      if (patch.value != null && refs.textarea) refs.textarea.value = patch.value;
+      if (patch.readOnly != null && refs.textarea) refs.textarea.readOnly = !!patch.readOnly;
+    }
+    // Log
+    if (fieldType === 'log') {
+      if (patch.content != null && refs.pre) {
+        refs.pre.textContent = patch.content;
+        refs.pre.scrollTop = refs.pre.scrollHeight;
+      }
+      if (patch.appendLines && refs.pre) {
+        refs.pre.textContent += (patch.appendLines || []).join('\n');
+        refs.pre.scrollTop = refs.pre.scrollHeight;
+      }
+    }
+    // Status
+    if (fieldType === 'status') {
+      if (patch.message != null && refs.message) refs.message.textContent = patch.message;
+      if (patch.variant != null || patch.spinner != null) {
+        if (patch.spinner) refs.icon.textContent = '⏳';
+        else if (patch.variant === 'success') { refs.icon.textContent = '✓'; refs.icon.style.color = '#4caf50'; }
+        else if (patch.variant === 'error') { refs.icon.textContent = '✗'; refs.icon.style.color = '#f44336'; }
+        else { refs.icon.textContent = 'ℹ'; refs.icon.style.color = ''; }
+      }
+    }
+    // Progress list — patch.items is a list of item patches keyed by id; also optionally replace entirely via patch.replace
+    if (fieldType === 'progress-list') {
+      if (patch.replace && refs.container) {
+        clearChildren(refs.container);
+        refs.itemNodes = {};
+        (patch.replace || []).forEach(function(item) {
+          var node = buildProgressItem(item);
+          refs.itemNodes[item.id] = node;
+          refs.container.appendChild(node.root);
+        });
+      }
+      if (patch.items && refs.itemNodes) {
+        patch.items.forEach(function(itemPatch) {
+          var node = refs.itemNodes[itemPatch.id];
+          if (!node) {
+            // Create a new item row
+            var fresh = buildProgressItem(itemPatch);
+            refs.itemNodes[itemPatch.id] = fresh;
+            refs.container.appendChild(fresh.root);
+          } else {
+            patchProgressItem(node, itemPatch);
+          }
+        });
+      }
+    }
+    // Checkbox list
+    if (fieldType === 'checkbox-list' && patch.items && refs.checkboxes) {
+      patch.items.forEach(function(itemPatch) {
+        var cb = refs.checkboxes[itemPatch.id];
+        if (cb && itemPatch.checked != null) cb.checked = !!itemPatch.checked;
+      });
+    }
+  }
+
+  // Save result (transient status text, used by e.g. compose editor)
+  function applyResult(id, success, error) {
+    if (id !== currentId) return;
+    if (success) {
+      statusEl.style.color = '#4caf50';
+      statusEl.textContent = 'Saved';
+      setTimeout(function() { if (currentId === id) statusEl.textContent = ''; }, 2000);
+    } else {
+      statusEl.style.color = '#f44336';
+      statusEl.textContent = error || 'Failed to save';
+    }
+  }
+
+  // ----- Event wiring -----
+
+  document.getElementById('dfm-modal-close').addEventListener('click', function() {
+    if (dismissable) closeModal(false);
+  });
+
+  overlayEl.addEventListener('click', function(ev) {
+    if (ev.target === overlayEl && dismissable) closeModal(false);
+  });
+
+  document.addEventListener('keydown', function(ev) {
+    if (currentId && ev.key === 'Escape' && dismissable) closeModal(false);
+    if (currentId && ev.key === 'Enter' && ev.ctrlKey) submitDefaultAction();
+  });
+
+  // Legacy support: older useModalElevation composable sends
+  // { type: 'docker-folders-modal', open: true/false, minHeight }
+  // without a modal descriptor. Ignore those — the new parent modal handles
+  // its own lifecycle.
+  window.addEventListener('message', function(e) {
+    if (!e.data || typeof e.data !== 'object') return;
+
+    if (e.data.type === 'docker-folders-resize') {
+      frame.style.height = e.data.height + 'px';
       return;
     }
 
-    // Edit mode
-    var content, tab;
-    if (activeTab === 'compose') {
-      content = document.getElementById('dfm-compose-textarea').value;
-      tab = 'compose';
-    } else {
-      content = document.getElementById('dfm-env-textarea').value;
-      tab = 'env';
-    }
-    frame.contentWindow.postMessage({
-      type: 'docker-folders-modal-action',
-      action: 'save',
-      tab: tab,
-      content: content,
-      projectName: modalData.projectName
-    }, '*');
-  };
-
-  // Close modal on overlay click
-  document.getElementById('dfm-modal-overlay').addEventListener('click', function(ev) {
-    if (ev.target === this) dfmCloseModal();
-  });
-
-  // Close modal on Escape key
-  document.addEventListener('keydown', function(ev) {
-    if (ev.key === 'Escape' && document.getElementById('dfm-modal-overlay').style.display === 'flex') {
-      dfmCloseModal();
-    }
-  });
-
-  window.addEventListener('message', function(e) {
-    if (e.data && e.data.type === 'docker-folders-resize') {
-      frame.style.height = e.data.height + 'px';
-    }
-    // Modal open/close from iframe
-    if (e.data && e.data.type === 'docker-folders-modal') {
+    if (e.data.type === 'docker-folders-modal') {
       if (e.data.open && e.data.modal) {
-        showModal(e.data.modal);
-      } else if (!e.data.open) {
-        document.getElementById('dfm-modal-overlay').style.display = 'none';
-        modalData = null;
+        openModal(e.data.modal);
+      } else if (!e.data.open && e.data.id) {
+        if (e.data.id === currentId) closeModal(true);
       }
+      return;
     }
-    // Save result from iframe
-    if (e.data && e.data.type === 'docker-folders-modal-result') {
-      var statusEl = document.getElementById('dfm-save-status');
-      if (e.data.success) {
-        statusEl.style.color = '#4caf50';
-        statusEl.textContent = 'Saved';
-        setTimeout(function() { statusEl.textContent = ''; }, 2000);
-      } else {
-        statusEl.style.color = '#f44336';
-        statusEl.textContent = e.data.error || 'Failed to save';
-      }
+
+    if (e.data.type === 'docker-folders-modal-update' && e.data.id) {
+      patchModal(e.data.id, e.data.patch || {});
+      return;
+    }
+
+    if (e.data.type === 'docker-folders-modal-result' && e.data.id) {
+      applyResult(e.data.id, !!e.data.success, e.data.error);
+      return;
     }
   });
 })();

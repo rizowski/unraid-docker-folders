@@ -1,6 +1,6 @@
 <template>
   <Transition name="modal">
-  <div v-if="isOpen && !useParentModal" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
+  <div v-if="isOpen && !inIframe" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
     <!-- Full-document dark backdrop -->
     <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
     <!-- Modal centered in visible viewport -->
@@ -108,9 +108,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue';
+import { ref, watch, computed } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentViewport } from '@/composables/useParentViewport';
+import { useParentModal } from '@/composables/useParentModal';
 
 interface Props {
   isOpen: boolean;
@@ -129,12 +130,10 @@ const newProjectName = ref('');
 const emit = defineEmits<{ close: [] }>();
 
 const composeStore = useComposeStore();
-const inIframe = window.parent !== window;
 
-// Viewport tracking (only used for in-iframe fallback rendering)
 const { visibleTop, visibleHeight } = useParentViewport();
 const totalHeight = computed(() =>
-  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
+  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value),
 );
 const viewportStyle = computed(() => ({
   top: visibleTop.value + 'px',
@@ -142,10 +141,6 @@ const viewportStyle = computed(() => ({
   width: '100%',
   height: visibleHeight.value + 'px',
 }));
-
-// When in iframe, the modal renders in the parent page DOM.
-// This flag controls whether the local template renders.
-const useParentModal = inIframe;
 
 const tabs = [
   { id: 'compose' as const, label: 'Compose File' },
@@ -164,152 +159,196 @@ const envFilePath = ref<string | null>(null);
 const envPath = ref('');
 const originalEnvPath = ref('');
 
-watch(() => [props.isOpen, props.projectName, props.mode], async () => {
-  if (!props.isOpen) return;
+const DEFAULT_COMPOSE = 'version: "3.8"\nservices:\n  app:\n    image: \n    ports:\n      - "8080:80"\n';
 
+const parentModal = useParentModal({
+  onAction({ actionId, values, activeTab: tab }) {
+    if (actionId === 'close' || actionId === 'cancel') {
+      emit('close');
+      return;
+    }
+    if (actionId === 'save') {
+      handleParentSave(values, tab);
+    }
+  },
+});
+
+const { inIframe } = parentModal;
+
+function buildDescriptor() {
+  const isCreate = props.mode === 'create';
+  const title = isCreate
+    ? 'Create Stack'
+    : `${props.readOnly ? 'View' : 'Edit'} Compose - ${props.projectName}`;
+
+  const fields: Parameters<typeof parentModal.open>[0]['fields'] = [];
+
+  if (isCreate) {
+    fields.push({
+      type: 'input',
+      id: 'projectName',
+      label: 'Stack Name',
+      value: '',
+      placeholder: 'my-stack',
+      autofocus: true,
+      required: true,
+    });
+  }
+
+  fields.push({
+    type: 'textarea',
+    id: 'composeContent',
+    value: composeContent.value,
+    caption: composePath.value || undefined,
+    readOnly: props.readOnly,
+    monospace: true,
+    fillHeight: true,
+    tab: 'compose',
+  });
+
+  fields.push({
+    type: 'input',
+    id: 'envPath',
+    label: 'Env File Path',
+    value: envPath.value,
+    placeholder: '.env (default)',
+    tab: 'env',
+  });
+
+  fields.push({
+    type: 'textarea',
+    id: 'envContent',
+    value: envContent.value,
+    caption: envFilePath.value || undefined,
+    placeholder: 'KEY=value',
+    readOnly: props.readOnly,
+    monospace: true,
+    fillHeight: true,
+    tab: 'env',
+  });
+
+  const actions: Parameters<typeof parentModal.open>[0]['actions'] = [];
+  actions.push({ id: 'close', label: props.readOnly ? 'Close' : 'Cancel', variant: 'default' });
+  if (!props.readOnly) {
+    actions.push({
+      id: 'save',
+      label: isCreate ? 'Create' : 'Save',
+      variant: 'primary',
+      disabledWhenEmpty: isCreate ? 'projectName' : undefined,
+    });
+  }
+
+  return {
+    kind: isCreate ? 'compose-create' : 'compose-editor',
+    title,
+    size: 'xl' as const,
+    fillHeight: true,
+    tabs: tabs.map((t) => ({ id: t.id, label: t.label })),
+    activeTab: 'compose',
+    fields,
+    actions,
+  };
+}
+
+async function loadForEdit() {
+  if (!props.projectName) return;
+  loading.value = true;
+  try {
+    const [composeResult, envResult] = await Promise.all([
+      composeStore.getComposeFile(props.projectName),
+      composeStore.getEnvFile(props.projectName),
+    ]);
+    composeContent.value = composeResult.content || '';
+    composePath.value = composeResult.path;
+    envContent.value = envResult.content || '';
+    envFilePath.value = envResult.path;
+
+    const stack = composeStore.getStackByProject(props.projectName);
+    envPath.value = stack?.env_file || '';
+    originalEnvPath.value = envPath.value;
+  } catch (e) {
+    console.error('Failed to load compose files:', e);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function openForCurrentState() {
   activeTab.value = 'compose';
   saveStatus.value = null;
 
-  // Create mode: set defaults, no data to fetch
   if (props.mode === 'create') {
     newProjectName.value = '';
-    composeContent.value = "version: \"3.8\"\nservices:\n  app:\n    image: \n    ports:\n      - \"8080:80\"\n";
+    composeContent.value = DEFAULT_COMPOSE;
     composePath.value = null;
     envContent.value = '';
     envFilePath.value = null;
     envPath.value = '';
     originalEnvPath.value = '';
     loading.value = false;
+  } else {
+    await loadForEdit();
+  }
 
-    if (useParentModal) {
-      window.parent.postMessage({
-        type: 'docker-folders-modal',
-        open: true,
-        modal: {
-          kind: 'compose-create',
-          title: 'Create Stack',
-          readOnly: false,
-          projectName: '',
-          composeContent: composeContent.value,
-          composePath: null,
-          envContent: '',
-          envPath: '',
-          envFilePath: null,
-        }
-      }, '*');
+  if (inIframe) {
+    parentModal.open(buildDescriptor());
+  }
+}
+
+async function handleParentSave(values: Record<string, unknown>, tab: string | undefined) {
+  if (props.mode === 'create') {
+    const projectName = typeof values.projectName === 'string' ? values.projectName.trim() : '';
+    if (!projectName) {
+      parentModal.result(false, 'Stack name is required');
+      return;
+    }
+    const content = typeof values.composeContent === 'string' ? values.composeContent : '';
+    const env = typeof values.envContent === 'string' ? values.envContent : '';
+    const result = await composeStore.createStack(projectName, content, env);
+    parentModal.result(result.success, result.error || undefined);
+    if (result.success) {
+      const { useFolderStore } = await import('@/stores/folders');
+      await useFolderStore().fetchFolders();
+      setTimeout(() => emit('close'), 1200);
     }
     return;
   }
 
-  // Edit mode: fetch existing data
-  if (!props.projectName) return;
-  loading.value = true;
-
-  try {
-    const [composeResult, envResult] = await Promise.all([
-      composeStore.getComposeFile(props.projectName),
-      composeStore.getEnvFile(props.projectName),
-    ]);
-
-    composeContent.value = composeResult.content || '';
-    composePath.value = composeResult.path;
-    envContent.value = envResult.content || '';
-    envFilePath.value = envResult.path;
-
-    // Load env path from stack metadata
-    const stack = composeStore.getStackByProject(props.projectName);
-    envPath.value = stack?.env_file || '';
-    originalEnvPath.value = envPath.value;
-
-    // If in iframe, send data to parent page modal
-    if (useParentModal) {
-      window.parent.postMessage({
-        type: 'docker-folders-modal',
-        open: true,
-        modal: {
-          kind: 'compose-editor',
-          title: (props.readOnly ? 'View' : 'Edit') + ' Compose - ' + props.projectName,
-          readOnly: props.readOnly,
-          projectName: props.projectName,
-          composeContent: composeContent.value,
-          composePath: composePath.value,
-          envContent: envContent.value,
-          envPath: envPath.value,
-          envFilePath: envFilePath.value,
-        }
-      }, '*');
-    }
-  } catch (e) {
-    console.error('Failed to load compose files:', e);
-  } finally {
-    loading.value = false;
-  }
-}, { immediate: true });
-
-// Listen for parent modal actions (save/close)
-function handleParentMessage(e: MessageEvent) {
-  if (!e.data || e.data.type !== 'docker-folders-modal-action') return;
-
-  if (e.data.action === 'close') {
-    emit('close');
-  } else if (e.data.action === 'create' && e.data.projectName) {
-    handleParentCreate(e.data.projectName, e.data.composeContent, e.data.envContent);
-  } else if (e.data.action === 'save' && e.data.projectName) {
-    handleParentSave(e.data.tab, e.data.content, e.data.projectName);
-  }
-}
-
-async function handleParentCreate(projectName: string, composeContent: string, envContent: string) {
-  const { useFolderStore } = await import('@/stores/folders');
-  const result = await composeStore.createStack(projectName, composeContent, envContent);
-  window.parent.postMessage({
-    type: 'docker-folders-modal-result',
-    success: result.success,
-    error: result.error || null,
-  }, '*');
-  if (result.success) {
-    await useFolderStore().fetchFolders();
-    setTimeout(() => emit('close'), 1500);
-  }
-}
-
-async function handleParentSave(tab: string, content: string, projectName: string) {
+  // Edit mode — save whichever tab is active
+  const currentTab = tab || 'compose';
   let success = true;
   try {
-    if (tab === 'compose') {
-      success = await composeStore.saveComposeFile(projectName, content);
+    if (currentTab === 'compose') {
+      const content = typeof values.composeContent === 'string' ? values.composeContent : '';
+      success = await composeStore.saveComposeFile(props.projectName, content);
     } else {
-      success = await composeStore.saveEnvFile(projectName, content);
+      const content = typeof values.envContent === 'string' ? values.envContent : '';
+      success = await composeStore.saveEnvFile(props.projectName, content);
+
+      // Also persist env path if changed
+      const newEnvPath = typeof values.envPath === 'string' ? values.envPath : '';
+      if (success && newEnvPath !== originalEnvPath.value) {
+        const ok = await composeStore.setEnvPath(props.projectName, newEnvPath);
+        if (ok) originalEnvPath.value = newEnvPath;
+      }
     }
   } catch {
     success = false;
   }
-  // Send result back to parent modal
-  window.parent.postMessage({
-    type: 'docker-folders-modal-result',
-    success,
-    error: success ? null : 'Failed to save',
-  }, '*');
+  parentModal.result(success, success ? undefined : 'Failed to save');
 }
 
-onMounted(() => {
-  if (useParentModal) {
-    window.addEventListener('message', handleParentMessage);
-  }
-});
-
-onUnmounted(() => {
-  if (useParentModal) {
-    window.removeEventListener('message', handleParentMessage);
-  }
-});
-
-// Close parent modal when isOpen goes false
-watch(() => props.isOpen, (open) => {
-  if (!open && useParentModal) {
-    window.parent.postMessage({ type: 'docker-folders-modal', open: false }, '*');
-  }
-});
+watch(
+  () => [props.isOpen, props.projectName, props.mode],
+  () => {
+    if (props.isOpen) {
+      openForCurrentState();
+    } else if (inIframe) {
+      parentModal.close();
+    }
+  },
+  { immediate: true },
+);
 
 async function handleSave() {
   saving.value = true;
@@ -324,7 +363,7 @@ async function handleSave() {
       const result = await composeStore.createStack(
         newProjectName.value.trim(),
         composeContent.value,
-        envContent.value
+        envContent.value,
       );
       saveStatus.value = result.success ? 'saved' : (result.error || 'Failed to create');
       if (result.success) {
