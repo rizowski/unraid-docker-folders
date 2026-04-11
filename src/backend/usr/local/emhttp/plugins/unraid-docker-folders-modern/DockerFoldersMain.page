@@ -23,6 +23,33 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         allowfullscreen></iframe>
 
 <!-- Generic parent-page modal overlay (rendered outside iframe to avoid clipping) -->
+<style>
+  /* Override Unraid's global textarea/input CSS inside our modal */
+  #dfm-modal-body textarea,
+  #dfm-modal-body input[type="text"],
+  #dfm-modal-body input[type="number"],
+  #dfm-modal-body input[type="color"],
+  #dfm-modal-body select {
+    box-sizing: border-box !important;
+    font-family: inherit;
+  }
+  #dfm-modal-body textarea {
+    resize: vertical !important;
+    min-height: 160px !important;
+  }
+  #dfm-modal-body .dfm-wrap-fill {
+    flex: 1 1 auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+  }
+  #dfm-modal-body .dfm-textarea-fill {
+    flex: 1 1 auto !important;
+    height: 100% !important;
+    min-height: 300px !important;
+    width: 100% !important;
+  }
+</style>
 <div id="dfm-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;font-family:clear-sans,sans-serif;padding:16px;box-sizing:border-box;">
   <div id="dfm-modal-card" style="background:var(--background-color,#1a1a1a);color:var(--text-color,#f2f2f2);border:1px solid var(--border-color,#333);border-radius:12px;box-shadow:0 25px 50px rgba(0,0,0,0.5);width:95%;max-width:500px;display:flex;flex-direction:column;overflow:hidden;max-height:90vh;" onclick="event.stopPropagation()">
     <!-- Header -->
@@ -205,6 +232,7 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   function renderTextareaField(field) {
     var wrap = document.createElement('div');
     if (field.fillHeight) {
+      wrap.className = 'dfm-wrap-fill';
       styleObj(wrap, { flex: '1', display: 'flex', flexDirection: 'column', minHeight: '0' });
     }
     if (field.label) wrap.appendChild(makeLabel(field.label));
@@ -231,6 +259,7 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     styles.minHeight = '160px';
     styles.resize = 'vertical';
     if (field.fillHeight) {
+      ta.className = 'dfm-textarea-fill';
       styles.flex = '1';
       styles.height = '100%';
       styles.minHeight = '300px';
