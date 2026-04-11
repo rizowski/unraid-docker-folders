@@ -482,6 +482,130 @@ class ComposeManager
   }
 
   /**
+   * Execute a shell command and stream stdout/stderr line-by-line via callback.
+   * $onLine receives ($line, $stream) where $stream is 'out' or 'err'.
+   */
+  private function execCommandStreaming($cmd, $onLine, $timeout = 600)
+  {
+    $descriptors = [
+      0 => ['pipe', 'r'],
+      1 => ['pipe', 'w'],
+      2 => ['pipe', 'w'],
+    ];
+
+    $process = proc_open($cmd, $descriptors, $pipes);
+    if (!is_resource($process)) {
+      return ['success' => false, 'exit_code' => -1, 'error' => 'Failed to start process'];
+    }
+
+    fclose($pipes[0]);
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+
+    $start = time();
+    $buffers = ['out' => '', 'err' => ''];
+
+    while (true) {
+      $status = proc_get_status($process);
+
+      $read = [$pipes[1], $pipes[2]];
+      $write = null;
+      $except = null;
+      $changed = @stream_select($read, $write, $except, 1);
+
+      if ($changed === false) {
+        break;
+      }
+
+      if ($changed > 0) {
+        foreach ($read as $stream) {
+          $key = ($stream === $pipes[1]) ? 'out' : 'err';
+          $chunk = fread($stream, 8192);
+          if ($chunk === false || $chunk === '') {
+            continue;
+          }
+          $buffers[$key] .= $chunk;
+          while (($nl = strpos($buffers[$key], "\n")) !== false) {
+            $line = rtrim(substr($buffers[$key], 0, $nl), "\r");
+            $buffers[$key] = substr($buffers[$key], $nl + 1);
+            if ($line !== '') {
+              call_user_func($onLine, $line, $key);
+            }
+          }
+        }
+      }
+
+      if (!$status['running']) {
+        // Drain any remaining bytes
+        foreach (['out', 'err'] as $key) {
+          $stream = $key === 'out' ? $pipes[1] : $pipes[2];
+          $rest = stream_get_contents($stream);
+          if ($rest !== false && $rest !== '') {
+            $buffers[$key] .= $rest;
+          }
+          if ($buffers[$key] !== '') {
+            foreach (explode("\n", $buffers[$key]) as $line) {
+              $line = rtrim($line, "\r");
+              if ($line !== '') {
+                call_user_func($onLine, $line, $key);
+              }
+            }
+            $buffers[$key] = '';
+          }
+        }
+        break;
+      }
+
+      if ($timeout > 0 && (time() - $start) > $timeout) {
+        proc_terminate($process);
+        $exit = proc_close($process);
+        return ['success' => false, 'exit_code' => $exit, 'error' => 'Command timed out'];
+      }
+    }
+
+    @fclose($pipes[1]);
+    @fclose($pipes[2]);
+    $exit = proc_close($process);
+
+    return ['success' => $exit === 0, 'exit_code' => $exit];
+  }
+
+  /**
+   * Pull images then bring up a compose stack, streaming progress via callbacks.
+   * $onPhase receives ($phase, $message). $onLine receives ($line, $stream).
+   */
+  public function stackUpStreaming($projectName, $forceRecreate, $onPhase, $onLine)
+  {
+    list($cmd, $stack) = $this->buildComposeCmd($projectName);
+
+    $cd = '';
+    if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
+      $cd = 'cd ' . escapeshellarg($stack['working_dir']) . ' && ';
+    }
+
+    // Phase 1: pull (best-effort — local-build services may not have images)
+    call_user_func($onPhase, 'pulling', 'Pulling images...');
+    $pullCmd = $cd . $cmd . ' pull 2>&1';
+    $pullResult = $this->execCommandStreaming($pullCmd, $onLine, 600);
+
+    if (!$pullResult['success']) {
+      // Don't abort — continue to up so locally-built or partial stacks still start
+      call_user_func($onPhase, 'pull_warning', 'Pull finished with warnings, continuing...');
+    }
+
+    // Phase 2: up
+    call_user_func($onPhase, 'starting', 'Starting containers...');
+    $upCmd = $cd . $cmd . ' up -d';
+    if ($forceRecreate) {
+      $upCmd .= ' --force-recreate';
+    }
+    $upCmd .= ' 2>&1';
+    $upResult = $this->execCommandStreaming($upCmd, $onLine, 600);
+
+    return $upResult;
+  }
+
+  /**
    * Start a compose stack (docker compose up -d)
    */
   public function stackUp($projectName, $forceRecreate = false)

@@ -232,7 +232,8 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     styles.resize = 'vertical';
     if (field.fillHeight) {
       styles.flex = '1';
-      styles.resize = 'none';
+      styles.height = '100%';
+      styles.minHeight = '300px';
     }
     if (field.readOnly) styles.opacity = '0.75';
     styleObj(ta, styles);

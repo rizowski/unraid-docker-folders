@@ -44,6 +44,13 @@
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
     </button>
+
+    <ComposeStartProgressModal
+      :is-open="startModalOpen"
+      :project-name="projectName"
+      @close="handleStartModalClose"
+      @complete="handleStartComplete"
+    />
   </div>
 </template>
 
@@ -52,6 +59,7 @@ import { ref, computed } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import ComposeStartProgressModal from './ComposeStartProgressModal.vue';
 
 const props = defineProps<{
   projectName: string;
@@ -66,6 +74,7 @@ const composeStore = useComposeStore();
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const actionInProgress = ref<string | null>(null);
+const startModalOpen = ref(false);
 
 const stack = computed(() => composeStore.getStackByProject(props.projectName));
 const isRunning = computed(() => (stack.value?.services_running ?? 0) > 0);
@@ -81,18 +90,24 @@ function buttonTitle(defaultTitle: string): string {
   return defaultTitle;
 }
 
-async function handleUp() {
+function handleUp() {
+  if (!composeStore.managementEnabled || actionInProgress.value !== null) return;
   actionInProgress.value = 'up';
-  try {
-    await composeStore.stackUp(props.projectName);
-    // Refresh so syncComposeStacks associates containers with folders
-    await Promise.all([
-      dockerStore.fetchContainers(),
-      folderStore.fetchFolders(),
-    ]);
-  } finally {
-    actionInProgress.value = null;
-  }
+  startModalOpen.value = true;
+}
+
+async function handleStartComplete() {
+  // Refresh so syncComposeStacks associates containers with folders
+  await Promise.all([
+    dockerStore.fetchContainers(),
+    folderStore.fetchFolders(),
+    composeStore.fetchStacks(true),
+  ]);
+}
+
+function handleStartModalClose() {
+  startModalOpen.value = false;
+  actionInProgress.value = null;
 }
 
 async function handleDown() {

@@ -22,6 +22,7 @@ export const useComposeStore = defineStore('compose', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const installingBinary = ref(false);
+  const statusChecked = ref(false);
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
   let initialLoadDone = false;
@@ -44,6 +45,7 @@ export const useComposeStore = defineStore('compose', () => {
       if (response.ok) {
         const data = await response.json();
         status.value = data;
+        statusChecked.value = true;
       }
     } catch (e) {
       console.error('Error fetching compose status:', e);
@@ -386,6 +388,7 @@ export const useComposeStore = defineStore('compose', () => {
     composeAvailable,
     managementEnabled,
     composePluginInstalled,
+    statusChecked,
 
     // Actions
     fetchStatus,
