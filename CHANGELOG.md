@@ -2,6 +2,7 @@
 
 ## 2026.04.11
 ### Changes
+- Fix modal close button alignment, populate faded preview from compose file
 - Consolidate modals, simplify compose folder UI, fix validation env
 - Compose editor: logs tab, recompose flow, save lock, YAML highlighting
 - Disable text wrapping in compose/env monospace textareas
