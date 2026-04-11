@@ -2,6 +2,7 @@
 
 ## 2026.04.11
 ### Changes
+- Compose editor: logs tab, recompose flow, save lock, YAML highlighting
 - Disable text wrapping in compose/env monospace textareas
 - Add Logs tab to edit-stack modal with auto-refresh, fix modal layout bugs
 - Force textarea resize/fill with !important to beat Unraid global CSS
