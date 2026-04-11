@@ -2,6 +2,7 @@
 
 ## 2026.04.11
 ### Changes
+- Force textarea resize/fill with !important to beat Unraid global CSS
 - Stream compose stack start, fix create-stack textarea and banner flash
 
 ## 2026.04.07
