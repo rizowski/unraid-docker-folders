@@ -149,6 +149,26 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
+  async function stackStop(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
+    try {
+      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=stop`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to stop stack');
+      }
+
+      await fetchStacks(true);
+      return data;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Error stopping stack:', e);
+      return { success: false, error: msg };
+    }
+  }
+
   async function stackRestart(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
       const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=restart`, {
@@ -422,6 +442,7 @@ export const useComposeStore = defineStore('compose', () => {
     createStack,
     stackUp,
     stackDown,
+    stackStop,
     stackRestart,
     stackPull,
     validateCompose,

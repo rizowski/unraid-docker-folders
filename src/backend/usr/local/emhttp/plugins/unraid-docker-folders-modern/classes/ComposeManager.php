@@ -493,6 +493,14 @@ class ComposeManager
       return ['success' => false, 'errors' => [['line' => 1, 'message' => 'Docker Compose not available']]];
     }
 
+    // Always resolve the stack so we can pass --env-file and working_dir
+    // even when validating unsaved content — required env interpolations
+    // would otherwise error out ("variable is required").
+    $stack = $this->db->fetchOne(
+      'SELECT working_dir, compose_file, env_file FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+
     $tmpFile = null;
     $cmd = 'docker compose';
     $cmd .= ' -p ' . escapeshellarg($projectName);
@@ -504,11 +512,13 @@ class ComposeManager
       }
       file_put_contents($tmpFile, $content);
       $cmd .= ' -f ' . escapeshellarg($tmpFile);
+      if ($stack && $stack['env_file']) {
+        $cmd .= ' --env-file ' . escapeshellarg($stack['env_file']);
+      }
+      if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
+        $cmd .= ' --project-directory ' . escapeshellarg($stack['working_dir']);
+      }
     } else {
-      $stack = $this->db->fetchOne(
-        'SELECT working_dir, compose_file, env_file FROM compose_stacks WHERE project_name = ?',
-        [$projectName]
-      );
       if ($stack && $stack['compose_file']) {
         $cmd .= ' -f ' . escapeshellarg($stack['compose_file']);
       }
@@ -735,6 +745,22 @@ class ComposeManager
     }
 
     $cmd .= ' down 2>&1';
+
+    return $this->execCommand($cmd);
+  }
+
+  /**
+   * Stop a compose stack without removing containers (docker compose stop)
+   */
+  public function stackStop($projectName)
+  {
+    list($cmd, $stack) = $this->buildComposeCmd($projectName);
+
+    if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
+      $cmd = 'cd ' . escapeshellarg($stack['working_dir']) . ' && ' . $cmd;
+    }
+
+    $cmd .= ' stop 2>&1';
 
     return $this->execCommand($cmd);
   }

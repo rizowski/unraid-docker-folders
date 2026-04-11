@@ -202,6 +202,19 @@ function handlePost($composeManager)
     jsonResponse($result);
   }
 
+  // Stack stop (halt containers without removing them)
+  if ($action === 'stop') {
+    if (!$status['management_enabled']) {
+      errorResponse('Compose management is disabled', 403);
+    }
+
+    $result = $composeManager->stackStop($project);
+
+    WebSocketPublisher::publish('compose', 'stop', ['project' => $project]);
+
+    jsonResponse($result);
+  }
+
   // Stack restart
   if ($action === 'restart') {
     if (!$status['management_enabled']) {

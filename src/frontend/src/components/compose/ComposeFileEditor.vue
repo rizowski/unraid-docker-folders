@@ -1,11 +1,5 @@
 <template>
-  <Transition name="modal">
-  <div v-if="isOpen && !inIframe" class="absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
-    <!-- Full-document dark backdrop -->
-    <div class="absolute inset-0 bg-black/50" @click="$emit('close')"></div>
-    <!-- Modal centered in visible viewport -->
-    <div class="absolute flex items-center justify-center" :style="viewportStyle" @click="$emit('close')">
-    <div class="modal-content bg-bg-card rounded-lg shadow-lg max-w-[700px] w-[95%] h-[85%] flex flex-col" @click.stop>
+  <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="700px" fill-height @close="$emit('close')">
       <!-- Header -->
       <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border shrink-0">
         <div v-if="mode === 'create'" class="flex items-center gap-3 flex-1 mr-4">
@@ -101,17 +95,14 @@
           </button>
         </div>
       </div>
-    </div>
-    </div>
-  </div>
-  </Transition>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed, onUnmounted } from 'vue';
 import { useComposeStore } from '@/stores/compose';
-import { useParentViewport } from '@/composables/useParentViewport';
 import { useParentModal } from '@/composables/useParentModal';
+import BaseModal from '@/components/BaseModal.vue';
 
 interface Props {
   isOpen: boolean;
@@ -130,17 +121,6 @@ const newProjectName = ref('');
 const emit = defineEmits<{ close: []; recompose: [project: string] }>();
 
 const composeStore = useComposeStore();
-
-const { visibleTop, visibleHeight } = useParentViewport();
-const totalHeight = computed(() =>
-  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value),
-);
-const viewportStyle = computed(() => ({
-  top: visibleTop.value + 'px',
-  left: '0',
-  width: '100%',
-  height: visibleHeight.value + 'px',
-}));
 
 type TabId = 'compose' | 'env' | 'logs';
 

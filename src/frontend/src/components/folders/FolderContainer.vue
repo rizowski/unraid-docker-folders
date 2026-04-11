@@ -1,10 +1,17 @@
 <template>
   <div class="mb-2">
-    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @view-logs="(p) => emit('view-logs', p)" @compose-up="(p) => emit('compose-up', p)" @compose-recompose="(p) => emit('compose-recompose', p)" @compose-pull="(p) => emit('compose-pull', p)" />
+    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @compose-up="(p) => emit('compose-up', p)" @compose-recompose="(p) => emit('compose-recompose', p)" @compose-pull="(p) => emit('compose-pull', p)" />
 
     <div class="folder-content-grid" :class="{ 'folder-content-expanded': !folder.collapsed || isSearching }">
       <div class="folder-content-inner px-2 sm:px-4">
-        <div class="container-list mb-4 min-h-[60px]" :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'" :data-folder-id="folder.id">
+        <div
+          class="container-list"
+          :class="[
+            view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4',
+            folderContainers.length > 0 ? 'mb-4 min-h-[60px]' : '',
+          ]"
+          :data-folder-id="folder.id"
+        >
           <ContainerCard
             v-for="assoc in folderContainers"
             :key="assoc.container_name"
@@ -18,26 +25,28 @@
             @pull="(data) => emit('pull', data)"
           />
         </div>
-        <div v-if="folderContainers.length === 0" class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4 -mt-4">
-          <template v-if="folder.compose_project">
-            <p>Stack is not running</p>
-            <p class="text-sm italic mb-3">Start the stack to see its containers</p>
-            <button
-              v-if="composeStore.managementEnabled"
-              class="nav-btn active"
-              @click="handleStackUp"
-              :disabled="stackStarting"
-            >
-              <svg v-if="stackStarting" class="animate-spin h-4 w-4 inline mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-              {{ stackStarting ? 'Starting...' : 'Start Stack' }}
-            </button>
-            <pre v-if="stackOutput" class="mt-3 text-left text-xs font-mono text-text-secondary bg-bg p-3 rounded overflow-auto max-h-[200px] mx-4">{{ stackOutput }}</pre>
-            <p v-if="stackError" class="mt-3 text-sm text-error">{{ stackError }}</p>
-          </template>
-          <template v-else>
-            <p>No containers in this folder</p>
-            <p class="text-sm italic">Drag containers here to organize them</p>
-          </template>
+        <!-- Compose folder: stack down — show faded container names as a preview -->
+        <div
+          v-if="folderContainers.length === 0 && folder.compose_project && previewAssociations.length > 0"
+          class="mb-4 opacity-40 pointer-events-none select-none"
+          :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'"
+        >
+          <div
+            v-for="assoc in previewAssociations"
+            :key="assoc.container_name"
+            class="flex items-center gap-2 px-3 py-2 bg-bg-card border border-border rounded"
+          >
+            <span class="w-2 h-2 rounded-full bg-text-secondary shrink-0"></span>
+            <span class="text-sm text-text truncate">{{ assoc.container_name }}</span>
+            <span class="ml-auto text-[10px] uppercase tracking-wide text-text-secondary">stopped</span>
+          </div>
+        </div>
+        <div
+          v-else-if="folderContainers.length === 0 && !folder.compose_project"
+          class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4"
+        >
+          <p>No containers in this folder</p>
+          <p class="text-sm italic">Drag containers here to organize them</p>
         </div>
       </div>
     </div>
@@ -48,7 +57,6 @@
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
-import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
@@ -71,7 +79,6 @@ const emit = defineEmits<{
   pull: [data: { image: string; name: string; managed: string | null }];
   'update-folder': [folder: Folder];
   'edit-compose': [project: string];
-  'view-logs': [project: string];
   'compose-up': [project: string];
   'compose-recompose': [project: string];
   'compose-pull': [project: string];
@@ -79,36 +86,8 @@ const emit = defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
-const composeStore = useComposeStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
-const stackStarting = ref(false);
-const stackOutput = ref<string | null>(null);
-const stackError = ref<string | null>(null);
-
-async function handleStackUp() {
-  if (!props.folder.compose_project) return;
-  stackStarting.value = true;
-  stackOutput.value = null;
-  stackError.value = null;
-  try {
-    const result = await composeStore.stackUp(props.folder.compose_project);
-    if (result && !result.success) {
-      stackError.value = result.error || 'Failed to start stack';
-    } else if (result?.output) {
-      stackOutput.value = result.output;
-    }
-    // Refresh containers so syncComposeStacks can associate them
-    await Promise.all([
-      dockerStore.fetchContainers(),
-      folderStore.fetchFolders(),
-    ]);
-  } catch (e) {
-    stackError.value = e instanceof Error ? e.message : 'Failed to start stack';
-  } finally {
-    stackStarting.value = false;
-  }
-}
 const actionsInProgress = ref<Map<string, string>>(new Map());
 
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
@@ -137,6 +116,18 @@ const folderContainers = computed(() => {
       const container = getContainer(assoc.container_name);
       return container?.state === 'running';
     });
+  }
+  return list;
+});
+
+// Preview list for compose folders whose stack is down: show stored associations
+// regardless of whether the container currently exists in Docker.
+const previewAssociations = computed(() => {
+  if (!props.folder.compose_project) return [];
+  let list = props.folder.containers || [];
+  if (isSearching.value) {
+    const q = dockerStore.searchQuery.trim().toLowerCase();
+    list = list.filter((assoc) => assoc.container_name.toLowerCase().includes(q));
   }
   return list;
 });

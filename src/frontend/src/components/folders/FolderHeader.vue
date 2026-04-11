@@ -30,7 +30,6 @@
         :folder="folder"
         class="hidden sm:flex"
         @edit-compose="(p) => emit('edit-compose', p)"
-        @view-logs="(p) => emit('view-logs', p)"
         @compose-up="(p) => emit('compose-up', p)"
         @compose-recompose="(p) => emit('compose-recompose', p)"
       />
@@ -135,7 +134,6 @@ const emit = defineEmits<{
   delete: [];
   'update-folder': [];
   'edit-compose': [project: string];
-  'view-logs': [project: string];
   'compose-recompose': [project: string];
   'compose-pull': [project: string];
   'compose-up': [project: string];
@@ -199,11 +197,10 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   if (props.folder.compose_project && composeStore.composeAvailable) {
     items.push(
       { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: composeStore.managementEnabled && !isRunning.value },
-      { label: 'Stack Down', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-down', show: composeStore.managementEnabled && isRunning.value },
+      { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: composeStore.managementEnabled && isRunning.value },
       { label: 'Pull Latest Images', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'compose-pull', show: composeStore.managementEnabled },
       { label: 'Recompose', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-recompose', show: composeStore.managementEnabled && isRunning.value },
-      { label: 'Edit Compose File', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'compose-edit' },
-      { label: 'Stack Logs', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', action: 'compose-logs' },
+      { label: 'Stack Details', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 16v-4|M12 8h.01', action: 'compose-edit' },
       { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', show: composeStore.managementEnabled },
       { divider: true },
     );
@@ -237,16 +234,14 @@ async function handleMenuSelect(action: string) {
   else if (action === 'update-folder') emit('update-folder');
   else if (action === 'compose-up' && props.folder.compose_project) {
     emit('compose-up', props.folder.compose_project);
-  } else if (action === 'compose-down' && props.folder.compose_project) {
-    await composeStore.stackDown(props.folder.compose_project);
+  } else if (action === 'compose-stop' && props.folder.compose_project) {
+    await composeStore.stackStop(props.folder.compose_project);
   } else if (action === 'compose-pull' && props.folder.compose_project) {
     emit('compose-pull', props.folder.compose_project);
   } else if (action === 'compose-recompose' && props.folder.compose_project) {
     emit('compose-recompose', props.folder.compose_project);
   } else if (action === 'compose-edit' && props.folder.compose_project) {
     emit('edit-compose', props.folder.compose_project);
-  } else if (action === 'compose-logs' && props.folder.compose_project) {
-    emit('view-logs', props.folder.compose_project);
   } else if (action === 'compose-toggle-autostart' && props.folder.compose_project && composeStack.value) {
     await composeStore.setAutostart(props.folder.compose_project, !composeStack.value.autostart);
   } else if (action === 'toggle-folder-autostart') {

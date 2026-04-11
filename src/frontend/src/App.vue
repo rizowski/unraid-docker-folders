@@ -139,7 +139,6 @@
             @pull="handlePull"
             @update-folder="handleUpdateFolder"
             @edit-compose="openComposeEditor"
-            @view-logs="openComposeLogs"
             @compose-up="openComposeUp"
             @compose-recompose="openComposeRecompose"
             @compose-pull="handleComposePull"
@@ -213,13 +212,6 @@
       @complete="handleComposeProgressComplete"
     />
 
-    <!-- Compose Logs -->
-    <ComposeLogs
-      :is-open="composeLogsOpen"
-      :project-name="composeEditorProject"
-      @close="composeLogsOpen = false"
-    />
-
     <!-- Pull Progress Modal (single container) -->
     <PullProgressModal
       :is-open="!!pullingContainer"
@@ -274,7 +266,6 @@ import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ComposeSetupBanner from '@/components/compose/ComposeSetupBanner.vue';
 import ComposeFileEditor from '@/components/compose/ComposeFileEditor.vue';
 import ComposeStartProgressModal from '@/components/compose/ComposeStartProgressModal.vue';
-import ComposeLogs from '@/components/compose/ComposeLogs.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ConnectionStatus from '@/components/ConnectionStatus.vue';
@@ -316,7 +307,6 @@ const editingFolder = ref<Folder | null>(null);
 // Compose modal state
 const composeEditorOpen = ref(false);
 const composeEditorMode = ref<'edit' | 'create'>('edit');
-const composeLogsOpen = ref(false);
 const composeEditorProject = ref('');
 
 // Compose progress modal (start/recompose)
@@ -334,11 +324,6 @@ function openCreateStack() {
   composeEditorProject.value = '';
   composeEditorMode.value = 'create';
   composeEditorOpen.value = true;
-}
-
-function openComposeLogs(project: string) {
-  composeEditorProject.value = project;
-  composeLogsOpen.value = true;
 }
 
 function openComposeUp(project: string) {

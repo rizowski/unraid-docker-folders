@@ -34,22 +34,13 @@
       <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
     </button>
 
-    <!-- Edit Compose -->
+    <!-- Stack Details (compose file + logs tab) -->
     <button
-      :title="composeStore.composePluginInstalled ? 'View compose file (read-only, compose.manager installed)' : 'Edit compose file'"
+      :title="composeStore.composePluginInstalled ? 'View stack details (read-only, compose.manager installed)' : 'Stack details'"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-blue-400"
       @click="$emit('edit-compose', projectName)"
     >
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
-    </button>
-
-    <!-- Logs -->
-    <button
-      title="View stack logs"
-      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-text"
-      @click="$emit('view-logs', projectName)"
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
     </button>
   </div>
 </template>
@@ -69,7 +60,6 @@ const props = defineProps<{
 
 defineEmits<{
   'edit-compose': [project: string];
-  'view-logs': [project: string];
   'compose-up': [project: string];
   'compose-recompose': [project: string];
 }>();
