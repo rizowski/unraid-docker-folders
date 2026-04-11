@@ -2,6 +2,7 @@
 
 ## 2026.04.11
 ### Changes
+- Add Logs tab to edit-stack modal with auto-refresh, fix modal layout bugs
 - Force textarea resize/fill with !important to beat Unraid global CSS
 - Stream compose stack start, fix create-stack textarea and banner flash
 
