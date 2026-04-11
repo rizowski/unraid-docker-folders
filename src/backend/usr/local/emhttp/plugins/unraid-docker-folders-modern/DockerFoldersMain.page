@@ -36,6 +36,10 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   #dfm-modal-body textarea {
     resize: vertical !important;
     min-height: 160px !important;
+    white-space: pre !important;
+    overflow-wrap: normal !important;
+    word-break: normal !important;
+    overflow-x: auto !important;
   }
   #dfm-modal-body .dfm-wrap-fill {
     flex: 1 1 auto !important;
@@ -269,6 +273,9 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     if (field.placeholder) ta.placeholder = field.placeholder;
     if (field.readOnly) ta.readOnly = true;
     ta.spellcheck = false;
+    if (field.monospace !== false) {
+      ta.setAttribute('wrap', 'off');
+    }
     var styles = field.monospace !== false ? monoInputStyles() : inputBaseStyles();
     styles.minHeight = '160px';
     styles.resize = 'vertical';
