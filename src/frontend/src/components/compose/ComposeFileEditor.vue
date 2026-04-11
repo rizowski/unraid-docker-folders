@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, onUnmounted } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentViewport } from '@/composables/useParentViewport';
 import { useParentModal } from '@/composables/useParentModal';
@@ -142,12 +142,18 @@ const viewportStyle = computed(() => ({
   height: visibleHeight.value + 'px',
 }));
 
-const tabs = [
-  { id: 'compose' as const, label: 'Compose File' },
-  { id: 'env' as const, label: 'Environment' },
-];
+type TabId = 'compose' | 'env' | 'logs';
 
-const activeTab = ref<'compose' | 'env'>('compose');
+const tabs = computed(() => {
+  const base: { id: TabId; label: string }[] = [
+    { id: 'compose', label: 'Compose File' },
+    { id: 'env', label: 'Environment' },
+  ];
+  if (props.mode !== 'create') base.push({ id: 'logs', label: 'Logs' });
+  return base;
+});
+
+const activeTab = ref<TabId>('compose');
 const loading = ref(false);
 const saving = ref(false);
 const saveStatus = ref<string | null>(null);
@@ -159,6 +165,10 @@ const envFilePath = ref<string | null>(null);
 const envPath = ref('');
 const originalEnvPath = ref('');
 
+const logsContent = ref('');
+const logsAutoRefresh = ref(true);
+let logsPollTimer: number | null = null;
+
 const DEFAULT_COMPOSE = 'version: "3.8"\nservices:\n  app:\n    image: \n    ports:\n      - "8080:80"\n';
 
 const parentModal = useParentModal({
@@ -169,6 +179,16 @@ const parentModal = useParentModal({
     }
     if (actionId === 'save') {
       handleParentSave(values, tab);
+    }
+  },
+  onFieldChange({ fieldId, itemId, value }) {
+    if (fieldId === 'logsControls' && itemId === 'auto') {
+      logsAutoRefresh.value = !!value;
+      if (logsAutoRefresh.value) {
+        startLogsPolling();
+      } else {
+        stopLogsPolling();
+      }
     }
   },
 });
@@ -227,6 +247,24 @@ function buildDescriptor() {
     tab: 'env',
   });
 
+  if (!isCreate) {
+    fields.push({
+      type: 'checkbox-list',
+      id: 'logsControls',
+      items: [
+        { id: 'auto', label: 'Auto-refresh every 3s', checked: logsAutoRefresh.value },
+      ],
+      tab: 'logs',
+    });
+    fields.push({
+      type: 'log',
+      id: 'logsContent',
+      content: logsContent.value,
+      fillHeight: true,
+      tab: 'logs',
+    });
+  }
+
   const actions: Parameters<typeof parentModal.open>[0]['actions'] = [];
   actions.push({ id: 'close', label: props.readOnly ? 'Close' : 'Cancel', variant: 'default' });
   if (!props.readOnly) {
@@ -243,11 +281,39 @@ function buildDescriptor() {
     title,
     size: 'xl' as const,
     fillHeight: true,
-    tabs: tabs.map((t) => ({ id: t.id, label: t.label })),
+    tabs: tabs.value.map((t) => ({ id: t.id, label: t.label })),
     activeTab: 'compose',
     fields,
     actions,
   };
+}
+
+async function fetchLogsTick() {
+  if (!props.projectName) return;
+  try {
+    const result = await composeStore.getLogs(props.projectName, 500);
+    logsContent.value = result.output || result.error || '';
+    if (inIframe) {
+      parentModal.update({
+        fields: [{ id: 'logsContent', content: logsContent.value }],
+      });
+    }
+  } catch (e) {
+    console.error('Failed to fetch compose logs:', e);
+  }
+}
+
+function startLogsPolling() {
+  if (logsPollTimer != null) return;
+  fetchLogsTick();
+  logsPollTimer = window.setInterval(fetchLogsTick, 3000);
+}
+
+function stopLogsPolling() {
+  if (logsPollTimer != null) {
+    clearInterval(logsPollTimer);
+    logsPollTimer = null;
+  }
 }
 
 async function loadForEdit() {
@@ -276,6 +342,7 @@ async function loadForEdit() {
 async function openForCurrentState() {
   activeTab.value = 'compose';
   saveStatus.value = null;
+  logsContent.value = '';
 
   if (props.mode === 'create') {
     newProjectName.value = '';
@@ -292,6 +359,10 @@ async function openForCurrentState() {
 
   if (inIframe) {
     parentModal.open(buildDescriptor());
+  }
+
+  if (props.mode !== 'create' && logsAutoRefresh.value) {
+    startLogsPolling();
   }
 }
 
@@ -336,6 +407,9 @@ async function handleParentSave(values: Record<string, unknown>, tab: string | u
     success = false;
   }
   parentModal.result(success, success ? undefined : 'Failed to save');
+  if (success) {
+    setTimeout(() => emit('close'), 600);
+  }
 }
 
 watch(
@@ -343,12 +417,17 @@ watch(
   () => {
     if (props.isOpen) {
       openForCurrentState();
-    } else if (inIframe) {
-      parentModal.close();
+    } else {
+      stopLogsPolling();
+      if (inIframe) parentModal.close();
     }
   },
   { immediate: true },
 );
+
+onUnmounted(() => {
+  stopLogsPolling();
+});
 
 async function handleSave() {
   saving.value = true;
@@ -380,7 +459,7 @@ async function handleSave() {
       }
       saveStatus.value = success ? 'saved' : 'Failed to save';
       if (success) {
-        setTimeout(() => { saveStatus.value = null; }, 2000);
+        setTimeout(() => emit('close'), 600);
       }
     }
   } finally {

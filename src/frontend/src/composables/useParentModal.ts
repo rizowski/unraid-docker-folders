@@ -163,8 +163,15 @@ export interface ModalActionEvent {
   activeTab?: string;
 }
 
+export interface ModalFieldChangeEvent {
+  fieldId: string;
+  itemId?: string;
+  value: unknown;
+}
+
 export interface UseParentModalOptions {
   onAction: (event: ModalActionEvent) => void;
+  onFieldChange?: (event: ModalFieldChangeEvent) => void;
 }
 
 let counter = 0;
@@ -181,13 +188,23 @@ export function useParentModal(options: UseParentModalOptions) {
   function handleMessage(e: MessageEvent) {
     const data = e.data;
     if (!data || typeof data !== 'object') return;
-    if (data.type !== 'docker-folders-modal-action') return;
     if (data.id !== id) return;
-    options.onAction({
-      actionId: data.actionId,
-      values: data.values || {},
-      activeTab: data.activeTab,
-    });
+    if (data.type === 'docker-folders-modal-action') {
+      options.onAction({
+        actionId: data.actionId,
+        values: data.values || {},
+        activeTab: data.activeTab,
+      });
+      return;
+    }
+    if (data.type === 'docker-folders-modal-field-change') {
+      options.onFieldChange?.({
+        fieldId: data.fieldId,
+        itemId: data.itemId,
+        value: data.value,
+      });
+      return;
+    }
   }
 
   if (inIframe) {
