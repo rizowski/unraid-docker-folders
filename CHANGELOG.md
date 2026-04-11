@@ -2,6 +2,7 @@
 
 ## 2026.04.11
 ### Changes
+- Consolidate modals, simplify compose folder UI, fix validation env
 - Compose editor: logs tab, recompose flow, save lock, YAML highlighting
 - Disable text wrapping in compose/env monospace textareas
 - Add Logs tab to edit-stack modal with auto-refresh, fix modal layout bugs

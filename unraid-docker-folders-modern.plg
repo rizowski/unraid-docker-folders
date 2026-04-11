@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.04.11-dev5">
-<!ENTITY md5 "4281df018e2eb8aadd13060c2f2bc49f">
+<!ENTITY version "2026.04.11-dev6">
+<!ENTITY md5 "acb0e5dd034dbacc8e18d24369b64ad2">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -77,6 +77,9 @@
 
 
 
+
+###2026.04.11-dev6
+- Consolidate modals, simplify compose folder UI, fix validation env
 ###2026.04.11-dev5
 - Compose editor: logs tab, recompose flow, save lock, YAML highlighting
 ###2026.04.11-dev4
