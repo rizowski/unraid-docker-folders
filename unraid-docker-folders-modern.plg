@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.04.11-dev3">
-<!ENTITY md5 "9fa4910ed51b0268b395ebdac02fca60">
+<!ENTITY version "2026.04.11-dev4">
+<!ENTITY md5 "bef4479cb0674f7ee6fbf4e0ccc4ae0b">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -75,6 +75,9 @@
 
 
 
+
+###2026.04.11-dev4
+- Disable text wrapping in compose/env monospace textareas
 ###2026.04.11-dev3
 - Add Logs tab to edit-stack modal with auto-refresh, fix modal layout bugs
 ###2026.04.11-dev2
