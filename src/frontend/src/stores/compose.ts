@@ -188,6 +188,31 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
+  async function validateCompose(
+    project: string,
+    content?: string,
+  ): Promise<{ success: boolean; errors: { line: number; column?: number; message: string }[]; output?: string }> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=validate`,
+        {
+          method: 'POST',
+          body: content !== undefined ? JSON.stringify({ content }) : undefined,
+          headers: content !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        },
+      );
+      const data = await response.json();
+      return {
+        success: !!data.success,
+        errors: Array.isArray(data.errors) ? data.errors : [],
+        output: data.output,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      return { success: false, errors: [{ line: 1, message: msg }] };
+    }
+  }
+
   async function getComposeFile(project: string): Promise<{ content: string | null; path: string | null; error?: string }> {
     try {
       const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=file`);
@@ -399,6 +424,7 @@ export const useComposeStore = defineStore('compose', () => {
     stackDown,
     stackRestart,
     stackPull,
+    validateCompose,
     getComposeFile,
     saveComposeFile,
     getEnvFile,

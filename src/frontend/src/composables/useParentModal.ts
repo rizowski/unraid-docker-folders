@@ -61,6 +61,7 @@ export type ModalField = ModalFieldBase & (
       monospace?: boolean;
       fillHeight?: boolean;
       caption?: string;
+      language?: 'yaml';
     }
   | {
       type: 'color';
@@ -122,6 +123,7 @@ export interface ModalAction {
   label: string;
   variant?: 'primary' | 'danger' | 'default';
   disabledWhenEmpty?: string;
+  disabled?: boolean;
   hidden?: boolean;
 }
 

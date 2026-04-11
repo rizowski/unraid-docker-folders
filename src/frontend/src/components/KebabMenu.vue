@@ -14,9 +14,13 @@
       class="absolute right-0 bg-bg border border-border rounded-lg shadow-lg py-1.5 min-w-[160px] z-[100]"
       :class="position === 'below' ? 'top-full mt-1' : 'bottom-full mb-1'"
     >
-      <template v-for="item in visibleItems" :key="item.label">
+      <template v-for="(item, idx) in visibleItems" :key="item.label ?? `div-${idx}`">
+        <hr
+          v-if="item.divider"
+          class="my-1 border-0 border-t border-border"
+        />
         <a
-          v-if="item.href"
+          v-else-if="item.href"
           :href="item.href"
           :target="item.target"
           rel="noopener"
@@ -25,7 +29,7 @@
           @click="menuOpen = false"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path v-for="(d, i) in item.icon.split('|')" :key="i" :d="d" />
+            <path v-for="(d, i) in (item.icon ?? '').split('|')" :key="i" :d="d" />
           </svg>
           {{ item.label }}
         </a>
@@ -36,7 +40,7 @@
           @click="menuOpen = false; $emit('select', item.action!)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path v-for="(d, i) in item.icon.split('|')" :key="i" :d="d" />
+            <path v-for="(d, i) in (item.icon ?? '').split('|')" :key="i" :d="d" />
           </svg>
           {{ item.label }}
         </button>
@@ -49,13 +53,14 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 
 export interface KebabMenuItem {
-  label: string;
-  icon: string;
+  label?: string;
+  icon?: string;
   show?: boolean;
   href?: string;
   target?: string;
   action?: string;
   class?: string;
+  divider?: boolean;
 }
 
 interface Props {
@@ -80,7 +85,22 @@ defineEmits<{
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 
-const visibleItems = computed(() => props.items.filter((item) => item.show !== false));
+const visibleItems = computed(() => {
+  const shown = props.items.filter((item) => item.show !== false);
+  // Collapse consecutive/leading/trailing dividers
+  const result: KebabMenuItem[] = [];
+  for (const item of shown) {
+    if (item.divider) {
+      if (result.length === 0) continue;
+      if (result[result.length - 1].divider) continue;
+      result.push(item);
+    } else {
+      result.push(item);
+    }
+  }
+  while (result.length && result[result.length - 1].divider) result.pop();
+  return result;
+});
 
 function onClickOutside(e: MouseEvent) {
   if (menuRef.value && !menuRef.value.contains(e.target as Node)) {

@@ -127,7 +127,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const newProjectName = ref('');
 
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; recompose: [project: string] }>();
 
 const composeStore = useComposeStore();
 
@@ -177,8 +177,8 @@ const parentModal = useParentModal({
       emit('close');
       return;
     }
-    if (actionId === 'save') {
-      handleParentSave(values, tab);
+    if (actionId === 'save' || actionId === 'save-recompose') {
+      handleParentSave(actionId, values, tab);
     }
   },
   onFieldChange({ fieldId, itemId, value }) {
@@ -223,6 +223,7 @@ function buildDescriptor() {
     readOnly: props.readOnly,
     monospace: true,
     fillHeight: true,
+    language: 'yaml',
     tab: 'compose',
   });
 
@@ -265,16 +266,7 @@ function buildDescriptor() {
     });
   }
 
-  const actions: Parameters<typeof parentModal.open>[0]['actions'] = [];
-  actions.push({ id: 'close', label: props.readOnly ? 'Close' : 'Cancel', variant: 'default' });
-  if (!props.readOnly) {
-    actions.push({
-      id: 'save',
-      label: isCreate ? 'Create' : 'Save',
-      variant: 'primary',
-      disabledWhenEmpty: isCreate ? 'projectName' : undefined,
-    });
-  }
+  const actions = buildActions();
 
   return {
     kind: isCreate ? 'compose-create' : 'compose-editor',
@@ -288,14 +280,51 @@ function buildDescriptor() {
   };
 }
 
+function buildActions(): Parameters<typeof parentModal.open>[0]['actions'] {
+  const isCreate = props.mode === 'create';
+  const actions: Parameters<typeof parentModal.open>[0]['actions'] = [];
+  actions.push({
+    id: 'close',
+    label: props.readOnly ? 'Close' : 'Cancel',
+    variant: 'default',
+    disabled: saving.value,
+  });
+  if (!props.readOnly) {
+    actions.push({
+      id: 'save',
+      label: saving.value ? (isCreate ? 'Creating...' : 'Saving...') : (isCreate ? 'Create' : 'Save'),
+      variant: 'primary',
+      disabledWhenEmpty: isCreate ? 'projectName' : undefined,
+      disabled: saving.value,
+    });
+    if (!isCreate) {
+      actions.push({
+        id: 'save-recompose',
+        label: saving.value ? 'Saving...' : 'Save & Recompose',
+        variant: 'primary',
+        disabled: saving.value,
+      });
+    }
+  }
+  return actions;
+}
+
+function patchActions() {
+  if (inIframe) {
+    parentModal.update({ actions: buildActions() });
+  }
+}
+
 async function fetchLogsTick() {
   if (!props.projectName) return;
   try {
     const result = await composeStore.getLogs(props.projectName, 500);
-    logsContent.value = result.output || result.error || '';
+    const next = result.output || result.error || '';
+    if (next === logsContent.value) return;
+    logsContent.value = next;
     if (inIframe) {
       parentModal.update({
-        fields: [{ id: 'logsContent', content: logsContent.value }],
+        fields: [{ id: 'logsContent', content: next }],
       });
     }
   } catch (e) {
@@ -366,49 +395,82 @@ async function openForCurrentState() {
   }
 }
 
-async function handleParentSave(values: Record<string, unknown>, tab: string | undefined) {
-  if (props.mode === 'create') {
-    const projectName = typeof values.projectName === 'string' ? values.projectName.trim() : '';
-    if (!projectName) {
-      parentModal.result(false, 'Stack name is required');
+async function handleParentSave(
+  actionId: string,
+  values: Record<string, unknown>,
+  tab: string | undefined,
+) {
+  saving.value = true;
+  patchActions();
+
+  try {
+    if (props.mode === 'create') {
+      const projectName = typeof values.projectName === 'string' ? values.projectName.trim() : '';
+      if (!projectName) {
+        parentModal.result(false, 'Stack name is required');
+        return;
+      }
+      const content = typeof values.composeContent === 'string' ? values.composeContent : '';
+      const env = typeof values.envContent === 'string' ? values.envContent : '';
+      const result = await composeStore.createStack(projectName, content, env);
+      parentModal.result(result.success, result.error || undefined);
+      if (result.success) {
+        const { useFolderStore } = await import('@/stores/folders');
+        await useFolderStore().fetchFolders();
+        setTimeout(() => emit('close'), 1200);
+      }
       return;
     }
-    const content = typeof values.composeContent === 'string' ? values.composeContent : '';
-    const env = typeof values.envContent === 'string' ? values.envContent : '';
-    const result = await composeStore.createStack(projectName, content, env);
-    parentModal.result(result.success, result.error || undefined);
-    if (result.success) {
-      const { useFolderStore } = await import('@/stores/folders');
-      await useFolderStore().fetchFolders();
-      setTimeout(() => emit('close'), 1200);
+
+    // Edit mode — save whichever tab is active
+    const currentTab = tab || 'compose';
+    let success = true;
+    try {
+      if (currentTab === 'compose') {
+        const content = typeof values.composeContent === 'string' ? values.composeContent : '';
+        // Validate first; if invalid, mark bad lines in the editor and abort save.
+        const validation = await composeStore.validateCompose(props.projectName, content);
+        if (inIframe) {
+          parentModal.update({
+            fields: [
+              {
+                id: 'composeContent',
+                ...(validation.success ? { clearErrors: true } : { errors: validation.errors }),
+              },
+            ],
+          });
+        }
+        if (!validation.success) {
+          parentModal.result(false, validation.errors[0]?.message || 'Invalid compose file');
+          return;
+        }
+        success = await composeStore.saveComposeFile(props.projectName, content);
+      } else {
+        const content = typeof values.envContent === 'string' ? values.envContent : '';
+        success = await composeStore.saveEnvFile(props.projectName, content);
+
+        // Also persist env path if changed
+        const newEnvPath = typeof values.envPath === 'string' ? values.envPath : '';
+        if (success && newEnvPath !== originalEnvPath.value) {
+          const ok = await composeStore.setEnvPath(props.projectName, newEnvPath);
+          if (ok) originalEnvPath.value = newEnvPath;
+        }
+      }
+    } catch {
+      success = false;
     }
-    return;
-  }
-
-  // Edit mode — save whichever tab is active
-  const currentTab = tab || 'compose';
-  let success = true;
-  try {
-    if (currentTab === 'compose') {
-      const content = typeof values.composeContent === 'string' ? values.composeContent : '';
-      success = await composeStore.saveComposeFile(props.projectName, content);
-    } else {
-      const content = typeof values.envContent === 'string' ? values.envContent : '';
-      success = await composeStore.saveEnvFile(props.projectName, content);
-
-      // Also persist env path if changed
-      const newEnvPath = typeof values.envPath === 'string' ? values.envPath : '';
-      if (success && newEnvPath !== originalEnvPath.value) {
-        const ok = await composeStore.setEnvPath(props.projectName, newEnvPath);
-        if (ok) originalEnvPath.value = newEnvPath;
+    parentModal.result(success, success ? undefined : 'Failed to save');
+    if (success) {
+      if (actionId === 'save-recompose') {
+        emit('recompose', props.projectName);
+        setTimeout(() => emit('close'), 200);
+      } else {
+        setTimeout(() => emit('close'), 600);
       }
     }
-  } catch {
-    success = false;
-  }
-  parentModal.result(success, success ? undefined : 'Failed to save');
-  if (success) {
-    setTimeout(() => emit('close'), 600);
+  } finally {
+    saving.value = false;
+    patchActions();
   }
 }
 

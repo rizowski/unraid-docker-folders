@@ -215,6 +215,14 @@ function handlePost($composeManager)
     jsonResponse($result);
   }
 
+  // Validate compose file (docker compose config)
+  if ($action === 'validate') {
+    $data = getRequestData();
+    $content = isset($data['content']) ? $data['content'] : null;
+    $result = $composeManager->validateComposeContent($project, $content);
+    jsonResponse($result);
+  }
+
   // Stack pull
   if ($action === 'pull') {
     if (!$status['management_enabled']) {

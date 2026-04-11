@@ -22,6 +22,13 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         scrolling="no"
         allowfullscreen></iframe>
 
+<!-- CodeMirror 5 (bundled) for YAML syntax highlighting in compose editor -->
+<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/codemirror.css">
+<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/theme/material-darker.css">
+<script src="/plugins/unraid-docker-folders-modern/codemirror/codemirror.js"></script>
+<script src="/plugins/unraid-docker-folders-modern/codemirror/mode/yaml/yaml.js"></script>
+<script src="/plugins/unraid-docker-folders-modern/codemirror/addon/edit/matchbrackets.js"></script>
+
 <!-- Generic parent-page modal overlay (rendered outside iframe to avoid clipping) -->
 <style>
   /* Override Unraid's global textarea/input CSS inside our modal */
@@ -66,6 +73,39 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     padding: 4px 8px !important;
     line-height: 1 !important;
     align-self: center !important;
+  }
+  /* CodeMirror inside the compose editor modal */
+  #dfm-modal-body .dfm-cm-wrap {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border-color,#333);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  #dfm-modal-body .dfm-cm-wrap.dfm-wrap-fill {
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
+  }
+  #dfm-modal-body .dfm-cm-wrap .CodeMirror {
+    height: auto;
+    min-height: 300px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  #dfm-modal-body .dfm-cm-wrap.dfm-wrap-fill .CodeMirror {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+  }
+  #dfm-modal-body .dfm-cm-wrap .CodeMirror-scroll {
+    min-height: 300px;
+  }
+  #dfm-modal-body .dfm-cm-error-line {
+    background: rgba(244, 67, 54, 0.18) !important;
+  }
+  #dfm-modal-body .dfm-cm-error-gutter {
+    color: #f44336;
+    padding: 0 4px;
   }
 </style>
 <div id="dfm-modal-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,0.5);justify-content:center;align-items:center;font-family:clear-sans,sans-serif;padding:16px;box-sizing:border-box;">
@@ -248,6 +288,11 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   }
 
   function renderTextareaField(field) {
+    // CodeMirror path for fields that request syntax highlighting
+    if (field.language && typeof window.CodeMirror === 'function') {
+      return renderCodeMirrorField(field);
+    }
+
     var wrap = document.createElement('div');
     if (field.fillHeight) {
       wrap.className = 'dfm-wrap-fill';
@@ -289,6 +334,75 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     styleObj(ta, styles);
     wrap.appendChild(ta);
     return { root: wrap, refs: { textarea: ta } };
+  }
+
+  function renderCodeMirrorField(field) {
+    var wrap = document.createElement('div');
+    wrap.className = 'dfm-cm-wrap' + (field.fillHeight ? ' dfm-wrap-fill' : '');
+    if (field.caption) {
+      var cap = document.createElement('div');
+      cap.textContent = field.caption;
+      styleObj(cap, {
+        fontSize: '12px',
+        opacity: '0.6',
+        padding: '4px 8px',
+        fontFamily: 'ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace',
+        background: 'color-mix(in srgb,var(--background-color,#1a1a1a),var(--text-color,#f2f2f2) 4%)',
+        borderBottom: '1px solid var(--border-color,#333)',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis'
+      });
+      wrap.appendChild(cap);
+    }
+    var host = document.createElement('div');
+    styleObj(host, { flex: field.fillHeight ? '1 1 auto' : '0 0 auto', minHeight: '0', display: 'flex', flexDirection: 'column' });
+    wrap.appendChild(host);
+
+    var modeName = field.language === 'yaml' ? 'yaml' : (field.language || 'null');
+    var cm = window.CodeMirror(host, {
+      value: field.value || '',
+      mode: modeName,
+      lineNumbers: true,
+      readOnly: !!field.readOnly,
+      indentUnit: 2,
+      tabSize: 2,
+      lineWrapping: false,
+      matchBrackets: true,
+      theme: 'material-darker',
+      gutters: ['CodeMirror-linenumbers', 'dfm-cm-error-gutter'],
+    });
+
+    // Keep CM sized to its container
+    setTimeout(function() { cm.refresh(); }, 0);
+
+    return {
+      root: wrap,
+      refs: {
+        cm: cm,
+        get value() { return cm.getValue(); },
+        clearErrors: function() {
+          cm.clearGutter('dfm-cm-error-gutter');
+          for (var i = 0; i < cm.lineCount(); i++) {
+            cm.removeLineClass(i, 'background', 'dfm-cm-error-line');
+          }
+        },
+        setErrors: function(errors) {
+          this.clearErrors();
+          (errors || []).forEach(function(err) {
+            var line = (err.line || 1) - 1;
+            if (line < 0) line = 0;
+            if (line >= cm.lineCount()) line = cm.lineCount() - 1;
+            cm.addLineClass(line, 'background', 'dfm-cm-error-line');
+            var marker = document.createElement('span');
+            marker.textContent = '✗';
+            marker.className = 'dfm-cm-error-gutter';
+            marker.title = err.message || '';
+            cm.setGutterMarker(line, 'dfm-cm-error-gutter', marker);
+          });
+        },
+      },
+    };
   }
 
   function renderColorField(field) {
@@ -695,15 +809,21 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   function refreshActionStates() {
     Object.keys(actionNodes).forEach(function(aid) {
       var entry = actionNodes[aid];
-      var disableField = entry.spec.disabledWhenEmpty;
-      if (!disableField) return;
-      var fieldEntry = fieldNodes[disableField];
-      if (!fieldEntry) return;
-      var input = fieldEntry.refs && fieldEntry.refs.input;
-      var empty = input ? !String(input.value || '').trim() : false;
-      entry.button.disabled = empty;
-      entry.button.style.opacity = empty ? '0.5' : '1';
-      entry.button.style.cursor = empty ? 'not-allowed' : 'pointer';
+      var disabled = !!entry.spec.disabled;
+      if (!disabled) {
+        var disableField = entry.spec.disabledWhenEmpty;
+        if (disableField) {
+          var fieldEntry = fieldNodes[disableField];
+          if (fieldEntry) {
+            var input = fieldEntry.refs && fieldEntry.refs.input;
+            disabled = input ? !String(input.value || '').trim() : false;
+          }
+        }
+      }
+      entry.button.disabled = disabled;
+      entry.button.style.opacity = disabled ? '0.5' : '1';
+      entry.button.style.cursor = disabled ? 'not-allowed' : 'pointer';
+      if (entry.spec.label != null) entry.button.textContent = entry.spec.label;
     });
   }
 
@@ -712,7 +832,8 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     Object.keys(fieldNodes).forEach(function(fid) {
       var entry = fieldNodes[fid];
       var refs = entry.refs || {};
-      if (refs.input) values[fid] = refs.input.value;
+      if (refs.cm) values[fid] = refs.cm.getValue();
+      else if (refs.input) values[fid] = refs.input.value;
       else if (refs.textarea) values[fid] = refs.textarea.value;
       else if (refs.select) values[fid] = refs.select.value;
       else if (refs.color) values[fid] = refs.text ? refs.text.value : refs.color.value;
@@ -848,10 +969,17 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     if (fieldType === 'input' && patch.value != null) {
       if (refs.input) refs.input.value = patch.value;
     }
-    // Textarea
+    // Textarea (plain or CodeMirror)
     if (fieldType === 'textarea') {
-      if (patch.value != null && refs.textarea) refs.textarea.value = patch.value;
-      if (patch.readOnly != null && refs.textarea) refs.textarea.readOnly = !!patch.readOnly;
+      if (refs.cm) {
+        if (patch.value != null) refs.cm.setValue(patch.value);
+        if (patch.readOnly != null) refs.cm.setOption('readOnly', !!patch.readOnly);
+        if (patch.errors != null && refs.setErrors) refs.setErrors(patch.errors);
+        if (patch.clearErrors && refs.clearErrors) refs.clearErrors();
+      } else {
+        if (patch.value != null && refs.textarea) refs.textarea.value = patch.value;
+        if (patch.readOnly != null && refs.textarea) refs.textarea.readOnly = !!patch.readOnly;
+      }
     }
     // Log
     if (fieldType === 'log') {

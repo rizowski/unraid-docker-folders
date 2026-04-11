@@ -27,9 +27,12 @@
       <ComposeControls
         v-if="folder.compose_project"
         :project-name="folder.compose_project"
+        :folder="folder"
         class="hidden sm:flex"
         @edit-compose="(p) => emit('edit-compose', p)"
         @view-logs="(p) => emit('view-logs', p)"
+        @compose-up="(p) => emit('compose-up', p)"
+        @compose-recompose="(p) => emit('compose-recompose', p)"
       />
       <span class="shrink-0 inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1" :class="runningCount > 0 ? 'bg-primary text-primary-text' : 'bg-border text-text-secondary'" :title="`${runningCount} running / ${existingContainerCount} total`">
         {{ runningCount }}/{{ existingContainerCount }}
@@ -98,6 +101,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import { useComposeStore } from '@/stores/compose';
+import { useFolderRunningState } from '@/composables/useFolderRunningState';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import ComposeControls from '@/components/compose/ComposeControls.vue';
@@ -132,6 +136,9 @@ const emit = defineEmits<{
   'update-folder': [];
   'edit-compose': [project: string];
   'view-logs': [project: string];
+  'compose-recompose': [project: string];
+  'compose-pull': [project: string];
+  'compose-up': [project: string];
 }>();
 
 const updatesStore = useUpdatesStore();
@@ -153,46 +160,52 @@ const composeStack = computed(() =>
   props.folder.compose_project ? composeStore.getStackByProject(props.folder.compose_project) : null
 );
 
-// Only count containers that still exist in Docker (filters out deleted/orphaned associations)
-const existingContainers = computed(() =>
-  props.folder.containers.filter((assoc) =>
-    dockerStore.containers.some((c) => c.name === assoc.container_name)
-  )
-);
-const existingContainerCount = computed(() => existingContainers.value.length);
+// Drive from actual docker state so stale compose metadata can't claim "running".
+const {
+  existingContainers,
+  runningCount,
+  totalCount: existingContainerCount,
+  isRunning,
+} = useFolderRunningState(() => props.folder);
 
 const allAutostart = computed(() => {
-  const containers = existingContainers.value;
-  if (containers.length === 0) return false;
-  return containers.every((assoc) => {
-    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
-    return container?.autostart === true;
-  });
+  if (existingContainers.value.length === 0) return false;
+  return existingContainers.value.every((c) => c.autostart === true);
 });
 
 const folderAutostartDelay = computed(() => {
-  const delays = props.folder.containers
-    .map((assoc) => dockerStore.containers.find((c) => c.name === assoc.container_name))
-    .filter((c) => c?.managed === 'dockerman')
-    .map((c) => c!.autostartDelay);
+  const delays = existingContainers.value
+    .filter((c) => c.managed === 'dockerman')
+    .map((c) => c.autostartDelay);
   if (delays.length === 0) return 0;
   // Show common delay if all the same, otherwise 0
   return delays.every((d) => d === delays[0]) ? delays[0] : 0;
 });
 
 const folderMenuItems = computed<KebabMenuItem[]>(() => {
-  const items: KebabMenuItem[] = [
-    { label: `Update (${folderUpdateCount.value})`, icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update-folder', class: 'text-warning hover:text-warning', show: folderUpdateCount.value > 0 },
-  ];
+  const items: KebabMenuItem[] = [];
 
-  // Compose-specific menu items (shown on small screens where inline controls are hidden)
+  if (folderUpdateCount.value > 0) {
+    items.push({
+      label: `Update (${folderUpdateCount.value})`,
+      icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3',
+      action: 'update-folder',
+      class: 'text-warning hover:text-warning',
+    });
+    items.push({ divider: true });
+  }
+
+  // Compose section — actions that affect the stack itself
   if (props.folder.compose_project && composeStore.composeAvailable) {
     items.push(
-      { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: composeStore.managementEnabled },
-      { label: 'Stack Down', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-down', show: composeStore.managementEnabled },
-      { label: 'Edit Compose', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'compose-edit' },
+      { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: composeStore.managementEnabled && !isRunning.value },
+      { label: 'Stack Down', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-down', show: composeStore.managementEnabled && isRunning.value },
+      { label: 'Pull Latest Images', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'compose-pull', show: composeStore.managementEnabled },
+      { label: 'Recompose', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-recompose', show: composeStore.managementEnabled && isRunning.value },
+      { label: 'Edit Compose File', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'compose-edit' },
       { label: 'Stack Logs', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', action: 'compose-logs' },
-      { label: composeStack.value?.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', show: composeStore.managementEnabled },
+      { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', show: composeStore.managementEnabled },
+      { divider: true },
     );
   }
 
@@ -205,12 +218,14 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
     items.push(
       { label: allAutostart.value ? 'Disable Autostart (all)' : 'Enable Autostart (all)', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-folder-autostart', class: allAutostart.value ? 'text-success' : '' },
       { label: `Autostart Delay: ${folderAutostartDelay.value}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-folder-autostart-delay', show: allAutostart.value },
+      { divider: true },
     );
   }
 
+  // Folder options — metadata only
   items.push(
-    { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'edit' },
-    { label: 'Delete', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'delete', class: 'hover:text-error' },
+    { label: 'Folder Options', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'edit' },
+    { label: 'Delete Folder', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'delete', class: 'hover:text-error' },
   );
 
   return items;
@@ -221,9 +236,13 @@ async function handleMenuSelect(action: string) {
   else if (action === 'delete') emit('delete');
   else if (action === 'update-folder') emit('update-folder');
   else if (action === 'compose-up' && props.folder.compose_project) {
-    await composeStore.stackUp(props.folder.compose_project);
+    emit('compose-up', props.folder.compose_project);
   } else if (action === 'compose-down' && props.folder.compose_project) {
     await composeStore.stackDown(props.folder.compose_project);
+  } else if (action === 'compose-pull' && props.folder.compose_project) {
+    emit('compose-pull', props.folder.compose_project);
+  } else if (action === 'compose-recompose' && props.folder.compose_project) {
+    emit('compose-recompose', props.folder.compose_project);
   } else if (action === 'compose-edit' && props.folder.compose_project) {
     emit('edit-compose', props.folder.compose_project);
   } else if (action === 'compose-logs' && props.folder.compose_project) {
@@ -274,18 +293,10 @@ const collapsedPorts = computed(() => {
   return ports.sort((a, b) => a - b).join(', ');
 });
 
-const runningCount = computed(() => {
-  return props.folder.containers.filter((assoc) => {
-    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
-    return container?.state === 'running';
-  }).length;
-});
-
 const containerIcons = computed(() => {
   const icons: string[] = [];
-  for (const assoc of props.folder.containers) {
-    const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
-    if (container?.icon) icons.push(container.icon);
+  for (const c of existingContainers.value) {
+    if (c.icon) icons.push(c.icon);
     if (icons.length >= 4) break;
   }
   return icons;

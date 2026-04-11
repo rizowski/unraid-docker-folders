@@ -59,6 +59,12 @@ export const useDockerStore = defineStore('docker', () => {
     return (id: string) => containers.value.find((c) => c.id === id);
   });
 
+  const containersByName = computed(() => {
+    const map = new Map<string, Container>();
+    for (const c of containers.value) map.set(c.name, c);
+    return map;
+  });
+
   const stateOrder: Record<string, number> = {
     exited: 0,
     running: 1,
@@ -234,6 +240,7 @@ export const useDockerStore = defineStore('docker', () => {
     // Getters
     containerCount,
     getContainerById,
+    containersByName,
     sortedContainers,
     unfolderedContainers,
 

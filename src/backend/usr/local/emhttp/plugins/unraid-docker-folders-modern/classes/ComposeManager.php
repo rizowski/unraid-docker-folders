@@ -482,6 +482,102 @@ class ComposeManager
   }
 
   /**
+   * Validate compose file content via `docker compose config`.
+   * If $content is provided it's written to a temp file and validated; otherwise
+   * the project's current file on disk is checked.
+   * Returns [ 'success' => bool, 'output' => string, 'errors' => [{line, column, message}] ]
+   */
+  public function validateComposeContent($projectName, $content = null)
+  {
+    if (!$this->isComposeAvailable()) {
+      return ['success' => false, 'errors' => [['line' => 1, 'message' => 'Docker Compose not available']]];
+    }
+
+    $tmpFile = null;
+    $cmd = 'docker compose';
+    $cmd .= ' -p ' . escapeshellarg($projectName);
+
+    if ($content !== null) {
+      $tmpFile = tempnam(sys_get_temp_dir(), 'dfm-compose-');
+      if ($tmpFile === false) {
+        return ['success' => false, 'errors' => [['line' => 1, 'message' => 'Failed to create temp file']]];
+      }
+      file_put_contents($tmpFile, $content);
+      $cmd .= ' -f ' . escapeshellarg($tmpFile);
+    } else {
+      $stack = $this->db->fetchOne(
+        'SELECT working_dir, compose_file, env_file FROM compose_stacks WHERE project_name = ?',
+        [$projectName]
+      );
+      if ($stack && $stack['compose_file']) {
+        $cmd .= ' -f ' . escapeshellarg($stack['compose_file']);
+      }
+      if ($stack && $stack['env_file']) {
+        $cmd .= ' --env-file ' . escapeshellarg($stack['env_file']);
+      }
+      if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
+        $cmd = 'cd ' . escapeshellarg($stack['working_dir']) . ' && ' . $cmd;
+      }
+    }
+
+    $cmd .= ' config --quiet 2>&1';
+    $result = $this->execCommand($cmd, 30);
+
+    if ($tmpFile) {
+      @unlink($tmpFile);
+    }
+
+    $errors = [];
+    if (!$result['success']) {
+      $errors = $this->parseComposeValidationErrors($result['output'] ?: ($result['error'] ?: ''));
+      if (empty($errors)) {
+        $errors[] = ['line' => 1, 'message' => trim($result['output'] ?: ($result['error'] ?: 'Validation failed'))];
+      }
+    }
+
+    return [
+      'success' => $result['success'],
+      'output' => $result['output'] ?: '',
+      'errors' => $errors,
+    ];
+  }
+
+  /**
+   * Parse docker compose error output for line numbers.
+   * Docker compose emits messages like:
+   *   "validating <file>: services.web.image expected type 'string'"
+   *   "yaml: line 12: mapping values are not allowed in this context"
+   *   "line 5: ..."
+   */
+  private function parseComposeValidationErrors($output)
+  {
+    if ($output === '' || $output === null) return [];
+    $errors = [];
+    $lines = preg_split("/\r?\n/", trim($output));
+    foreach ($lines as $line) {
+      $line = trim($line);
+      if ($line === '') continue;
+
+      // "yaml: line N: msg" or "line N: msg" or "in compose.yaml, line N column C: msg"
+      if (preg_match('/line\s+(\d+)(?:\s*,?\s*column\s+(\d+))?[\s:]+(.*)$/i', $line, $m)) {
+        $errors[] = [
+          'line' => (int) $m[1],
+          'column' => isset($m[2]) && $m[2] !== '' ? (int) $m[2] : 1,
+          'message' => trim($m[3]),
+        ];
+        continue;
+      }
+      // Fall back: attach to line 1 so user sees at least something
+      if (stripos($line, 'validating') !== false
+          || stripos($line, 'invalid') !== false
+          || stripos($line, 'error') !== false) {
+        $errors[] = ['line' => 1, 'column' => 1, 'message' => $line];
+      }
+    }
+    return $errors;
+  }
+
+  /**
    * Execute a shell command and stream stdout/stderr line-by-line via callback.
    * $onLine receives ($line, $stream) where $stream is 'out' or 'err'.
    */

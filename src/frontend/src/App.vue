@@ -140,6 +140,9 @@
             @update-folder="handleUpdateFolder"
             @edit-compose="openComposeEditor"
             @view-logs="openComposeLogs"
+            @compose-up="openComposeUp"
+            @compose-recompose="openComposeRecompose"
+            @compose-pull="handleComposePull"
           />
         </div>
 
@@ -198,6 +201,16 @@
       :read-only="composeStore.composePluginInstalled && composeEditorMode !== 'create'"
       :mode="composeEditorMode"
       @close="composeEditorOpen = false"
+      @recompose="openComposeRecompose"
+    />
+
+    <!-- Compose Start / Recompose Progress -->
+    <ComposeStartProgressModal
+      :is-open="composeProgressOpen"
+      :project-name="composeProgressProject"
+      :force-recreate="composeProgressForceRecreate"
+      @close="closeComposeProgress"
+      @complete="handleComposeProgressComplete"
     />
 
     <!-- Compose Logs -->
@@ -260,6 +273,7 @@ import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ComposeSetupBanner from '@/components/compose/ComposeSetupBanner.vue';
 import ComposeFileEditor from '@/components/compose/ComposeFileEditor.vue';
+import ComposeStartProgressModal from '@/components/compose/ComposeStartProgressModal.vue';
 import ComposeLogs from '@/components/compose/ComposeLogs.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
@@ -305,6 +319,11 @@ const composeEditorMode = ref<'edit' | 'create'>('edit');
 const composeLogsOpen = ref(false);
 const composeEditorProject = ref('');
 
+// Compose progress modal (start/recompose)
+const composeProgressProject = ref('');
+const composeProgressForceRecreate = ref(false);
+const composeProgressOpen = ref(false);
+
 function openComposeEditor(project: string) {
   composeEditorProject.value = project;
   composeEditorMode.value = 'edit';
@@ -320,6 +339,37 @@ function openCreateStack() {
 function openComposeLogs(project: string) {
   composeEditorProject.value = project;
   composeLogsOpen.value = true;
+}
+
+function openComposeUp(project: string) {
+  composeProgressProject.value = project;
+  composeProgressForceRecreate.value = false;
+  composeProgressOpen.value = true;
+}
+
+function openComposeRecompose(project: string) {
+  composeProgressProject.value = project;
+  composeProgressForceRecreate.value = true;
+  composeProgressOpen.value = true;
+}
+
+async function handleComposePull(project: string) {
+  await composeStore.stackPull(project);
+  await composeStore.fetchStacks(true);
+}
+
+async function handleComposeProgressComplete() {
+  await Promise.all([
+    dockerStore.fetchContainers(),
+    folderStore.fetchFolders(),
+    composeStore.fetchStacks(true),
+  ]);
+}
+
+function closeComposeProgress() {
+  composeProgressOpen.value = false;
+  composeProgressProject.value = '';
+  composeProgressForceRecreate.value = false;
 }
 
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);

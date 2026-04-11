@@ -2,14 +2,24 @@
   <div class="flex items-center gap-1" @click.stop>
     <!-- Stack Up (show when not fully running) -->
     <button
-      v-if="!isFullyRunning || actionInProgress === 'up'"
-      :disabled="!composeStore.managementEnabled || actionInProgress !== null"
+      v-if="!isFullyRunning"
+      :disabled="!composeStore.managementEnabled"
       :title="buttonTitle('Start stack')"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
-      @click="handleUp"
+      @click="$emit('compose-up', projectName)"
     >
-      <svg v-if="actionInProgress === 'up'" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-      <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+    </button>
+
+    <!-- Recompose (show when stack has running services) -->
+    <button
+      v-if="isRunning"
+      :disabled="!composeStore.managementEnabled"
+      :title="buttonTitle('Recompose (pull + recreate)')"
+      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
+      @click="$emit('compose-recompose', projectName)"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
     </button>
 
     <!-- Stack Down (show when has running services) -->
@@ -21,15 +31,13 @@
       @click="handleDown"
     >
       <svg v-if="actionInProgress === 'down'" class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-      <!-- Square stop icon -->
       <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
     </button>
 
     <!-- Edit Compose -->
     <button
       :title="composeStore.composePluginInstalled ? 'View compose file (read-only, compose.manager installed)' : 'Edit compose file'"
-      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
-      :disabled="actionInProgress !== null"
+      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-blue-400"
       @click="$emit('edit-compose', projectName)"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
@@ -38,51 +46,42 @@
     <!-- Logs -->
     <button
       title="View stack logs"
-      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-text disabled:opacity-40 disabled:cursor-not-allowed"
-      :disabled="actionInProgress !== null"
+      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-text"
       @click="$emit('view-logs', projectName)"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
     </button>
-
-    <ComposeStartProgressModal
-      :is-open="startModalOpen"
-      :project-name="projectName"
-      @close="handleStartModalClose"
-      @complete="handleStartComplete"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
-import ComposeStartProgressModal from './ComposeStartProgressModal.vue';
+import { useFolderRunningState } from '@/composables/useFolderRunningState';
+import type { Folder } from '@/types/folder';
 
 const props = defineProps<{
   projectName: string;
+  folder?: Folder;
 }>();
 
 defineEmits<{
   'edit-compose': [project: string];
   'view-logs': [project: string];
+  'compose-up': [project: string];
+  'compose-recompose': [project: string];
 }>();
 
 const composeStore = useComposeStore();
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const actionInProgress = ref<string | null>(null);
-const startModalOpen = ref(false);
 
-const stack = computed(() => composeStore.getStackByProject(props.projectName));
-const isRunning = computed(() => (stack.value?.services_running ?? 0) > 0);
-const isFullyRunning = computed(() => {
-  const s = stack.value;
-  if (!s || s.services_total === 0) return false;
-  return s.services_running >= s.services_total;
-});
+// Drive running state from actual docker containers, not compose metadata,
+// so a stack with zero running containers never shows as running.
+const { isRunning, isFullyRunning } = useFolderRunningState(() => props.folder);
 
 function buttonTitle(defaultTitle: string): string {
   if (!composeStore.composeAvailable) return 'Docker Compose not installed';
@@ -90,31 +89,10 @@ function buttonTitle(defaultTitle: string): string {
   return defaultTitle;
 }
 
-function handleUp() {
-  if (!composeStore.managementEnabled || actionInProgress.value !== null) return;
-  actionInProgress.value = 'up';
-  startModalOpen.value = true;
-}
-
-async function handleStartComplete() {
-  // Refresh so syncComposeStacks associates containers with folders
-  await Promise.all([
-    dockerStore.fetchContainers(),
-    folderStore.fetchFolders(),
-    composeStore.fetchStacks(true),
-  ]);
-}
-
-function handleStartModalClose() {
-  startModalOpen.value = false;
-  actionInProgress.value = null;
-}
-
 async function handleDown() {
   actionInProgress.value = 'down';
   try {
     await composeStore.stackDown(props.projectName);
-    // Refresh to update container/folder state
     await Promise.all([
       dockerStore.fetchContainers(),
       folderStore.fetchFolders(),
