@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.04.07-dev2">
-<!ENTITY md5 "1d463454eb6b673faa7fc9f358fa9c21">
+<!ENTITY version "2026.04.11-dev1">
+<!ENTITY md5 "8c7920d5ccceaeb8487f10e5108f3dac">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -72,6 +72,9 @@
 
 
 
+
+###2026.04.11-dev1
+- Stream compose stack start, fix create-stack textarea and banner flash
 ###2026.04.07-dev2
 - Fix compose plugin import banner for users without compose.manager
 ###2026.04.07-dev1

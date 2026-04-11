@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.04.11
+### Changes
+- Stream compose stack start, fix create-stack textarea and banner flash
+
 ## 2026.04.07
 ### Changes
 - Fix compose plugin import banner for users without compose.manager
