@@ -25,19 +25,19 @@
             @pull="(data) => emit('pull', data)"
           />
         </div>
-        <!-- Compose folder: stack down — show faded container names as a preview -->
+        <!-- Compose folder: stack down — show faded service names as a preview -->
         <div
           v-if="folderContainers.length === 0 && folder.compose_project && previewAssociations.length > 0"
           class="mb-4 opacity-40 pointer-events-none select-none"
           :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'"
         >
           <div
-            v-for="assoc in previewAssociations"
-            :key="assoc.container_name"
+            v-for="name in previewAssociations"
+            :key="name"
             class="flex items-center gap-2 px-3 py-2 bg-bg-card border border-border rounded"
           >
             <span class="w-2 h-2 rounded-full bg-text-secondary shrink-0"></span>
-            <span class="text-sm text-text truncate">{{ assoc.container_name }}</span>
+            <span class="text-sm text-text truncate">{{ name }}</span>
             <span class="ml-auto text-[10px] uppercase tracking-wide text-text-secondary">stopped</span>
           </div>
         </div>
@@ -57,6 +57,7 @@
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
+import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
@@ -86,6 +87,7 @@ const emit = defineEmits<{
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+const composeStore = useComposeStore();
 const statsStore = useStatsStore();
 const settingsStore = useSettingsStore();
 const actionsInProgress = ref<Map<string, string>>(new Map());
@@ -120,16 +122,24 @@ const folderContainers = computed(() => {
   return list;
 });
 
-// Preview list for compose folders whose stack is down: show stored associations
-// regardless of whether the container currently exists in Docker.
+// Preview list for compose folders whose stack is down.
+// Prefer the service names defined in the compose file (works even when
+// the stack has been fully removed via `docker compose down`); fall back
+// to stored container_folders rows if we have no stack metadata yet.
 const previewAssociations = computed(() => {
   if (!props.folder.compose_project) return [];
-  let list = props.folder.containers || [];
+  const stack = composeStore.getStackByProject(props.folder.compose_project);
+  let names: string[];
+  if (stack?.service_names && stack.service_names.length > 0) {
+    names = stack.service_names;
+  } else {
+    names = (props.folder.containers || []).map((a) => a.container_name);
+  }
   if (isSearching.value) {
     const q = dockerStore.searchQuery.trim().toLowerCase();
-    list = list.filter((assoc) => assoc.container_name.toLowerCase().includes(q));
+    names = names.filter((name) => name.toLowerCase().includes(q));
   }
-  return list;
+  return names;
 });
 
 const hiddenCount = computed(() => {

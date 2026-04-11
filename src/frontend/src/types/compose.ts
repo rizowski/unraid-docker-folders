@@ -13,6 +13,7 @@ export interface ComposeStack {
   imported_from: string | null;
   services_running: number;
   services_total: number;
+  service_names?: string[];
 }
 
 export interface ComposeStatus {

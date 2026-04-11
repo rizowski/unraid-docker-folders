@@ -237,9 +237,61 @@ class ComposeManager
           $stack['services_running']++;
         }
       }
+
+      // Always include defined service names from the compose file so the
+      // UI can render a faded preview even when the stack is fully down
+      // (containers removed, so stackPs returns nothing).
+      $stack['service_names'] = $this->parseComposeServiceNames($stack);
     }
 
     return $stacks;
+  }
+
+  /**
+   * Read the compose file for a stack and return the list of top-level
+   * service names. Uses lightweight YAML parsing so we don't need to shell
+   * out to `docker compose config` on every list fetch.
+   */
+  private function parseComposeServiceNames($stack)
+  {
+    if (empty($stack['compose_file'])) return [];
+    $path = $this->resolveComposeFilePath($stack);
+    if (!$path || !file_exists($path)) return [];
+    $content = @file_get_contents($path);
+    if ($content === false || $content === '') return [];
+
+    $services = [];
+    $lines = preg_split("/\r?\n/", $content);
+    $inServices = false;
+    $baseIndent = null;
+    foreach ($lines as $line) {
+      // Strip comments
+      $stripped = preg_replace('/^([^#]*?)\s*#.*$/', '$1', $line);
+      if ($stripped === null) $stripped = $line;
+
+      if (!$inServices) {
+        if (preg_match('/^services\s*:\s*$/', $stripped)) {
+          $inServices = true;
+        }
+        continue;
+      }
+
+      // Skip blank lines while inside services block
+      if (trim($stripped) === '') continue;
+
+      // A non-indented key ends the services block
+      if (preg_match('/^\S/', $stripped)) break;
+
+      // Match indented service key (only at the base indent level)
+      if (preg_match('/^(\s+)([a-zA-Z0-9._-]+)\s*:\s*$/', $stripped, $m)) {
+        $indent = strlen($m[1]);
+        if ($baseIndent === null) $baseIndent = $indent;
+        if ($indent === $baseIndent) {
+          $services[] = $m[2];
+        }
+      }
+    }
+    return $services;
   }
 
   /**
@@ -267,6 +319,7 @@ class ComposeManager
         $stack['services_running']++;
       }
     }
+    $stack['service_names'] = $this->parseComposeServiceNames($stack);
 
     return $stack;
   }
