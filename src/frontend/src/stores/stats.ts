@@ -38,6 +38,7 @@ export const useStatsStore = defineStore('stats', () => {
   const loading = ref(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let kickTimer: ReturnType<typeof setTimeout> | null = null;
+  let visibilityBound = false;
 
   const getStats = computed(() => {
     return (id: string): ContainerStats | null => stats.value[id] ?? null;
@@ -69,8 +70,21 @@ export const useStatsStore = defineStore('stats', () => {
     }
   }
 
+  function handleVisibilityChange() {
+    if (document.hidden) {
+      stopPolling();
+    } else if (allTrackedIds().length > 0) {
+      startPolling();
+    }
+  }
+
   function startPolling() {
     if (pollTimer) return;
+    if (!visibilityBound) {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      visibilityBound = true;
+    }
+    if (document.hidden) return;
     // Debounce the initial fetch so all registrations from the same
     // render cycle are batched into a single request.
     scheduleKick();
@@ -136,6 +150,10 @@ export const useStatsStore = defineStore('stats', () => {
   function cleanup() {
     stopPolling();
     if (kickTimer) { clearTimeout(kickTimer); kickTimer = null; }
+    if (visibilityBound) {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      visibilityBound = false;
+    }
     visibleIds.value = new Set();
     expandedIds.value = new Set();
     stats.value = {};

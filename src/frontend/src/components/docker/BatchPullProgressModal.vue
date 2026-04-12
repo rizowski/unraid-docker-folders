@@ -1,9 +1,5 @@
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-enter absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
-      <div class="absolute inset-0 bg-black/50" @click="handleClose"></div>
-      <div class="absolute flex items-center justify-center p-4" :style="viewportStyle">
-      <div class="relative bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+  <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="512px" @close="handleClose">
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-border">
           <div class="min-w-0">
@@ -30,82 +26,10 @@
             class="flex items-start gap-2 py-2"
             :class="idx < uniqueImages.length - 1 ? 'border-b border-border/30' : ''"
           >
-            <!-- Status icon -->
-            <div class="shrink-0 mt-0.5">
-              <!-- Done (success) -->
-              <svg v-if="imageResults[img] === 'success'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <!-- Done (error) -->
-              <svg v-else-if="imageResults[img] === 'error'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-error">
-                <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-              </svg>
-              <!-- Cancelled -->
-              <svg v-else-if="imageResults[img] === 'cancelled'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-text-secondary">
-                <circle cx="12" cy="12" r="10" /><line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-              </svg>
-              <!-- In progress -->
-              <svg v-else-if="currentImage === img" class="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-              </svg>
-              <!-- Pending -->
-              <div v-else class="w-4 h-4 rounded-full border-2 border-border"></div>
-            </div>
-
             <div class="flex-1 min-w-0">
               <p class="text-sm text-text font-mono truncate">{{ img }}</p>
-              <!-- Layer progress for current image -->
-              <div v-if="currentImage === img && Object.keys(currentLayers).length > 0" class="mt-1.5 space-y-1">
-                <div v-for="(layer, layerId) in currentLayers" :key="layerId" class="flex items-center gap-2 text-xs">
-                  <span class="text-text-secondary font-mono w-16 shrink-0 truncate">{{ layerId }}</span>
-                  <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
-                    <div
-                      class="h-full rounded-full transition-all duration-300"
-                      :class="layer.percent >= 100 ? 'bg-success' : 'bg-primary'"
-                      :style="{ width: Math.min(layer.percent, 100) + '%' }"
-                    ></div>
-                  </div>
-                  <span class="text-text-secondary w-20 text-right shrink-0">{{ layer.status }}</span>
-                </div>
-              </div>
-              <!-- Status text -->
-              <p v-if="currentImage === img && currentStatus" class="text-xs text-text-secondary mt-1">{{ currentStatus }}</p>
               <p v-if="imageErrors[img]" class="text-xs text-error mt-1">{{ imageErrors[img] }}</p>
-
-              <!-- Recreate status -->
-              <div v-if="imageRecreateStatus[img]" class="flex items-center gap-1.5 mt-1">
-                <svg v-if="imageRecreateStatus[img].status === 'recreating'" class="animate-spin h-3 w-3 text-primary shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                </svg>
-                <svg v-else-if="imageRecreateStatus[img].status === 'recreated'" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success shrink-0">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                <svg v-else xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-error shrink-0">
-                  <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-                </svg>
-                <span class="text-xs" :class="imageRecreateStatus[img].status === 'recreate_error' ? 'text-error' : 'text-text-secondary'">
-                  {{ imageRecreateStatus[img].message }}
-                </span>
-              </div>
-
-              <!-- Post-pull actions per image -->
-              <div v-if="imageResults[img] === 'success' && postPullAction !== 'pull_only'" class="mt-1.5">
-                <template v-if="postPullAction === 'pull_and_offer_restart'">
-                  <div v-for="c in getContainersForImage(img)" :key="c.name" class="inline-flex items-center gap-1 mr-2">
-                    <span class="text-xs text-text-secondary">{{ c.name }}</span>
-                    <a
-                      v-if="c.managed === 'dockerman'"
-                      :href="`/Docker/UpdateContainer?xmlTemplate=edit:${encodeURIComponent('/boot/config/plugins/dockerMan/templates-user/my-' + c.name + '.xml')}`"
-                      class="text-xs text-primary hover:underline"
-                    >Apply Update</a>
-                  </div>
-                </template>
-              </div>
             </div>
-
-            <!-- Status label -->
             <span class="shrink-0 text-xs font-medium" :class="statusLabelClass(img)">
               {{ statusLabel(img) }}
             </span>
@@ -113,11 +37,7 @@
         </div>
 
         <!-- Footer -->
-        <div class="px-6 py-3 border-t border-border flex justify-between items-center">
-          <div v-if="allDone && successCount > 0 && postPullAction === 'pull_only'" class="text-xs text-text-secondary">
-            {{ successCount }} image{{ successCount > 1 ? 's' : '' }} pulled. Use "Apply Update" in Unraid to recreate containers.
-          </div>
-          <div v-else></div>
+        <div class="px-6 py-3 border-t border-border flex justify-end">
           <div class="flex gap-2">
             <button
               v-if="!allDone"
@@ -135,18 +55,14 @@
             </button>
           </div>
         </div>
-      </div>
-      </div>
-    </div>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { getCsrfToken } from '@/utils/csrf';
-import { useSettingsStore } from '@/stores/settings';
-import { useParentViewport } from '@/composables/useParentViewport';
-import { useModalElevation } from '@/composables/useModalElevation';
+import { useParentModal } from '@/composables/useParentModal';
+import BaseModal from '@/components/BaseModal.vue';
 
 interface PullContainer {
   image: string;
@@ -173,22 +89,6 @@ interface LayerProgress {
   percent: number;
 }
 
-const settingsStore = useSettingsStore();
-const postPullAction = computed(() => settingsStore.postPullAction);
-
-useModalElevation(() => props.isOpen);
-const { visibleTop, visibleHeight } = useParentViewport();
-const totalHeight = computed(() =>
-  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
-);
-const viewportStyle = computed(() => ({
-  top: visibleTop.value + 'px',
-  left: '0',
-  width: '100%',
-  height: visibleHeight.value + 'px',
-}));
-
-// Deduplicated list of unique images to pull
 const uniqueImages = computed(() => [...new Set(props.containers.map((c) => c.image))]);
 
 const currentImage = ref<string | null>(null);
@@ -202,11 +102,6 @@ let cancelled = false;
 let abortController: AbortController | null = null;
 
 const completedCount = computed(() => Object.keys(imageResults.value).length);
-const successCount = computed(() => Object.values(imageResults.value).filter((r) => r === 'success').length);
-
-function getContainersForImage(image: string): PullContainer[] {
-  return props.containers.filter((c) => c.image === image);
-}
 
 function statusLabel(img: string): string {
   if (imageResults.value[img] === 'success') return 'Done';
@@ -222,6 +117,124 @@ function statusLabelClass(img: string): string {
   if (imageResults.value[img] === 'cancelled') return 'text-text-secondary';
   if (currentImage.value === img) return 'text-primary';
   return 'text-text-secondary';
+}
+
+function imageState(img: string): 'pending' | 'running' | 'done' | 'error' | 'cancelled' {
+  if (imageResults.value[img] === 'success') return 'done';
+  if (imageResults.value[img] === 'error') return 'error';
+  if (imageResults.value[img] === 'cancelled') return 'cancelled';
+  if (currentImage.value === img) return 'running';
+  return 'pending';
+}
+
+function imagePercent(img: string): number {
+  if (imageResults.value[img] === 'success') return 100;
+  if (imageResults.value[img] === 'error' || imageResults.value[img] === 'cancelled') return 100;
+  if (currentImage.value === img) {
+    const layerList = Object.values(currentLayers.value);
+    if (layerList.length === 0) return 5;
+    const avg = layerList.reduce((acc, l) => acc + l.percent, 0) / layerList.length;
+    return Math.max(5, avg);
+  }
+  return 0;
+}
+
+function imageStatusText(img: string): string {
+  if (imageResults.value[img] === 'success') return 'Done';
+  if (imageResults.value[img] === 'error') return imageErrors.value[img] || 'Error';
+  if (imageResults.value[img] === 'cancelled') return 'Skipped';
+  if (currentImage.value === img) return currentStatus.value || 'Pulling...';
+  return 'Pending';
+}
+
+function imageSublabel(img: string): string {
+  const recreate = imageRecreateStatus.value[img];
+  if (recreate) return recreate.message;
+  return '';
+}
+
+function buildProgressItems() {
+  return uniqueImages.value.map((img) => ({
+    id: img,
+    label: img,
+    percent: imagePercent(img),
+    status: imageStatusText(img),
+    state: imageState(img),
+    sublabel: imageSublabel(img),
+  }));
+}
+
+const parentModal = useParentModal({
+  onAction({ actionId }) {
+    if (actionId === 'cancel') {
+      cancelBatch();
+    } else if (actionId === 'close') {
+      if (allDone.value) emit('close');
+    }
+  },
+});
+
+const { inIframe } = parentModal;
+
+function openParent() {
+  parentModal.open({
+    kind: 'batch-pull-progress',
+    title: `Updating Containers (0/${uniqueImages.value.length})`,
+    size: 'md',
+    dismissable: false,
+    fields: [
+      { type: 'progress-list', id: 'images', items: buildProgressItems() },
+    ],
+    actions: [
+      { id: 'cancel', label: 'Cancel', variant: 'default' },
+    ],
+  });
+}
+
+function modalTitle(): string {
+  return allDone.value
+    ? 'Update Complete'
+    : `Updating Containers (${completedCount.value}/${uniqueImages.value.length})`;
+}
+
+function patchAll() {
+  if (!inIframe) return;
+  parentModal.update({
+    title: modalTitle(),
+    fields: [{ id: 'images', items: buildProgressItems() }],
+  });
+}
+
+function patchImage(img: string) {
+  if (!inIframe) return;
+  parentModal.update({
+    title: modalTitle(),
+    fields: [
+      {
+        id: 'images',
+        items: [
+          {
+            id: img,
+            label: img,
+            percent: imagePercent(img),
+            status: imageStatusText(img),
+            state: imageState(img),
+            sublabel: imageSublabel(img),
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function showCloseAction() {
+  if (!inIframe) return;
+  parentModal.update({
+    dismissable: true,
+    actions: [
+      { id: 'close', label: 'Close', variant: 'default' },
+    ],
+  });
 }
 
 function handleClose() {
@@ -253,6 +266,7 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
   currentImage.value = image;
   currentStatus.value = 'Preparing...';
   currentLayers.value = {};
+  patchImage(image);
 
   abortController = new AbortController();
 
@@ -272,9 +286,7 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
       },
     );
 
-    if (!response.ok) {
-      return 'error';
-    }
+    if (!response.ok) return 'error';
 
     const reader = response.body?.getReader();
     if (!reader) return 'error';
@@ -300,6 +312,7 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
             const data = JSON.parse(line.slice(6));
             if (currentEvent === 'status') {
               currentStatus.value = data.message || 'Pulling...';
+              patchImage(image);
             } else if (currentEvent === 'progress' && data.id) {
               const existing = currentLayers.value[data.id] || { status: '', current: 0, total: 0, percent: 0 };
               const current = data.current ?? existing.current;
@@ -307,17 +320,21 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
               const percent = total > 0 ? Math.round((current / total) * 100) : (data.status === 'Pull complete' || data.status === 'Already exists' ? 100 : existing.percent);
               currentLayers.value[data.id] = { status: data.status || existing.status, current, total, percent };
               currentLayers.value = { ...currentLayers.value };
+              patchImage(image);
             } else if (currentEvent === 'recreating') {
               currentStatus.value = data.message || `Recreating ${data.container}...`;
               imageRecreateStatus.value[image] = { status: 'recreating', message: data.message || '' };
               imageRecreateStatus.value = { ...imageRecreateStatus.value };
+              patchImage(image);
             } else if (currentEvent === 'recreated') {
               currentStatus.value = data.message || `${data.container} updated`;
               imageRecreateStatus.value[image] = { status: 'recreated', message: data.message || '' };
               imageRecreateStatus.value = { ...imageRecreateStatus.value };
+              patchImage(image);
             } else if (currentEvent === 'recreate_error') {
               imageRecreateStatus.value[image] = { status: 'recreate_error', message: data.message || '' };
               imageRecreateStatus.value = { ...imageRecreateStatus.value };
+              patchImage(image);
             } else if (currentEvent === 'complete') {
               result = 'success';
             } else if (currentEvent === 'error') {
@@ -333,9 +350,7 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
 
     return result;
   } catch (e: any) {
-    if (e.name === 'AbortError') {
-      return 'error';
-    }
+    if (e.name === 'AbortError') return 'error';
     imageErrors.value[image] = e.message || 'Pull failed';
     return 'error';
   }
@@ -343,12 +358,13 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
 
 async function startBatch() {
   reset();
+  if (inIframe) openParent();
 
   for (const image of uniqueImages.value) {
     if (cancelled) {
-      // Mark remaining as cancelled
       imageResults.value[image] = 'cancelled';
       imageResults.value = { ...imageResults.value };
+      patchImage(image);
       continue;
     }
 
@@ -360,12 +376,15 @@ async function startBatch() {
       imageResults.value[image] = result;
     }
     imageResults.value = { ...imageResults.value };
+    patchImage(image);
   }
 
   currentImage.value = null;
   currentStatus.value = '';
   currentLayers.value = {};
   allDone.value = true;
+  patchAll();
+  showCloseAction();
   emit('complete');
 }
 
@@ -374,6 +393,7 @@ watch(() => props.isOpen, (open) => {
     startBatch();
   } else if (!open) {
     cancelBatch();
+    if (inIframe) parentModal.close();
   }
 });
 </script>

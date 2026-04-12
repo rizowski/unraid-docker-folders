@@ -1,9 +1,5 @@
 <template>
-  <Teleport to="body">
-    <div v-if="isOpen" class="modal-enter absolute inset-0 z-[1000]" :style="{ minHeight: totalHeight + 'px' }">
-      <div class="absolute inset-0 bg-black/50" @click="handleClose"></div>
-      <div class="absolute flex items-center justify-center p-4" :style="viewportStyle">
-      <div class="relative bg-bg border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+  <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="512px" @close="handleClose">
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-border">
           <div class="min-w-0">
@@ -60,37 +56,16 @@
 
           <!-- Recreate progress -->
           <div v-if="recreateStatus" class="flex items-center gap-2 text-sm">
-            <svg v-if="recreateStatus === 'recreating'" class="animate-spin h-4 w-4 text-primary shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-            </svg>
-            <svg v-else-if="recreateStatus === 'recreated'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-success shrink-0">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-error shrink-0">
-              <circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
             <span class="text-text">{{ recreateMessage }}</span>
           </div>
 
-          <!-- Apply update link for dockerMan containers (only in offer_restart mode) -->
+          <!-- Apply update link for dockerMan containers -->
           <div v-if="isComplete && managed === 'dockerman' && postPullAction === 'pull_and_offer_restart'" class="pt-2 border-t border-border">
             <a
               :href="applyUpdateUrl"
               class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-text rounded text-sm font-medium no-underline hover:brightness-110 transition"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-              </svg>
-              Apply Update
-            </a>
+            >Apply Update</a>
             <p class="text-xs text-text-secondary mt-1.5">Opens Unraid's container update page to apply the new image.</p>
-          </div>
-
-          <!-- Pull-only hint -->
-          <div v-if="isComplete && postPullAction === 'pull_only'" class="pt-2 border-t border-border">
-            <p class="text-xs text-text-secondary">Image pulled. Restart the container to apply the update.</p>
           </div>
         </div>
 
@@ -103,18 +78,15 @@
             Close
           </button>
         </div>
-      </div>
-      </div>
-    </div>
-  </Teleport>
+  </BaseModal>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { getCsrfToken } from '@/utils/csrf';
 import { useSettingsStore } from '@/stores/settings';
-import { useParentViewport } from '@/composables/useParentViewport';
-import { useModalElevation } from '@/composables/useModalElevation';
+import { useParentModal } from '@/composables/useParentModal';
+import BaseModal from '@/components/BaseModal.vue';
 
 interface Props {
   isOpen: boolean;
@@ -140,18 +112,6 @@ interface LayerProgress {
 const settingsStore = useSettingsStore();
 const postPullAction = computed(() => settingsStore.postPullAction);
 
-useModalElevation(() => props.isOpen);
-const { visibleTop, visibleHeight } = useParentViewport();
-const totalHeight = computed(() =>
-  Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)
-);
-const viewportStyle = computed(() => ({
-  top: visibleTop.value + 'px',
-  left: '0',
-  width: '100%',
-  height: visibleHeight.value + 'px',
-}));
-
 const layers = ref<Record<string, LayerProgress>>({});
 const statusMessage = ref('Preparing...');
 const errorMessage = ref('');
@@ -164,6 +124,78 @@ let abortController: AbortController | null = null;
 const applyUpdateUrl = computed(() => {
   return `/Docker/UpdateContainer?xmlTemplate=edit:/boot/config/plugins/dockerMan/templates-user/my-${props.containerName}.xml`;
 });
+
+const parentModal = useParentModal({
+  onAction({ actionId }) {
+    if (actionId === 'close' || actionId === 'cancel') {
+      if (isDone.value) emit('close');
+    }
+  },
+});
+
+const { inIframe } = parentModal;
+
+function openParent() {
+  parentModal.open({
+    kind: 'pull-progress',
+    title: `Pull Image — ${props.image}`,
+    size: 'md',
+    dismissable: false,
+    fields: [
+      { type: 'status', id: 'status', message: statusMessage.value, spinner: true },
+      { type: 'progress-list', id: 'layers', items: [] },
+    ],
+    actions: [
+      { id: 'close', label: 'Close', variant: 'default', hidden: true },
+    ],
+  });
+}
+
+function patchStatus() {
+  if (!inIframe) return;
+  parentModal.update({
+    fields: [
+      {
+        id: 'status',
+        message: statusMessage.value,
+        spinner: !isDone.value,
+        variant: !isDone.value ? 'info' : (isComplete.value ? 'success' : 'error'),
+      },
+    ],
+  });
+}
+
+function patchLayer(layerId: string) {
+  if (!inIframe) return;
+  const layer = layers.value[layerId];
+  if (!layer) return;
+  parentModal.update({
+    fields: [
+      {
+        id: 'layers',
+        items: [
+          {
+            id: layerId,
+            label: layerId,
+            percent: layer.percent,
+            status: layer.status,
+            state: layer.percent >= 100 ? 'done' : 'running',
+          },
+        ],
+      },
+    ],
+  });
+}
+
+function showCloseButton() {
+  if (!inIframe) return;
+  parentModal.update({
+    dismissable: true,
+    actions: [
+      { id: 'close', label: 'Close', variant: 'default' },
+    ],
+  });
+}
 
 function handleClose() {
   if (!isDone.value) return;
@@ -182,6 +214,7 @@ function reset() {
 
 async function startPull() {
   reset();
+  if (inIframe) openParent();
 
   abortController = new AbortController();
 
@@ -198,19 +231,25 @@ async function startPull() {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: body.toString(),
         signal: abortController.signal,
-      }
+      },
     );
 
     if (!response.ok) {
       errorMessage.value = `HTTP ${response.status}`;
+      statusMessage.value = 'Error';
       isDone.value = true;
+      patchStatus();
+      showCloseButton();
       return;
     }
 
     const reader = response.body?.getReader();
     if (!reader) {
       errorMessage.value = 'No response stream';
+      statusMessage.value = 'Error';
       isDone.value = true;
+      patchStatus();
+      showCloseButton();
       return;
     }
 
@@ -223,7 +262,6 @@ async function startPull() {
 
       buffer += decoder.decode(value, { stream: true });
 
-      // Parse SSE lines
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
@@ -245,16 +283,20 @@ async function startPull() {
   } catch (e: any) {
     if (e.name !== 'AbortError') {
       errorMessage.value = e.message || 'Pull failed';
+      statusMessage.value = 'Error';
     }
   }
 
   isDone.value = true;
+  patchStatus();
+  showCloseButton();
 }
 
 function handleSSEEvent(event: string, data: any) {
   switch (event) {
     case 'status':
       statusMessage.value = data.message || 'Pulling...';
+      patchStatus();
       break;
     case 'progress':
       if (data.id) {
@@ -262,39 +304,44 @@ function handleSSEEvent(event: string, data: any) {
         const current = data.current ?? existing.current;
         const total = data.total ?? existing.total;
         const percent = total > 0 ? Math.round((current / total) * 100) : (data.status === 'Pull complete' || data.status === 'Already exists' ? 100 : existing.percent);
-        layers.value[data.id] = {
-          status: data.status || existing.status,
-          current,
-          total,
-          percent,
-        };
-        // Force reactivity
+        layers.value[data.id] = { status: data.status || existing.status, current, total, percent };
         layers.value = { ...layers.value };
+        patchLayer(data.id);
       }
       break;
     case 'complete':
       statusMessage.value = data.message || 'Pull complete';
       isComplete.value = true;
+      patchStatus();
       emit('complete', props.image);
       break;
     case 'recreating':
       recreateStatus.value = 'recreating';
       recreateMessage.value = data.message || `Recreating ${data.container}...`;
+      statusMessage.value = recreateMessage.value;
+      patchStatus();
       break;
     case 'recreated':
       recreateStatus.value = 'recreated';
       recreateMessage.value = data.message || `${data.container} updated`;
+      statusMessage.value = recreateMessage.value;
+      patchStatus();
       break;
     case 'recreate_error':
       recreateStatus.value = 'recreate_error';
       recreateMessage.value = data.message || `Failed to recreate ${data.container}`;
+      statusMessage.value = recreateMessage.value;
+      patchStatus();
       break;
     case 'error':
       errorMessage.value = data.message || 'Pull failed';
       statusMessage.value = 'Error';
+      patchStatus();
       break;
     case 'done':
       isDone.value = true;
+      patchStatus();
+      showCloseButton();
       break;
   }
 }
@@ -307,6 +354,7 @@ watch(() => props.isOpen, (open) => {
       abortController.abort();
       abortController = null;
     }
+    if (inIframe) parentModal.close();
   }
 });
 </script>

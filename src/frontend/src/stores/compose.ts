@@ -4,7 +4,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ComposeStack, ComposeStatus, ComposeImportResult } from '@/types/compose';
+import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeFileVersion, ComposeFileVersionDetail } from '@/types/compose';
 import { apiFetch } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -22,6 +22,7 @@ export const useComposeStore = defineStore('compose', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const installingBinary = ref(false);
+  const statusChecked = ref(false);
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
   let initialLoadDone = false;
@@ -44,6 +45,7 @@ export const useComposeStore = defineStore('compose', () => {
       if (response.ok) {
         const data = await response.json();
         status.value = data;
+        statusChecked.value = true;
       }
     } catch (e) {
       console.error('Error fetching compose status:', e);
@@ -147,6 +149,26 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
+  async function stackStop(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
+    try {
+      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=stop`, {
+        method: 'POST',
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to stop stack');
+      }
+
+      await fetchStacks(true);
+      return data;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      console.error('Error stopping stack:', e);
+      return { success: false, error: msg };
+    }
+  }
+
   async function stackRestart(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
       const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=restart`, {
@@ -183,6 +205,31 @@ export const useComposeStore = defineStore('compose', () => {
       const msg = e instanceof Error ? e.message : 'Unknown error';
       console.error('Error pulling images:', e);
       return { success: false, error: msg };
+    }
+  }
+
+  async function validateCompose(
+    project: string,
+    content?: string,
+  ): Promise<{ success: boolean; errors: { line: number; column?: number; message: string }[]; output?: string }> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=validate`,
+        {
+          method: 'POST',
+          body: content !== undefined ? JSON.stringify({ content }) : undefined,
+          headers: content !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        },
+      );
+      const data = await response.json();
+      return {
+        success: !!data.success,
+        errors: Array.isArray(data.errors) ? data.errors : [],
+        output: data.output,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      return { success: false, errors: [{ line: 1, message: msg }] };
     }
   }
 
@@ -308,7 +355,7 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
-  async function importFromComposePlugin(): Promise<ComposeImportResult | null> {
+  async function importFromComposePlugin(): Promise<ComposeImportResult> {
     loading.value = true;
     error.value = null;
 
@@ -318,20 +365,26 @@ export const useComposeStore = defineStore('compose', () => {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Import failed');
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Import failed (HTTP ${response.status})`);
       }
 
-      const result = await response.json();
+      const result: ComposeImportResult = await response.json();
 
       // Refresh stacks and status
       await Promise.all([fetchStacks(true), fetchStatus()]);
 
       return result;
     } catch (e) {
-      error.value = e instanceof Error ? e.message : 'Unknown error';
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      error.value = msg;
       console.error('Error importing from compose plugin:', e);
-      return null;
+      return {
+        success: false,
+        stacks_imported: 0,
+        stacks_skipped: 0,
+        errors: [msg],
+      };
     } finally {
       loading.value = false;
     }
@@ -366,6 +419,56 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
+  async function getFileVersions(
+    project: string,
+    fileType: 'compose' | 'env' = 'compose',
+  ): Promise<{ versions: ComposeFileVersion[] }> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=versions&file_type=${fileType}`,
+      );
+      const data = await response.json();
+      return { versions: data.versions || [] };
+    } catch (e) {
+      console.error('Error fetching file versions:', e);
+      return { versions: [] };
+    }
+  }
+
+  async function getFileVersionContent(
+    project: string,
+    versionId: number,
+  ): Promise<{ version: ComposeFileVersionDetail | null; error?: string }> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=version&version_id=${versionId}`,
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        return { version: null, error: data.message };
+      }
+      return { version: data.version };
+    } catch (e) {
+      return { version: null, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  }
+
+  async function restoreFileVersion(project: string, versionId: number): Promise<boolean> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=restore_version`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ version_id: versionId }),
+        },
+      );
+      return response.ok;
+    } catch (e) {
+      console.error('Error restoring file version:', e);
+      return false;
+    }
+  }
+
   return {
     // State
     stacks,
@@ -380,6 +483,7 @@ export const useComposeStore = defineStore('compose', () => {
     composeAvailable,
     managementEnabled,
     composePluginInstalled,
+    statusChecked,
 
     // Actions
     fetchStatus,
@@ -388,8 +492,10 @@ export const useComposeStore = defineStore('compose', () => {
     createStack,
     stackUp,
     stackDown,
+    stackStop,
     stackRestart,
     stackPull,
+    validateCompose,
     getComposeFile,
     saveComposeFile,
     getEnvFile,
@@ -398,5 +504,8 @@ export const useComposeStore = defineStore('compose', () => {
     setAutostart,
     getLogs,
     importFromComposePlugin,
+    getFileVersions,
+    getFileVersionContent,
+    restoreFileVersion,
   };
 });

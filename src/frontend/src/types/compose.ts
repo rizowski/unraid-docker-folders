@@ -13,6 +13,7 @@ export interface ComposeStack {
   imported_from: string | null;
   services_running: number;
   services_total: number;
+  service_names?: string[];
 }
 
 export interface ComposeStatus {
@@ -21,6 +22,18 @@ export interface ComposeStatus {
   compose_plugin_installed: boolean;
   management_enabled: boolean;
   compose_plugin_data_exists?: boolean;
+}
+
+export interface ComposeFileVersion {
+  id: number;
+  file_type: 'compose' | 'env';
+  file_path: string;
+  content_hash: string;
+  created_at: number;
+}
+
+export interface ComposeFileVersionDetail extends ComposeFileVersion {
+  content: string;
 }
 
 export interface ComposeImportResult {

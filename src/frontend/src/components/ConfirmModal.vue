@@ -1,5 +1,5 @@
 <template>
-  <BaseModal :is-open="isOpen" max-width="400px" @close="$emit('cancel')">
+  <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="400px" @close="$emit('cancel')">
     <div class="flex items-center gap-3 p-4 sm:p-6 pb-2">
       <div
         v-if="variant === 'danger'"
@@ -37,6 +37,7 @@
 <script setup lang="ts">
 import { watch, ref, nextTick } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
+import { useParentModal } from '@/composables/useParentModal';
 
 interface Props {
   isOpen: boolean;
@@ -51,16 +52,43 @@ const props = withDefaults(defineProps<Props>(), {
   variant: 'default',
 });
 
-defineEmits<{
+const emit = defineEmits<{
   confirm: [];
   cancel: [];
 }>();
 
 const confirmBtn = ref<HTMLButtonElement | null>(null);
 
+const parentModal = useParentModal({
+  onAction({ actionId }) {
+    if (actionId === 'confirm') emit('confirm');
+    else emit('cancel');
+  },
+});
+
+const { inIframe } = parentModal;
+
+function openParent() {
+  parentModal.open({
+    kind: 'confirm',
+    title: props.title,
+    size: 'sm',
+    fields: [
+      { type: 'text', text: props.message },
+    ],
+    actions: [
+      { id: 'cancel', label: 'Cancel', variant: 'default' },
+      { id: 'confirm', label: props.confirmLabel, variant: props.variant === 'danger' ? 'danger' : 'primary' },
+    ],
+  });
+}
+
 watch(() => props.isOpen, (open) => {
-  if (open) {
+  if (inIframe) {
+    if (open) openParent();
+    else parentModal.close();
+  } else if (open) {
     nextTick(() => confirmBtn.value?.focus());
   }
-});
+}, { immediate: true });
 </script>

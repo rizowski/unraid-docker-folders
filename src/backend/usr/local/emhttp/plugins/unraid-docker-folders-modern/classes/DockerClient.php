@@ -14,6 +14,13 @@ class DockerClient
   private $lastError = '';
   private $imageInfoCache = [];
 
+  private static $cgroupLayout = null;
+  private static $cgroupLayoutDetected = false;
+
+  const SLOW_CACHE_PATH = '/tmp/unraid-docker-slow-stats.json';
+  const CPU_SAMPLES_PATH = '/tmp/unraid-docker-stats-cpu.json';
+  const SLOW_CACHE_TTL = 60;
+
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
     $this->socketPath = $socketPath;
@@ -354,8 +361,384 @@ class DockerClient
     return $results;
   }
 
+  private function detectCgroupLayout($fullId)
+  {
+    if (self::$cgroupLayoutDetected) {
+      return self::$cgroupLayout;
+    }
+    self::$cgroupLayoutDetected = true;
+
+    $patterns = [
+      'v2-systemd' => "/sys/fs/cgroup/system.slice/docker-{$fullId}.scope",
+      'v2-flat'    => "/sys/fs/cgroup/docker/{$fullId}",
+      'v1'         => "/sys/fs/cgroup/cpu/docker/{$fullId}",
+    ];
+
+    foreach ($patterns as $layout => $path) {
+      if (is_dir($path)) {
+        self::$cgroupLayout = $layout;
+        return $layout;
+      }
+    }
+
+    self::$cgroupLayout = null;
+    return null;
+  }
+
+  private function getCgroupDir($layout, $fullId, $subsystem = null)
+  {
+    switch ($layout) {
+      case 'v2-systemd':
+        return "/sys/fs/cgroup/system.slice/docker-{$fullId}.scope";
+      case 'v2-flat':
+        return "/sys/fs/cgroup/docker/{$fullId}";
+      case 'v1':
+        $sub = $subsystem ?: 'cpu';
+        return "/sys/fs/cgroup/{$sub}/docker/{$fullId}";
+      default:
+        return null;
+    }
+  }
+
+  private function readSystemCpuInfo()
+  {
+    $result = ['system_time' => 0, 'online_cpus' => 1];
+    $procStat = @file_get_contents('/proc/stat');
+    if ($procStat === false) return $result;
+
+    $firstLine = strtok($procStat, "\n");
+    $parts = preg_split('/\s+/', $firstLine);
+    if (count($parts) >= 5) {
+      $total = 0;
+      for ($i = 1; $i < count($parts); $i++) {
+        $total += (int) $parts[$i];
+      }
+      // 1e7 ns per jiffy (100 jiffies/sec on Linux)
+      $result['system_time'] = $total * 10000000;
+    }
+    $cpuCount = preg_match_all('/^cpu\d+/m', $procStat);
+    if ($cpuCount > 0) {
+      $result['online_cpus'] = $cpuCount;
+    }
+
+    return $result;
+  }
+
+  private function readCgroupStats($fullId, $layout, $systemCpu)
+  {
+    $result = [
+      'cpu_usage' => 0,
+      'system_time' => $systemCpu['system_time'],
+      'online_cpus' => $systemCpu['online_cpus'],
+      'memory_usage' => 0,
+      'memory_limit' => 0,
+      'io_read' => 0,
+      'io_write' => 0,
+      'pids' => 0,
+    ];
+
+    if ($layout === 'v1') {
+      return $this->readCgroupV1Stats($fullId, $result);
+    }
+
+    $dir = $this->getCgroupDir($layout, $fullId);
+    if (!$dir || !is_dir($dir)) return null;
+
+    $cpuStat = @file_get_contents($dir . '/cpu.stat');
+    if ($cpuStat !== false && preg_match('/usage_usec\s+(\d+)/', $cpuStat, $m)) {
+      // cpu.stat reports microseconds; convert to nanoseconds to match v1/Docker convention
+      $result['cpu_usage'] = (int) $m[1] * 1000;
+    }
+
+    $memCurrent = @file_get_contents($dir . '/memory.current');
+    if ($memCurrent !== false) {
+      $result['memory_usage'] = (int) trim($memCurrent);
+    }
+    $memMax = @file_get_contents($dir . '/memory.max');
+    if ($memMax !== false) {
+      $val = trim($memMax);
+      $result['memory_limit'] = ($val === 'max') ? PHP_INT_MAX : (int) $val;
+    }
+
+    $ioStat = @file_get_contents($dir . '/io.stat');
+    if ($ioStat !== false) {
+      foreach (explode("\n", $ioStat) as $line) {
+        if (preg_match('/rbytes=(\d+)/', $line, $m)) {
+          $result['io_read'] += (int) $m[1];
+        }
+        if (preg_match('/wbytes=(\d+)/', $line, $m)) {
+          $result['io_write'] += (int) $m[1];
+        }
+      }
+    }
+
+    $pidsCurrent = @file_get_contents($dir . '/pids.current');
+    if ($pidsCurrent !== false) {
+      $result['pids'] = (int) trim($pidsCurrent);
+    }
+
+    return $result;
+  }
+
+  private function readCgroupV1Stats($fullId, $result)
+  {
+    $cpuDir = $this->getCgroupDir('v1', $fullId, 'cpuacct');
+    $usage = @file_get_contents($cpuDir . '/cpuacct.usage');
+    if ($usage !== false) {
+      $result['cpu_usage'] = (int) trim($usage);
+    }
+
+    $memDir = $this->getCgroupDir('v1', $fullId, 'memory');
+    $memUsage = @file_get_contents($memDir . '/memory.usage_in_bytes');
+    if ($memUsage !== false) {
+      $result['memory_usage'] = (int) trim($memUsage);
+    }
+    $memLimit = @file_get_contents($memDir . '/memory.limit_in_bytes');
+    if ($memLimit !== false) {
+      $val = (int) trim($memLimit);
+      $result['memory_limit'] = ($val > 1e17) ? PHP_INT_MAX : $val;
+    }
+
+    $blkDir = $this->getCgroupDir('v1', $fullId, 'blkio');
+    $blkio = @file_get_contents($blkDir . '/blkio.throttle.io_service_bytes');
+    if ($blkio !== false) {
+      foreach (explode("\n", $blkio) as $line) {
+        $parts = preg_split('/\s+/', trim($line));
+        if (count($parts) === 3) {
+          if (strtolower($parts[1]) === 'read') $result['io_read'] += (int) $parts[2];
+          if (strtolower($parts[1]) === 'write') $result['io_write'] += (int) $parts[2];
+        }
+      }
+    }
+
+    $pidsDir = $this->getCgroupDir('v1', $fullId, 'pids');
+    $pidsCurrent = @file_get_contents($pidsDir . '/pids.current');
+    if ($pidsCurrent !== false) {
+      $result['pids'] = (int) trim($pidsCurrent);
+    }
+
+    return $result;
+  }
+
+  private function readNetworkStats($fullId, $layout)
+  {
+    $rx = 0;
+    $tx = 0;
+
+    $dir = $this->getCgroupDir($layout, $fullId, 'pids');
+    if (!$dir) return ['rx' => 0, 'tx' => 0];
+
+    $procsFile = ($layout === 'v1') ? $dir . '/cgroup.procs' : $this->getCgroupDir($layout, $fullId) . '/cgroup.procs';
+    $procs = @file_get_contents($procsFile);
+    if ($procs === false) return ['rx' => 0, 'tx' => 0];
+
+    $pid = (int) strtok(trim($procs), "\n");
+    if ($pid <= 0) return ['rx' => 0, 'tx' => 0];
+
+    // /proc/{pid}/net/dev reads from the container's network namespace
+    $netDev = @file_get_contents("/proc/{$pid}/net/dev");
+    if ($netDev === false) return ['rx' => 0, 'tx' => 0];
+
+    foreach (explode("\n", $netDev) as $line) {
+      $line = trim($line);
+      if (strpos($line, ':') === false) continue;
+      list($iface, $stats) = explode(':', $line, 2);
+      $iface = trim($iface);
+      if ($iface === 'lo') continue;
+
+      $fields = preg_split('/\s+/', trim($stats));
+      if (count($fields) >= 9) {
+        $rx += (int) $fields[0];
+        $tx += (int) $fields[8];
+      }
+    }
+
+    return ['rx' => $rx, 'tx' => $tx];
+  }
+
+  private function loadJsonCache($path)
+  {
+    $data = @file_get_contents($path);
+    if ($data === false) return [];
+    $decoded = json_decode($data, true);
+    return is_array($decoded) ? $decoded : [];
+  }
+
+  private function saveJsonCache($path, $data)
+  {
+    $tmp = $path . '.tmp.' . getmypid();
+    file_put_contents($tmp, json_encode($data));
+    rename($tmp, $path);
+  }
+
   /**
-   * Fetch stats for multiple containers in parallel
+   * Fast batch stats using cgroup filesystem reads + cached slow data.
+   * Falls back to Docker API if cgroup reads are unavailable.
+   *
+   * @param array $ids Array of container IDs (full 64-char format from frontend)
+   * @return array Associative array of ['id' => formattedStats | null, ...]
+   */
+  public function fetchBatchStatsFast($ids)
+  {
+    if (empty($ids)) return [];
+
+    $layout = $this->detectCgroupLayout($ids[0]);
+    if (!$layout) {
+      return $this->fetchBatchStats($ids);
+    }
+
+    $systemCpu = $this->readSystemCpuInfo();
+
+    $cgroupData = [];
+    $netData = [];
+    $fallbackSet = [];
+
+    foreach ($ids as $id) {
+      $cg = $this->readCgroupStats($id, $layout, $systemCpu);
+      if ($cg === null) {
+        $fallbackSet[$id] = true;
+        continue;
+      }
+
+      $cgroupData[$id] = $cg;
+      $netData[$id] = $this->readNetworkStats($id, $layout);
+    }
+
+    $prevSamples = $this->loadJsonCache(self::CPU_SAMPLES_PATH);
+    $newSamples = [];
+
+    foreach ($cgroupData as $id => $cg) {
+      $newSamples[$id] = [
+        'cpu_usage' => $cg['cpu_usage'],
+        'system_time' => $cg['system_time'],
+      ];
+    }
+
+    $slowCache = $this->loadJsonCache(self::SLOW_CACHE_PATH);
+    $now = time();
+    $staleIds = [];
+
+    foreach ($ids as $id) {
+      if (isset($fallbackSet[$id])) continue;
+      $cached = $slowCache[$id] ?? null;
+      if (!$cached || ($now - ($cached['cachedAt'] ?? 0)) > self::SLOW_CACHE_TTL) {
+        $staleIds[] = $id;
+      }
+    }
+
+    if (!empty($staleIds)) {
+      $inspectRequests = [];
+      foreach ($staleIds as $id) {
+        $inspectRequests[$id] = "/containers/{$id}/json";
+      }
+      $inspectResults = $this->requestMulti($inspectRequests);
+
+      $imageMap = [];
+      foreach ($inspectResults as $id => $inspect) {
+        if (!$inspect) continue;
+        $imageId = $inspect['Image'] ?? '';
+        if ($imageId) $imageMap[$imageId][] = $id;
+      }
+
+      $imageRequests = [];
+      foreach (array_keys($imageMap) as $imageId) {
+        $imageRequests[$imageId] = "/images/{$imageId}/json";
+      }
+      $imageResults = $this->requestMulti($imageRequests);
+
+      foreach ($staleIds as $id) {
+        $inspect = $inspectResults[$id] ?? null;
+        if (!$inspect) continue;
+
+        $imageId = $inspect['Image'] ?? '';
+        $imageSize = 0;
+        if ($imageId && isset($imageResults[$imageId])) {
+          $imageSize = $imageResults[$imageId]['Size'] ?? 0;
+        }
+
+        $fullId = $inspect['Id'] ?? $id;
+        $logSize = $this->getContainerLogSize($fullId);
+
+        $slowCache[$id] = [
+          'restartCount' => $inspect['RestartCount'] ?? 0,
+          'startedAt' => $inspect['State']['StartedAt'] ?? '',
+          'imageSize' => $imageSize,
+          'logSize' => $logSize,
+          'cachedAt' => $now,
+        ];
+      }
+
+      $this->saveJsonCache(self::SLOW_CACHE_PATH, $slowCache);
+    }
+
+    $systemMemLimit = null;
+    $output = [];
+
+    foreach ($ids as $id) {
+      if (isset($fallbackSet[$id])) {
+        $output[$id] = null;
+        continue;
+      }
+
+      $cg = $cgroupData[$id];
+      $net = $netData[$id];
+      $prev = $prevSamples[$id] ?? null;
+      $slow = $slowCache[$id] ?? [];
+
+      $cpuPercent = 0.0;
+      if ($prev) {
+        $cpuDelta = $cg['cpu_usage'] - $prev['cpu_usage'];
+        $sysDelta = $cg['system_time'] - $prev['system_time'];
+        if ($sysDelta > 0 && $cpuDelta >= 0) {
+          $cpuPercent = round(($cpuDelta / $sysDelta) * $cg['online_cpus'] * 100, 2);
+        }
+      }
+
+      $memLimit = $cg['memory_limit'];
+      if ($memLimit === PHP_INT_MAX) {
+        if ($systemMemLimit === null) {
+          $systemMemLimit = 0;
+          $memInfo = @file_get_contents('/proc/meminfo');
+          if ($memInfo && preg_match('/MemTotal:\s+(\d+)\s+kB/', $memInfo, $m)) {
+            $systemMemLimit = (int) $m[1] * 1024;
+          }
+        }
+        $memLimit = $systemMemLimit;
+      }
+
+      $memPercent = $memLimit > 0 ? round(($cg['memory_usage'] / $memLimit) * 100, 2) : 0;
+
+      $output[$id] = [
+        'cpuPercent' => $cpuPercent,
+        'memoryUsage' => $cg['memory_usage'],
+        'memoryLimit' => $memLimit,
+        'memoryPercent' => $memPercent,
+        'blockRead' => $cg['io_read'],
+        'blockWrite' => $cg['io_write'],
+        'netRx' => $net['rx'],
+        'netTx' => $net['tx'],
+        'pids' => $cg['pids'],
+        'restartCount' => $slow['restartCount'] ?? 0,
+        'startedAt' => $slow['startedAt'] ?? '',
+        'imageSize' => $slow['imageSize'] ?? 0,
+        'logSize' => $slow['logSize'] ?? 0,
+      ];
+    }
+
+    $this->saveJsonCache(self::CPU_SAMPLES_PATH, $newSamples);
+
+    if (!empty($fallbackSet)) {
+      $fallbackStats = $this->fetchBatchStats(array_keys($fallbackSet));
+      foreach ($fallbackStats as $id => $stats) {
+        $output[$id] = $stats;
+      }
+    }
+
+    return $output;
+  }
+
+  /**
+   * Fetch stats for multiple containers in parallel (Docker API fallback)
    *
    * Runs 3 phases of parallel requests instead of sequential per-container calls:
    *   Phase 1: All container stats in parallel

@@ -81,6 +81,29 @@ function handleGet($composeManager)
     jsonResponse($result);
   }
 
+  // Get version history for a file
+  if ($action === 'versions' && $project) {
+    $fileType = $_GET['file_type'] ?? 'compose';
+    $result = $composeManager->getFileVersions($project, $fileType);
+    if (!$result['success']) {
+      errorResponse($result['error'], 400);
+    }
+    jsonResponse($result);
+  }
+
+  // Get specific version content
+  if ($action === 'version' && $project) {
+    $versionId = (int) ($_GET['version_id'] ?? 0);
+    if (!$versionId) {
+      errorResponse('version_id is required', 400);
+    }
+    $result = $composeManager->getFileVersionContent($project, $versionId);
+    if (!$result['success']) {
+      errorResponse($result['error'], 404);
+    }
+    jsonResponse($result);
+  }
+
   // Get stack logs
   if ($action === 'logs' && $project) {
     $tail = (int) ($_GET['tail'] ?? 100);
@@ -202,6 +225,19 @@ function handlePost($composeManager)
     jsonResponse($result);
   }
 
+  // Stack stop (halt containers without removing them)
+  if ($action === 'stop') {
+    if (!$status['management_enabled']) {
+      errorResponse('Compose management is disabled', 403);
+    }
+
+    $result = $composeManager->stackStop($project);
+
+    WebSocketPublisher::publish('compose', 'stop', ['project' => $project]);
+
+    jsonResponse($result);
+  }
+
   // Stack restart
   if ($action === 'restart') {
     if (!$status['management_enabled']) {
@@ -212,6 +248,14 @@ function handlePost($composeManager)
 
     WebSocketPublisher::publish('compose', 'restart', ['project' => $project]);
 
+    jsonResponse($result);
+  }
+
+  // Validate compose file (docker compose config)
+  if ($action === 'validate') {
+    $data = getRequestData();
+    $content = isset($data['content']) ? $data['content'] : null;
+    $result = $composeManager->validateComposeContent($project, $content);
     jsonResponse($result);
   }
 
@@ -268,6 +312,32 @@ function handlePost($composeManager)
     }
 
     WebSocketPublisher::publish('compose', 'save_env', ['project' => $project]);
+
+    jsonResponse($result);
+  }
+
+  // Restore a previous file version
+  if ($action === 'restore_version') {
+    if (!$status['management_enabled']) {
+      errorResponse('Compose management is disabled', 403);
+    }
+
+    $data = getRequestData();
+    $versionId = (int) ($data['version_id'] ?? 0);
+    if (!$versionId) {
+      errorResponse('version_id is required', 400);
+    }
+
+    $result = $composeManager->restoreFileVersion($project, $versionId);
+
+    if (!$result['success']) {
+      errorResponse($result['error'], 500);
+    }
+
+    WebSocketPublisher::publish('compose', 'restore_version', [
+      'project' => $project,
+      'version_id' => $versionId,
+    ]);
 
     jsonResponse($result);
   }

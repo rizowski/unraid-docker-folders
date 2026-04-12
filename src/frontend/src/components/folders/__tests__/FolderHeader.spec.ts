@@ -53,45 +53,40 @@ describe('FolderHeader', () => {
     expect(wrapper.findAll('.kebab-menu-item').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('menu contains Edit and Delete buttons', async () => {
+  it('menu contains folder options and delete buttons', async () => {
     const wrapper = mountHeader();
-    // Open the menu
     const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
     await kebab.trigger('click');
 
     const items = wrapper.findAll('.kebab-menu-item');
     const labels = items.map((el) => el.text().trim());
-    expect(labels).toContain('Edit');
-    expect(labels).toContain('Delete');
+    expect(labels).toContain('Folder Options');
+    expect(labels).toContain('Delete Folder');
   });
 
-  it('clicking Edit emits edit event and closes menu', async () => {
+  it('clicking Folder Options emits edit event and closes menu', async () => {
     const wrapper = mountHeader();
-    // Open menu
     const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
     await kebab.trigger('click');
 
-    const editBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Edit')!;
+    const editBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Folder Options')!;
     await editBtn.trigger('click');
 
     expect(wrapper.emitted('edit')).toBeTruthy();
     expect(wrapper.emitted('edit')!.length).toBe(1);
-    // Menu should be closed
     expect(wrapper.find('.kebab-menu-item').exists()).toBe(false);
   });
 
-  it('clicking Delete emits delete event and closes menu', async () => {
+  it('clicking Delete Folder emits delete event and closes menu', async () => {
     const wrapper = mountHeader();
-    // Open menu
     const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
     await kebab.trigger('click');
 
-    const deleteBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Delete')!;
+    const deleteBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Delete Folder')!;
     await deleteBtn.trigger('click');
 
     expect(wrapper.emitted('delete')).toBeTruthy();
     expect(wrapper.emitted('delete')!.length).toBe(1);
-    // Menu should be closed
     expect(wrapper.find('.kebab-menu-item').exists()).toBe(false);
   });
 

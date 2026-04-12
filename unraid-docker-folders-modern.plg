@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.03.21">
-<!ENTITY md5 "71b882cc5a69071012d92561cd4f967e">
+<!ENTITY version "2026.04.11-dev9">
+<!ENTITY md5 "b807537cf79d91983d6a1cd72b8b2430">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -70,6 +70,40 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+###2026.04.11-dev9
+- Add container expand/collapse animation and brighten info text
+- Optimize container stats with cgroup reads and slow-data caching
+###2026.04.11-dev8
+- Add compose file version history with rollback support
+###2026.04.11-dev7
+- Fix modal close button alignment, populate faded preview from compose file
+###2026.04.11-dev6
+- Consolidate modals, simplify compose folder UI, fix validation env
+###2026.04.11-dev5
+- Compose editor: logs tab, recompose flow, save lock, YAML highlighting
+###2026.04.11-dev4
+- Disable text wrapping in compose/env monospace textareas
+###2026.04.11-dev3
+- Add Logs tab to edit-stack modal with auto-refresh, fix modal layout bugs
+###2026.04.11-dev2
+- Force textarea resize/fill with !important to beat Unraid global CSS
+###2026.04.11-dev1
+- Stream compose stack start, fix create-stack textarea and banner flash
+###2026.04.07-dev2
+- Fix compose plugin import banner for users without compose.manager
+###2026.04.07-dev1
+- Render all modals in parent window to escape iframe clipping
 ###2026.03.21-dev14
 - Fix folder counts, cleanup deleted containers, unify modals, delete image option
 ###2026.03.21-dev13

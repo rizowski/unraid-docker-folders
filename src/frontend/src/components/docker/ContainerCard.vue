@@ -41,67 +41,69 @@
     </div>
 
     <!-- Accordion details -->
-    <div v-if="expanded" class="px-4 sm:px-6 pb-2 space-y-3 text-xs border-t border-border pt-3 overflow-hidden">
+    <Transition @enter="expandEnter" @after-enter="expandAfterEnter" @leave="expandLeave" @after-leave="expandAfterLeave">
+    <div v-if="expanded" class="overflow-hidden">
+        <div class="px-4 sm:px-6 pb-2 space-y-3 text-xs border-t border-border pt-3">
       <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 min-w-0">
         <template v-if="container.image">
-          <span class="text-muted shrink-0">Image</span>
-          <span class="text-text-secondary font-mono truncate">
+          <span class="text-text-secondary shrink-0">Image</span>
+          <span class="text-text font-mono truncate">
             <ImageLink :image="container.image" :href="imageLink" />
           </span>
         </template>
         <template v-if="networkInfo">
-          <span class="text-muted shrink-0">Network</span>
-          <span class="text-text-secondary font-mono truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
+          <span class="text-text-secondary shrink-0">Network</span>
+          <span class="text-text font-mono truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
         </template>
         <template v-if="displayPorts.length">
-          <span class="text-muted shrink-0">Ports</span>
-          <span class="text-text-secondary font-mono truncate">{{ displayPorts.join(', ') }}</span>
+          <span class="text-text-secondary shrink-0">Ports</span>
+          <span class="text-text font-mono truncate">{{ displayPorts.join(', ') }}</span>
         </template>
         <template v-if="displayMounts.length">
-          <span class="text-muted shrink-0">Volumes</span>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-hidden">
+          <span class="text-text-secondary shrink-0">Volumes</span>
+          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-hidden">
             <p v-for="mount in displayMounts" :key="mount.destination" class="sm:whitespace-nowrap truncate sm:overflow-visible sm:text-clip" :title="`${mount.source} -> ${mount.destination}`">
               <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
             </p>
           </div>
         </template>
       </div>
-      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted italic">No additional details available</div>
+      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-text-secondary italic">No additional details available</div>
 
       <!-- Resource Usage Stats -->
       <div v-if="isRunning && containerStats" class="space-y-2 pt-2 border-t border-border">
-        <p class="text-muted text-xs">Resource Usage</p>
+        <p class="text-text-secondary text-xs">Resource Usage</p>
         <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
         <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
         <!-- Numeric Stats -->
         <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-1">
-          <span class="text-muted">Block I/O</span>
-          <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-          <span class="text-muted">Network</span>
-          <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-          <span class="text-muted">PIDs</span>
-          <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-          <span class="text-muted">Restarts</span>
+          <span class="text-text-secondary">Block I/O</span>
+          <span class="text-text font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+          <span class="text-text-secondary">Network</span>
+          <span class="text-text font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+          <span class="text-text-secondary">PIDs</span>
+          <span class="text-text font-mono">{{ containerStats.pids }}</span>
+          <span class="text-text-secondary">Restarts</span>
           <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-          <span class="text-muted">Uptime</span>
-          <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-          <span class="text-muted">Image Size</span>
-          <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-          <span class="text-muted">Log Size</span>
+          <span class="text-text-secondary">Uptime</span>
+          <span class="text-text font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+          <span class="text-text-secondary">Image Size</span>
+          <span class="text-text font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+          <span class="text-text-secondary">Log Size</span>
           <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
           <template v-if="healthStatus">
-            <span class="text-muted">Health</span>
+            <span class="text-text-secondary">Health</span>
             <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
           </template>
           <template v-if="container.command">
-            <span class="text-muted">Command</span>
-            <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+            <span class="text-text-secondary">Command</span>
+            <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
           </template>
         </div>
         <!-- Labels -->
         <div v-if="displayLabels.length" class="space-y-1 pt-1 text-xs">
-          <p class="text-muted">Labels</p>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+          <p class="text-text-secondary">Labels</p>
+          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
             <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
               <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
             </p>
@@ -112,25 +114,27 @@
       <div v-else class="space-y-2 pt-2 border-t border-border">
         <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
           <template v-if="healthStatus">
-            <span class="text-muted">Health</span>
+            <span class="text-text-secondary">Health</span>
             <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
           </template>
           <template v-if="container.command">
-            <span class="text-muted">Command</span>
-            <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+            <span class="text-text-secondary">Command</span>
+            <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
           </template>
         </div>
         <div v-if="displayLabels.length" class="space-y-1 pt-1">
-          <p class="text-muted text-xs">Labels</p>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+          <p class="text-text-secondary text-xs">Labels</p>
+          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
             <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
               <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
             </p>
           </div>
         </div>
-        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-muted text-xs italic">Container not running</div>
+        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-text-secondary text-xs italic">Container not running</div>
       </div>
     </div>
+    </div>
+    </Transition>
 
     <div class="flex items-center gap-3 px-4 py-2 sm:px-6 sm:py-3 mt-auto border-t border-border/30">
       <template v-if="isActionInProgress">
@@ -240,76 +244,78 @@
     </div>
 
     <!-- List accordion details -->
-    <div v-if="expanded" class="px-2 sm:px-4 pb-4 pt-2 border-t border-border space-y-3 text-sm">
+    <Transition @enter="expandEnter" @after-enter="expandAfterEnter" @leave="expandLeave" @after-leave="expandAfterLeave">
+    <div v-if="expanded" class="overflow-hidden">
+        <div class="px-2 sm:px-4 pb-4 pt-2 border-t border-border space-y-3 text-sm">
       <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
         <template v-if="container.image">
-          <span class="text-muted shrink-0">Image</span>
-          <span class="text-text-secondary font-mono truncate">
+          <span class="text-text-secondary shrink-0">Image</span>
+          <span class="text-text font-mono truncate">
             <ImageLink :image="container.image" :href="imageLink" />
           </span>
         </template>
       </div>
       <div v-if="networkInfo || displayPorts.length || displayMounts.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
         <div v-if="networkInfo || displayPorts.length">
-          <p class="text-muted text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
-          <div class="text-text-secondary font-mono text-xs space-y-0.5">
+          <p class="text-text-secondary text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
+          <div class="text-text font-mono text-xs space-y-0.5">
             <p v-if="networkInfo" class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</p>
             <p v-for="port in displayPorts" :key="port" class="truncate">{{ port }}</p>
           </div>
         </div>
         <div v-if="displayMounts.length">
-          <p class="text-muted text-xs mb-1">Volumes</p>
-          <div class="text-text-secondary font-mono text-xs space-y-0.5 overflow-x-auto">
+          <p class="text-text-secondary text-xs mb-1">Volumes</p>
+          <div class="text-text font-mono text-xs space-y-0.5 overflow-x-auto">
             <p v-for="mount in displayMounts" :key="mount.destination" class="sm:whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
               <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
             </p>
           </div>
         </div>
       </div>
-      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-muted text-xs italic">No additional details available</div>
+      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-text-secondary text-xs italic">No additional details available</div>
 
       <!-- Resource Usage Stats (list view) -->
       <div v-if="isRunning && containerStats" class="space-y-1.5 pt-2 border-t border-border">
         <div :class="shouldShowInlineLogs ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : ''">
           <!-- Stats column -->
           <div class="space-y-1.5">
-            <p class="text-muted text-xs">Resource Usage</p>
+            <p class="text-text-secondary text-xs">Resource Usage</p>
             <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
             <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
             <!-- Detailed Stats + Container Info -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-0.5">
               <!-- Left column: I/O, Network, PIDs etc -->
               <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
-                <span class="text-muted">Block I/O</span>
-                <span class="text-text-secondary font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-                <span class="text-muted">Network</span>
-                <span class="text-text-secondary font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-                <span class="text-muted">PIDs</span>
-                <span class="text-text-secondary font-mono">{{ containerStats.pids }}</span>
-                <span class="text-muted">Restarts</span>
+                <span class="text-text-secondary">Block I/O</span>
+                <span class="text-text font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
+                <span class="text-text-secondary">Network</span>
+                <span class="text-text font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
+                <span class="text-text-secondary">PIDs</span>
+                <span class="text-text font-mono">{{ containerStats.pids }}</span>
+                <span class="text-text-secondary">Restarts</span>
                 <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-                <span class="text-muted">Uptime</span>
-                <span class="text-text-secondary font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-                <span class="text-muted">Image Size</span>
-                <span class="text-text-secondary font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-                <span class="text-muted">Log Size</span>
+                <span class="text-text-secondary">Uptime</span>
+                <span class="text-text font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
+                <span class="text-text-secondary">Image Size</span>
+                <span class="text-text font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
+                <span class="text-text-secondary">Log Size</span>
                 <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
               </div>
               <!-- Right column: Health, Command, Labels -->
               <div class="space-y-2 min-w-0 content-start">
                 <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
                   <template v-if="healthStatus">
-                    <span class="text-muted">Health</span>
+                    <span class="text-text-secondary">Health</span>
                     <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
                   </template>
                   <template v-if="container.command">
-                    <span class="text-muted">Command</span>
-                    <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+                    <span class="text-text-secondary">Command</span>
+                    <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
                   </template>
                 </div>
                 <div v-if="displayLabels.length" class="space-y-1">
-                  <p class="text-muted text-xs">Labels</p>
-                  <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+                  <p class="text-text-secondary text-xs">Labels</p>
+                  <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
                     <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
                       <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
                     </p>
@@ -321,7 +327,7 @@
           <!-- Inline logs column -->
           <div v-if="shouldShowInlineLogs" class="flex flex-col min-w-0">
             <div class="flex items-center justify-between mb-1">
-              <p class="text-muted text-xs">Logs</p>
+              <p class="text-text-secondary text-xs">Logs</p>
               <button
                 class="flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text transition"
                 title="Refresh logs"
@@ -360,25 +366,27 @@
       <div v-else class="space-y-2 pt-2 border-t border-border">
         <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
           <template v-if="healthStatus">
-            <span class="text-muted">Health</span>
+            <span class="text-text-secondary">Health</span>
             <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
           </template>
           <template v-if="container.command">
-            <span class="text-muted">Command</span>
-            <span class="text-text-secondary font-mono truncate" :title="container.command">{{ container.command }}</span>
+            <span class="text-text-secondary">Command</span>
+            <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
           </template>
         </div>
         <div v-if="displayLabels.length" class="space-y-1 pt-1">
-          <p class="text-muted text-xs">Labels</p>
-          <div class="text-text-secondary font-mono space-y-0.5 min-w-0 overflow-x-auto">
+          <p class="text-text-secondary text-xs">Labels</p>
+          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
             <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
               <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
             </p>
           </div>
         </div>
-        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-muted text-xs italic">Container not running</div>
+        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-text-secondary text-xs italic">Container not running</div>
       </div>
     </div>
+    </div>
+    </Transition>
   </div>
 
   <Teleport to="body">
@@ -514,6 +522,32 @@ function handleConfirm() {
 const expanded = ref(false);
 const settingsStore = useSettingsStore();
 const updatesStore = useUpdatesStore();
+
+const EXPAND_DURATION = 200;
+function expandEnter(el: Element, done: () => void) {
+  const htmlEl = el as HTMLElement;
+  htmlEl.style.height = '0';
+  htmlEl.style.transition = `height ${EXPAND_DURATION}ms ease`;
+  htmlEl.offsetHeight;
+  htmlEl.style.height = htmlEl.scrollHeight + 'px';
+  setTimeout(done, EXPAND_DURATION);
+}
+function expandAfterEnter(el: Element) {
+  (el as HTMLElement).style.height = '';
+  (el as HTMLElement).style.transition = '';
+}
+function expandLeave(el: Element, done: () => void) {
+  const htmlEl = el as HTMLElement;
+  htmlEl.style.height = htmlEl.scrollHeight + 'px';
+  htmlEl.style.transition = `height ${EXPAND_DURATION}ms ease`;
+  htmlEl.offsetHeight;
+  htmlEl.style.height = '0';
+  setTimeout(done, EXPAND_DURATION);
+}
+function expandAfterLeave(el: Element) {
+  (el as HTMLElement).style.height = '';
+  (el as HTMLElement).style.transition = '';
+}
 
 const isRunning = computed(() => props.container.state === 'running');
 

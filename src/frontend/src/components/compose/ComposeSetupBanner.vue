@@ -1,6 +1,6 @@
 <template>
   <!-- Binary not installed banner -->
-  <div v-if="!composeStore.composeAvailable" class="flex items-center gap-3 px-4 py-3 mb-4 rounded bg-warning/10 border border-warning/30 text-sm">
+  <div v-if="composeStore.statusChecked && !composeStore.composeAvailable" class="flex items-center gap-3 px-4 py-3 mb-4 rounded bg-warning/10 border border-warning/30 text-sm">
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-warning shrink-0">
       <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
       <line x1="12" y1="9" x2="12" y2="13" />
@@ -99,8 +99,7 @@ async function install() {
 async function handleImport() {
   importing.value = true;
   try {
-    const result = await composeStore.importFromComposePlugin();
-    importResult.value = result;
+    importResult.value = await composeStore.importFromComposePlugin();
     // Refresh containers + folders so syncComposeStacks can associate
     // any running compose containers with the newly created folders
     const { useDockerStore } = await import('@/stores/docker');

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.04.11
+### Changes
+- Add container expand/collapse animation and brighten info text
+- Optimize container stats with cgroup reads and slow-data caching
+- Add compose file version history with rollback support
+- Fix modal close button alignment, populate faded preview from compose file
+- Consolidate modals, simplify compose folder UI, fix validation env
+- Compose editor: logs tab, recompose flow, save lock, YAML highlighting
+- Disable text wrapping in compose/env monospace textareas
+- Add Logs tab to edit-stack modal with auto-refresh, fix modal layout bugs
+- Force textarea resize/fill with !important to beat Unraid global CSS
+- Stream compose stack start, fix create-stack textarea and banner flash
+
+## 2026.04.07
+### Changes
+- Fix compose plugin import banner for users without compose.manager
+- Render all modals in parent window to escape iframe clipping
+
 ## 2026.03.21
 ### Changes
 - Fix folder counts, cleanup deleted containers, unify modals, delete image option
