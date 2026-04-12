@@ -2,6 +2,8 @@
 
 ## 2026.04.11
 ### Changes
+- Add container expand/collapse animation and brighten info text
+- Optimize container stats with cgroup reads and slow-data caching
 - Add compose file version history with rollback support
 - Fix modal close button alignment, populate faded preview from compose file
 - Consolidate modals, simplify compose folder UI, fix validation env
