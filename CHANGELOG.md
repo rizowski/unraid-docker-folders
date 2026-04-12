@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.04.12
+### Changes
+- Add container/stack scheduling and backup system
+
 ## 2026.04.11
 ### Changes
 - Add container expand/collapse animation and brighten info text

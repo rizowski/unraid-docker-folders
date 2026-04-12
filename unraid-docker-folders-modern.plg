@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.04.11-dev9">
-<!ENTITY md5 "b807537cf79d91983d6a1cd72b8b2430">
+<!ENTITY version "2026.04.12-dev1">
+<!ENTITY md5 "b2f571f47e29cfd06345cb3b11eee4c9">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -81,6 +81,9 @@
 
 
 
+
+###2026.04.12-dev1
+- Add container/stack scheduling and backup system
 ###2026.04.11-dev9
 - Add container expand/collapse animation and brighten info text
 - Optimize container stats with cgroup reads and slow-data caching
