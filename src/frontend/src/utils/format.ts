@@ -16,6 +16,26 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+export function formatTimestamp(unixSeconds: number): string {
+  return new Date(unixSeconds * 1000).toLocaleString();
+}
+
+export function formatDuration(startSec: number, endSec: number): string {
+  const s = endSec - startSec;
+  if (s < 60) return `${s}s`;
+  return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+export type ScheduleRunStatus = 'success' | 'error' | 'skipped';
+
+export function scheduleStatusClass(status: string): string {
+  switch (status) {
+    case 'success': return 'text-success';
+    case 'error': return 'text-error';
+    default: return 'text-text-secondary';
+  }
+}
+
 export function formatUptime(isoDate: string): string {
   if (!isoDate) return 'N/A';
   const start = new Date(isoDate).getTime();

@@ -466,6 +466,7 @@ const emit = defineEmits<{
   restart: [id: string];
   remove: [id: string, removeImage: boolean];
   pull: [data: { image: string; name: string; managed: string | null }];
+  schedules: [targetType: string, targetId: string];
 }>();
 
 const isActionInProgress = computed(() => !!props.actionInProgress);
@@ -739,6 +740,9 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
   { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
   { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: props.container.managed === 'dockerman' && props.container.autostart },
+  { divider: true },
+  { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
+  { divider: true },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
 ]);
@@ -758,6 +762,8 @@ async function handleMenuAction(action: string) {
     handleToggleAutostart();
   } else if (action === 'set-autostart-delay') {
     showDelayModal.value = true;
+  } else if (action === 'schedules') {
+    emit('schedules', 'container', props.container.name);
   } else if (action === 'console') {
     openContainerTerminal('console');
   } else if (action === 'logs') {

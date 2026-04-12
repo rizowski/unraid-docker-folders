@@ -123,6 +123,18 @@ class DockerClient
     return $response !== false;
   }
 
+  public function pauseContainer($id)
+  {
+    $response = $this->request('POST', "/containers/{$id}/pause");
+    return $response !== false;
+  }
+
+  public function unpauseContainer($id)
+  {
+    $response = $this->request('POST', "/containers/{$id}/unpause");
+    return $response !== false;
+  }
+
   /**
    * Remove a container
    *

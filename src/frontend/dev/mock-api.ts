@@ -679,6 +679,91 @@ function handleCompose(req: any, res: any, params: Record<string, string>) {
   json(res, { error: true, message: 'Not found' }, 404);
 }
 
+// --- Mock Schedules ---
+
+let nextScheduleId = 3;
+const mockSchedules = [
+  {
+    id: 1, name: 'Nightly Plex Backup', target_type: 'container', target_id: 'plex',
+    action: 'backup', cron_expression: '0 3 * * *', enabled: true,
+    backup_config: { paths: ['/config'], destination: null, retention_count: null },
+    last_run_at: Math.floor(Date.now() / 1000) - 86400, last_run_status: 'success',
+    last_run_message: 'Backup created: plex.2026-04-10_030000.tar.gz',
+    next_run_at: Math.floor(Date.now() / 1000) + 3600,
+    created_at: Math.floor(Date.now() / 1000) - 604800, updated_at: Math.floor(Date.now() / 1000) - 86400,
+  },
+  {
+    id: 2, name: 'Stop postgres weeknights', target_type: 'container', target_id: 'postgres',
+    action: 'stop', cron_expression: '0 22 * * 1-5', enabled: true,
+    backup_config: null,
+    last_run_at: null, last_run_status: null, last_run_message: null,
+    next_run_at: Math.floor(Date.now() / 1000) + 7200,
+    created_at: Math.floor(Date.now() / 1000) - 3600, updated_at: Math.floor(Date.now() / 1000) - 3600,
+  },
+];
+
+function handleSchedules(req: any, res: any, params: URLSearchParams) {
+  const action = params.get('action');
+  const id = params.get('id') ? parseInt(params.get('id')!) : null;
+
+  if (req.method === 'GET') {
+    if (action === 'history' && id) {
+      return json(res, { history: [
+        { id: 1, schedule_id: id, started_at: Math.floor(Date.now() / 1000) - 86400, finished_at: Math.floor(Date.now() / 1000) - 86395, status: 'success', message: 'Completed', backup_file: null, backup_size: null },
+      ]});
+    }
+    if (action === 'backups') {
+      return json(res, { backups: [] });
+    }
+    if (id) {
+      const s = mockSchedules.find(s => s.id === id);
+      return s ? json(res, { schedule: s }) : json(res, { error: true, message: 'Not found' }, 404);
+    }
+    const targetType = params.get('target_type');
+    const targetId = params.get('target_id');
+    let filtered = mockSchedules;
+    if (targetType) filtered = filtered.filter(s => s.target_type === targetType);
+    if (targetId) filtered = filtered.filter(s => s.target_id === targetId);
+    return json(res, { schedules: filtered });
+  }
+
+  if (req.method === 'POST') {
+    if (action === 'toggle' && id) {
+      const s = mockSchedules.find(s => s.id === id);
+      if (s) s.enabled = !s.enabled;
+      return json(res, { success: true });
+    }
+    if (action === 'run' && id) {
+      return json(res, { success: true, schedule_id: id, status: 'success', message: 'Executed' });
+    }
+    if (action === 'delete_backup') {
+      return json(res, { success: true });
+    }
+    // Create
+    const newId = nextScheduleId++;
+    mockSchedules.push({
+      id: newId, name: 'New Schedule', target_type: 'container', target_id: 'plex',
+      action: 'backup', cron_expression: '0 3 * * *', enabled: true, backup_config: null,
+      last_run_at: null, last_run_status: null, last_run_message: null,
+      next_run_at: Math.floor(Date.now() / 1000) + 3600,
+      created_at: Math.floor(Date.now() / 1000), updated_at: Math.floor(Date.now() / 1000),
+    });
+    return json(res, { success: true, id: newId }, 201);
+  }
+
+  if (req.method === 'PUT' && id) {
+    return json(res, { success: true });
+  }
+
+  if (req.method === 'DELETE' && id) {
+    const idx = mockSchedules.findIndex(s => s.id === id);
+    if (idx >= 0) mockSchedules.splice(idx, 1);
+    return json(res, { success: true });
+  }
+
+  json(res, { error: true, message: 'Not found' }, 404);
+}
+
 // --- Vite plugin ---
 
 export function mockApiPlugin(): Plugin {
@@ -708,6 +793,8 @@ export function mockApiPlugin(): Plugin {
             handlePull(req, res, params);
           } else if (endpoint === 'compose.php') {
             handleCompose(req, res, params);
+          } else if (endpoint === 'schedules.php') {
+            handleSchedules(req, res, params);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }
