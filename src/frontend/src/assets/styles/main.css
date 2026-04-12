@@ -222,23 +222,23 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 10%, transparent);
 }
 
-/* Folder collapse/expand — CSS Grid height transition */
-#unraid-docker-folders-modern .folder-content-grid {
+/* Shared expand/collapse — CSS Grid height transition */
+#unraid-docker-folders-modern .expand-grid {
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 200ms ease;
 }
 
-#unraid-docker-folders-modern .folder-content-grid.folder-content-expanded {
+#unraid-docker-folders-modern .expand-grid.expand-expanded {
   grid-template-rows: 1fr;
 }
 
-#unraid-docker-folders-modern .folder-content-inner {
+#unraid-docker-folders-modern .expand-inner {
   overflow: hidden;
 }
 
 /* When expanded, allow kebab menus to escape the container */
-#unraid-docker-folders-modern .folder-content-grid.folder-content-expanded .folder-content-inner {
+#unraid-docker-folders-modern .expand-grid.expand-expanded .expand-inner {
   overflow: visible;
 }
 

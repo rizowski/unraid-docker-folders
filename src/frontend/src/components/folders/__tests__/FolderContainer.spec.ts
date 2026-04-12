@@ -58,12 +58,12 @@ describe('FolderContainer z-index stacking', () => {
     expect(header.exists()).toBe(true);
   });
 
-  it('folder-content-grid exists as sibling after header', () => {
+  it('expand-grid exists as sibling after header', () => {
     const wrapper = mount(FolderContainer, {
       props: { folder: makeFolder() },
       global: { plugins: [createPinia()] },
     });
-    const grid = wrapper.find('.folder-content-grid');
+    const grid = wrapper.find('.expand-grid');
     expect(grid.exists()).toBe(true);
   });
 

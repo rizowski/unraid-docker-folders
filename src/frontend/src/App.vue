@@ -158,8 +158,8 @@
             }}</span>
           </div>
 
-          <div class="folder-content-grid" :class="{ 'folder-content-expanded': !unfolderedCollapsed }">
-            <div class="folder-content-inner">
+          <div class="expand-grid" :class="{ 'expand-expanded': !unfolderedCollapsed }">
+            <div class="expand-inner">
               <div
                 class="container-list"
                 :class="viewMode === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'"
