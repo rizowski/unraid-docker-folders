@@ -52,7 +52,7 @@ function handleGet()
   }
 
   $dockerClient = new DockerClient();
-  $stats = $dockerClient->fetchBatchStats($ids);
+  $stats = $dockerClient->fetchBatchStatsFast($ids);
 
   jsonResponse(['stats' => $stats]);
 }
