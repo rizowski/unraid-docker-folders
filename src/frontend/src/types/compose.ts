@@ -24,6 +24,18 @@ export interface ComposeStatus {
   compose_plugin_data_exists?: boolean;
 }
 
+export interface ComposeFileVersion {
+  id: number;
+  file_type: 'compose' | 'env';
+  file_path: string;
+  content_hash: string;
+  created_at: number;
+}
+
+export interface ComposeFileVersionDetail extends ComposeFileVersion {
+  content: string;
+}
+
 export interface ComposeImportResult {
   success: boolean;
   stacks_imported: number;

@@ -33,8 +33,44 @@
         <div v-if="loading" class="text-center py-8 text-text-secondary">Loading...</div>
 
         <div v-else-if="activeTab === 'compose'" class="flex flex-col flex-1 min-h-0">
-          <div v-if="composePath" class="text-xs text-text-secondary mb-2 font-mono truncate">{{ composePath }}</div>
+          <div class="flex items-center gap-2 mb-2">
+            <div v-if="composePath" class="text-xs text-text-secondary font-mono truncate flex-1">{{ composePath }}</div>
+            <button
+              v-if="!readOnly && mode !== 'create'"
+              @click="toggleHistory('compose')"
+              class="nav-btn text-xs shrink-0"
+              :class="{ active: showHistory && historyFileType === 'compose' }"
+            >{{ showHistory && historyFileType === 'compose' ? 'Editor' : 'History' }}</button>
+          </div>
+          <div v-if="showHistory && historyFileType === 'compose'" class="flex flex-col flex-1 min-h-0">
+            <div v-if="versions.length === 0" class="text-center py-8 text-text-secondary">No previous versions</div>
+            <div v-else class="flex flex-col gap-2 flex-1 min-h-0 overflow-auto">
+              <div
+                v-for="v in versions"
+                :key="v.id"
+                class="flex items-center gap-3 p-2 rounded border border-border hover:bg-border cursor-pointer transition"
+                :class="{ 'bg-border': previewVersionId === v.id }"
+                @click="previewVersion(v.id)"
+              >
+                <span class="text-sm text-text flex-1">{{ formatVersionDate(v.created_at) }}</span>
+                <button
+                  @click.stop="confirmRestore(v.id)"
+                  class="nav-btn text-xs active"
+                >Restore</button>
+              </div>
+            </div>
+            <div v-if="previewContent !== null" class="mt-3 flex flex-col min-h-0 flex-1">
+              <div class="text-xs text-text-secondary mb-1">Preview</div>
+              <textarea
+                :value="previewContent"
+                readonly
+                class="styled-input flex-1 min-h-[80px] opacity-70"
+                spellcheck="false"
+              ></textarea>
+            </div>
+          </div>
           <textarea
+            v-else
             v-model="composeContent"
             :readonly="readOnly"
             class="styled-input flex-1 min-h-[120px]"
@@ -62,8 +98,44 @@
               >Save Path</button>
             </div>
           </div>
-          <div v-if="envFilePath" class="text-xs text-text-secondary mb-2 font-mono truncate">{{ envFilePath }}</div>
+          <div class="flex items-center gap-2 mb-2">
+            <div v-if="envFilePath" class="text-xs text-text-secondary font-mono truncate flex-1">{{ envFilePath }}</div>
+            <button
+              v-if="!readOnly && mode !== 'create'"
+              @click="toggleHistory('env')"
+              class="nav-btn text-xs shrink-0"
+              :class="{ active: showHistory && historyFileType === 'env' }"
+            >{{ showHistory && historyFileType === 'env' ? 'Editor' : 'History' }}</button>
+          </div>
+          <div v-if="showHistory && historyFileType === 'env'" class="flex flex-col flex-1 min-h-0">
+            <div v-if="versions.length === 0" class="text-center py-8 text-text-secondary">No previous versions</div>
+            <div v-else class="flex flex-col gap-2 flex-1 min-h-0 overflow-auto">
+              <div
+                v-for="v in versions"
+                :key="v.id"
+                class="flex items-center gap-3 p-2 rounded border border-border hover:bg-border cursor-pointer transition"
+                :class="{ 'bg-border': previewVersionId === v.id }"
+                @click="previewVersion(v.id)"
+              >
+                <span class="text-sm text-text flex-1">{{ formatVersionDate(v.created_at) }}</span>
+                <button
+                  @click.stop="confirmRestore(v.id)"
+                  class="nav-btn text-xs active"
+                >Restore</button>
+              </div>
+            </div>
+            <div v-if="previewContent !== null" class="mt-3 flex flex-col min-h-0 flex-1">
+              <div class="text-xs text-text-secondary mb-1">Preview</div>
+              <textarea
+                :value="previewContent"
+                readonly
+                class="styled-input flex-1 min-h-[80px] opacity-70"
+                spellcheck="false"
+              ></textarea>
+            </div>
+          </div>
           <textarea
+            v-else
             v-model="envContent"
             :readonly="readOnly"
             class="styled-input flex-1 min-h-[120px]"
@@ -103,6 +175,7 @@ import { ref, watch, computed, onUnmounted } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentModal } from '@/composables/useParentModal';
 import BaseModal from '@/components/BaseModal.vue';
+import type { ComposeFileVersion } from '@/types/compose';
 
 interface Props {
   isOpen: boolean;
@@ -148,6 +221,12 @@ const originalEnvPath = ref('');
 const logsContent = ref('');
 const logsAutoRefresh = ref(true);
 let logsPollTimer: number | null = null;
+
+const showHistory = ref(false);
+const historyFileType = ref<'compose' | 'env'>('compose');
+const versions = ref<ComposeFileVersion[]>([]);
+const previewVersionId = ref<number | null>(null);
+const previewContent = ref<string | null>(null);
 
 const DEFAULT_COMPOSE = 'version: "3.8"\nservices:\n  app:\n    image: \n    ports:\n      - "8080:80"\n';
 
@@ -507,6 +586,58 @@ async function handleSave() {
   } finally {
     saving.value = false;
   }
+}
+
+async function toggleHistory(fileType: 'compose' | 'env') {
+  if (showHistory.value && historyFileType.value === fileType) {
+    showHistory.value = false;
+    previewVersionId.value = null;
+    previewContent.value = null;
+    return;
+  }
+  historyFileType.value = fileType;
+  previewVersionId.value = null;
+  previewContent.value = null;
+  const result = await composeStore.getFileVersions(props.projectName, fileType);
+  versions.value = result.versions;
+  showHistory.value = true;
+}
+
+async function previewVersion(versionId: number) {
+  previewVersionId.value = versionId;
+  const result = await composeStore.getFileVersionContent(props.projectName, versionId);
+  if (result.version) {
+    previewContent.value = result.version.content;
+  }
+}
+
+async function confirmRestore(versionId: number) {
+  if (!confirm('Restore this version? The current file will be saved as a new version before restoring.')) return;
+  const success = await composeStore.restoreFileVersion(props.projectName, versionId);
+  if (success) {
+    showHistory.value = false;
+    previewVersionId.value = null;
+    previewContent.value = null;
+    await loadForEdit();
+    saveStatus.value = 'saved';
+  } else {
+    saveStatus.value = 'Failed to restore';
+  }
+}
+
+function formatVersionDate(timestamp: number): string {
+  const date = new Date(timestamp * 1000);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 async function saveEnvPath() {

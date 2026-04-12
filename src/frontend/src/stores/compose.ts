@@ -4,7 +4,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ComposeStack, ComposeStatus, ComposeImportResult } from '@/types/compose';
+import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeFileVersion, ComposeFileVersionDetail } from '@/types/compose';
 import { apiFetch } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -419,6 +419,56 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
+  async function getFileVersions(
+    project: string,
+    fileType: 'compose' | 'env' = 'compose',
+  ): Promise<{ versions: ComposeFileVersion[] }> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=versions&file_type=${fileType}`,
+      );
+      const data = await response.json();
+      return { versions: data.versions || [] };
+    } catch (e) {
+      console.error('Error fetching file versions:', e);
+      return { versions: [] };
+    }
+  }
+
+  async function getFileVersionContent(
+    project: string,
+    versionId: number,
+  ): Promise<{ version: ComposeFileVersionDetail | null; error?: string }> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=version&version_id=${versionId}`,
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        return { version: null, error: data.message };
+      }
+      return { version: data.version };
+    } catch (e) {
+      return { version: null, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  }
+
+  async function restoreFileVersion(project: string, versionId: number): Promise<boolean> {
+    try {
+      const response = await apiFetch(
+        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=restore_version`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ version_id: versionId }),
+        },
+      );
+      return response.ok;
+    } catch (e) {
+      console.error('Error restoring file version:', e);
+      return false;
+    }
+  }
+
   return {
     // State
     stacks,
@@ -454,5 +504,8 @@ export const useComposeStore = defineStore('compose', () => {
     setAutostart,
     getLogs,
     importFromComposePlugin,
+    getFileVersions,
+    getFileVersionContent,
+    restoreFileVersion,
   };
 });

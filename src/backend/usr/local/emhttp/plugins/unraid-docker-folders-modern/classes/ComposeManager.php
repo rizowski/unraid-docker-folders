@@ -954,6 +954,14 @@ class ComposeManager
       return ['success' => false, 'error' => 'Cannot determine compose file path'];
     }
 
+    // Snapshot current version before overwriting
+    if (file_exists($path)) {
+      $currentContent = @file_get_contents($path);
+      if ($currentContent !== false) {
+        $this->snapshotVersion($projectName, 'compose', $path, $currentContent);
+      }
+    }
+
     // Ensure directory exists
     $dir = dirname($path);
     if (!is_dir($dir)) {
@@ -1017,6 +1025,14 @@ class ComposeManager
       return ['success' => false, 'error' => 'Cannot determine env file path'];
     }
 
+    // Snapshot current version before overwriting
+    if ($path && file_exists($path)) {
+      $currentContent = @file_get_contents($path);
+      if ($currentContent !== false && $currentContent !== '') {
+        $this->snapshotVersion($projectName, 'env', $path, $currentContent);
+      }
+    }
+
     $dir = dirname($path);
     if (!is_dir($dir)) {
       @mkdir($dir, 0755, true);
@@ -1078,6 +1094,187 @@ class ComposeManager
     }
 
     return null;
+  }
+
+  // ─── File Versioning ────────────────────────────────────────────────
+
+  private function snapshotVersion($projectName, $fileType, $sourcePath, $content)
+  {
+    $hash = md5($content);
+
+    $latest = $this->db->fetchOne(
+      'SELECT content_hash FROM compose_file_versions
+       WHERE project_name = ? AND file_type = ?
+       ORDER BY id DESC LIMIT 1',
+      [$projectName, $fileType]
+    );
+
+    if ($latest && $latest['content_hash'] === $hash) {
+      return;
+    }
+
+    $stack = $this->db->fetchOne(
+      'SELECT working_dir FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+    if (!$stack) return;
+
+    $versionsDir = $stack['working_dir'] . '/.versions';
+    if (!is_dir($versionsDir)) {
+      @mkdir($versionsDir, 0755, true);
+    }
+
+    $timestamp = time();
+    $ext = $fileType === 'compose' ? 'yml' : 'env';
+    $versionFilename = "{$timestamp}-{$fileType}.{$ext}";
+    $versionPath = $versionsDir . '/' . $versionFilename;
+
+    if (@file_put_contents($versionPath, $content) === false) {
+      return;
+    }
+
+    $relativePath = '.versions/' . $versionFilename;
+
+    $this->db->insert('compose_file_versions', [
+      'project_name' => $projectName,
+      'file_type' => $fileType,
+      'file_path' => $relativePath,
+      'content_hash' => $hash,
+      'created_at' => $timestamp,
+    ]);
+
+    $this->pruneVersions($projectName, $fileType);
+  }
+
+  private function pruneVersions($projectName, $fileType)
+  {
+    $maxSetting = $this->db->fetchOne(
+      "SELECT value FROM settings WHERE key = 'compose_max_versions'"
+    );
+    $max = $maxSetting ? (int) $maxSetting['value'] : 10;
+    if ($max <= 0) return;
+
+    $count = $this->db->fetchValue(
+      'SELECT COUNT(*) FROM compose_file_versions
+       WHERE project_name = ? AND file_type = ?',
+      [$projectName, $fileType]
+    );
+
+    if ($count <= $max) return;
+
+    $stack = $this->db->fetchOne(
+      'SELECT working_dir FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+
+    $excess = $this->db->fetchAll(
+      'SELECT id, file_path FROM compose_file_versions
+       WHERE project_name = ? AND file_type = ?
+       ORDER BY id ASC
+       LIMIT ?',
+      [$projectName, $fileType, $count - $max]
+    );
+
+    foreach ($excess as $row) {
+      if ($stack) {
+        $fullPath = $stack['working_dir'] . '/' . $row['file_path'];
+        @unlink($fullPath);
+      }
+      $this->db->query(
+        'DELETE FROM compose_file_versions WHERE id = ?',
+        [$row['id']]
+      );
+    }
+  }
+
+  public function getFileVersions($projectName, $fileType = 'compose')
+  {
+    if (!in_array($fileType, ['compose', 'env'])) {
+      return ['success' => false, 'error' => 'Invalid file type', 'versions' => []];
+    }
+
+    $versions = $this->db->fetchAll(
+      'SELECT id, file_type, file_path, content_hash, created_at
+       FROM compose_file_versions
+       WHERE project_name = ? AND file_type = ?
+       ORDER BY created_at DESC',
+      [$projectName, $fileType]
+    );
+
+    return ['success' => true, 'versions' => $versions];
+  }
+
+  public function getFileVersionContent($projectName, $versionId)
+  {
+    $version = $this->db->fetchOne(
+      'SELECT v.id, v.file_type, v.file_path, v.content_hash, v.created_at, s.working_dir
+       FROM compose_file_versions v
+       JOIN compose_stacks s ON s.project_name = v.project_name
+       WHERE v.id = ? AND v.project_name = ?',
+      [$versionId, $projectName]
+    );
+
+    if (!$version) {
+      return ['success' => false, 'error' => 'Version not found'];
+    }
+
+    $fullPath = $version['working_dir'] . '/' . $version['file_path'];
+    if (!file_exists($fullPath)) {
+      return ['success' => false, 'error' => 'Version file missing from disk'];
+    }
+
+    $content = @file_get_contents($fullPath);
+    if ($content === false) {
+      return ['success' => false, 'error' => 'Failed to read version file'];
+    }
+
+    return [
+      'success' => true,
+      'version' => [
+        'id' => $version['id'],
+        'file_type' => $version['file_type'],
+        'content_hash' => $version['content_hash'],
+        'created_at' => $version['created_at'],
+        'content' => $content,
+      ],
+    ];
+  }
+
+  public function restoreFileVersion($projectName, $versionId)
+  {
+    $result = $this->getFileVersionContent($projectName, $versionId);
+    if (!$result['success']) {
+      return $result;
+    }
+
+    $version = $result['version'];
+
+    if ($version['file_type'] === 'compose') {
+      return $this->saveComposeFileContent($projectName, $version['content']);
+    } else {
+      return $this->saveEnvFileContent($projectName, $version['content']);
+    }
+  }
+
+  public function deleteStackVersionFiles($projectName)
+  {
+    $stack = $this->db->fetchOne(
+      'SELECT working_dir FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+    if (!$stack) return;
+
+    $versionsDir = $stack['working_dir'] . '/.versions';
+    if (is_dir($versionsDir)) {
+      $files = @scandir($versionsDir);
+      if ($files) {
+        foreach ($files as $file) {
+          if ($file === '.' || $file === '..') continue;
+          @unlink($versionsDir . '/' . $file);
+        }
+      }
+      @rmdir($versionsDir);
+    }
   }
 
   // ─── Autostart ─────────────────────────────────────────────────────
