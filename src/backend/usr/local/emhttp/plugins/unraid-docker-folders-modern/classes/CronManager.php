@@ -99,6 +99,7 @@ class CronManager
     if (empty(array_filter($filtered, function ($l) { return trim($l) !== ''; }))) {
       if (file_exists(self::CRON_FILE)) {
         unlink(self::CRON_FILE);
+        self::reload();
       }
       return;
     }
@@ -120,5 +121,18 @@ class CronManager
     $content = implode("\n", $lines) . "\n";
     file_put_contents(self::CRON_FILE, $content);
     chmod(self::CRON_FILE, 0644);
+    self::reload();
+  }
+
+  // Unraid's dcron does not automatically pick up files dropped in /etc/cron.d/.
+  // update_cron re-merges them into root's crontab and signals the daemon; SIGHUP
+  // to crond is the fallback if the helper is absent (non-Unraid dev environments).
+  private static function reload()
+  {
+    if (is_executable('/usr/local/sbin/update_cron')) {
+      @exec('/usr/local/sbin/update_cron > /dev/null 2>&1');
+      return;
+    }
+    @exec('pkill -HUP crond > /dev/null 2>&1');
   }
 }

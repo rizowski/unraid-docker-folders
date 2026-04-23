@@ -6,7 +6,19 @@
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
-      <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
+      <a
+        v-if="hasUpdate && releaseNotesUrl"
+        :href="releaseNotesUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning hover:bg-warning/30"
+        title="View release notes"
+        @click.stop
+      >Update</a>
+      <span
+        v-else-if="hasUpdate"
+        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+      >Update</span>
     </div>
 
     <!-- Clickable summary row -->
@@ -182,7 +194,19 @@
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
         <div class="flex items-center gap-3 min-w-0">
           <span class="text-xs font-semibold text-text truncate">{{ container.name }}</span>
-          <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
+          <a
+            v-if="hasUpdate && releaseNotesUrl"
+            :href="releaseNotesUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning hover:bg-warning/30"
+            title="View release notes"
+            @click.stop
+          >Update</a>
+          <span
+            v-else-if="hasUpdate"
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+          >Update</span>
           <span class="hidden sm:inline text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
@@ -559,6 +583,10 @@ const { showStats, containerStats } = useContainerStats({
 });
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
+const releaseNotesUrl = computed<string | null>(() => {
+  const u = updatesStore.updates[props.container.image];
+  return u?.source_url ? `${u.source_url}/releases` : null;
+});
 
 // Inline logs panel (list view only)
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';

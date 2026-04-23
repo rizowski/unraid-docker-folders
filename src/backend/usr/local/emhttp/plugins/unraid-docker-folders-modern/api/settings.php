@@ -120,5 +120,19 @@ function handlePost()
     }
   }
 
+  // When update checks are re-enabled, rewrite the cron from the stored
+  // schedule so the user doesn't have to reselect it after a toggle.
+  if ($key === 'enable_update_checks' && $value === '1') {
+    $scheduleRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'update_check_schedule'");
+    $schedule = ($scheduleRow && $scheduleRow['value'] !== 'disabled') ? $scheduleRow['value'] : 'daily';
+    CronManager::updateSchedule($schedule);
+    $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', ['update_check_schedule']);
+    if ($existing) {
+      $db->update('settings', ['value' => $schedule, 'updated_at' => $now], 'key = ?', ['update_check_schedule']);
+    } else {
+      $db->insert('settings', ['key' => 'update_check_schedule', 'value' => $schedule, 'updated_at' => $now]);
+    }
+  }
+
   jsonResponse(['success' => true, 'key' => $key, 'value' => $value]);
 }

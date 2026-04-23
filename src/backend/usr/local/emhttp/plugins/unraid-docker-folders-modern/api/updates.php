@@ -59,6 +59,7 @@ function handleGet()
         'update_available' => (bool) $row['update_available'],
         'checked_at' => (int) $row['checked_at'],
         'error' => $row['error'],
+        'source_url' => $row['source_url'] ?? null,
       ];
     }
   }

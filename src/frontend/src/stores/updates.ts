@@ -15,6 +15,7 @@ export interface ImageUpdateStatus {
   update_available: boolean;
   checked_at: number;
   error: string | null;
+  source_url: string | null;
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';

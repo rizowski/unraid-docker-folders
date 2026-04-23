@@ -894,11 +894,22 @@ class DockerClient
       'update_available' => false,
       'local_digest' => null,
       'remote_digest' => null,
+      'source_url' => null,
       'error' => null,
     ];
 
-    // Get local digest
-    $localDigest = $this->getImageDigest($localImageId);
+    // Single lookup: pull digest and OCI source label from the same payload
+    $info = $this->getImageInfo($localImageId);
+    $localDigest = null;
+    if ($info) {
+      $digests = $info['RepoDigests'] ?? [];
+      $localDigest = !empty($digests) ? $digests[0] : null;
+      $labels = $info['Config']['Labels'] ?? [];
+      $src = $labels['org.opencontainers.image.source'] ?? null;
+      if (is_string($src) && preg_match('#^https?://#i', $src)) {
+        $result['source_url'] = rtrim($src, '/');
+      }
+    }
     $result['local_digest'] = $localDigest;
 
     // Get remote digest

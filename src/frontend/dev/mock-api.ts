@@ -477,6 +477,7 @@ const mockUpdateChecks: Record<string, any> = {
     update_available: true,
     checked_at: Math.floor(Date.now() / 1000) - 3600,
     error: null,
+    source_url: 'https://github.com/linuxserver/docker-plex',
   },
   'postgres:16-alpine': {
     image: 'postgres:16-alpine',
@@ -485,6 +486,7 @@ const mockUpdateChecks: Record<string, any> = {
     update_available: true,
     checked_at: Math.floor(Date.now() / 1000) - 3600,
     error: null,
+    source_url: null,
   },
   'grafana/grafana:latest': {
     image: 'grafana/grafana:latest',
@@ -493,6 +495,7 @@ const mockUpdateChecks: Record<string, any> = {
     update_available: true,
     checked_at: Math.floor(Date.now() / 1000) - 3600,
     error: null,
+    source_url: 'https://github.com/grafana/grafana',
   },
 };
 
@@ -508,6 +511,9 @@ function handleUpdates(req: any, res: any, params: Record<string, string>) {
 
     for (const image of imagesToCheck) {
       const hasUpdate = image.includes('plex') || image.includes('postgres') || image.includes('grafana');
+      let sourceUrl: string | null = null;
+      if (image.includes('plex')) sourceUrl = 'https://github.com/linuxserver/docker-plex';
+      else if (image.includes('grafana')) sourceUrl = 'https://github.com/grafana/grafana';
       mockUpdateChecks[image] = {
         image,
         local_digest: `${image}@sha256:abc123`,
@@ -515,6 +521,7 @@ function handleUpdates(req: any, res: any, params: Record<string, string>) {
         update_available: hasUpdate,
         checked_at: now,
         error: null,
+        source_url: sourceUrl,
       };
     }
 
