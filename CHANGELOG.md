@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.04.22
+### Changes
+- Fix update-check cron registration and link Update badge to release notes
+
 ## 2026.04.12
 ### Changes
 - Add container/stack scheduling and backup system
