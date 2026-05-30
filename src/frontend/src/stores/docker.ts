@@ -21,6 +21,24 @@ export interface ContainerMount {
   RW: boolean;
 }
 
+export interface HostPortBinding {
+  hostIp: string;
+  hostPort: number;
+  containerPort: number;
+  type: string; // 'tcp' | 'udp'
+}
+
+export interface ConflictDetail {
+  hostPort: number;
+  type: string;
+  hostIp: string;
+  heldBy: string[]; // names of running containers holding this port
+}
+
+export interface ConflictInfo {
+  conflicts: ConflictDetail[];
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -29,6 +47,7 @@ export interface Container {
   status: string;
   command: string;
   ports: ContainerPort[];
+  hostPorts: HostPortBinding[];
   mounts: ContainerMount[];
   networkSettings: Record<string, { IPAddress: string }>;
   created: number;
@@ -63,6 +82,61 @@ export const useDockerStore = defineStore('docker', () => {
     const map = new Map<string, Container>();
     for (const c of containers.value) map.set(c.name, c);
     return map;
+  });
+
+  // Treat unspecified / all-interfaces bindings as a wildcard that overlaps
+  // any other host IP on the same port/protocol.
+  const isWildcardIp = (ip: string) => ip === '' || ip === '0.0.0.0' || ip === '::';
+
+  // A non-running container has a port conflict when one of its configured
+  // host port bindings collides with a binding held by a running container
+  // (same port + protocol, with overlapping host IP). The map is keyed by
+  // container id and only contains containers that actually conflict.
+  const portConflicts = computed<Map<string, ConflictInfo>>(() => {
+    // Occupied bindings from running containers.
+    const occupied: Array<{ port: number; type: string; ip: string; name: string }> = [];
+    for (const c of containers.value) {
+      if (c.state !== 'running') continue;
+      for (const b of c.hostPorts ?? []) {
+        occupied.push({ port: b.hostPort, type: b.type, ip: b.hostIp, name: c.name });
+      }
+    }
+
+    const result = new Map<string, ConflictInfo>();
+    if (occupied.length === 0) return result;
+
+    for (const c of containers.value) {
+      if (c.state === 'running') continue;
+      const conflicts: ConflictDetail[] = [];
+
+      for (const b of c.hostPorts ?? []) {
+        const heldBy = new Set<string>();
+        for (const o of occupied) {
+          if (o.port !== b.hostPort || o.type !== b.type) continue;
+          if (isWildcardIp(b.hostIp) || isWildcardIp(o.ip) || o.ip === b.hostIp) {
+            heldBy.add(o.name);
+          }
+        }
+        if (heldBy.size > 0) {
+          conflicts.push({
+            hostPort: b.hostPort,
+            type: b.type,
+            hostIp: b.hostIp,
+            heldBy: [...heldBy],
+          });
+        }
+      }
+
+      if (conflicts.length > 0) {
+        result.set(c.id, { conflicts });
+      }
+    }
+
+    return result;
+  });
+
+  const getPortConflict = computed(() => {
+    return (id: string) => portConflicts.value.get(id) ?? null;
   });
 
   const stateOrder: Record<string, number> = {
@@ -243,6 +317,8 @@ export const useDockerStore = defineStore('docker', () => {
     containersByName,
     sortedContainers,
     unfolderedContainers,
+    portConflicts,
+    getPortConflict,
 
     // Actions
     fetchContainers,

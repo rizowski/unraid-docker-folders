@@ -20,6 +20,10 @@ class DockerClient
   const SLOW_CACHE_PATH = '/tmp/unraid-docker-slow-stats.json';
   const CPU_SAMPLES_PATH = '/tmp/unraid-docker-stats-cpu.json';
   const SLOW_CACHE_TTL = 60;
+  // Host port bindings are immutable for a given container ID (a recreate
+  // yields a new ID), so this cache has no TTL — entries are added once on
+  // first sight and pruned when the container disappears.
+  const PORTS_CACHE_PATH = '/tmp/unraid-docker-port-bindings.json';
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
@@ -55,6 +59,12 @@ class DockerClient
     // Build autostart lookup from Unraid XML templates
     $autostartMap = $this->getAutostartMap();
 
+    // Build configured host port bindings lookup (used for port-conflict
+    // detection). Stopped containers don't expose PublicPort in the list
+    // response, so we source bindings from inspect data, cached by ID.
+    $ids = array_column($response, 'Id');
+    $hostPortsMap = $this->getHostPortsMap($ids);
+
     // Transform Docker API response to our format
     $containers = [];
     foreach ($response as $container) {
@@ -62,10 +72,103 @@ class DockerClient
       $autostartInfo = $autostartMap[$formatted['name']] ?? null;
       $formatted['autostart'] = $autostartInfo ? $autostartInfo['autostart'] : false;
       $formatted['autostartDelay'] = $autostartInfo ? $autostartInfo['autostartDelay'] : 0;
+      $formatted['hostPorts'] = $hostPortsMap[$formatted['id']] ?? [];
       $containers[] = $formatted;
     }
 
     return $containers;
+  }
+
+  /**
+   * Build a map of configured host port bindings keyed by container ID.
+   *
+   * Bindings come from each container's HostConfig.PortBindings (inspect),
+   * which is available regardless of running state — unlike the list
+   * response, which omits PublicPort for stopped containers. Results are
+   * cached permanently per ID (bindings are immutable for a given ID); only
+   * uncached IDs are inspected, and entries for vanished IDs are pruned.
+   *
+   * @param array $ids Container IDs from the current list
+   * @return array Map of id => [ {hostIp, hostPort, containerPort, type}, ... ]
+   */
+  private function getHostPortsMap(array $ids)
+  {
+    $cache = $this->loadJsonCache(self::PORTS_CACHE_PATH);
+    $changed = false;
+
+    // Inspect only IDs we haven't seen before.
+    $missing = array_values(array_filter($ids, function ($id) use ($cache) {
+      return !array_key_exists($id, $cache);
+    }));
+
+    if (!empty($missing)) {
+      $requests = [];
+      foreach ($missing as $id) {
+        $requests[$id] = "/containers/{$id}/json";
+      }
+      $results = $this->requestMulti($requests);
+
+      foreach ($missing as $id) {
+        $inspect = $results[$id] ?? null;
+        if ($inspect === null) continue; // transient failure — retry next list
+        $cache[$id] = $this->parsePortBindings($inspect['HostConfig']['PortBindings'] ?? []);
+        $changed = true;
+      }
+    }
+
+    // Prune entries for containers no longer present.
+    $idSet = array_flip($ids);
+    foreach (array_keys($cache) as $id) {
+      if (!isset($idSet[$id])) {
+        unset($cache[$id]);
+        $changed = true;
+      }
+    }
+
+    if ($changed) {
+      $this->saveJsonCache(self::PORTS_CACHE_PATH, $cache);
+    }
+
+    return $cache;
+  }
+
+  /**
+   * Normalize a Docker HostConfig.PortBindings map into a flat list.
+   *
+   * Input shape: "<containerPort>/<proto>" => [ {HostIp, HostPort}, ... ].
+   * An empty binding (declared but unpublished) is skipped. PHP json_decode
+   * turns an empty {} into [], which yields an empty list naturally.
+   *
+   * @param mixed $portBindings
+   * @return array List of {hostIp, hostPort, containerPort, type}
+   */
+  private function parsePortBindings($portBindings)
+  {
+    if (!is_array($portBindings)) {
+      return [];
+    }
+
+    $hostPorts = [];
+    foreach ($portBindings as $portProto => $bindings) {
+      if (empty($bindings) || !is_array($bindings)) continue;
+
+      $parts = explode('/', (string) $portProto);
+      $containerPort = (int) $parts[0];
+      $type = $parts[1] ?? 'tcp';
+
+      foreach ($bindings as $binding) {
+        $hostPort = $binding['HostPort'] ?? '';
+        if ($hostPort === '') continue;
+        $hostPorts[] = [
+          'hostIp' => $binding['HostIp'] ?? '',
+          'hostPort' => (int) $hostPort,
+          'containerPort' => $containerPort,
+          'type' => $type,
+        ];
+      }
+    }
+
+    return $hostPorts;
   }
 
   /**

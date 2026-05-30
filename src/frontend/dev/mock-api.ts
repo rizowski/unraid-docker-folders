@@ -19,6 +19,7 @@ const containers = [
     status: 'Up 3 days (healthy)', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:32400]/',
     created: Date.now() / 1000 - 259200,
     ports: [{ IP: '0.0.0.0', PrivatePort: 32400, PublicPort: 32400, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 32400, containerPort: 32400, type: 'tcp' }],
     mounts: [
       { Source: '/mnt/user/appdata/plex', Destination: '/config', Type: 'bind', RW: true },
       { Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true },
@@ -31,6 +32,7 @@ const containers = [
     status: 'Up 3 days (healthy)', icon: null, managed: null, webui: null,
     created: Date.now() / 1000 - 259200,
     ports: [{ IP: '0.0.0.0', PrivatePort: 5432, PublicPort: 5432, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 5432, containerPort: 5432, type: 'tcp' }],
     mounts: [
       { Source: '/mnt/user/appdata/postgres', Destination: '/var/lib/postgresql/data', Type: 'bind', RW: true },
     ],
@@ -42,6 +44,7 @@ const containers = [
     status: 'Up 3 days', icon: null, managed: null, webui: null,
     created: Date.now() / 1000 - 259200,
     ports: [{ IP: '0.0.0.0', PrivatePort: 6379, PublicPort: 6380, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 6380, containerPort: 6379, type: 'tcp' }],
     mounts: [
       { Source: '/mnt/user/appdata/valkey', Destination: '/data', Type: 'bind', RW: true },
     ],
@@ -53,6 +56,7 @@ const containers = [
     status: 'Up 2 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8080]/',
     created: Date.now() / 1000 - 172800,
     ports: [{ IP: '0.0.0.0', PrivatePort: 8080, PublicPort: 8080, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 8080, containerPort: 8080, type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/sabnzbd', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.5' } },
     labels: {},
@@ -65,6 +69,10 @@ const containers = [
       { IP: '0.0.0.0', PrivatePort: 80, PublicPort: 80, Type: 'tcp' },
       { IP: '0.0.0.0', PrivatePort: 443, PublicPort: 443, Type: 'tcp' },
     ],
+    hostPorts: [
+      { hostIp: '0.0.0.0', hostPort: 80, containerPort: 80, type: 'tcp' },
+      { hostIp: '0.0.0.0', hostPort: 443, containerPort: 443, type: 'tcp' },
+    ],
     mounts: [{ Source: '/var/run/docker.sock', Destination: '/tmp/docker.sock', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.6' } },
     labels: {},
@@ -74,6 +82,7 @@ const containers = [
     status: 'Up 5 days (healthy)', icon: null, managed: 'dockerman', webui: null,
     created: Date.now() / 1000 - 432000,
     ports: [{ IP: '0.0.0.0', PrivatePort: 3306, PublicPort: 3306, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3306, containerPort: 3306, type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/mariadb', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.7' } },
     labels: { 'com.docker.compose.project': 'db-stack' },
@@ -83,6 +92,8 @@ const containers = [
     status: 'Exited (0) 2 hours ago', icon: null, managed: null, webui: null,
     created: Date.now() / 1000 - 86400,
     ports: [{ IP: '', PrivatePort: 6379, Type: 'tcp' }],
+    // Configured for host 6379, but the running valkey uses 6380 — no conflict.
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 6379, containerPort: 6379, type: 'tcp' }],
     mounts: [],
     networkSettings: {},
     labels: { 'com.docker.compose.project': 'db-stack' },
@@ -92,6 +103,7 @@ const containers = [
     status: 'Exited (0) 1 day ago', icon: null, managed: 'dockerman', webui: null,
     created: Date.now() / 1000 - 604800,
     ports: [{ IP: '0.0.0.0', PrivatePort: 25565, PublicPort: 25565, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 25565, containerPort: 25565, type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/minecraft', Destination: '/data', Type: 'bind', RW: true }],
     networkSettings: {},
     labels: {},
@@ -101,6 +113,7 @@ const containers = [
     status: 'Up 1 day', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8123]/',
     created: Date.now() / 1000 - 86400,
     ports: [{ IP: '0.0.0.0', PrivatePort: 8123, PublicPort: 8123, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 8123, containerPort: 8123, type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/homeassistant', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { host: { IPAddress: '' } },
     labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/98822-support-home-assistant/', 'net.unraid.docker.project': 'https://www.home-assistant.io/' },
@@ -110,6 +123,7 @@ const containers = [
     status: 'Up 4 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:3000]/',
     created: Date.now() / 1000 - 345600,
     ports: [{ IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 3000, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3000, containerPort: 3000, type: 'tcp' }],
     mounts: [{ Source: '/mnt/user/appdata/grafana', Destination: '/var/lib/grafana', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.10' } },
     labels: {},
@@ -122,11 +136,101 @@ const containers = [
       { IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8880, Type: 'tcp' },
       { IP: '0.0.0.0', PrivatePort: 443, PublicPort: 8443, Type: 'tcp' },
     ],
+    hostPorts: [
+      { hostIp: '0.0.0.0', hostPort: 8880, containerPort: 80, type: 'tcp' },
+      { hostIp: '0.0.0.0', hostPort: 8443, containerPort: 443, type: 'tcp' },
+    ],
     mounts: [
       { Source: '/mnt/user/appdata/caddy/Caddyfile', Destination: '/etc/caddy/Caddyfile', Type: 'bind', RW: true },
       { Source: '/mnt/user/appdata/caddy/data', Destination: '/data', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.11' } },
+    labels: {},
+  },
+
+  // --- Port conflict demonstration scenarios ---
+  // CONFLICT (wildcard vs wildcard): stopped, host 3000/tcp collides with the
+  // running grafana above → "Port Conflict" badge.
+  {
+    id: 'lmn234opq567', name: 'grafana-canary', image: 'grafana/grafana:next', state: 'exited',
+    status: 'Exited (0) 30 minutes ago', icon: null, managed: 'dockerman', webui: null,
+    created: Date.now() / 1000 - 1800,
+    ports: [{ IP: '', PrivatePort: 3000, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3000, containerPort: 3000, type: 'tcp' }],
+    mounts: [],
+    networkSettings: {},
+    labels: {},
+  },
+  // Running DNS resolver on 53/udp (and 8053/tcp for its web UI).
+  {
+    id: 'mno345pqr678', name: 'pihole', image: 'pihole/pihole:latest', state: 'running',
+    status: 'Up 6 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8053]/admin/',
+    created: Date.now() / 1000 - 518400,
+    ports: [
+      { IP: '0.0.0.0', PrivatePort: 53, PublicPort: 53, Type: 'udp' },
+      { IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8053, Type: 'tcp' },
+    ],
+    hostPorts: [
+      { hostIp: '0.0.0.0', hostPort: 53, containerPort: 53, type: 'udp' },
+      { hostIp: '0.0.0.0', hostPort: 8053, containerPort: 80, type: 'tcp' },
+    ],
+    mounts: [{ Source: '/mnt/user/appdata/pihole', Destination: '/etc/pihole', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.12' } },
+    labels: {},
+  },
+  // NO CONFLICT (protocol differs): stopped, host 53/TCP — pihole only holds 53/UDP.
+  {
+    id: 'nop456qrs789', name: 'dnsmasq-old', image: 'jpillora/dnsmasq:latest', state: 'exited',
+    status: 'Exited (0) 3 days ago', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 259200,
+    ports: [{ IP: '', PrivatePort: 53, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 53, containerPort: 53, type: 'tcp' }],
+    mounts: [],
+    networkSettings: {},
+    labels: {},
+  },
+  // CONFLICT (udp wildcard): stopped, host 53/UDP collides with running pihole.
+  {
+    id: 'opq567rst890', name: 'adguard-old', image: 'adguard/adguardhome:latest', state: 'exited',
+    status: 'Exited (0) 4 days ago', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 345600,
+    ports: [{ IP: '', PrivatePort: 53, Type: 'udp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 53, containerPort: 53, type: 'udp' }],
+    mounts: [],
+    networkSettings: {},
+    labels: {},
+  },
+  // Running service bound to a SPECIFIC host IP on 9000/tcp.
+  {
+    id: 'pqr678stu901', name: 'web-a', image: 'nginx:alpine', state: 'running',
+    status: 'Up 2 days', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 172800,
+    ports: [{ IP: '192.168.1.10', PrivatePort: 80, PublicPort: 9000, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '192.168.1.10', hostPort: 9000, containerPort: 80, type: 'tcp' }],
+    mounts: [],
+    networkSettings: { bridge: { IPAddress: '172.17.0.13' } },
+    labels: {},
+  },
+  // NO CONFLICT (different specific IP): stopped, 9000/tcp on a *different* IP.
+  {
+    id: 'qrs789tuv012', name: 'web-b', image: 'nginx:alpine', state: 'exited',
+    status: 'Exited (0) 5 hours ago', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 18000,
+    ports: [{ IP: '', PrivatePort: 80, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '192.168.1.11', hostPort: 9000, containerPort: 80, type: 'tcp' }],
+    mounts: [],
+    networkSettings: {},
+    labels: {},
+  },
+  // CONFLICT (wildcard vs specific): stopped, 9000/tcp on 0.0.0.0 overlaps web-a.
+  {
+    id: 'rst890uvw123', name: 'web-c', image: 'nginx:alpine', state: 'exited',
+    status: 'Exited (0) 6 hours ago', icon: null, managed: null, webui: null,
+    created: Date.now() / 1000 - 21600,
+    ports: [{ IP: '', PrivatePort: 80, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 9000, containerPort: 80, type: 'tcp' }],
+    mounts: [],
+    networkSettings: {},
     labels: {},
   },
 ];

@@ -19,6 +19,11 @@
         v-else-if="hasUpdate"
         class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
       >Update</span>
+      <span
+        v-if="hasPortConflict"
+        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+        :title="portConflictTitle"
+      >Port Conflict</span>
     </div>
 
     <!-- Clickable summary row -->
@@ -207,6 +212,11 @@
             v-else-if="hasUpdate"
             class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
           >Update</span>
+          <span
+            v-if="hasPortConflict"
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+            :title="portConflictTitle"
+          >Port Conflict</span>
           <span class="hidden sm:inline text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
@@ -445,7 +455,7 @@
 
 <script setup lang="ts">
 import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
-import type { Container } from '@/stores/docker';
+import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
@@ -471,6 +481,7 @@ import IconAutostart from '@/components/icons/IconAutostart.vue';
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
 const isMobile = useIsMobile();
+const dockerStore = useDockerStore();
 const kebabMenuRef = ref<InstanceType<typeof KebabMenu> | null>(null);
 const menuOpen = computed(() => kebabMenuRef.value?.menuOpen ?? false);
 
@@ -507,8 +518,7 @@ const actionStatusText = computed(() => {
 
 // Autostart toggle
 async function handleToggleAutostart() {
-  const { useDockerStore } = await import('@/stores/docker');
-  await useDockerStore().toggleAutostart(props.container.name, !props.container.autostart);
+  await dockerStore.toggleAutostart(props.container.name, !props.container.autostart);
 }
 
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
@@ -517,8 +527,7 @@ const showDelayModal = ref(false);
 
 async function handleDelayConfirm(value: string) {
   const delay = Math.max(0, parseInt(value) || 0);
-  const { useDockerStore } = await import('@/stores/docker');
-  await useDockerStore().toggleAutostart(props.container.name, true, delay);
+  await dockerStore.toggleAutostart(props.container.name, true, delay);
   showDelayModal.value = false;
 }
 
@@ -581,6 +590,16 @@ const { showStats, containerStats } = useContainerStats({
   isRunning,
   expanded,
 });
+
+const portConflict = computed(() => dockerStore.getPortConflict(props.container.id));
+const hasPortConflict = computed(() => !!portConflict.value);
+const portConflictTitle = computed(() =>
+  portConflict.value
+    ? portConflict.value.conflicts
+        .map((d) => `Port ${d.hostPort}/${d.type} is in use by ${d.heldBy.join(', ')}`)
+        .join('; ')
+    : ''
+);
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
 const releaseNotesUrl = computed<string | null>(() => {

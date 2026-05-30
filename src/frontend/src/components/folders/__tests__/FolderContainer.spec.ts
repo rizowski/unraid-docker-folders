@@ -15,6 +15,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     status: 'Up 2 hours',
     command: '/entrypoint.sh',
     ports: [],
+    hostPorts: [],
     mounts: [],
     networkSettings: {},
     created: Date.now() / 1000,
