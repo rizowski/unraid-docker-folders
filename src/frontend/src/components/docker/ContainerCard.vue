@@ -74,7 +74,11 @@
         </template>
         <template v-if="displayPorts.length">
           <span class="text-text-secondary shrink-0">Ports</span>
-          <span class="text-text font-mono truncate">{{ displayPorts.join(', ') }}</span>
+          <div class="font-mono space-y-0.5 min-w-0">
+            <p v-for="(port, i) in displayPorts" :key="i" class="truncate" :class="port.conflictWith ? 'text-error' : 'text-text'">
+              {{ port.text }}<span v-if="port.conflictWith"> — conflicts with {{ port.conflictWith.join(', ') }}</span>
+            </p>
+          </div>
         </template>
         <template v-if="displayMounts.length">
           <span class="text-text-secondary shrink-0">Volumes</span>
@@ -294,7 +298,9 @@
           <p class="text-text-secondary text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
           <div class="text-text font-mono text-xs space-y-0.5">
             <p v-if="networkInfo" class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</p>
-            <p v-for="port in displayPorts" :key="port" class="truncate">{{ port }}</p>
+            <p v-for="(port, i) in displayPorts" :key="i" class="truncate" :class="port.conflictWith ? 'text-error' : ''">
+              {{ port.text }}<span v-if="port.conflictWith"> — conflicts with {{ port.conflictWith.join(', ') }}</span>
+            </p>
           </div>
         </div>
         <div v-if="displayMounts.length">
@@ -455,7 +461,7 @@
 
 <script setup lang="ts">
 import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
-import { useDockerStore, type Container } from '@/stores/docker';
+import { useDockerStore, type Container, type HostPortBinding } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
@@ -840,15 +846,68 @@ const networkInfo = computed(() => {
   return { name, ip: data?.IPAddress || '' };
 });
 
-const displayPorts = computed(() => {
-  const ports = props.container.ports;
-  if (!ports?.length) return [];
-  return ports.slice(0, 3).map((p) => {
-    if (p.PublicPort) {
-      return `${p.PrivatePort}/${p.Type} -> ${p.IP || '0.0.0.0'}:${p.PublicPort}`;
+// Conflicting host ports for this container, keyed by `${hostPort}/${type}` →
+// names of the running containers holding them.
+const conflictByHostPort = computed(() => {
+  const map = new Map<string, string[]>();
+  const info = portConflict.value;
+  if (info) {
+    for (const d of info.conflicts) {
+      map.set(`${d.hostPort}/${d.type}`, d.heldBy);
     }
-    return `${p.PrivatePort}/${p.Type}`;
+  }
+  return map;
+});
+
+interface PortRow {
+  text: string;
+  conflictWith: string[] | null;
+}
+
+const displayPorts = computed<PortRow[]>(() => {
+  const ports = props.container.ports ?? [];
+  const hostPorts = props.container.hostPorts ?? [];
+  const conflicts = conflictByHostPort.value;
+
+  // Index configured host bindings by container port + protocol so we can
+  // attach a host binding (and its conflict state) to each exposed port —
+  // stopped containers don't carry PublicPort in their runtime ports.
+  const bindingsByContainerPort = new Map<string, HostPortBinding[]>();
+  for (const b of hostPorts) {
+    const key = `${b.containerPort}/${b.type}`;
+    const list = bindingsByContainerPort.get(key);
+    if (list) list.push(b);
+    else bindingsByContainerPort.set(key, [b]);
+  }
+
+  const row = (text: string, hostPort: number, type: string): PortRow => ({
+    text,
+    conflictWith: conflicts.get(`${hostPort}/${type}`) ?? null,
   });
+
+  const rows: PortRow[] = [];
+
+  if (ports.length) {
+    for (const p of ports) {
+      const bindings = bindingsByContainerPort.get(`${p.PrivatePort}/${p.Type}`);
+      if (bindings?.length) {
+        for (const b of bindings) {
+          rows.push(row(`${p.PrivatePort}/${p.Type} -> ${b.hostIp || '0.0.0.0'}:${b.hostPort}`, b.hostPort, b.type));
+        }
+      } else if (p.PublicPort) {
+        rows.push(row(`${p.PrivatePort}/${p.Type} -> ${p.IP || '0.0.0.0'}:${p.PublicPort}`, p.PublicPort, p.Type));
+      } else {
+        rows.push({ text: `${p.PrivatePort}/${p.Type}`, conflictWith: null });
+      }
+    }
+  } else {
+    // No runtime ports (some stopped containers) — show configured bindings.
+    for (const b of hostPorts) {
+      rows.push(row(`${b.containerPort}/${b.type} -> ${b.hostIp || '0.0.0.0'}:${b.hostPort}`, b.hostPort, b.type));
+    }
+  }
+
+  return rows.slice(0, 3);
 });
 
 const compactPorts = computed(() => {
