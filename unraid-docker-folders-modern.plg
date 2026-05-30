@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.04.22-dev1">
-<!ENTITY md5 "62ac7fdc18862c52d5cbbfeda346ae2f">
+<!ENTITY version "2026.05.30-dev1">
+<!ENTITY md5 "b21a3d11dbd3d028b452ed08b5d9bbac">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -83,6 +83,9 @@
 
 
 
+
+###2026.05.30-dev1
+- Add port conflict badge for stopped containers
 ###2026.04.22-dev1
 - Fix update-check cron registration and link Update badge to release notes
 ###2026.04.12-dev1

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.05.30
+### Changes
+- Add port conflict badge for stopped containers
+
 ## 2026.04.22
 ### Changes
 - Fix update-check cron registration and link Update badge to release notes
