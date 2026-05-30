@@ -2,6 +2,8 @@
 
 ## 2026.05.30
 ### Changes
+- Pin yarn in .prototools to match packageManager
+- Show conflicting ports in expanded container details
 - Add port conflict badge for stopped containers
 
 ## 2026.04.22
