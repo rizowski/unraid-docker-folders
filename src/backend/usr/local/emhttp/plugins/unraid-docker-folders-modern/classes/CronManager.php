@@ -4,7 +4,10 @@ require_once dirname(__DIR__) . '/include/config.php';
 
 class CronManager
 {
-  const CRON_FILE = '/etc/cron.d/unraid-docker-folders-modern';
+  // Unraid's update_cron only concatenates *.cron files under
+  // /boot/config/plugins/<plugin>/ into root's crontab; files dropped in
+  // /etc/cron.d/ are ignored (and clobbered) — so the schedule must live here.
+  const CRON_FILE = CONFIG_DIR . '/' . PLUGIN_NAME . '.cron';
   const UPDATE_SCRIPT = PLUGIN_DIR . '/scripts/check-updates.php';
   const SCHEDULER_SCRIPT = PLUGIN_DIR . '/scripts/run-schedules.php';
 
@@ -53,7 +56,9 @@ class CronManager
   private static function setLine($tag, $cronExpr, $scriptPath)
   {
     $lines = self::readLines();
-    $entry = "{$cronExpr} root /usr/bin/php {$scriptPath} > /dev/null 2>&1";
+    // update_cron pipes this into `crontab -` (root's user crontab), which uses
+    // 5 time fields + command — NO user field.
+    $entry = "{$cronExpr} /usr/bin/php {$scriptPath} > /dev/null 2>&1";
     $marker = "# docker-folders-modern:{$tag}";
 
     $found = false;
@@ -124,9 +129,9 @@ class CronManager
     self::reload();
   }
 
-  // Unraid's dcron does not automatically pick up files dropped in /etc/cron.d/.
-  // update_cron re-merges them into root's crontab and signals the daemon; SIGHUP
-  // to crond is the fallback if the helper is absent (non-Unraid dev environments).
+  // update_cron concatenates every /boot/config/plugins/<plugin>/*.cron into
+  // root's crontab and signals the daemon; SIGHUP to crond is the fallback if
+  // the helper is absent (non-Unraid dev environments).
   private static function reload()
   {
     if (is_executable('/usr/local/sbin/update_cron')) {

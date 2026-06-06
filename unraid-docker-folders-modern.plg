@@ -437,6 +437,13 @@ if [ -f "${PLUGIN_DIR}/scripts/check-updates.php" ]; then
   echo "  check-updates.php made executable"
 fi
 
+# Clean up stale cron file from older versions that wrote to /etc/cron.d/
+# (update_cron never read it; the schedule now lives in CONFIG_DIR).
+if [ -f "/etc/cron.d/${PLUGIN_NAME}" ]; then
+  rm -f "/etc/cron.d/${PLUGIN_NAME}"
+  echo "  Removed stale /etc/cron.d/${PLUGIN_NAME}"
+fi
+
 # Make restore-cron script executable and run it to restore schedule from DB
 if [ -f "${PLUGIN_DIR}/scripts/restore-cron.php" ]; then
   chmod 755 "${PLUGIN_DIR}/scripts/restore-cron.php"
@@ -565,10 +572,12 @@ echo "========================================="
 echo "Removing ${PLUGIN_NAME}"
 echo "========================================="
 
-# Remove cron file if it exists
-if [ -f "/etc/cron.d/${PLUGIN_NAME}" ]; then
-  echo "Removing cron schedule..."
-  rm -f "/etc/cron.d/${PLUGIN_NAME}"
+# Remove the cron file (current location + legacy /etc/cron.d/ from old versions),
+# then rebuild root's crontab without our entries.
+echo "Removing cron schedule..."
+rm -f "${CONFIG_DIR}/${PLUGIN_NAME}.cron" "/etc/cron.d/${PLUGIN_NAME}"
+if [ -x /usr/local/sbin/update_cron ]; then
+  /usr/local/sbin/update_cron >/dev/null 2>&1
 fi
 
 # Backup data before removal
