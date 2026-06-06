@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.06.06
+### Changes
+- Fix cron registration: write to plugin config dir, drop user field
+
 ## 2026.05.30
 ### Changes
 - Pin yarn in .prototools to match packageManager
