@@ -189,8 +189,8 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
 
       // Upsert into database
       $db->query(
-        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
-         VALUES (:image, :local_digest, :remote_digest, :update_available, :checked_at, :error)',
+        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error, source_url)
+         VALUES (:image, :local_digest, :remote_digest, :update_available, :checked_at, :error, :source_url)',
         [
           ':image' => $imageName,
           ':local_digest' => $check['local_digest'],
@@ -198,6 +198,7 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
           ':update_available' => $check['update_available'] ? 1 : 0,
           ':checked_at' => time(),
           ':error' => $check['error'],
+          ':source_url' => $check['source_url'] ?? null,
         ]
       );
 
@@ -208,6 +209,7 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
         'update_available' => $check['update_available'],
         'checked_at' => time(),
         'error' => $check['error'],
+        'source_url' => $check['source_url'] ?? null,
       ];
     } catch (\Throwable $e) {
       $log('FATAL ' . $imageName . ': ' . $e->getMessage());
@@ -220,6 +222,7 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
         'update_available' => false,
         'checked_at' => time(),
         'error' => $e->getMessage(),
+        'source_url' => null,
       ];
     }
   }

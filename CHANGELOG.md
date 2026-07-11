@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026.06.06
+### Changes
+- Fix cron registration: write to plugin config dir, drop user field
+
+## 2026.05.30
+### Changes
+- Pin yarn in .prototools to match packageManager
+- Show conflicting ports in expanded container details
+- Add port conflict badge for stopped containers
+
+## 2026.04.22
+### Changes
+- Fix update-check cron registration and link Update badge to release notes
+
+## 2026.04.12
+### Changes
+- Add container/stack scheduling and backup system
+
 ## 2026.04.11
 ### Changes
 - Add container expand/collapse animation and brighten info text

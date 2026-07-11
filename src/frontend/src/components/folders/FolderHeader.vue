@@ -32,6 +32,7 @@
         @edit-compose="(p) => emit('edit-compose', p)"
         @compose-up="(p) => emit('compose-up', p)"
         @compose-recompose="(p) => emit('compose-recompose', p)"
+        @schedules="(type, id) => emit('schedules', type, id)"
       />
       <span class="shrink-0 inline-flex items-center justify-center min-w-6 h-6 px-2 rounded-full text-xs font-semibold ml-1" :class="runningCount > 0 ? 'bg-primary text-primary-text' : 'bg-border text-text-secondary'" :title="`${runningCount} running / ${existingContainerCount} total`">
         {{ runningCount }}/{{ existingContainerCount }}
@@ -137,6 +138,7 @@ const emit = defineEmits<{
   'compose-recompose': [project: string];
   'compose-pull': [project: string];
   'compose-up': [project: string];
+  schedules: [targetType: string, targetId: string];
 }>();
 
 const updatesStore = useUpdatesStore();

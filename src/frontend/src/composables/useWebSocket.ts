@@ -11,6 +11,7 @@ import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useComposeStore } from '@/stores/compose';
 import { useUpdatesStore } from '@/stores/updates';
+import { useScheduleStore } from '@/stores/schedules';
 import { useSettingsStore } from '@/stores/settings';
 import type { ConnectionStatus, WebSocketEvent } from '@/types/websocket';
 
@@ -44,6 +45,9 @@ function handleEvent(event: WebSocketEvent) {
     composeStore.fetchStacks();
     // Compose changes often affect container state too
     dockerStore.fetchContainers();
+  } else if (event.entity === 'schedules') {
+    const scheduleStore = useScheduleStore();
+    scheduleStore.fetchSchedules();
   } else if (event.entity === 'updates') {
     const settingsStore = useSettingsStore();
     if (settingsStore.enableUpdateChecks) {

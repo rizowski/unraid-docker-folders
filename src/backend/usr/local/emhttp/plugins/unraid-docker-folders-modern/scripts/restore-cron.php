@@ -37,5 +37,9 @@ $schedule = $scheduleRow ? $scheduleRow['value'] : 'disabled';
 CronManager::updateSchedule($schedule);
 
 if ($schedule !== 'disabled') {
-  echo "Cron schedule restored: {$schedule}";
+  echo "Cron schedule restored: {$schedule}\n";
 }
+
+// Restore scheduler cron if any enabled schedules exist
+CronManager::ensureSchedulerCron($db);
+echo "Schedule runner cron checked\n";

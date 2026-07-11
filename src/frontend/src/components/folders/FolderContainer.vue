@@ -1,6 +1,6 @@
 <template>
   <div class="mb-2">
-    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @compose-up="(p) => emit('compose-up', p)" @compose-recompose="(p) => emit('compose-recompose', p)" @compose-pull="(p) => emit('compose-pull', p)" />
+    <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @compose-up="(p) => emit('compose-up', p)" @compose-recompose="(p) => emit('compose-recompose', p)" @compose-pull="(p) => emit('compose-pull', p)" @schedules="(type, id) => emit('schedules', type, id)" />
 
     <div class="expand-grid" :class="{ 'expand-expanded': !folder.collapsed || isSearching }">
       <div class="expand-inner px-2 sm:px-4">
@@ -23,6 +23,7 @@
             @restart="handleRestart"
             @remove="handleRemove"
             @pull="(data) => emit('pull', data)"
+            @schedules="(type, id) => emit('schedules', type, id)"
           />
         </div>
         <!-- Compose folder: stack down — show faded service names as a preview -->
@@ -83,6 +84,7 @@ const emit = defineEmits<{
   'compose-up': [project: string];
   'compose-recompose': [project: string];
   'compose-pull': [project: string];
+  schedules: [targetType: string, targetId: string];
 }>();
 
 const dockerStore = useDockerStore();

@@ -6,7 +6,7 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'er
 
 export interface WebSocketEvent {
   type: 'event';
-  entity: 'container' | 'folder' | 'compose' | 'updates';
+  entity: 'container' | 'folder' | 'compose' | 'schedules' | 'updates';
   action: string;
   data: unknown;
   timestamp: number;

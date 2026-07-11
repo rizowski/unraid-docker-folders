@@ -6,7 +6,24 @@
       <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
       <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
       <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
-      <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
+      <a
+        v-if="hasUpdate && releaseNotesUrl"
+        :href="releaseNotesUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning hover:bg-warning/30"
+        title="View release notes"
+        @click.stop
+      >Update</a>
+      <span
+        v-else-if="hasUpdate"
+        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+      >Update</span>
+      <span
+        v-if="hasPortConflict"
+        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+        :title="portConflictTitle"
+      >Port Conflict</span>
     </div>
 
     <!-- Clickable summary row -->
@@ -57,7 +74,11 @@
         </template>
         <template v-if="displayPorts.length">
           <span class="text-text-secondary shrink-0">Ports</span>
-          <span class="text-text font-mono truncate">{{ displayPorts.join(', ') }}</span>
+          <div class="font-mono space-y-0.5 min-w-0">
+            <p v-for="(port, i) in displayPorts" :key="i" class="truncate" :class="port.conflictWith ? 'text-error' : 'text-text'">
+              {{ port.text }}<span v-if="port.conflictWith"> — conflicts with {{ port.conflictWith.join(', ') }}</span>
+            </p>
+          </div>
         </template>
         <template v-if="displayMounts.length">
           <span class="text-text-secondary shrink-0">Volumes</span>
@@ -182,7 +203,24 @@
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
         <div class="flex items-center gap-3 min-w-0">
           <span class="text-xs font-semibold text-text truncate">{{ container.name }}</span>
-          <span v-if="hasUpdate" class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning">Update</span>
+          <a
+            v-if="hasUpdate && releaseNotesUrl"
+            :href="releaseNotesUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning hover:bg-warning/30"
+            title="View release notes"
+            @click.stop
+          >Update</a>
+          <span
+            v-else-if="hasUpdate"
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+          >Update</span>
+          <span
+            v-if="hasPortConflict"
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+            :title="portConflictTitle"
+          >Port Conflict</span>
           <span class="hidden sm:inline text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
@@ -260,7 +298,9 @@
           <p class="text-text-secondary text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
           <div class="text-text font-mono text-xs space-y-0.5">
             <p v-if="networkInfo" class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</p>
-            <p v-for="port in displayPorts" :key="port" class="truncate">{{ port }}</p>
+            <p v-for="(port, i) in displayPorts" :key="i" class="truncate" :class="port.conflictWith ? 'text-error' : ''">
+              {{ port.text }}<span v-if="port.conflictWith"> — conflicts with {{ port.conflictWith.join(', ') }}</span>
+            </p>
           </div>
         </div>
         <div v-if="displayMounts.length">
@@ -421,7 +461,7 @@
 
 <script setup lang="ts">
 import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
-import type { Container } from '@/stores/docker';
+import { useDockerStore, type Container, type HostPortBinding } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
@@ -447,6 +487,7 @@ import IconAutostart from '@/components/icons/IconAutostart.vue';
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
 const isMobile = useIsMobile();
+const dockerStore = useDockerStore();
 const kebabMenuRef = ref<InstanceType<typeof KebabMenu> | null>(null);
 const menuOpen = computed(() => kebabMenuRef.value?.menuOpen ?? false);
 
@@ -466,6 +507,7 @@ const emit = defineEmits<{
   restart: [id: string];
   remove: [id: string, removeImage: boolean];
   pull: [data: { image: string; name: string; managed: string | null }];
+  schedules: [targetType: string, targetId: string];
 }>();
 
 const isActionInProgress = computed(() => !!props.actionInProgress);
@@ -482,8 +524,7 @@ const actionStatusText = computed(() => {
 
 // Autostart toggle
 async function handleToggleAutostart() {
-  const { useDockerStore } = await import('@/stores/docker');
-  await useDockerStore().toggleAutostart(props.container.name, !props.container.autostart);
+  await dockerStore.toggleAutostart(props.container.name, !props.container.autostart);
 }
 
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
@@ -492,8 +533,7 @@ const showDelayModal = ref(false);
 
 async function handleDelayConfirm(value: string) {
   const delay = Math.max(0, parseInt(value) || 0);
-  const { useDockerStore } = await import('@/stores/docker');
-  await useDockerStore().toggleAutostart(props.container.name, true, delay);
+  await dockerStore.toggleAutostart(props.container.name, true, delay);
   showDelayModal.value = false;
 }
 
@@ -557,7 +597,21 @@ const { showStats, containerStats } = useContainerStats({
   expanded,
 });
 
+const portConflict = computed(() => dockerStore.getPortConflict(props.container.id));
+const hasPortConflict = computed(() => !!portConflict.value);
+const portConflictTitle = computed(() =>
+  portConflict.value
+    ? portConflict.value.conflicts
+        .map((d) => `Port ${d.hostPort}/${d.type} is in use by ${d.heldBy.join(', ')}`)
+        .join('; ')
+    : ''
+);
+
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
+const releaseNotesUrl = computed<string | null>(() => {
+  const u = updatesStore.updates[props.container.image];
+  return u?.source_url ? `${u.source_url}/releases` : null;
+});
 
 // Inline logs panel (list view only)
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -739,6 +793,9 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
   { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
   { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: props.container.managed === 'dockerman' && props.container.autostart },
+  { divider: true },
+  { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
+  { divider: true },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
 ]);
@@ -758,6 +815,8 @@ async function handleMenuAction(action: string) {
     handleToggleAutostart();
   } else if (action === 'set-autostart-delay') {
     showDelayModal.value = true;
+  } else if (action === 'schedules') {
+    emit('schedules', 'container', props.container.name);
   } else if (action === 'console') {
     openContainerTerminal('console');
   } else if (action === 'logs') {
@@ -787,15 +846,68 @@ const networkInfo = computed(() => {
   return { name, ip: data?.IPAddress || '' };
 });
 
-const displayPorts = computed(() => {
-  const ports = props.container.ports;
-  if (!ports?.length) return [];
-  return ports.slice(0, 3).map((p) => {
-    if (p.PublicPort) {
-      return `${p.PrivatePort}/${p.Type} -> ${p.IP || '0.0.0.0'}:${p.PublicPort}`;
+// Conflicting host ports for this container, keyed by `${hostPort}/${type}` →
+// names of the running containers holding them.
+const conflictByHostPort = computed(() => {
+  const map = new Map<string, string[]>();
+  const info = portConflict.value;
+  if (info) {
+    for (const d of info.conflicts) {
+      map.set(`${d.hostPort}/${d.type}`, d.heldBy);
     }
-    return `${p.PrivatePort}/${p.Type}`;
+  }
+  return map;
+});
+
+interface PortRow {
+  text: string;
+  conflictWith: string[] | null;
+}
+
+const displayPorts = computed<PortRow[]>(() => {
+  const ports = props.container.ports ?? [];
+  const hostPorts = props.container.hostPorts ?? [];
+  const conflicts = conflictByHostPort.value;
+
+  // Index configured host bindings by container port + protocol so we can
+  // attach a host binding (and its conflict state) to each exposed port —
+  // stopped containers don't carry PublicPort in their runtime ports.
+  const bindingsByContainerPort = new Map<string, HostPortBinding[]>();
+  for (const b of hostPorts) {
+    const key = `${b.containerPort}/${b.type}`;
+    const list = bindingsByContainerPort.get(key);
+    if (list) list.push(b);
+    else bindingsByContainerPort.set(key, [b]);
+  }
+
+  const row = (text: string, hostPort: number, type: string): PortRow => ({
+    text,
+    conflictWith: conflicts.get(`${hostPort}/${type}`) ?? null,
   });
+
+  const rows: PortRow[] = [];
+
+  if (ports.length) {
+    for (const p of ports) {
+      const bindings = bindingsByContainerPort.get(`${p.PrivatePort}/${p.Type}`);
+      if (bindings?.length) {
+        for (const b of bindings) {
+          rows.push(row(`${p.PrivatePort}/${p.Type} -> ${b.hostIp || '0.0.0.0'}:${b.hostPort}`, b.hostPort, b.type));
+        }
+      } else if (p.PublicPort) {
+        rows.push(row(`${p.PrivatePort}/${p.Type} -> ${p.IP || '0.0.0.0'}:${p.PublicPort}`, p.PublicPort, p.Type));
+      } else {
+        rows.push({ text: `${p.PrivatePort}/${p.Type}`, conflictWith: null });
+      }
+    }
+  } else {
+    // No runtime ports (some stopped containers) — show configured bindings.
+    for (const b of hostPorts) {
+      rows.push(row(`${b.containerPort}/${b.type} -> ${b.hostIp || '0.0.0.0'}:${b.hostPort}`, b.hostPort, b.type));
+    }
+  }
+
+  return rows.slice(0, 3);
 });
 
 const compactPorts = computed(() => {

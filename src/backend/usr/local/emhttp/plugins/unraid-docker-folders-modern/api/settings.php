@@ -84,6 +84,8 @@ function handlePost()
     'post_pull_action',
     'log_refresh_interval',
     'compose_export_dir',
+    'backup_destination',
+    'default_retention_count',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);
@@ -115,6 +117,20 @@ function handlePost()
     $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', ['update_check_schedule']);
     if ($existing) {
       $db->update('settings', ['value' => 'disabled', 'updated_at' => $now], 'key = ?', ['update_check_schedule']);
+    }
+  }
+
+  // When update checks are re-enabled, rewrite the cron from the stored
+  // schedule so the user doesn't have to reselect it after a toggle.
+  if ($key === 'enable_update_checks' && $value === '1') {
+    $scheduleRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'update_check_schedule'");
+    $schedule = ($scheduleRow && $scheduleRow['value'] !== 'disabled') ? $scheduleRow['value'] : 'daily';
+    CronManager::updateSchedule($schedule);
+    $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', ['update_check_schedule']);
+    if ($existing) {
+      $db->update('settings', ['value' => $schedule, 'updated_at' => $now], 'key = ?', ['update_check_schedule']);
+    } else {
+      $db->insert('settings', ['key' => 'update_check_schedule', 'value' => $schedule, 'updated_at' => $now]);
     }
   }
 

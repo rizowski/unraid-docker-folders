@@ -34,6 +34,15 @@
       <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /></svg>
     </button>
 
+    <!-- Schedules -->
+    <button
+      title="Schedules"
+      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-text"
+      @click="$emit('schedules', 'stack', projectName)"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+    </button>
+
     <!-- Stack Details (compose file + logs tab) -->
     <button
       :title="composeStore.composePluginInstalled ? 'View stack details (read-only, compose.manager installed)' : 'Stack details'"
@@ -62,6 +71,7 @@ defineEmits<{
   'edit-compose': [project: string];
   'compose-up': [project: string];
   'compose-recompose': [project: string];
+  schedules: [targetType: string, targetId: string];
 }>();
 
 const composeStore = useComposeStore();

@@ -20,6 +20,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const notifyOnUpdates = ref(false);
   const updateCheckExclude = ref('');
   const postPullAction = ref('pull_only');
+  const backupDestination = ref('/mnt/user/backups/docker-folders');
+  const defaultRetentionCount = ref(7);
   const loaded = ref(false);
 
   async function fetchSettings() {
@@ -63,6 +65,13 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('post_pull_action' in settings) {
         postPullAction.value = settings.post_pull_action || 'pull_only';
+      }
+      if ('backup_destination' in settings) {
+        backupDestination.value = settings.backup_destination || '/mnt/user/backups/docker-folders';
+      }
+      if ('default_retention_count' in settings) {
+        const parsed = parseInt(settings.default_retention_count, 10);
+        defaultRetentionCount.value = Number.isNaN(parsed) ? 7 : parsed;
       }
 
       loaded.value = true;
@@ -201,6 +210,32 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setBackupDestination(value: string) {
+    backupDestination.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'backup_destination', value }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setDefaultRetentionCount(value: number) {
+    defaultRetentionCount.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'default_retention_count', value: String(value) }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
   async function setReplaceDockerSection(value: boolean) {
     replaceDockerSection.value = value;
 
@@ -226,6 +261,8 @@ export const useSettingsStore = defineStore('settings', () => {
     notifyOnUpdates,
     updateCheckExclude,
     postPullAction,
+    backupDestination,
+    defaultRetentionCount,
     loaded,
     fetchSettings,
     setDistinguishHealthy,
@@ -238,6 +275,8 @@ export const useSettingsStore = defineStore('settings', () => {
     setNotifyOnUpdates,
     setUpdateCheckExclude,
     setPostPullAction,
+    setBackupDestination,
+    setDefaultRetentionCount,
     setReplaceDockerSection,
   };
 });

@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.04.11">
-<!ENTITY md5 "b04b6145450cac0a2f87e30bef8db760">
+<!ENTITY version "2026.06.06-dev1">
+<!ENTITY md5 "3fb164d410ef270109bafc6ee2318f37">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -81,6 +81,22 @@
 
 
 
+
+
+
+
+
+###2026.06.06-dev1
+- Fix cron registration: write to plugin config dir, drop user field
+###2026.05.30-dev2
+- Pin yarn in .prototools to match packageManager
+- Show conflicting ports in expanded container details
+###2026.05.30-dev1
+- Add port conflict badge for stopped containers
+###2026.04.22-dev1
+- Fix update-check cron registration and link Update badge to release notes
+###2026.04.12-dev1
+- Add container/stack scheduling and backup system
 ###2026.04.11-dev9
 - Add container expand/collapse animation and brighten info text
 - Optimize container stats with cgroup reads and slow-data caching
@@ -424,6 +440,13 @@ if [ -f "${PLUGIN_DIR}/scripts/check-updates.php" ]; then
   echo "  check-updates.php made executable"
 fi
 
+# Clean up stale cron file from older versions that wrote to /etc/cron.d/
+# (update_cron never read it; the schedule now lives in CONFIG_DIR).
+if [ -f "/etc/cron.d/${PLUGIN_NAME}" ]; then
+  rm -f "/etc/cron.d/${PLUGIN_NAME}"
+  echo "  Removed stale /etc/cron.d/${PLUGIN_NAME}"
+fi
+
 # Make restore-cron script executable and run it to restore schedule from DB
 if [ -f "${PLUGIN_DIR}/scripts/restore-cron.php" ]; then
   chmod 755 "${PLUGIN_DIR}/scripts/restore-cron.php"
@@ -552,10 +575,12 @@ echo "========================================="
 echo "Removing ${PLUGIN_NAME}"
 echo "========================================="
 
-# Remove cron file if it exists
-if [ -f "/etc/cron.d/${PLUGIN_NAME}" ]; then
-  echo "Removing cron schedule..."
-  rm -f "/etc/cron.d/${PLUGIN_NAME}"
+# Remove the cron file (current location + legacy /etc/cron.d/ from old versions),
+# then rebuild root's crontab without our entries.
+echo "Removing cron schedule..."
+rm -f "${CONFIG_DIR}/${PLUGIN_NAME}.cron" "/etc/cron.d/${PLUGIN_NAME}"
+if [ -x /usr/local/sbin/update_cron ]; then
+  /usr/local/sbin/update_cron >/dev/null 2>&1
 fi
 
 # Backup data before removal

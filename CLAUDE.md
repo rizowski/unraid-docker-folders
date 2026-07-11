@@ -206,6 +206,12 @@ Key="Value"
 - **No full HTML docs in .page files**: Output content fragments only
 - **Vite base path**: Must be `/plugins/unraid-docker-folders-modern/assets/` for Unraid integration
 - **File permissions**: .page files = 644, scripts = 755, handled by build script
+- **Node / npm via proto**: `.prototools` at the repo root pins `node = "22.18.0"` and `npm = "bundled"`. If `npm` isn't on PATH, run `proto use` in the repo root to install and shim them. Shims live at `~/.proto/shims/`.
+- **No local PHP**: Lint/validate PHP with the `php:8.2-cli` Docker image, e.g.:
+  ```bash
+  docker run --rm -v "$(pwd)":/app -w /app php:8.2-cli php -l path/to/file.php
+  ```
+  Never assume a local `php` binary is available.
 
 ---
 

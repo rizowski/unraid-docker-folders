@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ContainerCard from '../ContainerCard.vue';
-import type { Container } from '@/stores/docker';
+import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 
@@ -15,6 +15,7 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     status: 'Up 2 hours',
     command: '/entrypoint.sh',
     ports: [{ IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }],
+    hostPorts: [],
     mounts: [],
     networkSettings: {},
     created: Date.now() / 1000,
@@ -604,6 +605,68 @@ describe('ContainerCard', () => {
         expect(logsCallCount()).toBe(callsAfterOpen);
 
         wrapper.unmount();
+      });
+    });
+
+    describe('port conflicts in expanded details', () => {
+      /** Seed the docker store with a running holder + the card's stopped container. */
+      function mountConflictCard(view: 'grid' | 'list', cardConflicts = true) {
+        const pinia = createPinia();
+        setActivePinia(pinia);
+
+        const docker = useDockerStore();
+        docker.containers = [
+          makeContainer({
+            id: 'run-grafana', name: 'grafana', state: 'running',
+            ports: [{ IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 3000, Type: 'tcp' }],
+            hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3000, containerPort: 3000, type: 'tcp' }],
+          }),
+          makeContainer({
+            id: 'stop-grafana', name: 'grafana-canary', state: 'exited',
+            ports: [{ IP: '', PrivatePort: 3000, Type: 'tcp' }],
+            // When cardConflicts is false, bind a free host port instead.
+            hostPorts: [{ hostIp: '0.0.0.0', hostPort: cardConflicts ? 3000 : 3001, containerPort: 3000, type: 'tcp' }],
+          }),
+        ];
+
+        return mount(ContainerCard, {
+          props: { container: docker.containers[1], view },
+          global: { plugins: [pinia], stubs: { Teleport: true } },
+        });
+      }
+
+      it('shows the conflicting port in red with holder names (grid view)', async () => {
+        const wrapper = mountConflictCard('grid');
+        // Expand via the summary row.
+        await wrapper.find('.cursor-pointer').trigger('click');
+        await flushPromises();
+
+        const portLine = wrapper.findAll('p').find((p) => p.text().includes('3000/tcp'));
+        expect(portLine).toBeTruthy();
+        expect(portLine!.text()).toContain('conflicts with grafana');
+        expect(portLine!.classes()).toContain('text-error');
+      });
+
+      it('shows the conflicting port in red with holder names (list view)', async () => {
+        const wrapper = mountConflictCard('list');
+        await wrapper.find('.container-row > div').trigger('click');
+        await flushPromises();
+
+        const portLine = wrapper.findAll('p').find((p) => p.text().includes('3000/tcp'));
+        expect(portLine).toBeTruthy();
+        expect(portLine!.text()).toContain('conflicts with grafana');
+        expect(portLine!.classes()).toContain('text-error');
+      });
+
+      it('does not flag the port when there is no conflict', async () => {
+        const wrapper = mountConflictCard('grid', false);
+        await wrapper.find('.cursor-pointer').trigger('click');
+        await flushPromises();
+
+        const portLine = wrapper.findAll('p').find((p) => p.text().includes('3000/tcp'));
+        expect(portLine).toBeTruthy();
+        expect(portLine!.text()).not.toContain('conflicts with');
+        expect(portLine!.classes()).not.toContain('text-error');
       });
     });
   });

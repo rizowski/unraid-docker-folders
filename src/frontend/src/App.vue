@@ -142,6 +142,7 @@
             @compose-up="openComposeUp"
             @compose-recompose="openComposeRecompose"
             @compose-pull="handleComposePull"
+            @schedules="openSchedules"
           />
         </div>
 
@@ -177,10 +178,16 @@
                   @restart="handleRestart"
                   @remove="handleRemove"
                   @pull="handlePull"
+                  @schedules="openSchedules"
                 />
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Schedules Panel -->
+        <div v-if="scheduleStore.scheduleCount > 0 || !dockerStore.containerCount" class="mt-8 pt-4 border-t border-border">
+          <SchedulesPanel />
         </div>
 
         <!-- Empty State -->
@@ -189,6 +196,14 @@
         </div>
       </div>
     </main>
+
+    <!-- Schedule List Modal -->
+    <ScheduleList
+      :is-open="!!schedulesTarget"
+      :target-type="schedulesTarget?.type ?? 'container'"
+      :target-id="schedulesTarget?.id ?? ''"
+      @close="schedulesTarget = null"
+    />
 
     <!-- Folder Edit Modal -->
     <FolderEditModal :is-open="isModalOpen" :folder="editingFolder" @close="closeModal" @save="saveFolder" />
@@ -260,6 +275,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import { useComposeStore } from '@/stores/compose';
+import { useScheduleStore } from '@/stores/schedules';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
@@ -272,11 +288,14 @@ import ConnectionStatus from '@/components/ConnectionStatus.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
+import ScheduleList from '@/components/schedules/ScheduleList.vue';
+import SchedulesPanel from '@/components/schedules/SchedulesPanel.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
+const scheduleStore = useScheduleStore();
 const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
 const updatesStore = useUpdatesStore();
@@ -404,7 +423,7 @@ watch(
 
 async function loadData() {
   try {
-    await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings(), composeStore.fetchStatus()]);
+    await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings(), composeStore.fetchStatus(), scheduleStore.fetchSchedules()]);
     if (settingsStore.enableUpdateChecks) {
       await updatesStore.fetchCachedUpdates();
     }
@@ -507,6 +526,12 @@ function initializeDragAndDrop() {
       })
     );
   }
+}
+
+const schedulesTarget = ref<{ type: 'container' | 'stack'; id: string } | null>(null);
+
+function openSchedules(targetType: string, targetId: string) {
+  schedulesTarget.value = { type: targetType as 'container' | 'stack', id: targetId };
 }
 
 async function handleStart(id: string) {
