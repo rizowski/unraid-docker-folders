@@ -1,0 +1,59 @@
+name: Release (stable)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+      - '.github/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history + tags: build.sh needs them for changelog generation,
+          # release notes, and duplicate-tag detection.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Seed archive directory from existing tags
+        # archive/*.txz is gitignored, but build.sh derives the next same-day
+        # build number from files in archive/. Recreate empty placeholders for
+        # every released version so auto-increment works in a fresh checkout.
+        run: |
+          mkdir -p archive
+          for tag in $(git tag -l 'v*'); do
+            touch "archive/unraid-docker-folders-modern-${tag#v}.txz"
+          done
+
+      - name: Build and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./build/build.sh --release
