@@ -2,6 +2,7 @@
 
 ## 2026.07.18
 ### Changes
+- Fix legacy button hiding on the native Docker page
 - Add settings to hide legacy Docker containers and buttons
 - Add targeted update checks for containers and compose stacks
 - Sync package-lock.json with package.json
