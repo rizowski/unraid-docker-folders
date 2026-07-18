@@ -2,6 +2,7 @@
 
 ## 2026.07.18
 ### Changes
+- Add settings to hide legacy Docker containers and buttons
 - Add targeted update checks for containers and compose stacks
 - Sync package-lock.json with package.json
 - Add GitHub Actions release workflows for main and dev
