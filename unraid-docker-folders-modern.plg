@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.07.18-dev3">
-<!ENTITY md5 "8ac00ca17b6fd4943661d905210fc2d3">
+<!ENTITY version "2026.07.18-dev4">
+<!ENTITY md5 "63735949f9bdb75af09edc2cdc21d05d">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -89,6 +89,9 @@
 
 
 
+
+###2026.07.18-dev4
+- Hide icon-only Docker Containers title bar variant
 ###2026.07.18-dev3
 - Fix legacy button hiding on the native Docker page
 ###2026.07.18-dev2
