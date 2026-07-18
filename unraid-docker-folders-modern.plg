@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.07.18-dev7">
-<!ENTITY md5 "0a6166907005b457a8d7808d686547c5">
+<!ENTITY version "2026.07.18-dev8">
+<!ENTITY md5 "7f75ccef84d6f71645399a54a1519728">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -93,6 +93,9 @@
 
 
 
+
+###2026.07.18-dev8
+- Faint tint on collapsed folders; fix expand animation snapping open
 ###2026.07.18-dev7
 - Replace folder left-border accent with expanded-state gradient tint
 ###2026.07.18-dev6
