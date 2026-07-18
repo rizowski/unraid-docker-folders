@@ -2,6 +2,7 @@
 
 ## 2026.07.18
 ### Changes
+- Add design guardrails (DESIGN.md) and migrate off palette colors
 - Remove live connection status indicator from main header
 - Hide icon-only Docker Containers title bar variant
 - Fix legacy button hiding on the native Docker page
