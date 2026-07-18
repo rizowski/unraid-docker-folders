@@ -12,6 +12,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Design Guardrails (MANDATORY for any UI change)
+
+**Before touching any template, CSS, or `.page` markup, read `DESIGN.md` and
+comply with it.** It is a set of hard constraints, not suggestions.
+
+Non-negotiables (full rules + review checklist in DESIGN.md):
+- The plugin must look **native to Unraid's webgui**: dense, flat,
+  border-separated, themed by the user's Unraid theme variables.
+- **Theme tokens only** (from `main.css` `@theme`) — never Tailwind palette
+  classes (`bg-blue-500`, `text-slate-*`, …) or hex values in components.
+- **One accent** (Unraid's `--header-background`). Status colors mean state,
+  never decoration.
+- No gradients, glassmorphism, glow shadows, or radii above `rounded` (4px)
+  on panels. Shadows only on modals/dropdowns.
+- Type scale is `text-xs`/`text-sm`; dense spacing (`p-2`/`p-3`); no hero
+  sections or airy layouts.
+- Inline stroke SVG icons only; **no emoji in the UI**; transitions ≤ 200ms
+  and only for state changes.
+- Reuse existing patterns (nav-btn, kebab menu, cards, BaseModal) before
+  inventing new ones. Verify on both dark and light Unraid themes.
+
+If a change genuinely requires breaking a rule, state which rule and why in
+the commit message.
+
+---
+
 ## Build Commands
 
 ### Frontend (Vue 3)
