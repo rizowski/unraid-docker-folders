@@ -18,7 +18,7 @@
       <h2 class="text-sm font-semibold text-text mr-1 truncate min-w-0">{{ folder.name }}</h2>
       <span
         v-if="folder.compose_project"
-        class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded text-[11px] font-medium tracking-wide uppercase mr-1"
+        class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-info/15 text-info rounded text-[11px] font-medium tracking-wide uppercase mr-1"
         :title="`Auto-grouped from compose project: ${folder.compose_project}`"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" /></svg>

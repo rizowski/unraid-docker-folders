@@ -718,10 +718,10 @@ const isHealthy = computed(() => props.container.status?.toLowerCase().includes(
 const statusDotClass = computed(() => {
   const state = props.container.state;
   if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'bg-green-500';
-  if (state === 'running' && distinguishHealthy.value) return 'bg-blue-500';
+  if (state === 'running' && distinguishHealthy.value) return 'bg-info';
   if (state === 'running') return 'bg-green-500';
   if (state === 'exited' || state === 'stopped') return 'bg-red-500';
-  return 'bg-gray-400';
+  return 'bg-muted';
 });
 
 // Vertical bar variant for list view (same color logic)
