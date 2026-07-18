@@ -2,6 +2,7 @@
 
 ## 2026.07.18
 ### Changes
+- Replace folder left-border accent with expanded-state gradient tint
 - Add design guardrails (DESIGN.md) and migrate off palette colors
 - Remove live connection status indicator from main header
 - Hide icon-only Docker Containers title bar variant
