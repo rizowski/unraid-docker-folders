@@ -17,6 +17,8 @@ foreach ($rows as $row) {
 $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
+$showLegacyContainers = ($settings['show_legacy_containers'] ?? '0') === '1';
+$showLegacyButtons = ($settings['show_legacy_buttons'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
 $showInlineLogs = ($settings['show_inline_logs'] ?? '0') === '1';
 $logRefreshInterval = $settings['log_refresh_interval'] ?? '10';
@@ -637,6 +639,28 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="replace-docker-section" <?= $replaceDockerSection ? 'checked' : '' ?> onchange="saveSetting('replace_docker_section', this.checked ? '1' : '0')" />
         <span id="save-status-replace-docker-section" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-legacy-containers">Show legacy Docker containers</label>
+        <div class="description">When the Docker Containers section is replaced, show the native (legacy) container list in a collapsed "Native Docker Containers" accordion below the Folders UI. When disabled, the legacy list is hidden entirely. Only applies while the section is replaced. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-legacy-containers" <?= $showLegacyContainers ? 'checked' : '' ?> onchange="saveSetting('show_legacy_containers', this.checked ? '1' : '0')" />
+        <span id="save-status-show-legacy-containers" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-legacy-buttons">Show legacy Docker buttons</label>
+        <div class="description">When the Docker Containers section is replaced, keep the native Docker page action buttons (Add Container, Check for Updates, etc.) visible. When disabled, they are hidden. Only applies while the section is replaced. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-legacy-buttons" <?= $showLegacyButtons ? 'checked' : '' ?> onchange="saveSetting('show_legacy_buttons', this.checked ? '1' : '0')" />
+        <span id="save-status-show-legacy-buttons" class="save-status">Saved</span>
       </div>
     </div>
 

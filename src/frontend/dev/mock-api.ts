@@ -499,6 +499,9 @@ const settings: Record<string, string> = {
   notify_on_updates: '0',
   update_check_exclude: '',
   post_pull_action: 'pull_only',
+  replace_docker_section: '0',
+  show_legacy_containers: '0',
+  show_legacy_buttons: '0',
 };
 
 async function handleSettings(req: any, res: any) {

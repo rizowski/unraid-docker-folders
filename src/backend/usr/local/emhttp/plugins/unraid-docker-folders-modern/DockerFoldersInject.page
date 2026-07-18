@@ -13,10 +13,19 @@ $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['replace_docke
 $replaceDockersSection = ($row && $row['value'] === '1');
 
 if (!$replaceDockersSection) return;
+
+// Visibility of the legacy (native) container list and action buttons.
+// Both hidden by default; opt back in via the plugin settings page.
+$row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['show_legacy_containers']);
+$showLegacyContainers = ($row && $row['value'] === '1');
+$row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['show_legacy_buttons']);
+$showLegacyButtons = ($row && $row['value'] === '1');
 ?>
 
 <script>
 (function() {
+  var SHOW_LEGACY_CONTAINERS = <?= $showLegacyContainers ? 'true' : 'false' ?>;
+  var SHOW_LEGACY_BUTTONS = <?= $showLegacyButtons ? 'true' : 'false' ?>;
   function hideNativeDockerSection() {
     // Hide the "Docker Containers" title bar
     document.querySelectorAll('div.title').forEach(function(el) {
@@ -73,26 +82,65 @@ if (!$replaceDockersSection) return;
         }
       }
 
-      // Wrap native section in a collapsed accordion
-      var accordion = document.createElement('details');
-      accordion.className = 'native-docker-accordion';
-      accordion.style.cssText = 'margin-top:12px;width:100%;';
+      if (SHOW_LEGACY_CONTAINERS) {
+        // Wrap native section in a collapsed accordion
+        var accordion = document.createElement('details');
+        accordion.className = 'native-docker-accordion';
+        accordion.style.cssText = 'margin-top:12px;width:100%;';
 
-      var summary = document.createElement('summary');
-      summary.style.cssText = 'cursor:pointer;padding:8px 12px;font-size:13px;user-select:none;';
-      summary.textContent = 'Native Docker Containers';
-      accordion.appendChild(summary);
+        var summary = document.createElement('summary');
+        summary.style.cssText = 'cursor:pointer;padding:8px 12px;font-size:13px;user-select:none;';
+        summary.textContent = 'Native Docker Containers';
+        accordion.appendChild(summary);
 
-      target.parentElement.insertBefore(accordion, target);
-      accordion.appendChild(target);
+        target.parentElement.insertBefore(accordion, target);
+        accordion.appendChild(target);
+      } else {
+        // Legacy container list hidden entirely (default)
+        target.style.display = 'none';
+      }
     }
 
     return !!containerSection;
   }
 
+  // Labels of the native Docker page action buttons, hidden unless the
+  // "show legacy buttons" setting is enabled.
+  var NATIVE_BUTTON_LABELS = [
+    'add container',
+    'check for updates',
+    'update all',
+    'apply update',
+    'container size',
+  ];
+
+  function hideNativeButtons() {
+    if (SHOW_LEGACY_BUTTONS) return true;
+
+    var found = false;
+    var candidates = document.querySelectorAll('input[type="button"], button');
+    candidates.forEach(function(el) {
+      // Never touch the plugin's own UI or anything inside the native accordion
+      // (the accordion already scopes its own visibility)
+      if (el.closest('[id*="docker-folders"]') || el.closest('.native-docker-accordion')) return;
+
+      var label = (el.value || el.textContent || '').trim().toLowerCase();
+      if (NATIVE_BUTTON_LABELS.indexOf(label) !== -1) {
+        el.style.display = 'none';
+        found = true;
+      }
+    });
+
+    return found;
+  }
+
   var attempts = 0;
+  var sectionDone = false;
+  var buttonsDone = false;
   function tryHide() {
-    if (!hideNativeDockerSection() && attempts < 20) {
+    sectionDone = hideNativeDockerSection() || sectionDone;
+    buttonsDone = hideNativeButtons() || buttonsDone;
+    if ((!sectionDone || !buttonsDone) && attempts < 20) {
       attempts++;
       setTimeout(tryHide, 250);
     }
