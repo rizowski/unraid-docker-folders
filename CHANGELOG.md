@@ -2,6 +2,7 @@
 
 ## 2026.07.18
 ### Changes
+- Remove live connection status indicator from main header
 - Hide icon-only Docker Containers title bar variant
 - Fix legacy button hiding on the native Docker page
 - Add settings to hide legacy Docker containers and buttons

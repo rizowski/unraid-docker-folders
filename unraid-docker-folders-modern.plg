@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.07.18-dev4">
-<!ENTITY md5 "63735949f9bdb75af09edc2cdc21d05d">
+<!ENTITY version "2026.07.18-dev5">
+<!ENTITY md5 "5b73a1227069ba37db99865aa98eb5fa">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -90,6 +90,9 @@
 
 
 
+
+###2026.07.18-dev5
+- Remove live connection status indicator from main header
 ###2026.07.18-dev4
 - Hide icon-only Docker Containers title bar variant
 ###2026.07.18-dev3
