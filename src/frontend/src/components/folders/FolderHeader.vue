@@ -1,11 +1,19 @@
 <template>
   <div
-    class="relative flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-4 cursor-pointer select-none border-l-4 hover:bg-bg-card transition"
+    class="folder-header relative flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-2 cursor-pointer select-none hover:bg-bg-card transition"
     :class="{ 'z-50': menuOpen }"
-    :style="{ borderLeftColor: folder.color || '#ff8c2f' }"
     @click="$emit('toggle-collapse')"
   >
-    <div class="flex items-center gap-2 flex-1 min-w-0">
+    <!-- Expanded-state tint: faint folder color fading to transparent on the
+         right (the sanctioned gradient exception in DESIGN.md §2). Sits above
+         the header background; content wrappers below are positioned so they
+         paint on top. -->
+    <div
+      class="absolute inset-0 rounded-sm pointer-events-none transition-opacity duration-200"
+      :class="folder.collapsed ? 'opacity-0' : 'opacity-100'"
+      :style="{ background: `linear-gradient(to right, ${folderTint}, transparent)` }"
+    ></div>
+    <div class="relative flex items-center gap-2 flex-1 min-w-0">
       <DragHandle v-if="!dragLocked" handle-class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing" />
       <ChevronIcon :expanded="!folder.collapsed" />
       <div
@@ -53,7 +61,7 @@
         <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
       </div>
     </div>
-    <div class="flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
+    <div class="relative flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
       <button
         class="p-1.5 rounded cursor-pointer transition relative"
         :class="hideStopped ? 'text-text' : 'text-text-secondary hover:text-text'"
@@ -127,6 +135,11 @@ const props = withDefaults(defineProps<Props>(), {
   hideStopped: false,
   hiddenCount: 0,
 });
+
+// Faint tint of the folder's color for the expanded-state background.
+const folderTint = computed(
+  () => `color-mix(in srgb, ${props.folder.color || 'var(--header-background, #ff8c2f)'} 12%, transparent)`
+);
 
 const emit = defineEmits<{
   'toggle-collapse': [];

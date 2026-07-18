@@ -94,7 +94,7 @@ describe('FolderHeader', () => {
     // FolderHeader renders a fragment (header div + InputModal), so
     // wrapper.element is the mount container — target the header div itself.
     const headerRoot = (wrapper: ReturnType<typeof mountHeader>) =>
-      wrapper.get('div.border-l-4').element as HTMLElement;
+      wrapper.get('div.folder-header').element as HTMLElement;
 
     it('root element has relative positioning for stacking context', () => {
       const wrapper = mountHeader();
@@ -129,7 +129,7 @@ describe('FolderHeader', () => {
       const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
       await kebab.trigger('click');
 
-      const dropdown = wrapper.findAll('div').find((d) => d.classes().includes('absolute'));
+      const dropdown = wrapper.findAll('div').find((d) => d.classes().includes('shadow-lg'));
       expect(dropdown).toBeTruthy();
       expect(dropdown!.element.className).toContain('z-[100]');
     });
