@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.07.10">
-<!ENTITY md5 "5f4b0498ca47a705cd82dda834c74159">
+<!ENTITY version "2026.07.18-dev1">
+<!ENTITY md5 "7b63c1ea06f09710ff37f3a608ee588f">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -86,6 +86,11 @@
 
 
 
+
+###2026.07.18-dev1
+- Add targeted update checks for containers and compose stacks
+- Sync package-lock.json with package.json
+- Add GitHub Actions release workflows for main and dev
 ###2026.06.06-dev1
 - Fix cron registration: write to plugin config dir, drop user field
 ###2026.05.30-dev2

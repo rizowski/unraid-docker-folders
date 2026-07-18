@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.07.18
+### Changes
+- Add targeted update checks for containers and compose stacks
+- Sync package-lock.json with package.json
+- Add GitHub Actions release workflows for main and dev
+
+## 2026.07.10
+### Changes
+- Release 2026.07.10
+
 ## 2026.06.06
 ### Changes
 - Fix cron registration: write to plugin config dir, drop user field
