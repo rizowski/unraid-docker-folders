@@ -160,6 +160,19 @@ const composeStack = computed(() =>
   props.folder.compose_project ? composeStore.getStackByProject(props.folder.compose_project) : null
 );
 
+// Unique images of containers that actually exist in this folder / stack
+const folderImages = computed(() => {
+  const images = new Set<string>();
+  for (const c of existingContainers.value) {
+    if (c.image) images.add(c.image);
+  }
+  return [...images];
+});
+
+const folderUpdateCheckRunning = computed(() =>
+  folderImages.value.some((image) => updatesStore.isCheckingImage(image))
+);
+
 // Drive from actual docker state so stale compose metadata can't claim "running".
 const {
   existingContainers,
@@ -193,6 +206,17 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
       class: 'text-warning hover:text-warning',
     });
     items.push({ divider: true });
+  }
+
+  if (settingsStore.enableUpdateChecks && folderImages.value.length > 0) {
+    items.push(
+      {
+        label: folderUpdateCheckRunning.value ? 'Checking for Updates…' : 'Check for Updates',
+        icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
+        action: 'check-updates',
+      },
+      { divider: true },
+    );
   }
 
   // Compose section — actions that affect the stack itself
@@ -234,6 +258,11 @@ async function handleMenuSelect(action: string) {
   if (action === 'edit') emit('edit');
   else if (action === 'delete') emit('delete');
   else if (action === 'update-folder') emit('update-folder');
+  else if (action === 'check-updates') {
+    if (!folderUpdateCheckRunning.value) {
+      await updatesStore.checkImagesForUpdates(folderImages.value);
+    }
+  }
   else if (action === 'compose-up' && props.folder.compose_project) {
     emit('compose-up', props.folder.compose_project);
   } else if (action === 'compose-stop' && props.folder.compose_project) {

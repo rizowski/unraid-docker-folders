@@ -603,16 +603,22 @@ const mockUpdateChecks: Record<string, any> = {
   },
 };
 
-function handleUpdates(req: any, res: any, params: Record<string, string>) {
+async function handleUpdates(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {
     return json(res, { updates: mockUpdateChecks });
   }
 
   if (req.method === 'POST' && params.action === 'check') {
-    // Simulate checking — mark a few containers as having updates
-    const imagesToCheck = [...new Set(containers.map((c) => c.image))];
+    // Simulate checking — mark a few containers as having updates.
+    // A payload of {images: [...]} restricts the check (targeted mode).
+    const body = await parseBody(req);
+    const allImages = [...new Set(containers.map((c) => c.image))];
+    const imagesToCheck = Array.isArray(body?.images)
+      ? allImages.filter((img) => body.images.includes(img))
+      : allImages;
     const now = Math.floor(Date.now() / 1000);
 
+    const results: Record<string, (typeof mockUpdateChecks)[string]> = {};
     for (const image of imagesToCheck) {
       const hasUpdate = image.includes('plex') || image.includes('postgres') || image.includes('grafana');
       let sourceUrl: string | null = null;
@@ -627,9 +633,11 @@ function handleUpdates(req: any, res: any, params: Record<string, string>) {
         error: null,
         source_url: sourceUrl,
       };
+      results[image] = mockUpdateChecks[image];
     }
 
-    return json(res, { updates: mockUpdateChecks });
+    // Like the real API: return only what was checked this round
+    return json(res, { updates: results });
   }
 }
 
@@ -899,7 +907,7 @@ export function mockApiPlugin(): Plugin {
           } else if (endpoint === 'stats.php') {
             handleStats(req, res, params);
           } else if (endpoint === 'updates.php') {
-            handleUpdates(req, res, params);
+            await handleUpdates(req, res, params);
           } else if (endpoint === 'pull.php') {
             handlePull(req, res, params);
           } else if (endpoint === 'compose.php') {

@@ -52,6 +52,12 @@ class StubDatabase
 {
     private array $settings = [];
 
+    /** @var string[] SQL of every executed query, for cleanup assertions */
+    public array $executedQueries = [];
+
+    /** Stale-entry count reported to the cleanup logic */
+    public int $staleCount = 0;
+
     public function setExcludePatterns(string $patterns): void
     {
         $this->settings['update_check_exclude'] = $patterns;
@@ -69,12 +75,13 @@ class StubDatabase
 
     public function query(string $sql, array $params = []): mixed
     {
+        $this->executedQueries[] = $sql;
         return true;
     }
 
     public function fetchValue(string $sql, array $params = []): mixed
     {
-        return 0;
+        return $this->staleCount;
     }
 }
 
@@ -319,5 +326,99 @@ final class UpdateCheckTest extends TestCase
         $this->assertStringContainsString('redis:7', $allLogs);
         $this->assertStringContainsString('postgres:15', $allLogs);
         $this->assertStringContainsString('Socket error', $allLogs);
+    }
+
+    // --- Targeted checks (specific containers / compose stacks) ----------
+
+    #[Test]
+    public function targetedCheckOnlyChecksRequestedImages(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+            $this->makeContainer('redis:7'),
+            $this->makeContainer('postgres:15'),
+        ];
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log(), ['nginx:latest', 'redis:7']);
+
+        $this->assertSame(2, $result['checked']);
+        $this->assertArrayHasKey('nginx:latest', $result['results']);
+        $this->assertArrayHasKey('redis:7', $result['results']);
+        $this->assertArrayNotHasKey('postgres:15', $result['results']);
+    }
+
+    #[Test]
+    public function targetedCheckIgnoresUnknownImages(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+        ];
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log(), ['nginx:latest', 'ghost:5']);
+
+        $this->assertSame(1, $result['checked']);
+        $this->assertArrayHasKey('nginx:latest', $result['results']);
+        $this->assertArrayNotHasKey('ghost:5', $result['results']);
+    }
+
+    #[Test]
+    public function targetedCheckStillAppliesExcludePatterns(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+            $this->makeContainer('redis:7'),
+        ];
+        $this->db->setExcludePatterns('nginx:*');
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log(), ['nginx:latest', 'redis:7']);
+
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame(1, $result['checked']);
+        $this->assertArrayNotHasKey('nginx:latest', $result['results']);
+        $this->assertArrayHasKey('redis:7', $result['results']);
+    }
+
+    #[Test]
+    public function targetedCheckWithEmptyListChecksNothing(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+        ];
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log(), []);
+
+        $this->assertSame(0, $result['checked']);
+        $this->assertEmpty($result['results']);
+    }
+
+    #[Test]
+    public function fullCheckRunsStaleEntryCleanup(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+        ];
+        $this->db->staleCount = 3;
+
+        checkAllImageUpdates($this->docker, $this->db, $this->log());
+
+        $deletes = array_filter($this->db->executedQueries, fn ($sql) => str_contains($sql, 'DELETE'));
+        $this->assertNotEmpty($deletes, 'Full check should clean up stale image_update_checks entries');
+    }
+
+    #[Test]
+    public function targetedCheckSkipsStaleEntryCleanup(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+            $this->makeContainer('redis:7'),
+        ];
+        $this->db->staleCount = 3;
+
+        checkAllImageUpdates($this->docker, $this->db, $this->log(), ['nginx:latest']);
+
+        // A targeted check only sees a subset of images — running the cleanup
+        // would delete every other image's cached status.
+        $deletes = array_filter($this->db->executedQueries, fn ($sql) => str_contains($sql, 'DELETE'));
+        $this->assertEmpty($deletes, 'Targeted check must not delete other images\' cached entries');
     }
 }

@@ -68,7 +68,11 @@ function handleGet()
 }
 
 /**
- * Check all container images for updates
+ * Check container images for updates.
+ *
+ * With no payload, checks every container image. An optional JSON payload
+ * `{"images": ["linuxserver/plex:latest", ...]}` restricts the check to
+ * those images (used for per-container / per-stack checks).
  */
 function handlePost()
 {
@@ -78,16 +82,33 @@ function handlePost()
     errorResponse('Invalid action', 400);
   }
 
+  // Optional targeted check: list of image references to check
+  $onlyImages = null;
+  $data = getRequestData();
+  if (is_array($data) && isset($data['images'])) {
+    if (!is_array($data['images'])) {
+      errorResponse('images must be an array of image references', 400);
+    }
+    $onlyImages = array_values(array_filter($data['images'], function ($img) {
+      return is_string($img) && $img !== '';
+    }));
+    if (empty($onlyImages)) {
+      errorResponse('images must contain at least one image reference', 400);
+    }
+  }
+
   // Allow unlimited execution time — registry checks can take 15s each
   set_time_limit(0);
   ignore_user_abort(true);
 
-  logUpdate('START Manual update check begun');
+  logUpdate($onlyImages !== null
+    ? 'START Targeted update check begun (' . count($onlyImages) . ' image(s))'
+    : 'START Manual update check begun');
 
   $dockerClient = new DockerClient();
   $db = Database::getInstance();
 
-  $result = checkAllImageUpdates($dockerClient, $db, 'logUpdate');
+  $result = checkAllImageUpdates($dockerClient, $db, 'logUpdate', $onlyImages);
 
   logUpdate('DONE Checked ' . $result['checked'] . ', skipped ' . $result['skipped'] . ', errors ' . $result['errors'] . ', updates ' . $result['newUpdates']);
 
