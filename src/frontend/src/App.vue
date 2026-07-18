@@ -9,7 +9,6 @@
           </svg>
         </a>
         <span class="text-xs sm:text-sm text-text-secondary truncate">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
-        <ConnectionStatus />
       </div>
       <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
         <div class="relative w-full sm:w-auto order-last sm:order-none mt-2 sm:mt-0">
@@ -284,7 +283,6 @@ import ComposeFileEditor from '@/components/compose/ComposeFileEditor.vue';
 import ComposeStartProgressModal from '@/components/compose/ComposeStartProgressModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
-import ConnectionStatus from '@/components/ConnectionStatus.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
