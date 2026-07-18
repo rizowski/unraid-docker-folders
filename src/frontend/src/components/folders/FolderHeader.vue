@@ -4,13 +4,14 @@
     :class="{ 'z-50': menuOpen }"
     @click="$emit('toggle-collapse')"
   >
-    <!-- Expanded-state tint: faint folder color fading to transparent on the
-         right (the sanctioned gradient exception in DESIGN.md §2). Sits above
-         the header background; content wrappers below are positioned so they
+    <!-- Folder-color tint fading to transparent on the right (the sanctioned
+         gradient exception in DESIGN.md §2): faint when collapsed, full
+         strength when expanded. Same gradient at two opacities so the change
+         animates smoothly. Content wrappers below are positioned so they
          paint on top. -->
     <div
       class="absolute inset-0 rounded-sm pointer-events-none transition-opacity duration-200"
-      :class="folder.collapsed ? 'opacity-0' : 'opacity-100'"
+      :class="folder.collapsed ? 'opacity-40' : 'opacity-100'"
       :style="{ background: `linear-gradient(to right, ${folderTint}, transparent)` }"
     ></div>
     <div class="relative flex items-center gap-2 flex-1 min-w-0">

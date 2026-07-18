@@ -238,8 +238,13 @@
   overflow: hidden;
 }
 
-/* When expanded, allow kebab menus to escape the container */
-#unraid-docker-folders-modern .expand-grid.expand-expanded .expand-inner {
+/* After the expand transition settles, allow kebab menus to escape the
+   container. This must NOT apply during the transition itself: flipping
+   overflow to visible changes the grid row's minimum track size from 0 to
+   full content height, which makes the 0fr->1fr animation snap open.
+   FolderContainer adds .expand-settled ~220ms after expanding and removes
+   it immediately on collapse. */
+#unraid-docker-folders-modern .expand-grid.expand-settled .expand-inner {
   overflow: visible;
 }
 
