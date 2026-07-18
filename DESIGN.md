@@ -41,6 +41,10 @@ marketing-style empty states. None of that belongs here.
 - **Flat.** Panels are separated by `border-border` (1px) and background
   tokens, exactly like Unraid's own tables.
 - **No gradients. No glassmorphism / `backdrop-blur`. No glow shadows.**
+  One sanctioned exception: the folder header's expanded-state tint — the
+  folder's color at ~12% fading to transparent on the right. It encodes state
+  (expanded) and identity (the folder's own color), not decoration. Do not add
+  a second gradient.
 - Shadows only on floating overlays (modals, dropdown menus: `shadow-lg`) and
   the existing `shadow-sm` on cards. Nothing else casts a shadow.
 - Border radius: `rounded` (4px) is the default and the maximum for
