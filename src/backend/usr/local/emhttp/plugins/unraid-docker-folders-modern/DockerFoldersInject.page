@@ -22,6 +22,16 @@ $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['show_legacy_b
 $showLegacyButtons = ($row && $row['value'] === '1');
 ?>
 
+<?php if (!$showLegacyButtons): ?>
+<style>
+/* Hide the native Docker page action button row (Add Container, Start All,
+   Stop All, Check for Updates, ...). CSS with !important wins even when
+   dockerMan's own scripts rewrite the buttons' style attributes, and it
+   applies regardless of when the buttons are inserted into the DOM. */
+.js-actions { display: none !important; }
+</style>
+<?php endif; ?>
+
 <script>
 (function() {
   var SHOW_LEGACY_CONTAINERS = <?= $showLegacyContainers ? 'true' : 'false' ?>;
@@ -104,10 +114,16 @@ $showLegacyButtons = ($row && $row['value'] === '1');
     return !!containerSection;
   }
 
-  // Labels of the native Docker page action buttons, hidden unless the
+  // Labels of the native Docker page action buttons (dockerMan renders them
+  // in a div.js-actions, hidden via CSS above). This JS pass is a fallback
+  // for markups where that class is absent, hidden unless the
   // "show legacy buttons" setting is enabled.
   var NATIVE_BUTTON_LABELS = [
     'add container',
+    'start all',
+    'stop all',
+    'pause all',
+    'resume all',
     'check for updates',
     'update all',
     'apply update',
@@ -126,7 +142,10 @@ $showLegacyButtons = ($row && $row['value'] === '1');
 
       var label = (el.value || el.textContent || '').trim().toLowerCase();
       if (NATIVE_BUTTON_LABELS.indexOf(label) !== -1) {
-        el.style.display = 'none';
+        // Prefer hiding the whole action row; dockerMan rewrites the buttons'
+        // own style attributes, so per-element hiding must use !important.
+        var row = el.closest('.js-actions');
+        (row || el).style.setProperty('display', 'none', 'important');
         found = true;
       }
     });
