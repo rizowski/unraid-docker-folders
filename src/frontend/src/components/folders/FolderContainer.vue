@@ -2,7 +2,7 @@
   <div class="mb-1">
     <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @compose-up="(p) => emit('compose-up', p)" @compose-recompose="(p) => emit('compose-recompose', p)" @compose-pull="(p) => emit('compose-pull', p)" @schedules="(type, id) => emit('schedules', type, id)" />
 
-    <div class="expand-grid" :class="{ 'expand-expanded': !folder.collapsed || isSearching }">
+    <div class="expand-grid" :class="{ 'expand-expanded': isExpanded, 'expand-settled': expandSettled }">
       <div class="expand-inner px-2 sm:px-4">
         <div
           class="container-list"
@@ -99,6 +99,26 @@ const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${prop
 watch(hideStopped, (v) => localStorage.setItem(storageKey.value, v ? '1' : '0'));
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
+
+const isExpanded = computed(() => !props.folder.collapsed || isSearching.value);
+
+// Overflow on the expand container must stay hidden while the height
+// transition runs (see .expand-settled in main.css), so mark the folder as
+// settled shortly after the 200ms transition finishes. Collapse unsettles
+// immediately so the closing transition can animate.
+const expandSettled = ref(isExpanded.value);
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+watch(isExpanded, (expanded) => {
+  clearTimeout(settleTimer);
+  if (expanded) {
+    settleTimer = setTimeout(() => {
+      expandSettled.value = true;
+    }, 220);
+  } else {
+    expandSettled.value = false;
+  }
+});
+onUnmounted(() => clearTimeout(settleTimer));
 
 const folderContainers = computed(() => {
   let list = props.folder.containers || [];
