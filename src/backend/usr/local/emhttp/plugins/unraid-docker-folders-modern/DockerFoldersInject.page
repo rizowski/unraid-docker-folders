@@ -37,10 +37,15 @@ $showLegacyButtons = ($row && $row['value'] === '1');
   var SHOW_LEGACY_CONTAINERS = <?= $showLegacyContainers ? 'true' : 'false' ?>;
   var SHOW_LEGACY_BUTTONS = <?= $showLegacyButtons ? 'true' : 'false' ?>;
   function hideNativeDockerSection() {
-    // Hide the "Docker Containers" title bar
+    // Hide the "Docker Containers" title bar. Depending on Unraid version it
+    // either carries the section text or renders as an icon-only bar
+    // (fa-th grid icon with empty label spans).
     document.querySelectorAll('div.title').forEach(function(el) {
-      if (el.textContent && /Docker Containers/i.test(el.textContent)) {
-        el.style.display = 'none';
+      var text = (el.textContent || '').trim();
+      var isDockerTitle = /Docker Containers/i.test(text);
+      var isIconOnlyTitle = text === '' && el.querySelector('i.fa-th');
+      if (isDockerTitle || isIconOnlyTitle) {
+        el.style.setProperty('display', 'none', 'important');
       }
     });
 
