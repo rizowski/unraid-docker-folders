@@ -1,22 +1,33 @@
 <template>
   <BaseModal :is-open="isOpen" max-width="560px" @close="$emit('close')">
-    <div class="p-5 flex flex-col gap-4">
-      <h2 class="text-lg font-semibold text-text m-0">{{ editId ? 'Edit Schedule' : 'New Schedule' }}</h2>
+    <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
+      <h2 class="text-xl font-semibold text-text m-0">{{ editId ? 'Edit Schedule' : 'New Schedule' }}</h2>
+      <button
+        class="flex items-center justify-center w-8 h-8 rounded-full bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition"
+        aria-label="Close"
+        @click="$emit('close')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      </button>
+    </div>
 
+    <div class="p-4 sm:p-6 flex flex-col gap-4">
       <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium text-text">Name</label>
+        <label for="schedule-name" class="font-medium text-text">Name</label>
         <input
+          id="schedule-name"
           v-model="form.name"
-          class="w-full px-3 py-2 rounded border border-border bg-bg text-text text-sm"
+          class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-text focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
           placeholder="e.g. Nightly backup"
         />
       </div>
 
       <div class="flex flex-col gap-1">
-        <label class="text-sm font-medium text-text">Action</label>
+        <label for="schedule-action" class="font-medium text-text">Action</label>
         <select
+          id="schedule-action"
           v-model="form.action"
-          class="w-full px-3 py-2 rounded border border-border bg-bg text-text text-sm"
+          class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-text cursor-pointer focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
         >
           <option value="start">Start</option>
           <option value="stop">Stop</option>
@@ -30,68 +41,92 @@
 
       <!-- Backup config -->
       <template v-if="form.action === 'backup'">
-        <div class="flex flex-col gap-2 p-3 rounded border border-border bg-bg">
+        <div class="flex flex-col gap-3 p-4 rounded border border-border bg-bg-card">
           <h3 class="text-sm font-semibold text-text m-0">Backup Configuration</h3>
 
           <template v-if="targetType === 'container'">
-            <div class="flex flex-col gap-1">
+            <div class="flex flex-col gap-2">
               <label class="text-xs text-text-secondary">Paths to back up (container paths)</label>
-              <div v-if="containerMounts.length" class="text-xs text-text-secondary mb-1">
+              <div v-if="containerMounts.length" class="text-xs text-text-secondary">
                 Available mounts: {{ containerMounts.map(m => m.Destination).join(', ') }}
               </div>
               <div v-for="(path, idx) in backupPaths" :key="idx" class="flex items-center gap-2">
                 <input
                   :value="path"
-                  class="flex-1 px-2 py-1.5 rounded border border-border bg-bg text-text text-sm font-mono"
+                  class="flex-1 py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                   placeholder="/config"
                   @input="backupPaths[idx] = ($event.target as HTMLInputElement).value"
                 />
-                <button class="text-error text-sm cursor-pointer bg-transparent border-none p-1" @click="backupPaths.splice(idx, 1)">x</button>
+                <button
+                  class="flex items-center justify-center p-1.5 shrink-0 rounded cursor-pointer text-text-secondary hover:text-error transition"
+                  aria-label="Remove path"
+                  @click="backupPaths.splice(idx, 1)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
               </div>
-              <button class="text-primary text-sm cursor-pointer bg-transparent border-none p-0 text-left w-fit" @click="backupPaths.push('')">+ Add path</button>
+              <button class="nav-btn w-fit" @click="backupPaths.push('')">+ Add path</button>
             </div>
           </template>
 
           <template v-else>
-            <div v-for="(svc, idx) in backupServices" :key="idx" class="flex flex-col gap-1 p-2 rounded border border-border">
+            <div v-for="(svc, idx) in backupServices" :key="idx" class="flex flex-col gap-2 p-3 rounded border border-border">
               <div class="flex items-center gap-2">
                 <input
                   v-model="svc.service"
-                  class="flex-1 px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+                  class="flex-1 py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                   placeholder="Service name"
                 />
-                <button class="text-error text-sm cursor-pointer bg-transparent border-none p-1" @click="backupServices.splice(idx, 1)">x</button>
+                <button
+                  class="flex items-center justify-center p-1.5 shrink-0 rounded cursor-pointer text-text-secondary hover:text-error transition"
+                  aria-label="Remove service"
+                  @click="backupServices.splice(idx, 1)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
               </div>
               <div v-for="(p, pi) in svc.patterns" :key="pi" class="flex items-center gap-2 ml-4">
                 <input
                   :value="p"
-                  class="flex-1 px-2 py-1.5 rounded border border-border bg-bg text-text text-sm font-mono"
+                  class="flex-1 py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                   placeholder="/data"
                   @input="svc.patterns[pi] = ($event.target as HTMLInputElement).value"
                 />
-                <button class="text-error text-xs cursor-pointer bg-transparent border-none p-1" @click="svc.patterns.splice(pi, 1)">x</button>
+                <button
+                  class="flex items-center justify-center p-1.5 shrink-0 rounded cursor-pointer text-text-secondary hover:text-error transition"
+                  aria-label="Remove path"
+                  @click="svc.patterns.splice(pi, 1)"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
               </div>
-              <button class="text-primary text-xs cursor-pointer bg-transparent border-none p-0 text-left w-fit ml-4" @click="svc.patterns.push('')">+ Add path</button>
+              <!-- margin lives on the wrapper: #…modern button.nav-btn sets margin:0,
+                   which outranks a Tailwind ml-* utility -->
+              <div class="ml-4">
+                <button class="nav-btn" @click="svc.patterns.push('')">+ Add path</button>
+              </div>
             </div>
-            <button class="text-primary text-sm cursor-pointer bg-transparent border-none p-0 text-left w-fit" @click="backupServices.push({ service: '', patterns: [''] })">+ Add service</button>
+            <button class="nav-btn w-fit" @click="backupServices.push({ service: '', patterns: [''] })">+ Add service</button>
           </template>
 
           <div class="flex gap-3">
             <div class="flex-1 flex flex-col gap-1">
-              <label class="text-xs text-text-secondary">Destination (optional)</label>
+              <label for="backup-destination" class="text-xs text-text-secondary">Destination (optional)</label>
               <input
+                id="backup-destination"
                 v-model="backupDestination"
-                class="w-full px-2 py-1.5 rounded border border-border bg-bg text-text text-sm font-mono"
+                class="w-full py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                 :placeholder="settingsStore.backupDestination"
               />
             </div>
             <div class="w-24 flex flex-col gap-1">
-              <label class="text-xs text-text-secondary">Keep</label>
+              <label for="backup-retention" class="text-xs text-text-secondary">Keep</label>
               <input
+                id="backup-retention"
                 v-model.number="backupRetention"
                 type="number"
                 min="1"
-                class="w-full px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+                class="w-full py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
                 :placeholder="String(settingsStore.defaultRetentionCount)"
               />
             </div>
@@ -105,13 +140,18 @@
       </div>
 
       <div v-if="formError" class="text-sm text-error">{{ formError }}</div>
+    </div>
 
-      <div class="flex justify-end gap-2 pt-2">
-        <button class="px-4 py-2 rounded border border-border bg-transparent text-text text-sm cursor-pointer hover:bg-bg" @click="$emit('close')">Cancel</button>
-        <button class="px-4 py-2 rounded border-none bg-primary text-white text-sm cursor-pointer hover:opacity-90" :disabled="saving" @click="save">
-          {{ saving ? 'Saving...' : (editId ? 'Update' : 'Create') }}
-        </button>
-      </div>
+    <div class="flex justify-end gap-2 p-4 sm:p-6 pt-4 border-t border-border">
+      <button class="nav-btn" @click="$emit('close')">Cancel</button>
+      <button
+        class="nav-btn active"
+        :class="{ 'opacity-50 cursor-not-allowed': saving }"
+        :disabled="saving"
+        @click="save"
+      >
+        {{ saving ? 'Saving...' : (editId ? 'Update' : 'Create') }}
+      </button>
     </div>
   </BaseModal>
 </template>

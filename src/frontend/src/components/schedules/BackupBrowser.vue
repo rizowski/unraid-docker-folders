@@ -1,8 +1,17 @@
 <template>
   <BaseModal :is-open="isOpen" max-width="600px" @close="$emit('close')">
-    <div class="p-5 flex flex-col gap-3">
-      <h2 class="text-lg font-semibold text-text m-0">Backups: {{ targetId }}</h2>
+    <div class="flex justify-between items-center gap-3 p-4 sm:p-6 border-b border-border">
+      <h2 class="text-xl font-semibold text-text m-0 truncate">Backups: {{ targetId }}</h2>
+      <button
+        class="flex items-center justify-center w-8 h-8 shrink-0 rounded-full bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition"
+        aria-label="Close"
+        @click="$emit('close')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      </button>
+    </div>
 
+    <div class="p-4 sm:p-6 flex flex-col gap-3">
       <div v-if="loading" class="text-sm text-text-secondary py-4 text-center">Loading...</div>
 
       <div v-else-if="!backups.length" class="text-sm text-text-secondary py-4 text-center">
@@ -31,20 +40,21 @@
         </div>
       </div>
 
-      <ConfirmModal
-        :is-open="!!confirmDeletePath"
-        title="Delete Backup"
-        message="Are you sure you want to delete this backup file?"
-        confirm-label="Delete"
-        variant="danger"
-        @confirm="doDelete"
-        @cancel="confirmDeletePath = ''"
-      />
-
-      <div class="flex justify-end pt-2">
-        <button class="px-4 py-2 rounded border border-border bg-transparent text-text text-sm cursor-pointer hover:bg-bg" @click="$emit('close')">Close</button>
-      </div>
     </div>
+
+    <div class="flex justify-end p-4 sm:p-6 pt-4 border-t border-border">
+      <button class="nav-btn" @click="$emit('close')">Close</button>
+    </div>
+
+    <ConfirmModal
+      :is-open="!!confirmDeletePath"
+      title="Delete Backup"
+      message="Are you sure you want to delete this backup file?"
+      confirm-label="Delete"
+      variant="danger"
+      @confirm="doDelete"
+      @cancel="confirmDeletePath = ''"
+    />
   </BaseModal>
 </template>
 

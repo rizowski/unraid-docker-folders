@@ -1,38 +1,42 @@
 <template>
   <div class="flex flex-col gap-2">
-    <label class="text-sm font-medium text-text">Schedule</label>
+    <label for="cron-preset" class="font-medium text-text">Schedule</label>
     <select
+      id="cron-preset"
       :value="preset"
-      class="w-full px-3 py-2 rounded border border-border bg-bg text-text text-sm"
+      class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-text cursor-pointer focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
       @change="onPresetChange(($event.target as HTMLSelectElement).value as CronPreset)"
     >
       <option v-for="(info, key) in CRON_PRESETS" :key="key" :value="key">{{ info.label }}</option>
     </select>
 
     <div v-if="preset === 'daily_custom'" class="flex items-center gap-2">
-      <label class="text-xs text-text-secondary">Time:</label>
+      <label for="cron-daily-time" class="text-xs text-text-secondary">Time:</label>
       <input
+        id="cron-daily-time"
         type="time"
         :value="customTime"
-        class="px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+        class="py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
         @change="onTimeChange(($event.target as HTMLInputElement).value)"
       />
     </div>
 
     <div v-if="preset === 'weekly_custom'" class="flex items-center gap-2 flex-wrap">
-      <label class="text-xs text-text-secondary">Day:</label>
+      <label for="cron-weekly-day" class="text-xs text-text-secondary">Day:</label>
       <select
+        id="cron-weekly-day"
         :value="customDay"
-        class="px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+        class="py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm cursor-pointer focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
         @change="customDay = Number(($event.target as HTMLSelectElement).value); emitWeekly()"
       >
         <option v-for="(name, idx) in dayNames" :key="idx" :value="idx">{{ name }}</option>
       </select>
-      <label class="text-xs text-text-secondary">Time:</label>
+      <label for="cron-weekly-time" class="text-xs text-text-secondary">Time:</label>
       <input
+        id="cron-weekly-time"
         type="time"
         :value="customTime"
-        class="px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+        class="py-1.5 px-3 border border-input-border rounded bg-input-bg text-text text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
         @change="onWeeklyTimeChange(($event.target as HTMLInputElement).value)"
       />
     </div>
@@ -41,7 +45,7 @@
       <input
         :value="modelValue"
         placeholder="* * * * *"
-        class="w-full px-3 py-2 rounded border border-border bg-bg text-text text-sm font-mono"
+        class="w-full py-2 px-4 border border-input-border rounded bg-input-bg text-text font-mono focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
         @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       />
       <span class="text-xs text-text-secondary">Format: minute hour day-of-month month day-of-week</span>

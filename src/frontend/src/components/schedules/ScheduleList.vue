@@ -1,13 +1,20 @@
 <template>
   <BaseModal :is-open="isOpen" max-width="640px" @close="$emit('close')">
-    <div class="p-5 flex flex-col gap-3">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-text m-0">Schedules: {{ targetId }}</h2>
-        <button class="px-3 py-1.5 rounded border-none bg-primary text-white text-sm cursor-pointer hover:opacity-90" @click="showCreateModal = true">
-          + Add
+    <div class="flex justify-between items-center gap-3 p-4 sm:p-6 border-b border-border">
+      <h2 class="text-xl font-semibold text-text m-0 truncate">Schedules: {{ targetId }}</h2>
+      <div class="flex items-center gap-2 shrink-0">
+        <button class="nav-btn active" @click="showCreateModal = true">+ Add</button>
+        <button
+          class="flex items-center justify-center w-8 h-8 rounded-full bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition"
+          aria-label="Close"
+          @click="$emit('close')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
         </button>
       </div>
+    </div>
 
+    <div class="p-4 sm:p-6 flex flex-col gap-3">
       <div v-if="loading" class="text-sm text-text-secondary py-4 text-center">Loading...</div>
 
       <div v-else-if="!targetSchedules.length" class="text-sm text-text-secondary py-4 text-center">
@@ -76,32 +83,35 @@
         </div>
       </div>
 
-      <ScheduleModal
-        :is-open="showCreateModal || editSchedule !== null"
-        :target-type="targetType"
-        :target-id="targetId"
-        :edit-id="editSchedule"
-        @close="showCreateModal = false; editSchedule = null"
-        @saved="onSaved"
-      />
-
-      <ScheduleHistoryModal
-        v-if="showHistory !== null"
-        :is-open="showHistory !== null"
-        :schedule-id="showHistory!"
-        @close="showHistory = null"
-      />
-
-      <ConfirmModal
-        :is-open="confirmDelete !== null"
-        title="Delete Schedule"
-        message="Are you sure you want to delete this schedule?"
-        confirm-label="Delete"
-        variant="danger"
-        @confirm="doDelete"
-        @cancel="confirmDelete = null"
-      />
     </div>
+
+    <!-- Nested modals: each teleports its own overlay to the app root, so they
+         render as siblings of this one rather than inside its scroll container. -->
+    <ScheduleModal
+      :is-open="showCreateModal || editSchedule !== null"
+      :target-type="targetType"
+      :target-id="targetId"
+      :edit-id="editSchedule"
+      @close="showCreateModal = false; editSchedule = null"
+      @saved="onSaved"
+    />
+
+    <ScheduleHistoryModal
+      v-if="showHistory !== null"
+      :is-open="showHistory !== null"
+      :schedule-id="showHistory!"
+      @close="showHistory = null"
+    />
+
+    <ConfirmModal
+      :is-open="confirmDelete !== null"
+      title="Delete Schedule"
+      message="Are you sure you want to delete this schedule?"
+      confirm-label="Delete"
+      variant="danger"
+      @confirm="doDelete"
+      @cancel="confirmDelete = null"
+    />
   </BaseModal>
 </template>
 

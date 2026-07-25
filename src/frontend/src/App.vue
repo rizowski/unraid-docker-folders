@@ -245,25 +245,24 @@
       @complete="handleBatchPullComplete"
     />
 
-    <Teleport to="body">
-      <ConfirmModal
-        :is-open="!!deletingFolderId"
-        title="Delete Folder"
-        :message="`Delete &quot;${deletingFolderName}&quot;? Containers will be moved to unfoldered.`"
-        confirm-label="Delete"
-        variant="danger"
-        @confirm="confirmDeleteFolder"
-        @cancel="deletingFolderId = null"
-      />
-      <ConfirmModal
-        :is-open="showBatchConfirm"
-        title="Update Containers"
-        :message="`Pull updates for ${pendingBatchContainers.length} container(s)? This will download newer images from the registry.`"
-        confirm-label="Update"
-        @confirm="confirmBatchPull"
-        @cancel="showBatchConfirm = false; pendingBatchContainers = []"
-      />
-    </Teleport>
+    <!-- BaseModal teleports its own overlay to the app root, so no wrapper needed -->
+    <ConfirmModal
+      :is-open="!!deletingFolderId"
+      title="Delete Folder"
+      :message="`Delete &quot;${deletingFolderName}&quot;? Containers will be moved to unfoldered.`"
+      confirm-label="Delete"
+      variant="danger"
+      @confirm="confirmDeleteFolder"
+      @cancel="deletingFolderId = null"
+    />
+    <ConfirmModal
+      :is-open="showBatchConfirm"
+      title="Update Containers"
+      :message="`Pull updates for ${pendingBatchContainers.length} container(s)? This will download newer images from the registry.`"
+      confirm-label="Update"
+      @confirm="confirmBatchPull"
+      @cancel="showBatchConfirm = false; pendingBatchContainers = []"
+    />
   </div>
 </template>
 

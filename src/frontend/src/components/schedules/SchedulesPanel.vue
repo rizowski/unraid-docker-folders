@@ -12,7 +12,7 @@
         <input
           v-model="filter"
           placeholder="Filter..."
-          class="px-2 py-1 rounded border border-border bg-bg text-text text-sm w-40"
+          class="text-sm px-3 py-1 w-40 border border-border rounded bg-transparent text-text placeholder:text-text-secondary focus:outline-none focus:border-text-secondary"
         />
       </div>
     </div>
