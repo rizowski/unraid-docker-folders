@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.07.25
+### Changes
+- fix: schedules modal
+
+## 2026.07.10
+### Changes
+- Release 2026.07.10
+
 ## 2026.06.06
 ### Changes
 - Fix cron registration: write to plugin config dir, drop user field
