@@ -91,35 +91,37 @@ describe('FolderHeader', () => {
   });
 
   describe('z-index stacking', () => {
+    // FolderHeader renders a fragment (header div + InputModal), so
+    // wrapper.element is the mount container — target the header div itself.
+    const headerRoot = (wrapper: ReturnType<typeof mountHeader>) =>
+      wrapper.get('div.folder-header').element as HTMLElement;
+
     it('root element has relative positioning for stacking context', () => {
       const wrapper = mountHeader();
-      const root = wrapper.element as HTMLElement;
-      expect(root.className).toContain('relative');
+      expect(headerRoot(wrapper).className).toContain('relative');
     });
 
     it('root does not have z-50 when menu is closed', () => {
       const wrapper = mountHeader();
-      const root = wrapper.element as HTMLElement;
-      expect(root.classList.contains('z-50')).toBe(false);
+      expect(headerRoot(wrapper).classList.contains('z-50')).toBe(false);
     });
 
     it('root gains z-50 when menu is open to elevate above sibling content', async () => {
       const wrapper = mountHeader();
       const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
       await kebab.trigger('click');
-      const root = wrapper.element as HTMLElement;
-      expect(root.classList.contains('z-50')).toBe(true);
+      expect(headerRoot(wrapper).classList.contains('z-50')).toBe(true);
     });
 
     it('root loses z-50 when menu closes', async () => {
       const wrapper = mountHeader();
       const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
       await kebab.trigger('click');
-      expect((wrapper.element as HTMLElement).classList.contains('z-50')).toBe(true);
+      expect(headerRoot(wrapper).classList.contains('z-50')).toBe(true);
 
       document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await wrapper.vm.$nextTick();
-      expect((wrapper.element as HTMLElement).classList.contains('z-50')).toBe(false);
+      expect(headerRoot(wrapper).classList.contains('z-50')).toBe(false);
     });
 
     it('dropdown menu has z-[100] within the header stacking context', async () => {
@@ -127,7 +129,7 @@ describe('FolderHeader', () => {
       const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
       await kebab.trigger('click');
 
-      const dropdown = wrapper.findAll('div').find((d) => d.classes().includes('absolute'));
+      const dropdown = wrapper.findAll('div').find((d) => d.classes().includes('shadow-lg'));
       expect(dropdown).toBeTruthy();
       expect(dropdown!.element.className).toContain('z-[100]');
     });

@@ -1,14 +1,14 @@
 <template>
-  <div class="mb-2">
+  <div class="mb-1">
     <FolderHeader :folder="folder" :hide-stopped="hideStopped" :hidden-count="hiddenCount" @toggle-collapse="toggleCollapse" @toggle-hide-stopped="hideStopped = !hideStopped" @edit="$emit('edit', folder)" @delete="$emit('delete', folder.id)" @update-folder="$emit('update-folder', folder)" @edit-compose="(p) => emit('edit-compose', p)" @compose-up="(p) => emit('compose-up', p)" @compose-recompose="(p) => emit('compose-recompose', p)" @compose-pull="(p) => emit('compose-pull', p)" @schedules="(type, id) => emit('schedules', type, id)" />
 
-    <div class="expand-grid" :class="{ 'expand-expanded': !folder.collapsed || isSearching }">
+    <div class="expand-grid" :class="{ 'expand-expanded': isExpanded, 'expand-settled': expandSettled }">
       <div class="expand-inner px-2 sm:px-4">
         <div
           class="container-list"
           :class="[
-            view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4',
-            folderContainers.length > 0 ? 'mb-4 min-h-[60px]' : '',
+            view === 'list' ? 'flex flex-col gap-1.5' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-3',
+            folderContainers.length > 0 ? 'mb-2 min-h-[60px]' : '',
           ]"
           :data-folder-id="folder.id"
         >
@@ -29,8 +29,8 @@
         <!-- Compose folder: stack down — show faded service names as a preview -->
         <div
           v-if="folderContainers.length === 0 && folder.compose_project && previewAssociations.length > 0"
-          class="mb-4 opacity-40 pointer-events-none select-none"
-          :class="view === 'list' ? 'flex flex-col gap-2' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-4'"
+          class="mb-2 opacity-40 pointer-events-none select-none"
+          :class="view === 'list' ? 'flex flex-col gap-1.5' : 'grid grid-cols-[repeat(auto-fill,minmax(min(280px,100%),1fr))] gap-3'"
         >
           <div
             v-for="name in previewAssociations"
@@ -44,7 +44,7 @@
         </div>
         <div
           v-else-if="folderContainers.length === 0 && !folder.compose_project"
-          class="text-center py-8 text-text-secondary border-2 border-dashed border-border rounded-lg mb-4"
+          class="text-center py-6 text-text-secondary border-2 border-dashed border-border rounded mb-2"
         >
           <p>No containers in this folder</p>
           <p class="text-sm italic">Drag containers here to organize them</p>
@@ -99,6 +99,26 @@ const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${prop
 watch(hideStopped, (v) => localStorage.setItem(storageKey.value, v ? '1' : '0'));
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
+
+const isExpanded = computed(() => !props.folder.collapsed || isSearching.value);
+
+// Overflow on the expand container must stay hidden while the height
+// transition runs (see .expand-settled in main.css), so mark the folder as
+// settled shortly after the 200ms transition finishes. Collapse unsettles
+// immediately so the closing transition can animate.
+const expandSettled = ref(isExpanded.value);
+let settleTimer: ReturnType<typeof setTimeout> | undefined;
+watch(isExpanded, (expanded) => {
+  clearTimeout(settleTimer);
+  if (expanded) {
+    settleTimer = setTimeout(() => {
+      expandSettled.value = true;
+    }, 220);
+  } else {
+    expandSettled.value = false;
+  }
+});
+onUnmounted(() => clearTimeout(settleTimer));
 
 const folderContainers = computed(() => {
   let list = props.folder.containers || [];

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026.07.18
+### Changes
+- Faint tint on collapsed folders; fix expand animation snapping open
+- Replace folder left-border accent with expanded-state gradient tint
+- Add design guardrails (DESIGN.md) and migrate off palette colors
+- Remove live connection status indicator from main header
+- Hide icon-only Docker Containers title bar variant
+- Fix legacy button hiding on the native Docker page
+- Add settings to hide legacy Docker containers and buttons
+- Add targeted update checks for containers and compose stacks
+- Sync package-lock.json with package.json
+- Add GitHub Actions release workflows for main and dev
+
+## 2026.07.10
+### Changes
+- Release 2026.07.10
+
 ## 2026.06.06
 ### Changes
 - Fix cron registration: write to plugin config dir, drop user field

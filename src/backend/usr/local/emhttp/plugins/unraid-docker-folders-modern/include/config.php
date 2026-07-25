@@ -99,7 +99,7 @@ function logUpdate($message)
 }
 
 /**
- * Check all container images for updates against their registries.
+ * Check container images for updates against their registries.
  *
  * Shared logic used by both the cron script and the manual API endpoint.
  * Loads exclude patterns, collects unique images, checks each, and upserts results.
@@ -107,9 +107,12 @@ function logUpdate($message)
  * @param DockerClient $dockerClient Docker API client
  * @param Database $db Database instance
  * @param callable $log Logging callback: function(string $message)
+ * @param array|null $onlyImages Restrict the check to these image references
+ *                               (e.g. one container's image, or a compose
+ *                               stack's images). Null checks everything.
  * @return array ['results' => [...], 'checked' => int, 'skipped' => int, 'errors' => int, 'newUpdates' => int]
  */
-function checkAllImageUpdates($dockerClient, $db, callable $log)
+function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = null)
 {
   $containers = $dockerClient->listContainers(true);
 
@@ -129,6 +132,14 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
     if ($image && !isset($uniqueImages[$image])) {
       $uniqueImages[$image] = $imageId;
     }
+  }
+
+  // Targeted check: restrict to the requested images. Only images that
+  // actually belong to a container are checked — unknown names are ignored.
+  if ($onlyImages !== null) {
+    $requested = array_fill_keys(array_map('strval', $onlyImages), true);
+    $uniqueImages = array_intersect_key($uniqueImages, $requested);
+    $log('INFO Targeted check for ' . count($onlyImages) . ' image(s), ' . count($uniqueImages) . ' matched running container image(s)');
   }
 
   $log('INFO Found ' . count($containers) . ' container(s), ' . count($uniqueImages) . ' unique image(s)');
@@ -228,9 +239,11 @@ function checkAllImageUpdates($dockerClient, $db, callable $log)
   }
 
   // Clean up stale entries for images that no longer have containers
-  // (e.g. after container recreation changed the image reference)
+  // (e.g. after container recreation changed the image reference).
+  // Skipped for targeted checks: $uniqueImages only holds the requested
+  // subset there, so the NOT IN clause would wipe every other image's row.
   $currentImages = array_keys($uniqueImages);
-  if (!empty($currentImages)) {
+  if ($onlyImages === null && !empty($currentImages)) {
     $placeholders = implode(',', array_fill(0, count($currentImages), '?'));
     $staleCount = $db->fetchValue(
       "SELECT COUNT(*) FROM image_update_checks WHERE image NOT IN ({$placeholders})",

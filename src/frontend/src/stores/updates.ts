@@ -31,6 +31,7 @@ function globMatch(pattern: string, str: string): boolean {
 export const useUpdatesStore = defineStore('updates', () => {
   const updates = ref<Record<string, ImageUpdateStatus>>({});
   const checking = ref(false);
+  const checkingImages = ref<string[]>([]);
   const lastChecked = ref<number | null>(null);
 
   function isExcluded(imageName: string): boolean {
@@ -98,6 +99,35 @@ export const useUpdatesStore = defineStore('updates', () => {
     }
   }
 
+  /**
+   * Check a specific set of images for updates (single container, folder,
+   * or compose stack). Results are merged into the cache — a targeted check
+   * must not discard statuses of images it didn't look at.
+   */
+  async function checkImagesForUpdates(images: string[]) {
+    const unique = [...new Set(images.filter(Boolean))];
+    if (unique.length === 0) return;
+
+    checkingImages.value = [...new Set([...checkingImages.value, ...unique])];
+    try {
+      const response = await apiFetch(`${API_BASE}/updates.php?action=check`, {
+        method: 'POST',
+        body: JSON.stringify({ images: unique }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      updates.value = { ...updates.value, ...(data.updates || {}) };
+    } catch (e) {
+      console.error('Error checking images for updates:', e);
+    } finally {
+      checkingImages.value = checkingImages.value.filter((i) => !unique.includes(i));
+    }
+  }
+
+  function isCheckingImage(imageName: string): boolean {
+    return checking.value || checkingImages.value.includes(imageName);
+  }
+
   function clearUpdateForImage(imageName: string) {
     if (updates.value[imageName]) {
       updates.value[imageName] = { ...updates.value[imageName], update_available: false };
@@ -107,13 +137,16 @@ export const useUpdatesStore = defineStore('updates', () => {
   return {
     updates,
     checking,
+    checkingImages,
     lastChecked,
     updatesAvailableCount,
     hasUpdate,
     isExcluded,
+    isCheckingImage,
     getContainersWithUpdates,
     fetchCachedUpdates,
     checkForUpdates,
+    checkImagesForUpdates,
     clearUpdateForImage,
   };
 });

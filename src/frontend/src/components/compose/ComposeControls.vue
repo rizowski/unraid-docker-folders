@@ -16,7 +16,7 @@
       v-if="isRunning"
       :disabled="!composeStore.managementEnabled"
       :title="buttonTitle('Recompose (pull + recreate)')"
-      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
+      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-info disabled:opacity-40 disabled:cursor-not-allowed"
       @click="$emit('compose-recompose', projectName)"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
@@ -46,7 +46,7 @@
     <!-- Stack Details (compose file + logs tab) -->
     <button
       :title="composeStore.composePluginInstalled ? 'View stack details (read-only, compose.manager installed)' : 'Stack details'"
-      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-blue-400"
+      class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-info"
       @click="$emit('edit-compose', projectName)"
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>

@@ -1,9 +1,19 @@
 # DESIGN.md
 
-Design system for the Unraid Docker Folders Modern frontend.
+The design system for the Unraid Docker Folders Modern frontend.
 
 This document is **normative**. When existing code disagrees with it, the code is
-wrong — fix the code, don't amend the doc. New UI must follow it.
+wrong — fix the code, don't amend the doc. If a change genuinely requires
+breaking a rule, the commit message must say which rule and why.
+
+It has two parts:
+
+- **Part I — Guardrails** (§1–9): the hard constraints. What the plugin must
+  look like, and the failure modes to avoid. Read before any UI change.
+- **Part II — System reference** (§10–16): the mechanics. Theme bridge, the
+  Unraid CSS reset, button vocabulary, modal contracts, forms, scale.
+
+The **review checklist** at the end is the last thing to run before committing.
 
 Source of truth for tokens and global rules:
 `src/frontend/src/assets/styles/main.css`.
@@ -12,7 +22,121 @@ Reference implementations: `FolderEditModal.vue`, `ConfirmModal.vue`,
 
 ---
 
-## 1. Theming
+# Part I — Guardrails
+
+## North star
+
+This plugin is a **native part of the Unraid webgui**, not an embedded app.
+Test: a screenshot of this page next to Unraid's own Docker page must look like
+one product. Unraid's webgui is dense, flat, functional, and themed by the
+user — the plugin inherits all four properties.
+
+The failure mode to avoid is the "AI-built dashboard" look: gradient heroes,
+oversized rounded cards, purple accents, emoji icons, airy whitespace,
+marketing-style empty states. None of that belongs here.
+
+---
+
+## 1. Color
+
+- **Only theme tokens** from the `@theme` block in
+  `src/frontend/src/assets/styles/main.css` (`text`, `text-secondary`, `bg`,
+  `bg-card`, `bg-input`, `border`, `primary`, `button`, `success`, `error`,
+  `warning`, `info`, `muted`). **Never** raw Tailwind palette classes
+  (`bg-blue-500`, `text-slate-400`, …) and never hex values in components.
+  The full token table is in §10.
+- Need a color that has no token? Add a token to `@theme` first — derived from
+  an Unraid CSS variable where one exists — then use it. That's a deliberate,
+  reviewable act; sprinkling palette classes is not.
+- **One accent.** The accent is Unraid's `--header-background`
+  (`primary`) — the user chose it in their theme. Never introduce a second
+  accent hue for emphasis, branding, or variety.
+- `success`/`error`/`warning`/`info` mean **state**, nothing else. Never use a
+  status color decoratively.
+- Subtle fills (hovers, tracks, chips) use
+  `color-mix(in srgb, var(--text-color) N%, transparent)` with N ≤ 10 — this is
+  the established pattern and works on every theme.
+
+## 2. Surfaces
+
+- **Flat.** Panels are separated by `border-border` (1px) and background
+  tokens, exactly like Unraid's own tables.
+- **No gradients. No glassmorphism / `backdrop-blur`. No glow shadows.**
+  One sanctioned exception: the folder header's expanded-state tint — the
+  folder's color at ~12% fading to transparent on the right. It encodes state
+  (expanded) and identity (the folder's own color), not decoration. Do not add
+  a second gradient.
+- Shadows only on floating overlays (modals, dropdown menus: `shadow-lg`) and
+  the existing `shadow-sm` on cards. Nothing else casts a shadow.
+- Border radius: `rounded` (4px) is the default and the maximum for
+  rectangles. `rounded-full` only for dots, pills, and circular buttons.
+  **`rounded-lg` and above are banned** for panels, cards and inputs — with one
+  carve-out: floating overlays (modal cards and dropdown menus) use
+  `rounded-lg` (8px). See the radius scale in §15.
+- Nesting: at most card-inside-panel. No card-in-card-in-card.
+
+## 3. Typography
+
+- Working scale is **`text-xs` and `text-sm`**; `text-base`/`text-lg` only for
+  modal/section titles. Anything larger needs a rule-break note.
+- No decorative headings, no `font-black`, no letter-spacing tricks outside the
+  existing `.nav-btn` uppercase pattern.
+- Fonts: inherit (`clear-sans` from Unraid) and the existing monospace stack
+  for logs/inputs. Never add a webfont.
+
+## 4. Spacing & density
+
+- This is a **control panel — density is a feature**. Default paddings are
+  `p-2`/`p-3`, gaps `gap-2`/`gap-3`; section separation ≤ `mb-4`
+  (`sm:mb-8` max for the page header).
+- No hero sections, no centered feature layouts, no `p-8`+ breathing room, no
+  large empty-state panels. An empty state is one line of `text-text-secondary`
+  text, optionally with one small icon — never an illustration with friendly
+  copy.
+
+## 5. Iconography
+
+- Icons are **inline stroke SVGs** (feather style: `stroke-width="2"`,
+  `stroke-linecap="round"`, `fill="none"`), 14–18px, `currentColor`.
+- **No emoji anywhere in the UI.** No icon fonts inside the Vue app
+  (FontAwesome names are only for Unraid `.page` headers / folder icons where
+  Unraid renders them). No illustrations, mascots, or decorative graphics.
+
+## 6. Motion
+
+- Transitions ≤ **200ms**, `ease`, on opacity/transform/background/border
+  only. Existing exceptions (600ms state pulse, 2s log-line fade) are the
+  ceiling for attention effects. The full motion scale is in §15.
+- Animation must communicate a **state change** (started, connected, new line).
+  No entrance choreography, staggered reveals, hover scale-ups, bounces, or
+  shimmer skeletons.
+
+## 7. Language
+
+- Labels are terse and literal: "Stop", "Check for Updates", "3 containers".
+  No exclamation marks, no marketing adjectives ("powerful", "seamless"), no
+  cutesy empty-state copy, no "✨".
+
+## 8. Reuse before invention
+
+- New UI must be assembled from the established patterns first: `nav-btn`,
+  kebab menu, `styled-input`, stats bar, folder header, container card/row,
+  `BaseModal`. A new visual pattern is only justified when no existing one
+  fits — and it must be indistinguishable in family (color tokens, 4px radius,
+  border-separated, dense).
+
+## 9. Theming
+
+- Every change must work on **both dark and light Unraid themes**. All the
+  theme tokens resolve from Unraid CSS variables — if a style only looks right
+  on one theme, it's wrong. Never assume a dark background.
+- `npm run dev` is light-only; see the dark-theme recipe in §16.
+
+---
+
+# Part II — System reference
+
+## 10. Theming internals
 
 There are **two distinct CSS variable namespaces**. Don't conflate them.
 
@@ -42,7 +166,7 @@ utility classes we actually write:
 | Token | Utility | Source |
 |---|---|---|
 | `--color-text` | `text-text` | `--text-color` |
-| `--color-text-secondary` | `text-text-secondary` | `--text-color-secondary` (see limitations) |
+| `--color-text-secondary` | `text-text-secondary` | `--text-color-secondary` (see §16) |
 | `--color-bg` | `bg-bg` | `--background-color` |
 | `--color-bg-card` | `bg-bg-card` | background + 3% text |
 | `--color-bg-input` | `bg-bg-input` | background + 8% text |
@@ -78,7 +202,7 @@ on every Unraid theme.
 
 ---
 
-## 2. The Unraid CSS reset — read this before styling a button
+## 11. The Unraid CSS reset — read this before styling a button
 
 Unraid's webgui sets `html { font-size: 62.5% }` (10px base), which breaks
 Tailwind's rem-based scale, and applies heavy global styles to `button`,
@@ -104,7 +228,7 @@ isn't `.styled-input` gets its border, background and padding zeroed.
 
 ---
 
-## 3. Buttons
+## 12. Buttons
 
 | Use | Class |
 |---|---|
@@ -150,7 +274,7 @@ nothing — style those with utilities.
 
 ---
 
-## 4. Modals
+## 13. Modals
 
 ### Two surfaces
 
@@ -219,7 +343,7 @@ transition in `main.css` targets it.
 
 ---
 
-## 5. Forms
+## 14. Forms
 
 Standard field:
 
@@ -245,11 +369,12 @@ Helper and caption text: `text-xs text-text-secondary`. Validation errors:
 
 ---
 
-## 6. Scale reference
+## 15. Scale reference
 
 **Radius** — `rounded` (4px) is the default for buttons, inputs, badges and
-rows; `rounded-lg` (8px) for modal cards and dropdown menus; `rounded-full` for
-pills, status dots, progress bars and round icon buttons.
+rows; `rounded-lg` (8px) for modal cards and dropdown menus (the §2 carve-out
+for floating overlays); `rounded-full` for pills, status dots, progress bars and
+round icon buttons.
 
 **Spacing** — `gap-1` icon-button clusters · `gap-2` footer buttons and inline
 chips · `gap-3` row content · `gap-4` form field stacks · `p-4 sm:p-6` modal
@@ -272,7 +397,7 @@ existing shared classes (`.expand-grid`, `.state-change-pulse`,
 
 ---
 
-## 7. Known limitations
+## 16. Known limitations
 
 Recorded deliberately — do not "fix" these without evidence.
 
@@ -302,3 +427,20 @@ Recorded deliberately — do not "fix" these without evidence.
   `DockerFoldersSettings.page` hand-roll inline styles with dark fallbacks
   (`#333`, `#1a1a1a`), while `main.css` uses light ones (`#e0e0e0`, `#f2f2f2`).
   The two halves disagree about what "no theme" means.
+
+---
+
+## Review checklist (the "AI tells" deny-list)
+
+Before committing UI work, grep yourself against this list. Any hit is a bug:
+
+- [ ] Gradient backgrounds or gradient text
+- [ ] `rounded-lg`/`xl`/`2xl` on panels, `shadow-md`+ on non-overlays
+- [ ] Tailwind palette color classes (`*-blue-*`, `*-slate-*`, `*-purple-*`, …)
+- [ ] A second accent color; purple/indigo anything
+- [ ] Emoji in templates or UI strings
+- [ ] `backdrop-blur`, glassmorphism, glow effects
+- [ ] Headings above `text-lg`; marketing-style hero/empty states
+- [ ] Hover `scale-*` transforms, entrance animations, shimmer skeletons
+- [ ] Whitespace padding `p-6`+ on ordinary panels
+- [ ] A new component that duplicates an existing pattern with different styling

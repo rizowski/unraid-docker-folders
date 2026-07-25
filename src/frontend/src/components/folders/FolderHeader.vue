@@ -1,11 +1,20 @@
 <template>
   <div
-    class="relative flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-4 cursor-pointer select-none border-l-4 hover:bg-bg-card transition"
+    class="folder-header relative flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-2 cursor-pointer select-none hover:bg-bg-card transition"
     :class="{ 'z-50': menuOpen }"
-    :style="{ borderLeftColor: folder.color || '#ff8c2f' }"
     @click="$emit('toggle-collapse')"
   >
-    <div class="flex items-center gap-2 flex-1 min-w-0">
+    <!-- Folder-color tint fading to transparent on the right (the sanctioned
+         gradient exception in DESIGN.md §2): faint when collapsed, full
+         strength when expanded. Same gradient at two opacities so the change
+         animates smoothly. Content wrappers below are positioned so they
+         paint on top. -->
+    <div
+      class="absolute inset-0 rounded-sm pointer-events-none transition-opacity duration-200"
+      :class="folder.collapsed ? 'opacity-40' : 'opacity-100'"
+      :style="{ background: `linear-gradient(to right, ${folderTint}, transparent)` }"
+    ></div>
+    <div class="relative flex items-center gap-2 flex-1 min-w-0">
       <DragHandle v-if="!dragLocked" handle-class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing" />
       <ChevronIcon :expanded="!folder.collapsed" />
       <div
@@ -18,7 +27,7 @@
       <h2 class="text-sm font-semibold text-text mr-1 truncate min-w-0">{{ folder.name }}</h2>
       <span
         v-if="folder.compose_project"
-        class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded text-[11px] font-medium tracking-wide uppercase mr-1"
+        class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 bg-info/15 text-info rounded text-[11px] font-medium tracking-wide uppercase mr-1"
         :title="`Auto-grouped from compose project: ${folder.compose_project}`"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2" /><rect x="2" y="14" width="20" height="8" rx="2" ry="2" /><line x1="6" y1="6" x2="6.01" y2="6" /><line x1="6" y1="18" x2="6.01" y2="18" /></svg>
@@ -53,7 +62,7 @@
         <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
       </div>
     </div>
-    <div class="flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
+    <div class="relative flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
       <button
         class="p-1.5 rounded cursor-pointer transition relative"
         :class="hideStopped ? 'text-text' : 'text-text-secondary hover:text-text'"
@@ -128,6 +137,11 @@ const props = withDefaults(defineProps<Props>(), {
   hiddenCount: 0,
 });
 
+// Faint tint of the folder's color for the expanded-state background.
+const folderTint = computed(
+  () => `color-mix(in srgb, ${props.folder.color || 'var(--header-background, #ff8c2f)'} 12%, transparent)`
+);
+
 const emit = defineEmits<{
   'toggle-collapse': [];
   'toggle-hide-stopped': [];
@@ -158,6 +172,19 @@ const folderUpdateCount = computed(() => {
 
 const composeStack = computed(() =>
   props.folder.compose_project ? composeStore.getStackByProject(props.folder.compose_project) : null
+);
+
+// Unique images of containers that actually exist in this folder / stack
+const folderImages = computed(() => {
+  const images = new Set<string>();
+  for (const c of existingContainers.value) {
+    if (c.image) images.add(c.image);
+  }
+  return [...images];
+});
+
+const folderUpdateCheckRunning = computed(() =>
+  folderImages.value.some((image) => updatesStore.isCheckingImage(image))
 );
 
 // Drive from actual docker state so stale compose metadata can't claim "running".
@@ -193,6 +220,17 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
       class: 'text-warning hover:text-warning',
     });
     items.push({ divider: true });
+  }
+
+  if (settingsStore.enableUpdateChecks && folderImages.value.length > 0) {
+    items.push(
+      {
+        label: folderUpdateCheckRunning.value ? 'Checking for Updates…' : 'Check for Updates',
+        icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
+        action: 'check-updates',
+      },
+      { divider: true },
+    );
   }
 
   // Compose section — actions that affect the stack itself
@@ -234,6 +272,11 @@ async function handleMenuSelect(action: string) {
   if (action === 'edit') emit('edit');
   else if (action === 'delete') emit('delete');
   else if (action === 'update-folder') emit('update-folder');
+  else if (action === 'check-updates') {
+    if (!folderUpdateCheckRunning.value) {
+      await updatesStore.checkImagesForUpdates(folderImages.value);
+    }
+  }
   else if (action === 'compose-up' && props.folder.compose_project) {
     emit('compose-up', props.folder.compose_project);
   } else if (action === 'compose-stop' && props.folder.compose_project) {
