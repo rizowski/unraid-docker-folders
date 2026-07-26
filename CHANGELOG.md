@@ -2,6 +2,7 @@
 
 ## 2026.07.26
 ### Changes
+- feat: replace container status dot/bar with a halo around the icon
 - feat: restructure expanded container card and widen its click target
 - fix: modals and add create container button
 
