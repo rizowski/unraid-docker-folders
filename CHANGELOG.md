@@ -2,6 +2,7 @@
 
 ## 2026.07.26
 ### Changes
+- feat: list containers before updating, and update several at once
 - feat: show a container's schedules in its expanded card
 - fix: read logs from TTY containers, brighten secondary text, link container icons
 - feat: replace container status dot/bar with a halo around the icon
