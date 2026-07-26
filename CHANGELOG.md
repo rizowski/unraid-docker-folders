@@ -2,6 +2,7 @@
 
 ## 2026.07.26
 ### Changes
+- feat: restructure expanded container card and widen its click target
 - fix: modals and add create container button
 
 ## 2026.07.25
