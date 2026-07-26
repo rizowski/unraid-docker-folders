@@ -810,7 +810,7 @@ function handleCompose(req: any, res: any, params: Record<string, string>) {
 
 // --- Mock Schedules ---
 
-let nextScheduleId = 3;
+let nextScheduleId = 5;
 const mockSchedules = [
   {
     id: 1, name: 'Nightly Plex Backup', target_type: 'container', target_id: 'plex',
@@ -820,6 +820,26 @@ const mockSchedules = [
     last_run_message: 'Backup created: plex.2026-04-10_030000.tar.gz',
     next_run_at: Math.floor(Date.now() / 1000) + 3600,
     created_at: Math.floor(Date.now() / 1000) - 604800, updated_at: Math.floor(Date.now() / 1000) - 86400,
+  },
+  // Two more on plex so manage mode's bulk enable/disable and multi-delete are
+  // exercisable in the dev server, and so a disabled row and a failed run each
+  // have a representative.
+  {
+    id: 3, name: 'Weekly Plex Restart', target_type: 'container', target_id: 'plex',
+    action: 'restart', cron_expression: '0 4 * * 0', enabled: false,
+    backup_config: null,
+    last_run_at: Math.floor(Date.now() / 1000) - 172800, last_run_status: 'error',
+    last_run_message: 'Container did not come back up',
+    next_run_at: Math.floor(Date.now() / 1000) + 259200,
+    created_at: Math.floor(Date.now() / 1000) - 1209600, updated_at: Math.floor(Date.now() / 1000) - 172800,
+  },
+  {
+    id: 4, name: 'Pause Plex overnight', target_type: 'container', target_id: 'plex',
+    action: 'pause', cron_expression: '0 2 * * *', enabled: true,
+    backup_config: null,
+    last_run_at: null, last_run_status: null, last_run_message: null,
+    next_run_at: Math.floor(Date.now() / 1000) + 93600,
+    created_at: Math.floor(Date.now() / 1000) - 7200, updated_at: Math.floor(Date.now() / 1000) - 7200,
   },
   {
     id: 2, name: 'Stop postgres weeknights', target_type: 'container', target_id: 'postgres',
@@ -862,6 +882,28 @@ async function handleSchedules(req: any, res: any, params: Record<string, string
       const s = mockSchedules.find(s => s.id === id);
       if (s) s.enabled = !s.enabled;
       return json(res, { success: true });
+    }
+    if (action === 'bulk_toggle') {
+      const body = await parseBody(req);
+      let changed = 0;
+      for (const u of body.updates || []) {
+        const s = mockSchedules.find(s => s.id === u.id);
+        if (!s) continue;
+        s.enabled = !!u.enabled;
+        // Mirrors the backend: enabling recomputes the next run.
+        if (s.enabled) s.next_run_at = Math.floor(Date.now() / 1000) + 3600;
+        changed++;
+      }
+      return json(res, { success: true, changed });
+    }
+    if (action === 'bulk_delete') {
+      const body = await parseBody(req);
+      let deleted = 0;
+      for (const rawId of body.ids || []) {
+        const idx = mockSchedules.findIndex(s => s.id === rawId);
+        if (idx >= 0) { mockSchedules.splice(idx, 1); deleted++; }
+      }
+      return json(res, { success: true, deleted });
     }
     if (action === 'run' && id) {
       return json(res, { success: true, schedule_id: id, status: 'success', message: 'Executed' });

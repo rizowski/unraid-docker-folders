@@ -120,6 +120,53 @@ export const useScheduleStore = defineStore('schedules', () => {
     }
   }
 
+  /**
+   * Commit many enable/disable changes in one request.
+   *
+   * Not optimistic: the caller (Manage mode) has been showing staged state
+   * locally and refetches on success, so there is nothing to roll back.
+   */
+  async function bulkSetEnabled(
+    updates: { id: number; enabled: boolean }[],
+  ): Promise<{ success: boolean; error?: string }> {
+    if (updates.length === 0) return { success: true };
+
+    try {
+      const response = await apiFetch(`${API_BASE}/schedules.php?action=bulk_toggle`, {
+        method: 'POST',
+        body: JSON.stringify({ updates }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        return { success: false, error: result.message || `HTTP ${response.status}` };
+      }
+      await fetchSchedules(true);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed to update schedules' };
+    }
+  }
+
+  async function bulkDelete(ids: number[]): Promise<{ success: boolean; error?: string }> {
+    if (ids.length === 0) return { success: true };
+
+    try {
+      const response = await apiFetch(`${API_BASE}/schedules.php?action=bulk_delete`, {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        return { success: false, error: result.message || `HTTP ${response.status}` };
+      }
+      schedules.value = schedules.value.filter((s) => !ids.includes(s.id));
+      await fetchSchedules(true);
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed to delete schedules' };
+    }
+  }
+
   async function runScheduleNow(id: number): Promise<{ success: boolean; message?: string }> {
     try {
       const response = await apiFetch(`${API_BASE}/schedules.php?action=run&id=${id}`, {
@@ -184,6 +231,8 @@ export const useScheduleStore = defineStore('schedules', () => {
     updateSchedule,
     deleteSchedule,
     toggleSchedule,
+    bulkSetEnabled,
+    bulkDelete,
     runScheduleNow,
     getHistory,
     getBackups,

@@ -194,11 +194,6 @@
           </div>
         </div>
 
-        <!-- Schedules Panel -->
-        <div v-if="scheduleStore.scheduleCount > 0 || !dockerStore.containerCount" class="mt-8 pt-4 border-t border-border">
-          <SchedulesPanel />
-        </div>
-
         <!-- Empty State -->
         <div v-if="dockerStore.containerCount === 0" class="text-center py-8 px-6 text-text-secondary">
           <p>No Docker containers found</p>
@@ -297,7 +292,6 @@ import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
-import SchedulesPanel from '@/components/schedules/SchedulesPanel.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
 
