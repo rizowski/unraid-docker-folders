@@ -62,10 +62,15 @@ marketing-style empty states. None of that belongs here.
 - **Flat.** Panels are separated by `border-border` (1px) and background
   tokens, exactly like Unraid's own tables.
 - **No gradients. No glassmorphism / `backdrop-blur`. No glow shadows.**
-  One sanctioned exception: the folder header's expanded-state tint — the
-  folder's color at ~12% fading to transparent on the right. It encodes state
-  (expanded) and identity (the folder's own color), not decoration. Do not add
-  a second gradient.
+  Two sanctioned exceptions, both encoding state rather than decoration:
+  1. The folder header's expanded-state tint — the folder's color at ~12%
+     fading to transparent on the right. It encodes state (expanded) and
+     identity (the folder's own color). Do not add a second gradient.
+  2. `.status-halo` — a feathered `box-shadow` around a container icon
+     carrying run/health state (`-success` / `-info` / `-error` / `-muted`).
+     It replaced a separate status dot and bar, so it removes chrome rather
+     than adding it, and it is the *only* glow in the plugin. Do not give it a
+     second meaning (hover, selection, drag) and do not add another glow.
 - Shadows only on floating overlays (modals, dropdown menus: `shadow-lg`) and
   the existing `shadow-sm` on cards. Nothing else casts a shadow.
 - Border radius: `rounded` (4px) is the default and the maximum for
@@ -166,7 +171,7 @@ utility classes we actually write:
 | Token | Utility | Source |
 |---|---|---|
 | `--color-text` | `text-text` | `--text-color` |
-| `--color-text-secondary` | `text-text-secondary` | `--text-color-secondary` (see §16) |
+| `--color-text-secondary` | `text-text-secondary` | text 65% → background (see §16) |
 | `--color-bg` | `bg-bg` | `--background-color` |
 | `--color-bg-card` | `bg-bg-card` | background + 3% text |
 | `--color-bg-input` | `bg-bg-input` | background + 8% text |
@@ -178,7 +183,7 @@ utility classes we actually write:
 | `--color-success` | `text-success` | fixed `#4caf50` |
 | `--color-error` | `text-error` | fixed `#f44336` |
 | `--color-warning` | `text-warning` | fixed `#ff9800` |
-| `--color-muted` | `text-muted` | fixed `#757575` |
+| `--color-muted` | `text-muted` | text 58% → background (see §16) |
 
 The four semantic colors are intentionally **not** themeable — success is green
 on every Unraid theme.
@@ -225,7 +230,11 @@ field renders as bare text with no box at all. Utilities that set a property the
 reset never touches (`text-sm`, `w-8`, `color`, `box-shadow`) do survive.
 
 A control must therefore carry one of the sanctioned opt-in classes, each
-written unlayered in `main.css` with `#id + element + class` specificity:
+written unlayered in `main.css` with `#id + element + class` specificity. The
+input reset **excludes** `.styled-input` and `.form-input` by name rather than
+relying on those classes to out-specify it: `:not()` contributes its argument's
+specificity, so `#id input:not(.styled-input)` and `#id input.form-input` both
+compute to (1,1,1) and the winner would come down to source order.
 
 | Control | Class |
 |---|---|
@@ -273,7 +282,8 @@ variant. In-iframe and parent-rendered modals therefore agree.
 `.icon-btn` supplies the parts the reset would strip: `inline-flex` centring,
 6px padding, 4px radius, and an 8% text-tint hover background. **Colour stays in
 the template** so intent is visible — swap the hover token: `hover:text-primary`
-(run/activate), `hover:text-error` (delete).
+(run/activate), `hover:text-error` (delete). It matches `button.icon-btn` and
+`a.icon-btn`, so an icon that navigates can be a real anchor.
 
 Round close buttons in modal headers add `.icon-btn-round` (32×32,
 `rounded-full`, no padding). Every icon-only button needs an `aria-label`; add
@@ -402,7 +412,8 @@ define `--input-background`, so that token falls back to white and is unreadable
 on dark themes. Same for `--color-border` over `--color-input-border`.
 
 To constrain a field's width, put the width on a wrapper — `.form-input` sets
-`width`, which outranks a `w-*` utility (§11).
+`width` from an unlayered rule, which a layered `w-*` utility cannot override
+(§11).
 
 `.styled-input` remains the **monospace editor** variant — YAML, log panes.
 It carries its own 12px padding and is not the default text input; prefer
@@ -445,13 +456,25 @@ existing shared classes (`.expand-grid`, `.state-change-pulse`,
 
 Recorded deliberately — do not "fix" these without evidence.
 
-- **`--text-color-secondary` is never bridged.** `main.css` maps
-  `--color-text-secondary: var(--text-color-secondary, #666666)`, but that
-  variable is not in `DockerFoldersMain.page`'s bridge list, so
-  `text-text-secondary` always resolves to the hardcoded `#666666` on every
-  theme. Adding it is speculative: Unraid may not define it, and the bridge
-  silently drops empty values. It still beats every alternative in use, so keep
-  using `text-text-secondary`.
+- **`--text-color-secondary` is never bridged — resolved by deriving instead.**
+  That variable is not in `DockerFoldersMain.page`'s bridge list, so
+  `--color-text-secondary` used to fall back to a hardcoded `#666666` on every
+  theme. On a dark theme that is **3.0:1** against `#1a1a1a` — below AA, and the
+  log pane renders 11px monospace in it. `main.css` now derives both greys from
+  the bridged `--text-color`, mixed **toward `--background-color`**:
+  `color-mix(in srgb, var(--text-color, #1a1a1a) 65%, var(--background-color, #f2f2f2))`
+  for `--color-text-secondary` and 58% for `--color-muted`. Mixing toward the
+  background rather than `transparent` keeps the result opaque, so the
+  `bg-text-secondary` / `border-text-secondary` usages don't turn translucent.
+  The ratios reproduce the old light-theme values exactly (`#666666`,
+  `≈#757575`), so only dark themes change. **Edge case, measured:** if
+  `--text-color` fails to bridge while `--background-color` succeeds, the mix
+  collapses to same-on-same. This is *not* a new failure — `--color-text` has
+  always been `var(--text-color, #1a1a1a)`, so in that scenario 33 of 60 sampled
+  text elements were already background-coloured before this change. The page is
+  already unusable; secondary text simply stops being the accidental exception.
+  Guarding it isn't worth the complexity. Keep using `text-text-secondary` /
+  `text-muted` — do not reintroduce hardcoded greys.
 - **Destructive buttons disagree across surfaces.** In-iframe, danger maps to
   `.nav-btn.warning` (amber `#ff9800`); the parent modal renders `danger` as red
   `#dc2626`. Don't repurpose `.warning` — `App.vue` uses it for the drag-lock
@@ -462,7 +485,12 @@ Recorded deliberately — do not "fix" these without evidence.
   `DockerFoldersMain.page` now explicitly ignores. Harmless; left in place.
 - **`color-mix` degrades.** Tailwind emits a non-`color-mix` fallback in which
   `bg-bg-card` and `bg-bg-input` collapse to the plain page background — cards
-  lose their separation. Only affects browsers without `color-mix` support.
+  lose their separation. Secondary text now depends on `color-mix` too, but
+  with higher stakes: an invalid `color:` value falls back to *inherited*,
+  which can land same-on-same. That is why `--color-text-secondary` and
+  `--color-muted` keep a hardcoded base in `@theme` and are only upgraded
+  inside `@supports (color: color-mix(in srgb, red, blue))`. Don't move those
+  declarations back into `@theme`. Only affects browsers without `color-mix`.
 - **Dev is light-only.** `npm run dev` never passes `?theme=`, so theme
   regressions are invisible there. To check dark, append a URL-encoded theme
   param, e.g.
@@ -478,12 +506,13 @@ Recorded deliberately — do not "fix" these without evidence.
 
 Before committing UI work, grep yourself against this list. Any hit is a bug:
 
-- [ ] Gradient backgrounds or gradient text
+- [ ] Gradient backgrounds or gradient text (except the folder-header
+      expanded tint — §2)
 - [ ] `rounded-lg`/`xl`/`2xl` on panels, `shadow-md`+ on non-overlays
 - [ ] Tailwind palette color classes (`*-blue-*`, `*-slate-*`, `*-purple-*`, …)
 - [ ] A second accent color; purple/indigo anything
 - [ ] Emoji in templates or UI strings
-- [ ] `backdrop-blur`, glassmorphism, glow effects
+- [ ] `backdrop-blur`, glassmorphism, glow effects (except `.status-halo` — §2)
 - [ ] Headings above `text-lg`; marketing-style hero/empty states
 - [ ] Hover `scale-*` transforms, entrance animations, shimmer skeletons
 - [ ] Whitespace padding `p-6`+ on ordinary panels

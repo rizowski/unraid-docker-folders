@@ -58,6 +58,23 @@ function handleGet($dockerClient)
     }
     $tail = isset($_GET['tail']) ? max(1, min(500, (int)$_GET['tail'])) : 50;
     $logs = $dockerClient->getContainerLogs($id, $tail);
+
+    // Docker refused to serve the logs. Say why, instead of showing an empty
+    // pane that looks identical to a container that simply hasn't logged
+    // anything. Deliberately HTTP 200, not errorResponse(): the log pane polls
+    // on a timer, so a container with an unreadable logging driver would
+    // otherwise emit a failed request every tick. The body still uses
+    // errorResponse()'s envelope (`error` boolean + `message` text) so `error`
+    // never means two different things across the API.
+    if ($logs === false) {
+      jsonResponse([
+        'logs' => '',
+        'error' => true,
+        'message' => $dockerClient->getLastError() ?: 'Failed to read container logs',
+      ]);
+      return;
+    }
+
     jsonResponse(['logs' => $logs]);
     return;
   }

@@ -6,28 +6,15 @@ import ContainerCard from '../ContainerCard.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
+import { makeContainer as baseContainer } from '@/test/fixtures';
 
+// This suite's default container publishes a port — several tests assert on the
+// rendered port summary — so it layers that onto the shared fixture.
 function makeContainer(overrides: Partial<Container> = {}): Container {
-  return {
-    id: 'abc123',
-    name: 'test-container',
-    image: 'nginx:latest',
-    state: 'running',
-    status: 'Up 2 hours',
-    command: '/entrypoint.sh',
+  return baseContainer({
     ports: [{ IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }],
-    hostPorts: [],
-    mounts: [],
-    networkSettings: {},
-    created: Date.now() / 1000,
-    icon: null,
-    managed: 'dockerman',
-    webui: null,
-    labels: {},
-    autostart: false,
-    autostartDelay: 0,
     ...overrides,
-  };
+  });
 }
 
 function mountCard(container?: Partial<Container>, props: Record<string, unknown> = {}) {
@@ -86,6 +73,58 @@ describe('ContainerCard', () => {
         },
       });
       expect(iconClasses(wrapper)).toContain('status-halo-success');
+    });
+  });
+
+  describe('container icon links to the WebUI', () => {
+    const iconEl = (w: ReturnType<typeof mount>) => w.find('img').element.parentElement!;
+    const isExpanded = (w: ReturnType<typeof mount>) => w.text().includes('Resource Usage');
+
+    for (const view of ['grid', 'list'] as const) {
+      it(`renders the icon as a link with the resolved URL (${view})`, () => {
+        const wrapper = mountCard(
+          { webui: 'http://[IP]:[PORT:80]/admin', state: 'running' },
+          { view },
+        );
+        const icon = iconEl(wrapper);
+
+        expect(icon.tagName).toBe('A');
+        // [IP] -> hostname, [PORT:80] -> the mapped public port 8080
+        expect(icon.getAttribute('href')).toBe(`http://${window.location.hostname}:8080/admin`);
+        expect(icon.getAttribute('target')).toBe('_blank');
+        expect(icon.getAttribute('rel')).toBe('noopener noreferrer');
+        expect(icon.getAttribute('title')).toContain('Open WebUI');
+      });
+
+      it(`clicking the icon opens the WebUI without expanding the card (${view})`, async () => {
+        const wrapper = mountCard(
+          { webui: 'http://[IP]:[PORT:80]/admin', state: 'running' },
+          { view },
+        );
+        expect(isExpanded(wrapper)).toBe(false);
+
+        await wrapper.find('img').trigger('click');
+
+        expect(isExpanded(wrapper)).toBe(false);
+      });
+
+      it(`stays an inert span and still expands when there is no WebUI (${view})`, async () => {
+        const wrapper = mountCard({ webui: null, state: 'running' }, { view });
+        expect(iconEl(wrapper).tagName).toBe('SPAN');
+
+        await wrapper.find('img').trigger('click');
+
+        expect(isExpanded(wrapper)).toBe(true);
+      });
+    }
+
+    it('does not link when the container is stopped', () => {
+      const wrapper = mountCard({
+        webui: 'http://[IP]:[PORT:80]/admin',
+        state: 'exited',
+        status: 'Exited (0) 3 hours ago',
+      });
+      expect(iconEl(wrapper).tagName).toBe('SPAN');
     });
   });
 
@@ -430,6 +469,47 @@ describe('ContainerCard', () => {
       // The log content should be rendered
       expect(wrapper.text()).toContain('server started');
       expect(wrapper.text()).toContain('ready');
+    });
+
+    it('surfaces the API error instead of the empty-state text', async () => {
+      // Docker refuses to serve logs (e.g. --log-driver=none): the API answers
+      // 200 with an explicit reason, which must not look like "container is quiet".
+      fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('action=logs')) {
+          return new Response(
+            JSON.stringify({
+              logs: '',
+              error: true,
+              message: "Docker API HTTP 400 — this container's logging driver may not support reading logs",
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      });
+
+      const wrapper = await mountExpandedListCard({ enableLogs: true });
+
+      expect(wrapper.text()).toContain('logging driver may not support reading logs');
+      expect(wrapper.text()).not.toContain('No logs available.');
+    });
+
+    it('still shows the empty state when the container is simply quiet', async () => {
+      fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('action=logs')) {
+          return new Response(JSON.stringify({ logs: '' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      });
+
+      const wrapper = await mountExpandedListCard({ enableLogs: true });
+
+      expect(wrapper.text()).toContain('No logs available.');
     });
 
     it('shows a "Logs" header label in the panel', async () => {

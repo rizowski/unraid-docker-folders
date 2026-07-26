@@ -2,7 +2,7 @@
   <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text bg-bg">
     <header class="flex flex-wrap justify-between items-center gap-y-3 gap-x-4 mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
-        <a href="/Settings/DockerFoldersSettings" class="nav-btn shrink-0" title="Settings" style="text-decoration: none;">
+        <a href="/Settings/DockerFoldersSettings" class="nav-btn shrink-0" title="Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -100,7 +100,6 @@
           href="/Docker/AddContainer"
           class="nav-btn active"
           title="Create a new container"
-          style="text-decoration: none;"
         >
           <span class="sm:hidden">+ Container</span>
           <span class="hidden sm:inline">+ Create Container</span>
@@ -379,6 +378,16 @@ function handleComposePull(project: string) {
 }
 
 async function handleComposeProgressComplete() {
+  // A pull only changes image digests on disk — nothing is created, started or
+  // stopped — so the container list and folder assignments are unchanged.
+  // fetchContainers() is the most expensive call the plugin makes (a Docker
+  // socket enumeration plus a scan of Unraid's template directory), so don't
+  // pay for it here.
+  if (composeProgressMode.value === 'pull') {
+    await composeStore.fetchStacks(true);
+    return;
+  }
+
   await Promise.all([
     dockerStore.fetchContainers(),
     folderStore.fetchFolders(),

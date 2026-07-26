@@ -6,9 +6,13 @@
     <div class="cursor-pointer select-none" @click="expanded = !expanded">
       <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
         <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" @click.stop />
-        <span class="shrink-0 flex p-0.5 status-halo" :class="statusHaloClass" :title="statusTooltip">
-          <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain" />
-        </span>
+        <ContainerIcon
+          :src="container.icon || fallbackIcon"
+          :alt="container.name"
+          :halo-class="status.halo"
+          :status-tooltip="status.tooltip"
+          :href="iconWebui"
+        />
         <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
         <a
           v-if="hasUpdate && releaseNotesUrl"
@@ -81,9 +85,6 @@
           :is-running="isRunning"
           :image-link="imageLink"
           :show-logs="false"
-          :log-lines="logLines"
-          :logs-loading="logsLoading"
-          :new-line-count="newLineCount"
         />
       </div>
     </Transition>
@@ -128,9 +129,13 @@
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
       <DragHandle v-if="!dragLocked" :size="14" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2" @click.stop />
       <ChevronIcon :expanded="expanded" :size="12" />
-      <span class="shrink-0 flex p-0.5 status-halo" :class="statusHaloClass" :title="statusTooltip">
-        <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain" />
-      </span>
+      <ContainerIcon
+        :src="container.icon || fallbackIcon"
+        :alt="container.name"
+        :halo-class="status.halo"
+        :status-tooltip="status.tooltip"
+        :href="iconWebui"
+      />
 
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
         <div class="flex items-center gap-3 min-w-0">
@@ -233,6 +238,7 @@
           :image-link="imageLink"
           :show-logs="shouldShowInlineLogs"
           :log-lines="logLines"
+          :log-error="logError"
           :logs-loading="logsLoading"
           :new-line-count="newLineCount"
           @refresh-logs="fetchLogs"
@@ -288,6 +294,7 @@ import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
 import ContainerDetails from '@/components/docker/ContainerDetails.vue';
+import ContainerIcon from '@/components/docker/ContainerIcon.vue';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -442,6 +449,9 @@ const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 const logLines = ref<string[]>([]);
 const newLineCount = ref(0);
 const logsLoading = ref(false);
+// Why Docker wouldn't serve the logs, when it says so. Distinct from an empty
+// logLines, which just means the container hasn't logged anything.
+const logError = ref('');
 const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
 
 const shouldShowInlineLogs = computed(
@@ -467,10 +477,14 @@ async function fetchLogs() {
       }
 
       logLines.value = lines;
+      // Matches the API's error envelope: `error` is a boolean, the human text
+      // is in `message`.
+      logError.value = data.error ? data.message || 'Failed to load logs.' : '';
     }
   } catch (e) {
     console.error('Error fetching logs:', e);
-    logLines.value = ['Failed to load logs.'];
+    logLines.value = [];
+    logError.value = 'Failed to load logs.';
     newLineCount.value = 0;
   } finally {
     logsLoading.value = false;
@@ -523,25 +537,21 @@ const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 const isHealthy = computed(() => props.container.status?.toLowerCase().includes('(healthy)'));
 
 // Health/state is carried by a feathered halo around the container icon in both
-// views (see .status-halo in main.css), replacing the old dot and bar.
-const statusHaloClass = computed(() => {
+// views (see .status-halo in main.css), replacing the old dot and bar. Halo and
+// tooltip resolve together so a newly handled state can't land in one and be
+// forgotten in the other — they were previously two parallel branch chains.
+const status = computed(() => {
   const state = props.container.state;
-  if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'status-halo-success';
-  if (state === 'running' && distinguishHealthy.value) return 'status-halo-info';
-  if (state === 'running') return 'status-halo-success';
-  if (state === 'exited' || state === 'stopped') return 'status-halo-error';
-  return 'status-halo-muted';
-});
-
-const statusTooltip = computed(() => {
-  const state = props.container.state;
-  if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'Running (healthy)';
-  if (state === 'running' && distinguishHealthy.value) return 'Running (no health check)';
-  if (state === 'running') return 'Running';
-  if (state === 'exited') return 'Exited';
-  if (state === 'stopped') return 'Stopped';
-  if (state === 'created') return 'Created';
-  return state.charAt(0).toUpperCase() + state.slice(1);
+  if (state === 'running') {
+    if (!distinguishHealthy.value) return { halo: 'status-halo-success', tooltip: 'Running' };
+    return isHealthy.value
+      ? { halo: 'status-halo-success', tooltip: 'Running (healthy)' }
+      : { halo: 'status-halo-info', tooltip: 'Running (no health check)' };
+  }
+  if (state === 'exited') return { halo: 'status-halo-error', tooltip: 'Exited' };
+  if (state === 'stopped') return { halo: 'status-halo-error', tooltip: 'Stopped' };
+  if (state === 'created') return { halo: 'status-halo-muted', tooltip: 'Created' };
+  return { halo: 'status-halo-muted', tooltip: state.charAt(0).toUpperCase() + state.slice(1) };
 });
 
 const editUrl = computed(() => {
@@ -563,6 +573,10 @@ const resolvedWebui = computed(() => {
   });
   return url;
 });
+
+// Same gate as the footer WebUI link, so the two can never disagree about
+// whether a container has a reachable web interface.
+const iconWebui = computed(() => (isRunning.value ? resolvedWebui.value : null));
 
 function openContainerTerminal(mode: 'console' | 'logs') {
   const name = props.container.name;

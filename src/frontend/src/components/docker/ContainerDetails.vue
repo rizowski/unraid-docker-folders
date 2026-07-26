@@ -93,15 +93,12 @@
       <div class="flex items-center justify-between mb-1">
         <p class="text-text-secondary text-xs">Logs</p>
         <button
-          class="icon-btn flex items-center justify-center w-5 h-5 text-muted hover:text-text"
+          class="icon-btn w-5 h-5 text-muted hover:text-text"
           title="Refresh logs"
           :disabled="logsLoading"
           @click.stop="emit('refresh-logs')"
         >
-          <svg :class="{ 'animate-spin': logsLoading }" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="1 4 1 10 7 10" />
-            <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-          </svg>
+          <IconRestart :size="12" :class="{ 'animate-spin': logsLoading }" />
         </button>
       </div>
       <div
@@ -118,6 +115,9 @@
             :class="{ 'log-line-new': idx < newLineCount }"
           >{{ line }}</div>
         </template>
+        <template v-else-if="logError">
+          <span class="text-error italic">{{ logError }}</span>
+        </template>
         <template v-else>
           <span class="text-muted italic">No logs available.</span>
         </template>
@@ -133,23 +133,37 @@ import type { ContainerStats } from '@/stores/stats';
 import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 import StatsBar from '@/components/common/StatsBar.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
+import IconRestart from '@/components/icons/IconRestart.vue';
 
-const props = defineProps<{
-  container: Container;
-  containerStats: ContainerStats | null;
-  showStats: boolean;
-  isRunning: boolean;
-  imageLink: string | null;
-  /**
-   * Inline logs. Fetching lives in the parent: during a collapse this component
-   * is mid-leave-transition and stops receiving prop updates, so it cannot be
-   * trusted to know when to stop polling.
-   */
-  showLogs: boolean;
-  logLines: string[];
-  logsLoading: boolean;
-  newLineCount: number;
-}>();
+const props = withDefaults(
+  defineProps<{
+    container: Container;
+    containerStats: ContainerStats | null;
+    showStats: boolean;
+    isRunning: boolean;
+    imageLink: string | null;
+    /**
+     * Inline logs. Fetching lives in the parent: during a collapse this
+     * component is mid-leave-transition and stops receiving prop updates, so it
+     * cannot be trusted to know when to stop polling.
+     *
+     * The four log props below are optional because grid view passes
+     * `show-logs="false"` and never has log state to give.
+     */
+    showLogs: boolean;
+    logLines?: string[];
+    /** Why the logs couldn't be read, if Docker told us. Empty when fine. */
+    logError?: string;
+    logsLoading?: boolean;
+    newLineCount?: number;
+  }>(),
+  {
+    logLines: () => [],
+    logError: '',
+    logsLoading: false,
+    newLineCount: 0,
+  },
+);
 
 const emit = defineEmits<{ (e: 'refresh-logs'): void }>();
 
