@@ -324,6 +324,10 @@ function parseBody(req: any): Promise<any> {
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseUrl(url: string) {
   const parsed = new URL(url, 'http://localhost');
   return { path: parsed.pathname, params: Object.fromEntries(parsed.searchParams) };
@@ -615,6 +619,9 @@ async function handleUpdates(req: any, res: any, params: Record<string, string>)
     // Simulate checking — mark a few containers as having updates.
     // A payload of {images: [...]} restricts the check (targeted mode).
     const body = await parseBody(req);
+    // A real check hits a registry per image; without latency here the
+    // in-progress indicators are impossible to see in dev.
+    await sleep(900);
     const allImages = [...new Set(containers.map((c) => c.image))];
     const imagesToCheck = Array.isArray(body?.images)
       ? allImages.filter((img) => body.images.includes(img))
@@ -824,9 +831,10 @@ const mockSchedules = [
   },
 ];
 
-function handleSchedules(req: any, res: any, params: URLSearchParams) {
-  const action = params.get('action');
-  const id = params.get('id') ? parseInt(params.get('id')!) : null;
+async function handleSchedules(req: any, res: any, params: Record<string, string>) {
+  // parseUrl hands every handler a plain object, not URLSearchParams.
+  const action = params.action;
+  const id = params.id ? parseInt(params.id) : null;
 
   if (req.method === 'GET') {
     if (action === 'history' && id) {
@@ -841,8 +849,8 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
       const s = mockSchedules.find(s => s.id === id);
       return s ? json(res, { schedule: s }) : json(res, { error: true, message: 'Not found' }, 404);
     }
-    const targetType = params.get('target_type');
-    const targetId = params.get('target_id');
+    const targetType = params.target_type;
+    const targetId = params.target_id;
     let filtered = mockSchedules;
     if (targetType) filtered = filtered.filter(s => s.target_type === targetType);
     if (targetId) filtered = filtered.filter(s => s.target_id === targetId);
@@ -861,11 +869,19 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
     if (action === 'delete_backup') {
       return json(res, { success: true });
     }
-    // Create
+    // Create — echo the submitted schedule so the list and the edit form
+    // round-trip like they do against the real API.
+    const body = await parseBody(req);
     const newId = nextScheduleId++;
     mockSchedules.push({
-      id: newId, name: 'New Schedule', target_type: 'container', target_id: 'plex',
-      action: 'backup', cron_expression: '0 3 * * *', enabled: true, backup_config: null,
+      id: newId,
+      name: body.name || 'New Schedule',
+      target_type: body.target_type || 'container',
+      target_id: body.target_id || 'plex',
+      action: body.action || 'backup',
+      cron_expression: body.cron_expression || '0 3 * * *',
+      enabled: body.enabled ?? true,
+      backup_config: body.backup_config || null,
       last_run_at: null, last_run_status: null, last_run_message: null,
       next_run_at: Math.floor(Date.now() / 1000) + 3600,
       created_at: Math.floor(Date.now() / 1000), updated_at: Math.floor(Date.now() / 1000),
@@ -874,6 +890,9 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
   }
 
   if (req.method === 'PUT' && id) {
+    const body = await parseBody(req);
+    const s = mockSchedules.find(s => s.id === id);
+    if (s) Object.assign(s, body, { id, updated_at: Math.floor(Date.now() / 1000) });
     return json(res, { success: true });
   }
 
@@ -884,6 +903,75 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
   }
 
   json(res, { error: true, message: 'Not found' }, 404);
+}
+
+// --- Compose stream mock (SSE) ---
+
+function handleComposeStream(req: any, res: any, params: Record<string, string>) {
+  if (req.method !== 'POST') {
+    return json(res, { error: true, message: 'Method not allowed' }, 405);
+  }
+
+  const action = params.action;
+  const project = params.project;
+  if ((action !== 'up' && action !== 'pull') || !project) {
+    return json(res, { error: true, message: 'Missing or invalid action/project' }, 400);
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'X-Accel-Buffering': 'no',
+    'Connection': 'keep-alive',
+  });
+
+  function sendEvent(event: string, data: any) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  const services = ['web', 'db', 'cache'];
+  const steps: { event: string; data: any }[] = [
+    { event: 'phase', data: { phase: 'pulling', message: 'Pulling images...' } },
+    ...services.flatMap((svc) => [
+      { event: 'log', data: { line: `${svc} Pulling`, stream: 'stdout' } },
+      { event: 'log', data: { line: `${svc} Downloading  12.3MB/45.1MB`, stream: 'stdout' } },
+      { event: 'log', data: { line: `${svc} Pulled`, stream: 'stdout' } },
+    ]),
+  ];
+
+  if (action === 'up') {
+    steps.push(
+      { event: 'phase', data: { phase: 'starting', message: 'Starting containers...' } },
+      ...services.map((svc) => ({
+        event: 'log',
+        data: { line: `Container ${project}-${svc}-1  Started`, stream: 'stdout' },
+      })),
+    );
+  }
+
+  sendEvent('status', {
+    message: action === 'pull' ? `Pulling images for ${project}...` : `Starting ${project}...`,
+  });
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= steps.length) {
+      clearInterval(interval);
+      sendEvent('complete', {
+        message: action === 'pull'
+          ? `Images for ${project} pulled successfully`
+          : `${project} started successfully`,
+        project,
+      });
+      sendEvent('done', { finished: true });
+      res.end();
+      return;
+    }
+    const step = steps[i++];
+    sendEvent(step.event, step.data);
+  }, 250);
+
+  req.on('close', () => clearInterval(interval));
 }
 
 // --- Vite plugin ---
@@ -915,8 +1003,10 @@ export function mockApiPlugin(): Plugin {
             handlePull(req, res, params);
           } else if (endpoint === 'compose.php') {
             handleCompose(req, res, params);
+          } else if (endpoint === 'compose-stream.php') {
+            handleComposeStream(req, res, params);
           } else if (endpoint === 'schedules.php') {
-            handleSchedules(req, res, params);
+            await handleSchedules(req, res, params);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }

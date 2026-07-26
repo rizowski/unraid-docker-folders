@@ -3,7 +3,7 @@
     <div class="flex justify-between items-center gap-3 p-4 sm:p-6 border-b border-border">
       <h2 class="text-xl font-semibold text-text m-0 truncate">Backups: {{ targetId }}</h2>
       <button
-        class="flex items-center justify-center w-8 h-8 shrink-0 rounded-full bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition"
+        class="icon-btn icon-btn-round shrink-0 text-text-secondary hover:text-text"
         aria-label="Close"
         @click="$emit('close')"
       >
@@ -31,7 +31,8 @@
             </div>
           </div>
           <button
-            class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-error transition bg-transparent border-none shrink-0"
+            class="icon-btn shrink-0 text-text-secondary hover:text-error"
+            aria-label="Delete backup"
             title="Delete backup"
             @click="confirmDeletePath = backup.path"
           >

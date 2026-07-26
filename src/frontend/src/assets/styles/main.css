@@ -156,6 +156,87 @@
   border-color: var(--color-primary);
 }
 
+/* Form fields: opt-in class for ordinary (non-monospace) inputs.
+   The input reset above is unlayered, so it outranks every Tailwind utility
+   (which live in @layer utilities) regardless of specificity — `w-full py-2
+   px-4 border bg-input-bg` on a bare <input> is dead, and the field renders
+   with no box at all. Parent-document modals (useParentModal) never hit this
+   because Unraid styles them natively; in-iframe BaseModal forms do.
+   Selector is id + element + class to outrank `input:not(.styled-input)`. */
+#unraid-docker-folders-modern input.form-input,
+#unraid-docker-folders-modern select.form-input,
+#unraid-docker-folders-modern textarea.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  margin: 0;
+  min-height: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-text);
+  /* --color-bg-input (background + 8% text), not --color-input-bg: Unraid does
+     not actually define --input-background, so that token falls back to white
+     and is unreadable on dark themes. Same source .styled-input uses. */
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  transition: border-color 0.15s;
+}
+
+#unraid-docker-folders-modern select.form-input {
+  cursor: pointer;
+}
+
+#unraid-docker-folders-modern .form-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+#unraid-docker-folders-modern .form-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Compact variant for fields inside a grouped/nested block */
+#unraid-docker-folders-modern .form-input.compact {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Path / cron values keep the standard field chrome but a monospace face */
+#unraid-docker-folders-modern .form-input.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Width override for fields that should not fill their row */
+#unraid-docker-folders-modern .form-input.auto-width {
+  width: auto;
+}
+
+/* Icon-only buttons: opt-in class.
+   Same cause as .form-input — the button reset zeroes padding, radius and
+   background, so `p-1.5 rounded hover:bg-*` never applies. Colour stays with
+   the utilities (hover:text-primary / hover:text-error) so intent is visible
+   in the template. */
+#unraid-docker-folders-modern button.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+#unraid-docker-folders-modern button.icon-btn:hover {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+}
+
+/* Round variant — modal header close buttons */
+#unraid-docker-folders-modern button.icon-btn.icon-btn-round {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 9999px;
+}
+
 /* Neutralize Unraid's p { text-align: justify } and p:empty { display: none } */
 #unraid-docker-folders-modern p {
   text-align: left;

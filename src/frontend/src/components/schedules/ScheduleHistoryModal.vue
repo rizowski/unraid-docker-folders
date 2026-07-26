@@ -3,7 +3,7 @@
     <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
       <h2 class="text-xl font-semibold text-text m-0">Execution History</h2>
       <button
-        class="flex items-center justify-center w-8 h-8 rounded-full bg-transparent cursor-pointer text-text-secondary hover:text-text hover:bg-border transition"
+        class="icon-btn icon-btn-round text-text-secondary hover:text-text"
         aria-label="Close"
         @click="$emit('close')"
       >

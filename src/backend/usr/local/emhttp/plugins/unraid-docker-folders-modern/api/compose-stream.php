@@ -2,7 +2,11 @@
 /**
  * Unraid Docker Folders - Compose Stack Streaming API (SSE)
  *
- * Streams docker compose pull + up output line-by-line via Server-Sent Events.
+ * Streams docker compose output line-by-line via Server-Sent Events.
+ *
+ * Actions:
+ *   up   — pull images, then bring the stack up
+ *   pull — pull images only
  *
  * @package UnraidDockerModern
  */
@@ -24,7 +28,7 @@ if ($method !== 'POST') {
 $action = $_GET['action'] ?? null;
 $project = $_GET['project'] ?? null;
 
-if ($action !== 'up' || !$project) {
+if (!in_array($action, ['up', 'pull'], true) || !$project) {
   header('Content-Type: application/json');
   errorResponse('Missing or invalid action/project', 400);
 }
@@ -62,33 +66,45 @@ function sendSSE($event, $data)
   @flush();
 }
 
-try {
-  sendSSE('status', ['message' => "Starting {$project}..."]);
+$onPhase = function ($phase, $message) {
+  sendSSE('phase', ['phase' => $phase, 'message' => $message]);
+};
+$onLine = function ($line, $stream) {
+  sendSSE('log', ['line' => $line, 'stream' => $stream]);
+};
 
-  $result = $composeManager->stackUpStreaming(
-    $project,
-    $forceRecreate,
-    function ($phase, $message) {
-      sendSSE('phase', ['phase' => $phase, 'message' => $message]);
-    },
-    function ($line, $stream) {
-      sendSSE('log', ['line' => $line, 'stream' => $stream]);
-    }
-  );
+$isPull = ($action === 'pull');
+
+try {
+  sendSSE('status', [
+    'message' => $isPull ? "Pulling images for {$project}..." : "Starting {$project}...",
+  ]);
+
+  if ($isPull) {
+    $result = $composeManager->stackPullStreaming($project, $onPhase, $onLine);
+  } else {
+    $result = $composeManager->stackUpStreaming($project, $forceRecreate, $onPhase, $onLine);
+  }
 
   if ($result['success']) {
     try {
-      WebSocketPublisher::publish('compose', 'up', ['project' => $project]);
+      WebSocketPublisher::publish('compose', $action, ['project' => $project]);
     } catch (\Throwable $e) {
       // non-critical
     }
     sendSSE('complete', [
-      'message' => "{$project} started successfully",
+      'message' => $isPull
+        ? "Images for {$project} pulled successfully"
+        : "{$project} started successfully",
       'project' => $project,
     ]);
   } else {
     $err = $result['error'] ?? ('Exit code ' . ($result['exit_code'] ?? '?'));
-    sendSSE('error', ['message' => "Failed to start {$project}: {$err}"]);
+    sendSSE('error', [
+      'message' => $isPull
+        ? "Failed to pull images for {$project}: {$err}"
+        : "Failed to start {$project}: {$err}",
+    ]);
   }
 } catch (\Throwable $e) {
   sendSSE('error', ['message' => $e->getMessage()]);

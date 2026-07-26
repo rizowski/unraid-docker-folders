@@ -215,16 +215,32 @@ Tailwind's rem-based scale, and applies heavy global styles to `button`,
   `border`, `border-radius`, `background`, `font-size`, `font-weight`,
   `letter-spacing`, `text-transform`, `min-width` and `margin`.
 
-**Consequence:** a button styled only with Tailwind utilities silently loses its
-type scale — `text-sm` survives (utility specificity wins) but inherited
-`font-weight` and `letter-spacing` do not, and any property you forget to set
-falls back to the reset. A button must therefore either:
+**The reset is unlayered; Tailwind utilities live in `@layer utilities`.**
+Unlayered rules beat *every* layered rule regardless of specificity, so this is
+not a specificity contest a utility can win. On a plain `<button>`, `p-1.5`,
+`rounded`, `bg-*` and `hover:bg-*` are **dead** — the reset's `padding: 0`,
+`border-radius: 0` and `background: none` always apply. On a plain `<input>`,
+`w-full`, `py-2 px-4`, `border`, `bg-input-bg` are dead the same way, and the
+field renders as bare text with no box at all. Utilities that set a property the
+reset never touches (`text-sm`, `w-8`, `color`, `box-shadow`) do survive.
 
-1. carry `.nav-btn` (and get the full house style), or
-2. be an icon-only button where the reset is what you want.
+A control must therefore carry one of the sanctioned opt-in classes, each
+written unlayered in `main.css` with `#id + element + class` specificity:
 
-Do not hand-roll a third option. The same applies to inputs: everything that
-isn't `.styled-input` gets its border, background and padding zeroed.
+| Control | Class |
+|---|---|
+| Text button | `.nav-btn` (§12) |
+| Icon-only button | `.icon-btn`, `+ .icon-btn-round` for modal close × |
+| Text input / select / textarea | `.form-input` (§14) |
+| Monospace editor / log pane | `.styled-input` |
+| Dropdown menu item | `.kebab-menu-item` |
+
+Do not hand-roll a sixth option, and do not try to override a reset property
+with a utility — put it on a wrapper element instead.
+
+Parent-document modals (`useParentModal`) never hit any of this: Unraid styles
+them natively. It only bites **in-iframe `BaseModal` content**, which is why the
+schedules components are where it surfaced.
 
 ---
 
@@ -249,15 +265,22 @@ variant. In-iframe and parent-rendered modals therefore agree.
 ### Icon buttons
 
 ```html
-<button class="p-1.5 rounded cursor-pointer text-text-secondary hover:text-text transition" title="…">
+<button class="icon-btn text-text-secondary hover:text-text" aria-label="…" title="…">
   <svg width="14" height="14" …/>
 </button>
 ```
 
-Swap the hover token for intent: `hover:text-primary` (run/activate),
-`hover:text-error` (delete). Round close buttons in modal headers use
-`w-8 h-8 rounded-full … hover:bg-border`. Every icon-only button needs an
-`aria-label`; add `title` as well when a hover tooltip is useful.
+`.icon-btn` supplies the parts the reset would strip: `inline-flex` centring,
+6px padding, 4px radius, and an 8% text-tint hover background. **Colour stays in
+the template** so intent is visible — swap the hover token: `hover:text-primary`
+(run/activate), `hover:text-error` (delete).
+
+Round close buttons in modal headers add `.icon-btn-round` (32×32,
+`rounded-full`, no padding). Every icon-only button needs an `aria-label`; add
+`title` as well when a hover tooltip is useful.
+
+Don't reach for `p-*`, `rounded*`, `bg-*` or `hover:bg-*` on these — see §11 for
+why they do nothing.
 
 ### Utilities that silently lose to `.nav-btn`
 
@@ -288,7 +311,16 @@ On a real Unraid box the parent surface is what users see; the in-iframe one is
 the dev-server fallback. **Prefer `useParentModal` for new modals.** Fall back to
 `BaseModal`-only when the form is too dynamic for the descriptor's field types
 (no repeatable-list field exists) — the schedules modals are the current
-exception, and they are documented as such.
+exception, and they are documented as such. In-iframe content must use the
+opt-in control classes from §11; the parent surface does not.
+
+**Never open a modal from inside another modal.** A second `BaseModal` teleports
+to the app root so it *renders* correctly, but two stacked scrims over a card
+the user was already reading is not the house style. Put the secondary content
+inline in the first modal's body instead — `ScheduleList` renders its add/edit
+form (`ScheduleForm.vue`) above the schedule rows and hides the "+ Add Schedule"
+button while it is open. A sibling confirm (`ConfirmModal`) over a list is the
+one accepted exception.
 
 ### Positioning contract
 
@@ -348,21 +380,33 @@ transition in `main.css` targets it.
 Standard field:
 
 ```html
-<div class="mb-6">
-  <label for="x" class="block mb-1 font-medium text-text">Label *</label>
-  <input
-    id="x"
-    class="w-full py-2 px-4 border border-input-border rounded bg-input-bg
-           focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10"
-  />
+<div class="flex flex-col gap-1">
+  <label for="x" class="text-sm font-medium text-text">Label *</label>
+  <input id="x" class="form-input" />
 </div>
 ```
 
-Compact fields inside a grouped/nested block may use `py-1.5 px-3 text-sm`.
+`.form-input` is the opt-in class for ordinary inputs, selects and textareas:
+full width, `8px 12px` padding, 1px `--color-border`, 4px radius, and
+`--color-bg-input` (background + 8% text) as the fill. Focus moves the border to
+`--color-primary`. Modifiers, combinable:
 
-`.styled-input` is the **monospace / code** variant — YAML, log panes, file
-paths, cron expressions. It is not the default text input. Add `font-mono` to a
-standard field when the value is a path but the field is otherwise ordinary.
+| Modifier | Effect |
+|---|---|
+| `.compact` | `6px 10px` / 13px — fields inside a grouped or nested block |
+| `.mono` | monospace face, standard chrome — paths, cron expressions |
+| `.auto-width` | intrinsic width — time pickers, day selects |
+
+Use `--color-bg-input`, **not** `--color-input-bg`: Unraid does not actually
+define `--input-background`, so that token falls back to white and is unreadable
+on dark themes. Same for `--color-border` over `--color-input-border`.
+
+To constrain a field's width, put the width on a wrapper — `.form-input` sets
+`width`, which outranks a `w-*` utility (§11).
+
+`.styled-input` remains the **monospace editor** variant — YAML, log panes.
+It carries its own 12px padding and is not the default text input; prefer
+`.form-input.mono` for a single-line path or cron value.
 
 Helper and caption text: `text-xs text-text-secondary`. Validation errors:
 `text-sm text-error`.

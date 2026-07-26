@@ -94,6 +94,17 @@
           <span class="sm:hidden">Update ({{ updatesStore.updatesAvailableCount }})</span>
           <span class="hidden sm:inline">Update All ({{ updatesStore.updatesAvailableCount }})</span>
         </button>
+        <!-- Links out to Unraid's native Add Container form. A plain relative
+             href breaks out of the plugin iframe via <base target="_parent">. -->
+        <a
+          href="/Docker/AddContainer"
+          class="nav-btn active"
+          title="Create a new container"
+          style="text-decoration: none;"
+        >
+          <span class="sm:hidden">+ Container</span>
+          <span class="hidden sm:inline">+ Create Container</span>
+        </a>
         <button
           v-if="composeStore.composeAvailable && composeStore.managementEnabled"
           @click="openCreateStack"
@@ -217,10 +228,11 @@
       @recompose="openComposeRecompose"
     />
 
-    <!-- Compose Start / Recompose Progress -->
-    <ComposeStartProgressModal
+    <!-- Compose Start / Recompose / Pull Progress -->
+    <ComposeProgressModal
       :is-open="composeProgressOpen"
       :project-name="composeProgressProject"
+      :mode="composeProgressMode"
       :force-recreate="composeProgressForceRecreate"
       @close="closeComposeProgress"
       @complete="handleComposeProgressComplete"
@@ -279,7 +291,7 @@ import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ComposeSetupBanner from '@/components/compose/ComposeSetupBanner.vue';
 import ComposeFileEditor from '@/components/compose/ComposeFileEditor.vue';
-import ComposeStartProgressModal from '@/components/compose/ComposeStartProgressModal.vue';
+import ComposeProgressModal from '@/components/compose/ComposeProgressModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
@@ -327,6 +339,7 @@ const composeEditorProject = ref('');
 
 // Compose progress modal (start/recompose)
 const composeProgressProject = ref('');
+const composeProgressMode = ref<'up' | 'pull'>('up');
 const composeProgressForceRecreate = ref(false);
 const composeProgressOpen = ref(false);
 
@@ -344,19 +357,25 @@ function openCreateStack() {
 
 function openComposeUp(project: string) {
   composeProgressProject.value = project;
+  composeProgressMode.value = 'up';
   composeProgressForceRecreate.value = false;
   composeProgressOpen.value = true;
 }
 
 function openComposeRecompose(project: string) {
   composeProgressProject.value = project;
+  composeProgressMode.value = 'up';
   composeProgressForceRecreate.value = true;
   composeProgressOpen.value = true;
 }
 
-async function handleComposePull(project: string) {
-  await composeStore.stackPull(project);
-  await composeStore.fetchStacks(true);
+// Pull streams its output into the same progress modal as up/recompose —
+// a bare await gave no sign anything was happening.
+function handleComposePull(project: string) {
+  composeProgressProject.value = project;
+  composeProgressMode.value = 'pull';
+  composeProgressForceRecreate.value = false;
+  composeProgressOpen.value = true;
 }
 
 async function handleComposeProgressComplete() {
@@ -370,6 +389,7 @@ async function handleComposeProgressComplete() {
 function closeComposeProgress() {
   composeProgressOpen.value = false;
   composeProgressProject.value = '';
+  composeProgressMode.value = 'up';
   composeProgressForceRecreate.value = false;
 }
 

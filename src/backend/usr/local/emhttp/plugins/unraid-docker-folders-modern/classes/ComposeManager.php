@@ -765,6 +765,26 @@ class ComposeManager
   }
 
   /**
+   * Pull the latest images for a compose stack, streaming progress via
+   * callbacks. Same first phase as stackUpStreaming(), without the up.
+   * $onPhase receives ($phase, $message). $onLine receives ($line, $stream).
+   */
+  public function stackPullStreaming($projectName, $onPhase, $onLine)
+  {
+    list($cmd, $stack) = $this->buildComposeCmd($projectName);
+
+    $cd = '';
+    if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
+      $cd = 'cd ' . escapeshellarg($stack['working_dir']) . ' && ';
+    }
+
+    call_user_func($onPhase, 'pulling', 'Pulling images...');
+    $pullCmd = $cd . $cmd . ' pull 2>&1';
+
+    return $this->execCommandStreaming($pullCmd, $onLine, 600);
+  }
+
+  /**
    * Start a compose stack (docker compose up -d)
    */
   public function stackUp($projectName, $forceRecreate = false)

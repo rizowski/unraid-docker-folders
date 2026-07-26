@@ -20,6 +20,14 @@
         class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
       >Update</span>
       <span
+        v-if="checkingUpdates"
+        class="shrink-0 inline-flex items-center gap-1 text-[10px] text-text-secondary"
+        title="Checking for image updates"
+      >
+        <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        Checking
+      </span>
+      <span
         v-if="hasPortConflict"
         class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
         :title="portConflictTitle"
@@ -216,6 +224,14 @@
             v-else-if="hasUpdate"
             class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
           >Update</span>
+          <span
+            v-if="checkingUpdates"
+            class="shrink-0 inline-flex items-center gap-1 text-[10px] text-text-secondary"
+            title="Checking for image updates"
+          >
+            <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            Checking
+          </span>
           <span
             v-if="hasPortConflict"
             class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
@@ -608,6 +624,11 @@ const portConflictTitle = computed(() =>
 );
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
+// The kebab item that starts the check closes with the menu, so the running
+// state needs a home on the card itself.
+const checkingUpdates = computed(
+  () => settingsStore.enableUpdateChecks && updatesStore.isTargetedCheck(props.container.image),
+);
 const releaseNotesUrl = computed<string | null>(() => {
   const u = updatesStore.updates[props.container.image];
   return u?.source_url ? `${u.source_url}/releases` : null;
