@@ -503,6 +503,7 @@ const settings: Record<string, string> = {
   notify_on_updates: '0',
   update_check_exclude: '',
   post_pull_action: 'pull_only',
+  update_concurrency: '3',
   replace_docker_section: '0',
   show_legacy_containers: '0',
   show_legacy_buttons: '0',
@@ -674,6 +675,15 @@ function handlePull(req: any, res: any, params: Record<string, string>) {
   const statuses = ['Pulling fs layer', 'Downloading', 'Downloading', 'Download complete', 'Extracting', 'Pull complete'];
   let step = 0;
 
+  // Stagger pull speed per image (deterministically, so runs are repeatable).
+  // Uniform timings would make a broken concurrency pool look fine — units
+  // need to finish out of order for the shared cursor to be exercised.
+  let hash = 0;
+  for (let i = 0; i < image.length; i++) {
+    hash = (hash * 31 + image.charCodeAt(i)) >>> 0;
+  }
+  const stepMs = 150 + (hash % 8) * 70; // ~2.7s to ~12.4s per image
+
   function sendEvent(event: string, data: any) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
@@ -708,7 +718,7 @@ function handlePull(req: any, res: any, params: Record<string, string>) {
 
     sendEvent('progress', data);
     step++;
-  }, 200);
+  }, stepMs);
 
   req.on('close', () => clearInterval(interval));
 }

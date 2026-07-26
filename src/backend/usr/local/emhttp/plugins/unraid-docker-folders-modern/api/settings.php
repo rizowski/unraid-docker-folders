@@ -83,6 +83,7 @@ function handlePost()
     'show_folder_ports', 'show_inline_logs', 'enable_update_checks',
     'update_check_schedule', 'notify_on_updates', 'update_check_exclude',
     'post_pull_action',
+    'update_concurrency',
     'log_refresh_interval',
     'compose_export_dir',
     'backup_destination',
@@ -95,6 +96,15 @@ function handlePost()
   // Validate value length
   if (is_string($value) && strlen($value) > 10000) {
     errorResponse('Value too long', 400);
+  }
+
+  // Clamp bounded numeric settings — the UI <select> is not the only writer.
+  if ($key === 'update_concurrency') {
+    $n = (int) $value;
+    if ($n < 1 || $n > 5) {
+      errorResponse('update_concurrency must be between 1 and 5', 400);
+    }
+    $value = (string) $n;
   }
 
   // Upsert: insert or update

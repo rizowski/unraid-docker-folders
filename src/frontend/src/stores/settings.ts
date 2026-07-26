@@ -20,6 +20,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const notifyOnUpdates = ref(false);
   const updateCheckExclude = ref('');
   const postPullAction = ref('pull_only');
+  /** How many containers to pull + recreate at once during a batch update. */
+  const updateConcurrency = ref(3);
   const backupDestination = ref('/mnt/user/backups/docker-folders');
   const defaultRetentionCount = ref(7);
   const loaded = ref(false);
@@ -65,6 +67,10 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('post_pull_action' in settings) {
         postPullAction.value = settings.post_pull_action || 'pull_only';
+      }
+      if ('update_concurrency' in settings) {
+        const parsed = parseInt(settings.update_concurrency, 10);
+        updateConcurrency.value = Number.isNaN(parsed) ? 3 : Math.min(5, Math.max(1, parsed));
       }
       if ('backup_destination' in settings) {
         backupDestination.value = settings.backup_destination || '/mnt/user/backups/docker-folders';
@@ -210,6 +216,20 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  async function setUpdateConcurrency(value: number) {
+    const clamped = Math.min(5, Math.max(1, Math.round(value)));
+    updateConcurrency.value = clamped;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'update_concurrency', value: String(clamped) }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
   async function setBackupDestination(value: string) {
     backupDestination.value = value;
 
@@ -261,6 +281,7 @@ export const useSettingsStore = defineStore('settings', () => {
     notifyOnUpdates,
     updateCheckExclude,
     postPullAction,
+    updateConcurrency,
     backupDestination,
     defaultRetentionCount,
     loaded,
@@ -275,6 +296,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setNotifyOnUpdates,
     setUpdateCheckExclude,
     setPostPullAction,
+    setUpdateConcurrency,
     setBackupDestination,
     setDefaultRetentionCount,
     setReplaceDockerSection,

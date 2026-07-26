@@ -244,8 +244,8 @@
 
     <!-- Batch Pull Progress Modal -->
     <BatchPullProgressModal
-      :is-open="batchPullContainers.length > 0"
-      :containers="batchPullContainers"
+      :is-open="batchPullUnits.length > 0"
+      :units="batchPullUnits"
       @close="handleBatchPullClose"
       @complete="handleBatchPullComplete"
     />
@@ -260,20 +260,18 @@
       @confirm="confirmDeleteFolder"
       @cancel="deletingFolderId = null"
     />
-    <ConfirmModal
+    <UpdateConfirmModal
       :is-open="showBatchConfirm"
-      title="Update Containers"
-      :message="`Pull updates for ${pendingBatchContainers.length} container(s)? This will download newer images from the registry.`"
-      confirm-label="Update"
+      :units="pendingUnits"
       @confirm="confirmBatchPull"
-      @cancel="showBatchConfirm = false; pendingBatchContainers = []"
+      @cancel="showBatchConfirm = false; pendingUnits = []"
     />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick, provide, toRef } from 'vue';
-import { useDockerStore } from '@/stores/docker';
+import { useDockerStore, type Container } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
@@ -291,6 +289,8 @@ import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
+import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
+import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
@@ -305,9 +305,9 @@ const composeStore = useComposeStore();
 
 const actionsInProgress = ref<Map<string, string>>(new Map());
 const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
-const batchPullContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
+const batchPullUnits = ref<UpdateUnit[]>([]);
 const showBatchConfirm = ref(false);
-const pendingBatchContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
+const pendingUnits = ref<UpdateUnit[]>([]);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
@@ -591,6 +591,23 @@ async function handleRemove(id: string, removeImage = false) {
 }
 
 function handlePull(data: { image: string; name: string; managed: string | null }) {
+  // Pulling an image recreates *every* container using it. When this container
+  // is the only one, go straight to the pull; when it has siblings, show them
+  // first so nothing gets recreated invisibly.
+  const container = dockerStore.containers.find((c) => c.name === data.name);
+  if (container) {
+    const units = buildUpdateUnits(
+      [container],
+      dockerStore.containers,
+      composeStore.managementEnabled,
+    );
+    const affected = units.reduce((total, u) => total + u.containers.length, 0);
+    if (affected > 1) {
+      pendingUnits.value = units;
+      showBatchConfirm.value = true;
+      return;
+    }
+  }
   pullingContainer.value = data;
 }
 
@@ -600,44 +617,66 @@ async function handlePullComplete(image: string) {
   await updatesStore.fetchCachedUpdates();
 }
 
-function handleUpdateAll() {
-  const containersWithUpdates = updatesStore.getContainersWithUpdates().map((c) => ({
-    image: c.image,
-    name: c.name,
-    managed: c.managed,
-  }));
-  if (containersWithUpdates.length === 0) return;
-  pendingBatchContainers.value = containersWithUpdates;
+function openUpdateConfirm(containers: Container[]) {
+  if (containers.length === 0) return;
+  const units = buildUpdateUnits(
+    containers,
+    dockerStore.containers,
+    composeStore.managementEnabled,
+  );
+  if (units.length === 0) return;
+  pendingUnits.value = units;
   showBatchConfirm.value = true;
+}
+
+function handleUpdateAll() {
+  openUpdateConfirm(updatesStore.getContainersWithUpdates());
 }
 
 function handleUpdateFolder(folder: Folder) {
-  const containersWithUpdates: { image: string; name: string; managed: string | null }[] = [];
+  const containersWithUpdates: Container[] = [];
   for (const assoc of folder.containers) {
     const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
     if (container && updatesStore.hasUpdate(container.image)) {
-      containersWithUpdates.push({ image: container.image, name: container.name, managed: container.managed });
+      containersWithUpdates.push(container);
     }
   }
-  if (containersWithUpdates.length === 0) return;
-  pendingBatchContainers.value = containersWithUpdates;
-  showBatchConfirm.value = true;
+  openUpdateConfirm(containersWithUpdates);
 }
 
-function confirmBatchPull() {
+function confirmBatchPull(units: UpdateUnit[]) {
   showBatchConfirm.value = false;
-  batchPullContainers.value = [...pendingBatchContainers.value];
-  pendingBatchContainers.value = [];
+  batchPullUnits.value = units;
+  pendingUnits.value = [];
 }
 
 async function handleBatchPullComplete() {
   // Refresh data after batch pull completes
   await dockerStore.fetchContainers(true);
   await updatesStore.fetchCachedUpdates();
+  await recheckComposeImages();
+}
+
+/**
+ * Re-check images updated through the compose CLI.
+ *
+ * `pull.php` records fresh digests itself, so image units clear their own
+ * update flag. `compose-stream.php` doesn't — without this, a stack updated
+ * via `docker compose` keeps showing an "Update" badge until the next
+ * scheduled check.
+ */
+async function recheckComposeImages() {
+  const images = new Set<string>();
+  for (const unit of batchPullUnits.value) {
+    if (unit.kind !== 'compose') continue;
+    for (const container of unit.containers) images.add(container.image);
+  }
+  if (images.size === 0) return;
+  await updatesStore.checkImagesForUpdates([...images]);
 }
 
 function handleBatchPullClose() {
-  batchPullContainers.value = [];
+  batchPullUnits.value = [];
   // Clear update flags for successfully pulled images
   dockerStore.fetchContainers(true);
   updatesStore.fetchCachedUpdates();

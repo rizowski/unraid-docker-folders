@@ -20,6 +20,13 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 requireAuth();
 
+// Release the PHP session lock so this long-running stream doesn't block every
+// other request on the same session (including the rest of the Unraid webgui).
+// Nothing below touches $_SESSION; POST CSRF is validated by local_prepend.php.
+if (session_status() === PHP_SESSION_ACTIVE) {
+  session_write_close();
+}
+
 if ($method !== 'POST') {
   header('Content-Type: application/json');
   errorResponse('Method not allowed', 405);
