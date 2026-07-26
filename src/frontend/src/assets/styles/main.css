@@ -304,6 +304,11 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 10%, transparent);
 }
 
+/* Inline log pane fill: subtle on both light and dark themes */
+#unraid-docker-folders-modern .log-pane {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
+}
+
 /* Shared expand/collapse — CSS Grid height transition */
 #unraid-docker-folders-modern .expand-grid {
   display: grid;

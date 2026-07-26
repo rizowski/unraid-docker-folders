@@ -57,6 +57,31 @@ describe('ContainerCard', () => {
     expect(menuItems.length).toBe(0);
   });
 
+  describe('expand click target (grid view)', () => {
+    const isExpanded = (w: ReturnType<typeof mountCard>) => w.text().includes('Resource Usage');
+
+    it('expands when the title header is clicked, not just the chevron row', async () => {
+      const wrapper = mountCard();
+      expect(isExpanded(wrapper)).toBe(false);
+
+      const title = wrapper.find('h3');
+      expect(title.text()).toBe('test-container');
+      await title.trigger('click');
+
+      expect(isExpanded(wrapper)).toBe(true);
+    });
+
+    it('does not expand when a footer action button is clicked', async () => {
+      const wrapper = mountCard({ state: 'running' });
+
+      const restart = wrapper.findAll('button').find((b) => b.attributes('title') === 'Restart')!;
+      expect(restart).toBeTruthy();
+      await restart.trigger('click');
+
+      expect(isExpanded(wrapper)).toBe(false);
+    });
+  });
+
   it('clicking kebab button opens the menu (grid view)', async () => {
     const wrapper = mountCard();
     const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
@@ -397,22 +422,59 @@ describe('ContainerCard', () => {
       expect(logsCallCount()).toBe(callsBefore + 1);
     });
 
-    it('applies 2-column grid layout when inline logs are shown', async () => {
-      const wrapper = await mountExpandedListCard({ enableLogs: true });
+    it('renders the same expanded detail layout in grid view as in list view', async () => {
+      const findInfoRow = (w: ReturnType<typeof mount>) =>
+        w.findAll('div').find((d) => d.classes().includes('md:grid-cols-2'));
 
-      const gridDiv = wrapper.findAll('div').find((d) =>
-        d.classes().includes('grid') && d.classes().includes('lg:grid-cols-2'),
+      const listRow = findInfoRow(await mountExpandedListCard({ enableLogs: true }));
+
+      const gridCard = mountCardWithSharedPinia(
+        { state: 'running' },
+        { view: 'grid' },
+        { enableLogs: true, seedStatsId: 'abc123' },
       );
-      expect(gridDiv).toBeTruthy();
+      await gridCard.find('.cursor-pointer').trigger('click');
+      await flushPromises();
+      const gridRow = findInfoRow(gridCard);
+
+      expect(listRow).toBeTruthy();
+      expect(gridRow).toBeTruthy();
+      // Same info-row grid definition, and the same sections underneath.
+      expect(gridRow!.classes()).toEqual(listRow!.classes());
+      for (const section of ['Resource Usage', 'Block I/O', 'Net I/O', 'Uptime']) {
+        expect(gridCard.text()).toContain(section);
+      }
     });
 
-    it('does not apply 2-column grid when setting is off', async () => {
-      const wrapper = await mountExpandedListCard({ enableLogs: false });
+    it('renders the logs panel as a full-width row, not a column beside the stats', async () => {
+      const wrapper = await mountExpandedListCard({ enableLogs: true });
 
-      const gridDiv = wrapper.findAll('div').find((d) =>
-        d.classes().includes('lg:grid-cols-2'),
+      // The log pane must not sit inside a multi-column grid — it owns its own row.
+      const logPane = wrapper.findAll('div').find((d) => d.text().includes('server started') && d.classes().includes('font-mono'));
+      expect(logPane).toBeTruthy();
+
+      const splitGrid = wrapper.findAll('div').find((d) =>
+        d.classes().includes('lg:grid-cols-2') && d.text().includes('server started'),
       );
-      expect(gridDiv).toBeUndefined();
+      expect(splitGrid).toBeUndefined();
+    });
+
+    it('keeps the full-width stats row and two-column info row regardless of the inline logs setting', async () => {
+      for (const enableLogs of [true, false]) {
+        const wrapper = await mountExpandedListCard({ enableLogs });
+
+        // Resource usage owns its own row — not a cell in a multi-column grid.
+        const statsRow = wrapper.findAll('div').find((d) => d.text().startsWith('Resource Usage'));
+        expect(statsRow).toBeTruthy();
+        expect(statsRow!.classes().some((c) => c.startsWith('md:grid-cols'))).toBe(false);
+
+        // Metadata sits to the left of the I/O counters in the info row below.
+        const infoRow = wrapper.findAll('div').find((d) => d.classes().includes('md:grid-cols-2'));
+        expect(infoRow).toBeTruthy();
+        expect(infoRow!.text()).toContain('Block I/O');
+        expect(infoRow!.text()).toContain('Image');
+        expect(infoRow!.text()).toContain('Ports');
+      }
     });
 
     it('does not show log panel for exited containers', async () => {
