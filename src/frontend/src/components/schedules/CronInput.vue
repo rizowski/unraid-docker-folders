@@ -1,38 +1,42 @@
 <template>
   <div class="flex flex-col gap-2">
-    <label class="text-sm font-medium text-text">Schedule</label>
+    <label :for="`${uid}-cron-preset`" class="text-sm font-medium text-text">Schedule</label>
     <select
+      :id="`${uid}-cron-preset`"
       :value="preset"
-      class="w-full px-3 py-2 rounded border border-border bg-bg text-text text-sm"
+      class="form-input"
       @change="onPresetChange(($event.target as HTMLSelectElement).value as CronPreset)"
     >
       <option v-for="(info, key) in CRON_PRESETS" :key="key" :value="key">{{ info.label }}</option>
     </select>
 
     <div v-if="preset === 'daily_custom'" class="flex items-center gap-2">
-      <label class="text-xs text-text-secondary">Time:</label>
+      <label :for="`${uid}-cron-daily-time`" class="text-xs text-text-secondary">Time:</label>
       <input
+        :id="`${uid}-cron-daily-time`"
         type="time"
         :value="customTime"
-        class="px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+        class="form-input compact auto-width"
         @change="onTimeChange(($event.target as HTMLInputElement).value)"
       />
     </div>
 
     <div v-if="preset === 'weekly_custom'" class="flex items-center gap-2 flex-wrap">
-      <label class="text-xs text-text-secondary">Day:</label>
+      <label :for="`${uid}-cron-weekly-day`" class="text-xs text-text-secondary">Day:</label>
       <select
+        :id="`${uid}-cron-weekly-day`"
         :value="customDay"
-        class="px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+        class="form-input compact auto-width"
         @change="customDay = Number(($event.target as HTMLSelectElement).value); emitWeekly()"
       >
         <option v-for="(name, idx) in dayNames" :key="idx" :value="idx">{{ name }}</option>
       </select>
-      <label class="text-xs text-text-secondary">Time:</label>
+      <label :for="`${uid}-cron-weekly-time`" class="text-xs text-text-secondary">Time:</label>
       <input
+        :id="`${uid}-cron-weekly-time`"
         type="time"
         :value="customTime"
-        class="px-2 py-1.5 rounded border border-border bg-bg text-text text-sm"
+        class="form-input compact auto-width"
         @change="onWeeklyTimeChange(($event.target as HTMLInputElement).value)"
       />
     </div>
@@ -41,7 +45,7 @@
       <input
         :value="modelValue"
         placeholder="* * * * *"
-        class="w-full px-3 py-2 rounded border border-border bg-bg text-text text-sm font-mono"
+        class="form-input mono"
         @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
       />
       <span class="text-xs text-text-secondary">Format: minute hour day-of-month month day-of-week</span>
@@ -52,7 +56,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, useId } from 'vue';
 import { CRON_PRESETS, type CronPreset } from '@/types/schedule';
 
 const props = defineProps<{
@@ -62,6 +66,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string];
 }>();
+
+// Unique per instance: the panel modal and the inline list form can both be
+// mounted, and duplicate ids would bind <label for> to the wrong field.
+const uid = useId();
 
 const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 

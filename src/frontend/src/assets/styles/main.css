@@ -2,7 +2,10 @@
 
 @theme {
   --color-text: var(--text-color, #1a1a1a);
-  --color-text-secondary: var(--text-color-secondary, #666666);
+  /* Base value only — the @supports block below derives the real, theme-aware
+     one. Kept hardcoded here so an unsupported color-mix can't invalidate
+     `color:` and drop secondary text to inherited (same-on-same). */
+  --color-text-secondary: #666666;
   --color-bg: var(--background-color, #f2f2f2);
   --color-bg-card: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 3%);
   --color-bg-input: color-mix(in srgb, var(--background-color, #f2f2f2), var(--text-color, #1a1a1a) 8%);
@@ -18,7 +21,31 @@
   --color-error: #f44336;
   --color-warning: #ff9800;
   --color-info: #2196f3;
-  --color-muted: #757575;
+  --color-muted: #757575; /* base only — see the @supports block below */
+}
+
+/*
+ * Theme-aware secondary text.
+ *
+ * Unraid never bridges `--text-color-secondary`, so these two greys used to be
+ * hardcoded on every theme. On a dark theme that left #666 on #1a1a1a at 3.0:1
+ * contrast — below AA, and the log pane renders 11px monospace in it.
+ *
+ * Mixing toward `--background-color` (not `transparent`) keeps the result
+ * opaque, so the handful of `bg-text-secondary` / `border-text-secondary`
+ * usages don't silently turn translucent. The ratios are picked so light
+ * themes are unchanged: 65% of #1a1a1a over #f2f2f2 is #666666 and 58% is
+ * #7b7b7b — the previous hardcoded values.
+ *
+ * Guarded by @supports because an unsupported color-mix in a `color:`
+ * declaration is invalid and would fall back to inherited text. Unlayered, so
+ * it beats Tailwind's @theme output in `@layer theme` regardless of order.
+ */
+@supports (color: color-mix(in srgb, red, blue)) {
+  :root {
+    --color-text-secondary: color-mix(in srgb, var(--text-color, #1a1a1a) 65%, var(--background-color, #f2f2f2));
+    --color-muted: color-mix(in srgb, var(--text-color, #1a1a1a) 58%, var(--background-color, #f2f2f2));
+  }
 }
 
 /*
@@ -120,10 +147,14 @@
   border-color: transparent;
 }
 
-/* Neutralize Unraid's input styles */
-#unraid-docker-folders-modern input:not(.styled-input),
-#unraid-docker-folders-modern select:not(.styled-input),
-#unraid-docker-folders-modern textarea:not(.styled-input) {
+/* Neutralize Unraid's input styles.
+   Both opt-in classes are excluded here rather than left to out-specify this
+   rule: `:not()` contributes its argument's specificity, so
+   `#id input:not(.styled-input)` and `#id input.form-input` both compute to
+   (1,1,1) and the winner would be decided by source order alone. */
+#unraid-docker-folders-modern input:not(.styled-input):not(.form-input),
+#unraid-docker-folders-modern select:not(.styled-input):not(.form-input),
+#unraid-docker-folders-modern textarea:not(.styled-input):not(.form-input) {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
@@ -151,9 +182,90 @@
   resize: vertical;
 }
 
-#unraid-docker-folders-modern .styled-input:focus {
+#unraid-docker-folders-modern .styled-input:focus,
+#unraid-docker-folders-modern .form-input:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+/* Form fields: opt-in class for ordinary (non-monospace) inputs.
+   The input reset above is unlayered, so it outranks every Tailwind utility
+   (which live in @layer utilities) regardless of specificity — `w-full py-2
+   px-4 border bg-input-bg` on a bare <input> is dead, and the field renders
+   with no box at all. Parent-document modals (useParentModal) never hit this
+   because Unraid styles them natively; in-iframe BaseModal forms do.
+   The reset excludes .form-input explicitly, so this rule doesn't have to
+   out-specify it. */
+#unraid-docker-folders-modern input.form-input,
+#unraid-docker-folders-modern select.form-input,
+#unraid-docker-folders-modern textarea.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  margin: 0;
+  min-height: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-text);
+  /* --color-bg-input (background + 8% text), not --color-input-bg: Unraid does
+     not actually define --input-background, so that token falls back to white
+     and is unreadable on dark themes. Same source .styled-input uses. */
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  transition: border-color 0.15s;
+}
+
+#unraid-docker-folders-modern select.form-input {
+  cursor: pointer;
+}
+
+#unraid-docker-folders-modern .form-input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+/* Compact variant for fields inside a grouped/nested block */
+#unraid-docker-folders-modern .form-input.compact {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* Path / cron values keep the standard field chrome but a monospace face */
+#unraid-docker-folders-modern .form-input.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Width override for fields that should not fill their row */
+#unraid-docker-folders-modern .form-input.auto-width {
+  width: auto;
+}
+
+/* Icon-only buttons: opt-in class.
+   Same cause as .form-input — the button reset zeroes padding, radius and
+   background, so `p-1.5 rounded hover:bg-*` never applies. Colour stays with
+   the utilities (hover:text-primary / hover:text-error) so intent is visible
+   in the template. */
+#unraid-docker-folders-modern button.icon-btn,
+#unraid-docker-folders-modern a.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+
+#unraid-docker-folders-modern button.icon-btn:hover,
+#unraid-docker-folders-modern a.icon-btn:hover {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+}
+
+/* Round variant — modal header close buttons */
+#unraid-docker-folders-modern button.icon-btn.icon-btn-round,
+#unraid-docker-folders-modern a.icon-btn.icon-btn-round {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 9999px;
 }
 
 /* Neutralize Unraid's p { text-align: justify } and p:empty { display: none } */
@@ -222,6 +334,33 @@
 #unraid-docker-folders-modern .stats-bar-track {
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 10%, transparent);
 }
+
+/* Inline log pane fill: subtle on both light and dark themes */
+#unraid-docker-folders-modern .log-pane {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
+}
+
+/*
+ * Status halo around the container icon — replaces the old status dot (grid)
+ * and status bar (list). A tight ring plus a feathered bloom in the state
+ * color. This is a deliberate DESIGN.md §2 deviation ("no glow shadows"):
+ * the glow encodes container state, never decoration, and a hard 2px border
+ * read too heavy on a list of mostly-stopped containers.
+ *
+ * The ring lives on a wrapper span, not the <img>, because the img reset
+ * above kills borders at ID specificity.
+ */
+#unraid-docker-folders-modern .status-halo {
+  border-radius: 4px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--halo-color) 50%, transparent),
+    0 0 8px 2px color-mix(in srgb, var(--halo-color) 32%, transparent);
+}
+
+#unraid-docker-folders-modern .status-halo-success { --halo-color: var(--color-success); }
+#unraid-docker-folders-modern .status-halo-error   { --halo-color: var(--color-error); }
+#unraid-docker-folders-modern .status-halo-info    { --halo-color: var(--color-info); }
+#unraid-docker-folders-modern .status-halo-muted   { --halo-color: var(--color-muted); }
 
 /* Shared expand/collapse — CSS Grid height transition */
 #unraid-docker-folders-modern .expand-grid {

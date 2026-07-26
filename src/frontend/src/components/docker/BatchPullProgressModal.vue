@@ -4,7 +4,7 @@
         <div class="flex items-center justify-between px-6 py-4 border-b border-border">
           <div class="min-w-0">
             <h2 class="text-base font-semibold text-text truncate">
-              {{ allDone ? 'Update Complete' : `Updating Containers (${completedCount}/${uniqueImages.length})` }}
+              {{ modalTitle() }}
             </h2>
           </div>
           <button
@@ -21,17 +21,18 @@
         <!-- Content -->
         <div class="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           <div
-            v-for="(img, idx) in uniqueImages"
-            :key="img"
+            v-for="(unit, idx) in units"
+            :key="unit.id"
             class="flex items-start gap-2 py-2"
-            :class="idx < uniqueImages.length - 1 ? 'border-b border-border/30' : ''"
+            :class="idx < units.length - 1 ? 'border-b border-border/30' : ''"
           >
             <div class="flex-1 min-w-0">
-              <p class="text-sm text-text font-mono truncate">{{ img }}</p>
-              <p v-if="imageErrors[img]" class="text-xs text-error mt-1">{{ imageErrors[img] }}</p>
+              <p class="text-sm text-text font-mono truncate">{{ unitLabel(unit) }}</p>
+              <p class="text-xs text-text-secondary truncate">{{ unitStatusText(unit.id) }}</p>
+              <p v-if="unitErrors[unit.id]" class="text-xs text-error mt-1">{{ unitErrors[unit.id] }}</p>
             </div>
-            <span class="shrink-0 text-xs font-medium" :class="statusLabelClass(img)">
-              {{ statusLabel(img) }}
+            <span class="shrink-0 text-xs font-medium" :class="statusLabelClass(unit.id)">
+              {{ statusLabel(unit.id) }}
             </span>
           </div>
         </div>
@@ -62,17 +63,13 @@
 import { ref, computed, watch } from 'vue';
 import { getCsrfToken } from '@/utils/csrf';
 import { useParentModal } from '@/composables/useParentModal';
+import { useSettingsStore } from '@/stores/settings';
 import BaseModal from '@/components/BaseModal.vue';
-
-interface PullContainer {
-  image: string;
-  name: string;
-  managed: string | null;
-}
+import { unitLabel, type UpdateUnit } from '@/utils/updateUnits';
 
 interface Props {
   isOpen: boolean;
-  containers: PullContainer[];
+  units: UpdateUnit[];
 }
 
 const props = defineProps<Props>();
@@ -89,78 +86,83 @@ interface LayerProgress {
   percent: number;
 }
 
-const uniqueImages = computed(() => [...new Set(props.containers.map((c) => c.image))]);
+type UnitResult = 'success' | 'error' | 'cancelled';
 
-const currentImage = ref<string | null>(null);
-const currentStatus = ref('');
-const currentLayers = ref<Record<string, LayerProgress>>({});
-const imageResults = ref<Record<string, 'success' | 'error' | 'cancelled'>>({});
-const imageErrors = ref<Record<string, string>>({});
-const imageRecreateStatus = ref<Record<string, { status: string; message: string }>>({});
+const settingsStore = useSettingsStore();
+
+const API_BASE = '/plugins/unraid-docker-folders-modern/api';
+
+// All per-unit state is keyed by unit id — several units run at once, so
+// nothing here can be a single in-flight value.
+const unitRunning = ref<Record<string, boolean>>({});
+const unitStatus = ref<Record<string, string>>({});
+const unitLayers = ref<Record<string, Record<string, LayerProgress>>>({});
+const unitResults = ref<Record<string, UnitResult>>({});
+const unitErrors = ref<Record<string, string>>({});
+const unitRecreate = ref<Record<string, string>>({});
 const allDone = ref(false);
+
 let cancelled = false;
-let abortController: AbortController | null = null;
+/** One controller per in-flight unit; cancelling aborts every one of them. */
+let controllers = new Set<AbortController>();
+/** Guards against a pool settling after the modal has already closed. */
+let runToken = 0;
 
-const completedCount = computed(() => Object.keys(imageResults.value).length);
+const completedCount = computed(() => Object.keys(unitResults.value).length);
 
-function statusLabel(img: string): string {
-  if (imageResults.value[img] === 'success') return 'Done';
-  if (imageResults.value[img] === 'error') return 'Error';
-  if (imageResults.value[img] === 'cancelled') return 'Skipped';
-  if (currentImage.value === img) return 'Pulling';
+function statusLabel(id: string): string {
+  const result = unitResults.value[id];
+  if (result === 'success') return 'Done';
+  if (result === 'error') return 'Error';
+  if (result === 'cancelled') return 'Skipped';
+  if (unitRunning.value[id]) return 'Updating';
   return 'Pending';
 }
 
-function statusLabelClass(img: string): string {
-  if (imageResults.value[img] === 'success') return 'text-success';
-  if (imageResults.value[img] === 'error') return 'text-error';
-  if (imageResults.value[img] === 'cancelled') return 'text-text-secondary';
-  if (currentImage.value === img) return 'text-primary';
+function statusLabelClass(id: string): string {
+  const result = unitResults.value[id];
+  if (result === 'success') return 'text-success';
+  if (result === 'error') return 'text-error';
+  if (result === 'cancelled') return 'text-text-secondary';
+  if (unitRunning.value[id]) return 'text-primary';
   return 'text-text-secondary';
 }
 
-function imageState(img: string): 'pending' | 'running' | 'done' | 'error' | 'cancelled' {
-  if (imageResults.value[img] === 'success') return 'done';
-  if (imageResults.value[img] === 'error') return 'error';
-  if (imageResults.value[img] === 'cancelled') return 'cancelled';
-  if (currentImage.value === img) return 'running';
+function unitState(id: string): 'pending' | 'running' | 'done' | 'error' | 'cancelled' {
+  const result = unitResults.value[id];
+  if (result === 'success') return 'done';
+  if (result === 'error') return 'error';
+  if (result === 'cancelled') return 'cancelled';
+  if (unitRunning.value[id]) return 'running';
   return 'pending';
 }
 
-function imagePercent(img: string): number {
-  if (imageResults.value[img] === 'success') return 100;
-  if (imageResults.value[img] === 'error' || imageResults.value[img] === 'cancelled') return 100;
-  if (currentImage.value === img) {
-    const layerList = Object.values(currentLayers.value);
-    if (layerList.length === 0) return 5;
-    const avg = layerList.reduce((acc, l) => acc + l.percent, 0) / layerList.length;
-    return Math.max(5, avg);
-  }
-  return 0;
+function unitPercent(id: string): number {
+  if (unitResults.value[id]) return 100;
+  if (!unitRunning.value[id]) return 0;
+  const layers = Object.values(unitLayers.value[id] || {});
+  if (layers.length === 0) return 5;
+  const avg = layers.reduce((acc, l) => acc + l.percent, 0) / layers.length;
+  return Math.max(5, avg);
 }
 
-function imageStatusText(img: string): string {
-  if (imageResults.value[img] === 'success') return 'Done';
-  if (imageResults.value[img] === 'error') return imageErrors.value[img] || 'Error';
-  if (imageResults.value[img] === 'cancelled') return 'Skipped';
-  if (currentImage.value === img) return currentStatus.value || 'Pulling...';
+function unitStatusText(id: string): string {
+  const result = unitResults.value[id];
+  if (result === 'success') return 'Done';
+  if (result === 'error') return unitErrors.value[id] || 'Error';
+  if (result === 'cancelled') return 'Skipped';
+  if (unitRunning.value[id]) return unitStatus.value[id] || 'Updating...';
   return 'Pending';
 }
 
-function imageSublabel(img: string): string {
-  const recreate = imageRecreateStatus.value[img];
-  if (recreate) return recreate.message;
-  return '';
-}
-
 function buildProgressItems() {
-  return uniqueImages.value.map((img) => ({
-    id: img,
-    label: img,
-    percent: imagePercent(img),
-    status: imageStatusText(img),
-    state: imageState(img),
-    sublabel: imageSublabel(img),
+  return props.units.map((unit) => ({
+    id: unit.id,
+    label: unitLabel(unit),
+    percent: unitPercent(unit.id),
+    status: unitStatusText(unit.id),
+    state: unitState(unit.id),
+    sublabel: unitRecreate.value[unit.id] || '',
   }));
 }
 
@@ -179,11 +181,11 @@ const { inIframe } = parentModal;
 function openParent() {
   parentModal.open({
     kind: 'batch-pull-progress',
-    title: `Updating Containers (0/${uniqueImages.value.length})`,
+    title: `Updating Containers (0/${props.units.length})`,
     size: 'md',
     dismissable: false,
     fields: [
-      { type: 'progress-list', id: 'images', items: buildProgressItems() },
+      { type: 'progress-list', id: 'units', items: buildProgressItems() },
     ],
     actions: [
       { id: 'cancel', label: 'Cancel', variant: 'default' },
@@ -194,32 +196,32 @@ function openParent() {
 function modalTitle(): string {
   return allDone.value
     ? 'Update Complete'
-    : `Updating Containers (${completedCount.value}/${uniqueImages.value.length})`;
+    : `Updating Containers (${completedCount.value}/${props.units.length})`;
 }
 
 function patchAll() {
   if (!inIframe) return;
   parentModal.update({
     title: modalTitle(),
-    fields: [{ id: 'images', items: buildProgressItems() }],
+    fields: [{ id: 'units', items: buildProgressItems() }],
   });
 }
 
-function patchImage(img: string) {
+function patchUnit(unit: UpdateUnit) {
   if (!inIframe) return;
   parentModal.update({
     title: modalTitle(),
     fields: [
       {
-        id: 'images',
+        id: 'units',
         items: [
           {
-            id: img,
-            label: img,
-            percent: imagePercent(img),
-            status: imageStatusText(img),
-            state: imageState(img),
-            sublabel: imageSublabel(img),
+            id: unit.id,
+            label: unitLabel(unit),
+            percent: unitPercent(unit.id),
+            status: unitStatusText(unit.id),
+            state: unitState(unit.id),
+            sublabel: unitRecreate.value[unit.id] || '',
           },
         ],
       },
@@ -244,47 +246,139 @@ function handleClose() {
 
 function cancelBatch() {
   cancelled = true;
-  if (abortController) {
-    abortController.abort();
-    abortController = null;
+  for (const controller of controllers) {
+    controller.abort();
   }
+  controllers = new Set();
 }
 
 function reset() {
-  currentImage.value = null;
-  currentStatus.value = '';
-  currentLayers.value = {};
-  imageResults.value = {};
-  imageErrors.value = {};
-  imageRecreateStatus.value = {};
+  unitRunning.value = {};
+  unitStatus.value = {};
+  unitLayers.value = {};
+  unitResults.value = {};
+  unitErrors.value = {};
+  unitRecreate.value = {};
   allDone.value = false;
   cancelled = false;
-  abortController = null;
+  controllers = new Set();
 }
 
-async function pullImage(image: string): Promise<'success' | 'error'> {
-  currentImage.value = image;
-  currentStatus.value = 'Preparing...';
-  currentLayers.value = {};
-  patchImage(image);
+function setStatus(id: string, text: string) {
+  unitStatus.value = { ...unitStatus.value, [id]: text };
+}
 
-  abortController = new AbortController();
-
-  const API_BASE = '/plugins/unraid-docker-folders-modern/api';
-  const token = getCsrfToken();
+/** The endpoint + body for a unit, keyed off its kind. */
+function requestFor(unit: UpdateUnit): { url: string; body: URLSearchParams } {
   const body = new URLSearchParams();
+  const token = getCsrfToken();
   if (token) body.append('csrf_token', token);
 
+  if (unit.kind === 'compose') {
+    // `up` pulls and then recreates changed services; `pull` downloads only.
+    // Honour the same post-pull setting standalone containers use.
+    const action = settingsStore.postPullAction === 'pull_and_auto_recreate' ? 'up' : 'pull';
+    return {
+      url: `${API_BASE}/compose-stream.php?action=${action}&project=${encodeURIComponent(unit.project)}`,
+      body,
+    };
+  }
+
+  // Send the exact container set the confirm dialog listed, so the backend
+  // recreates those and nothing else.
+  body.append('containers', unit.containers.map((c) => c.id).join(','));
+  return {
+    url: `${API_BASE}/pull.php?image=${encodeURIComponent(unit.image)}`,
+    body,
+  };
+}
+
+/**
+ * Apply one SSE event to a unit's state. Returns 'success'/'error' on a
+ * terminal event, otherwise null. `pull.php` and `compose-stream.php` share
+ * the terminal vocabulary (complete/error/done) and differ only in how they
+ * report progress, so one handler covers both.
+ */
+function applyEvent(
+  unit: UpdateUnit,
+  event: string,
+  data: Record<string, any>,
+): UnitResult | null {
+  const id = unit.id;
+
+  switch (event) {
+    case 'status':
+      setStatus(id, data.message || 'Updating...');
+      break;
+
+    // pull.php: per-layer download progress.
+    case 'progress': {
+      if (!data.id) break;
+      const layers = { ...(unitLayers.value[id] || {}) };
+      const existing = layers[data.id] || { status: '', current: 0, total: 0, percent: 0 };
+      const current = data.current ?? existing.current;
+      const total = data.total ?? existing.total;
+      const percent = total > 0
+        ? Math.round((current / total) * 100)
+        : (data.status === 'Pull complete' || data.status === 'Already exists' ? 100 : existing.percent);
+      layers[data.id] = { status: data.status || existing.status, current, total, percent };
+      unitLayers.value = { ...unitLayers.value, [id]: layers };
+      break;
+    }
+
+    // compose-stream.php: coarse phase markers, no layer data.
+    case 'phase': {
+      const percent = data.phase === 'starting' ? 80 : 40;
+      unitLayers.value = { ...unitLayers.value, [id]: { phase: { status: data.phase || '', current: 0, total: 0, percent } } };
+      setStatus(id, data.message || data.phase || 'Updating...');
+      break;
+    }
+
+    // compose-stream.php: raw CLI output; show the newest non-empty line.
+    case 'log': {
+      const line = typeof data.line === 'string' ? data.line.trim() : '';
+      if (line) setStatus(id, line);
+      break;
+    }
+
+    case 'recreating':
+    case 'recreated':
+      setStatus(id, data.message || '');
+      unitRecreate.value = { ...unitRecreate.value, [id]: data.message || '' };
+      break;
+
+    case 'recreate_error':
+      unitRecreate.value = { ...unitRecreate.value, [id]: data.message || '' };
+      break;
+
+    case 'complete':
+      return 'success';
+
+    case 'error':
+      unitErrors.value = { ...unitErrors.value, [id]: data.message || 'Update failed' };
+      return 'error';
+  }
+
+  return null;
+}
+
+async function runUnit(unit: UpdateUnit): Promise<UnitResult> {
+  unitRunning.value = { ...unitRunning.value, [unit.id]: true };
+  setStatus(unit.id, 'Preparing...');
+  patchUnit(unit);
+
+  const controller = new AbortController();
+  controllers.add(controller);
+
+  const { url, body } = requestFor(unit);
+
   try {
-    const response = await fetch(
-      `${API_BASE}/pull.php?image=${encodeURIComponent(image)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-        signal: abortController.signal,
-      },
-    );
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+      signal: controller.signal,
+    });
 
     if (!response.ok) return 'error';
 
@@ -293,7 +387,7 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
 
     const decoder = new TextDecoder();
     let buffer = '';
-    let result: 'success' | 'error' = 'error';
+    let result: UnitResult = 'error';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -309,38 +403,9 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
           currentEvent = line.slice(7);
         } else if (line.startsWith('data: ')) {
           try {
-            const data = JSON.parse(line.slice(6));
-            if (currentEvent === 'status') {
-              currentStatus.value = data.message || 'Pulling...';
-              patchImage(image);
-            } else if (currentEvent === 'progress' && data.id) {
-              const existing = currentLayers.value[data.id] || { status: '', current: 0, total: 0, percent: 0 };
-              const current = data.current ?? existing.current;
-              const total = data.total ?? existing.total;
-              const percent = total > 0 ? Math.round((current / total) * 100) : (data.status === 'Pull complete' || data.status === 'Already exists' ? 100 : existing.percent);
-              currentLayers.value[data.id] = { status: data.status || existing.status, current, total, percent };
-              currentLayers.value = { ...currentLayers.value };
-              patchImage(image);
-            } else if (currentEvent === 'recreating') {
-              currentStatus.value = data.message || `Recreating ${data.container}...`;
-              imageRecreateStatus.value[image] = { status: 'recreating', message: data.message || '' };
-              imageRecreateStatus.value = { ...imageRecreateStatus.value };
-              patchImage(image);
-            } else if (currentEvent === 'recreated') {
-              currentStatus.value = data.message || `${data.container} updated`;
-              imageRecreateStatus.value[image] = { status: 'recreated', message: data.message || '' };
-              imageRecreateStatus.value = { ...imageRecreateStatus.value };
-              patchImage(image);
-            } else if (currentEvent === 'recreate_error') {
-              imageRecreateStatus.value[image] = { status: 'recreate_error', message: data.message || '' };
-              imageRecreateStatus.value = { ...imageRecreateStatus.value };
-              patchImage(image);
-            } else if (currentEvent === 'complete') {
-              result = 'success';
-            } else if (currentEvent === 'error') {
-              imageErrors.value[image] = data.message || 'Pull failed';
-              result = 'error';
-            }
+            const terminal = applyEvent(unit, currentEvent, JSON.parse(line.slice(6)));
+            if (terminal) result = terminal;
+            patchUnit(unit);
           } catch {
             // skip malformed JSON
           }
@@ -351,37 +416,48 @@ async function pullImage(image: string): Promise<'success' | 'error'> {
     return result;
   } catch (e: any) {
     if (e.name === 'AbortError') return 'error';
-    imageErrors.value[image] = e.message || 'Pull failed';
+    unitErrors.value = { ...unitErrors.value, [unit.id]: e.message || 'Update failed' };
     return 'error';
+  } finally {
+    controllers.delete(controller);
+    unitRunning.value = { ...unitRunning.value, [unit.id]: false };
   }
+}
+
+function finishUnit(unit: UpdateUnit, result: UnitResult) {
+  unitResults.value = { ...unitResults.value, [unit.id]: result };
+  patchUnit(unit);
 }
 
 async function startBatch() {
   reset();
+  const token = ++runToken;
   if (inIframe) openParent();
 
-  for (const image of uniqueImages.value) {
-    if (cancelled) {
-      imageResults.value[image] = 'cancelled';
-      imageResults.value = { ...imageResults.value };
-      patchImage(image);
-      continue;
+  const units = [...props.units];
+  const limit = Math.max(1, Math.min(settingsStore.updateConcurrency, units.length));
+
+  // Worker pool: `limit` workers share one cursor, so a fast unit immediately
+  // picks up the next instead of waiting on a slow sibling.
+  let cursor = 0;
+  const worker = async () => {
+    while (cursor < units.length) {
+      const unit = units[cursor++];
+      if (cancelled) {
+        finishUnit(unit, 'cancelled');
+        continue;
+      }
+      const result = await runUnit(unit);
+      finishUnit(unit, cancelled && result === 'error' ? 'cancelled' : result);
     }
+  };
 
-    const result = await pullImage(image);
+  await Promise.all(Array.from({ length: limit }, worker));
 
-    if (cancelled && result === 'error') {
-      imageResults.value[image] = 'cancelled';
-    } else {
-      imageResults.value[image] = result;
-    }
-    imageResults.value = { ...imageResults.value };
-    patchImage(image);
-  }
+  // The modal may have been closed (and a new batch started) while the pool
+  // drained — don't resurrect a dead run.
+  if (token !== runToken || !props.isOpen) return;
 
-  currentImage.value = null;
-  currentStatus.value = '';
-  currentLayers.value = {};
   allDone.value = true;
   patchAll();
   showCloseAction();
@@ -389,9 +465,10 @@ async function startBatch() {
 }
 
 watch(() => props.isOpen, (open) => {
-  if (open && props.containers.length > 0) {
+  if (open && props.units.length > 0) {
     startBatch();
   } else if (!open) {
+    runToken++;
     cancelBatch();
     if (inIframe) parentModal.close();
   }

@@ -1,32 +1,20 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { ref } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ContainerCard from '../ContainerCard.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
+import { makeContainer as baseContainer } from '@/test/fixtures';
 
+// This suite's default container publishes a port — several tests assert on the
+// rendered port summary — so it layers that onto the shared fixture.
 function makeContainer(overrides: Partial<Container> = {}): Container {
-  return {
-    id: 'abc123',
-    name: 'test-container',
-    image: 'nginx:latest',
-    state: 'running',
-    status: 'Up 2 hours',
-    command: '/entrypoint.sh',
+  return baseContainer({
     ports: [{ IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }],
-    hostPorts: [],
-    mounts: [],
-    networkSettings: {},
-    created: Date.now() / 1000,
-    icon: null,
-    managed: 'dockerman',
-    webui: null,
-    labels: {},
-    autostart: false,
-    autostartDelay: 0,
     ...overrides,
-  };
+  });
 }
 
 function mountCard(container?: Partial<Container>, props: Record<string, unknown> = {}) {
@@ -55,6 +43,114 @@ describe('ContainerCard', () => {
     // The kebab dropdown should not be rendered initially
     const menuItems = wrapper.findAll('.kebab-menu-item');
     expect(menuItems.length).toBe(0);
+  });
+
+  describe('status halo on the container icon', () => {
+    // The halo sits on the span wrapping the icon, not the img itself.
+    const iconClasses = (w: ReturnType<typeof mount>) =>
+      w.find('img').element.parentElement!.className.split(' ');
+
+    it('marks a healthy running container with a success halo (grid)', () => {
+      expect(iconClasses(mountCard({ status: 'Up 2 hours (healthy)' }))).toContain('status-halo-success');
+    });
+
+    it('marks a running container with no health check as info (grid)', () => {
+      expect(iconClasses(mountCard({ status: 'Up 2 hours' }))).toContain('status-halo-info');
+    });
+
+    it('marks a stopped container with an error halo (list)', () => {
+      const wrapper = mountCard({ state: 'exited', status: 'Exited (0) 3 hours ago' }, { view: 'list' });
+      expect(iconClasses(wrapper)).toContain('status-halo-error');
+    });
+
+    it('falls back to success for running containers when distinguishHealthy is off', () => {
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer({ status: 'Up 2 hours' }), view: 'grid' as const },
+        global: {
+          plugins: [createPinia()],
+          provide: { distinguishHealthy: ref(false) },
+          stubs: { Teleport: true },
+        },
+      });
+      expect(iconClasses(wrapper)).toContain('status-halo-success');
+    });
+  });
+
+  describe('container icon links to the WebUI', () => {
+    const iconEl = (w: ReturnType<typeof mount>) => w.find('img').element.parentElement!;
+    const isExpanded = (w: ReturnType<typeof mount>) => w.text().includes('Resource Usage');
+
+    for (const view of ['grid', 'list'] as const) {
+      it(`renders the icon as a link with the resolved URL (${view})`, () => {
+        const wrapper = mountCard(
+          { webui: 'http://[IP]:[PORT:80]/admin', state: 'running' },
+          { view },
+        );
+        const icon = iconEl(wrapper);
+
+        expect(icon.tagName).toBe('A');
+        // [IP] -> hostname, [PORT:80] -> the mapped public port 8080
+        expect(icon.getAttribute('href')).toBe(`http://${window.location.hostname}:8080/admin`);
+        expect(icon.getAttribute('target')).toBe('_blank');
+        expect(icon.getAttribute('rel')).toBe('noopener noreferrer');
+        expect(icon.getAttribute('title')).toContain('Open WebUI');
+      });
+
+      it(`clicking the icon opens the WebUI without expanding the card (${view})`, async () => {
+        const wrapper = mountCard(
+          { webui: 'http://[IP]:[PORT:80]/admin', state: 'running' },
+          { view },
+        );
+        expect(isExpanded(wrapper)).toBe(false);
+
+        await wrapper.find('img').trigger('click');
+
+        expect(isExpanded(wrapper)).toBe(false);
+      });
+
+      it(`stays an inert span and still expands when there is no WebUI (${view})`, async () => {
+        const wrapper = mountCard({ webui: null, state: 'running' }, { view });
+        expect(iconEl(wrapper).tagName).toBe('SPAN');
+
+        await wrapper.find('img').trigger('click');
+
+        expect(isExpanded(wrapper)).toBe(true);
+      });
+    }
+
+    it('does not link when the container is stopped', () => {
+      const wrapper = mountCard({
+        webui: 'http://[IP]:[PORT:80]/admin',
+        state: 'exited',
+        status: 'Exited (0) 3 hours ago',
+      });
+      expect(iconEl(wrapper).tagName).toBe('SPAN');
+    });
+  });
+
+  describe('expand click target (grid view)', () => {
+    const isExpanded = (w: ReturnType<typeof mountCard>) => w.text().includes('Resource Usage');
+
+    it('expands when the title header is clicked, not just the chevron row', async () => {
+      const wrapper = mountCard();
+      expect(isExpanded(wrapper)).toBe(false);
+
+      const title = wrapper.find('h3');
+      expect(title.text()).toBe('test-container');
+      await title.trigger('click');
+
+      expect(isExpanded(wrapper)).toBe(true);
+    });
+
+    it('does not expand when a footer action button is clicked', async () => {
+      const wrapper = mountCard({ state: 'running' });
+
+      const restart = wrapper.findAll('button').find((b) => b.attributes('title') === 'Restart')!;
+      expect(restart).toBeTruthy();
+      await restart.trigger('click');
+
+      expect(isExpanded(wrapper)).toBe(false);
+    });
   });
 
   it('clicking kebab button opens the menu (grid view)', async () => {
@@ -375,6 +471,47 @@ describe('ContainerCard', () => {
       expect(wrapper.text()).toContain('ready');
     });
 
+    it('surfaces the API error instead of the empty-state text', async () => {
+      // Docker refuses to serve logs (e.g. --log-driver=none): the API answers
+      // 200 with an explicit reason, which must not look like "container is quiet".
+      fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('action=logs')) {
+          return new Response(
+            JSON.stringify({
+              logs: '',
+              error: true,
+              message: "Docker API HTTP 400 — this container's logging driver may not support reading logs",
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      });
+
+      const wrapper = await mountExpandedListCard({ enableLogs: true });
+
+      expect(wrapper.text()).toContain('logging driver may not support reading logs');
+      expect(wrapper.text()).not.toContain('No logs available.');
+    });
+
+    it('still shows the empty state when the container is simply quiet', async () => {
+      fetchSpy.mockImplementation(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : (input as Request).url;
+        if (url.includes('action=logs')) {
+          return new Response(JSON.stringify({ logs: '' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({}), { status: 200 });
+      });
+
+      const wrapper = await mountExpandedListCard({ enableLogs: true });
+
+      expect(wrapper.text()).toContain('No logs available.');
+    });
+
     it('shows a "Logs" header label in the panel', async () => {
       const wrapper = await mountExpandedListCard({ enableLogs: true });
 
@@ -397,22 +534,59 @@ describe('ContainerCard', () => {
       expect(logsCallCount()).toBe(callsBefore + 1);
     });
 
-    it('applies 2-column grid layout when inline logs are shown', async () => {
-      const wrapper = await mountExpandedListCard({ enableLogs: true });
+    it('renders the same expanded detail layout in grid view as in list view', async () => {
+      const findInfoRow = (w: ReturnType<typeof mount>) =>
+        w.findAll('div').find((d) => d.classes().includes('md:grid-cols-2'));
 
-      const gridDiv = wrapper.findAll('div').find((d) =>
-        d.classes().includes('grid') && d.classes().includes('lg:grid-cols-2'),
+      const listRow = findInfoRow(await mountExpandedListCard({ enableLogs: true }));
+
+      const gridCard = mountCardWithSharedPinia(
+        { state: 'running' },
+        { view: 'grid' },
+        { enableLogs: true, seedStatsId: 'abc123' },
       );
-      expect(gridDiv).toBeTruthy();
+      await gridCard.find('.cursor-pointer').trigger('click');
+      await flushPromises();
+      const gridRow = findInfoRow(gridCard);
+
+      expect(listRow).toBeTruthy();
+      expect(gridRow).toBeTruthy();
+      // Same info-row grid definition, and the same sections underneath.
+      expect(gridRow!.classes()).toEqual(listRow!.classes());
+      for (const section of ['Resource Usage', 'Block I/O', 'Net I/O', 'Uptime']) {
+        expect(gridCard.text()).toContain(section);
+      }
     });
 
-    it('does not apply 2-column grid when setting is off', async () => {
-      const wrapper = await mountExpandedListCard({ enableLogs: false });
+    it('renders the logs panel as a full-width row, not a column beside the stats', async () => {
+      const wrapper = await mountExpandedListCard({ enableLogs: true });
 
-      const gridDiv = wrapper.findAll('div').find((d) =>
-        d.classes().includes('lg:grid-cols-2'),
+      // The log pane must not sit inside a multi-column grid — it owns its own row.
+      const logPane = wrapper.findAll('div').find((d) => d.text().includes('server started') && d.classes().includes('font-mono'));
+      expect(logPane).toBeTruthy();
+
+      const splitGrid = wrapper.findAll('div').find((d) =>
+        d.classes().includes('lg:grid-cols-2') && d.text().includes('server started'),
       );
-      expect(gridDiv).toBeUndefined();
+      expect(splitGrid).toBeUndefined();
+    });
+
+    it('keeps the full-width stats row and two-column info row regardless of the inline logs setting', async () => {
+      for (const enableLogs of [true, false]) {
+        const wrapper = await mountExpandedListCard({ enableLogs });
+
+        // Resource usage owns its own row — not a cell in a multi-column grid.
+        const statsRow = wrapper.findAll('div').find((d) => d.text().startsWith('Resource Usage'));
+        expect(statsRow).toBeTruthy();
+        expect(statsRow!.classes().some((c) => c.startsWith('md:grid-cols'))).toBe(false);
+
+        // Metadata sits to the left of the I/O counters in the info row below.
+        const infoRow = wrapper.findAll('div').find((d) => d.classes().includes('md:grid-cols-2'));
+        expect(infoRow).toBeTruthy();
+        expect(infoRow!.text()).toContain('Block I/O');
+        expect(infoRow!.text()).toContain('Image');
+        expect(infoRow!.text()).toContain('Ports');
+      }
     });
 
     it('does not show log panel for exited containers', async () => {

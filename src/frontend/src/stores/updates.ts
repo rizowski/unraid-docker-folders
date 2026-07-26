@@ -128,6 +128,16 @@ export const useUpdatesStore = defineStore('updates', () => {
     return checking.value || checkingImages.value.includes(imageName);
   }
 
+  /**
+   * True only while a *targeted* check (one container, folder or stack) covers
+   * this image. Drives the inline spinners on cards and folder headers — the
+   * global check already has its own spinner on the header button, so folding
+   * it in here would light up every card at once.
+   */
+  function isTargetedCheck(imageName: string): boolean {
+    return checkingImages.value.includes(imageName);
+  }
+
   function clearUpdateForImage(imageName: string) {
     if (updates.value[imageName]) {
       updates.value[imageName] = { ...updates.value[imageName], update_available: false };
@@ -143,6 +153,7 @@ export const useUpdatesStore = defineStore('updates', () => {
     hasUpdate,
     isExcluded,
     isCheckingImage,
+    isTargetedCheck,
     getContainersWithUpdates,
     fetchCachedUpdates,
     checkForUpdates,

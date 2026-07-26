@@ -1,8 +1,17 @@
 <template>
   <BaseModal :is-open="isOpen" max-width="600px" @close="$emit('close')">
-    <div class="p-5 flex flex-col gap-3">
-      <h2 class="text-lg font-semibold text-text m-0">Execution History</h2>
+    <div class="flex justify-between items-center p-4 sm:p-6 border-b border-border">
+      <h2 class="text-xl font-semibold text-text m-0">Execution History</h2>
+      <button
+        class="icon-btn icon-btn-round text-text-secondary hover:text-text"
+        aria-label="Close"
+        @click="$emit('close')"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      </button>
+    </div>
 
+    <div class="p-4 sm:p-6 flex flex-col gap-3">
       <div v-if="loading" class="text-sm text-text-secondary py-4 text-center">Loading...</div>
 
       <div v-else-if="!history.length" class="text-sm text-text-secondary py-4 text-center">
@@ -20,7 +29,7 @@
             :class="{
               'bg-success': entry.status === 'success',
               'bg-error': entry.status === 'error',
-              'bg-yellow-500': entry.status === 'running',
+              'bg-warning': entry.status === 'running',
               'bg-text-secondary': entry.status === 'skipped',
             }"
           ></span>
@@ -42,9 +51,10 @@
         </div>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button class="px-4 py-2 rounded border border-border bg-transparent text-text text-sm cursor-pointer hover:bg-bg" @click="$emit('close')">Close</button>
-      </div>
+    </div>
+
+    <div class="flex justify-end p-4 sm:p-6 pt-4 border-t border-border">
+      <button class="nav-btn" @click="$emit('close')">Close</button>
     </div>
   </BaseModal>
 </template>
@@ -76,7 +86,7 @@ function statusBadge(status: string) {
   switch (status) {
     case 'success': return 'bg-success/20 text-success';
     case 'error': return 'bg-error/20 text-error';
-    case 'running': return 'bg-yellow-500/20 text-yellow-500';
+    case 'running': return 'bg-warning/20 text-warning';
     default: return 'bg-bg text-text-secondary';
   }
 }

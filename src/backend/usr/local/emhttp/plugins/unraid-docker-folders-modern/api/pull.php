@@ -17,6 +17,15 @@ $method = $_SERVER['REQUEST_METHOD'];
 
 requireAuth();
 
+// Release the PHP session lock. Sessions are locked exclusively for the life
+// of a request, and local_prepend.php starts one for plugin API paths — so a
+// pull that runs for minutes would block every other request on this session,
+// including the rest of the Unraid webgui. Nothing below touches $_SESSION,
+// and POST CSRF was already validated by local_prepend.php before we ran.
+if (session_status() === PHP_SESSION_ACTIVE) {
+  session_write_close();
+}
+
 if ($method !== 'POST') {
   header('Content-Type: application/json');
   errorResponse('Method not allowed', 405);
@@ -33,6 +42,28 @@ if (!$image) {
 if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9._\/:@-]+$/', $image) || strlen($image) > 255) {
   header('Content-Type: application/json');
   errorResponse('Invalid image name', 400);
+}
+
+// Optional: restrict auto-recreate to specific container IDs.
+// Without this, the recreate step below matches by image and rebuilds *every*
+// container using it — surprising when several containers share an image. The
+// UI sends the exact set it showed the user so the two always agree. Absent
+// param keeps the original match-by-image behavior for other callers.
+$onlyContainerIds = null;
+$rawContainers = $_POST['containers'] ?? '';
+if (is_string($rawContainers) && $rawContainers !== '') {
+  $ids = [];
+  foreach (explode(',', $rawContainers) as $cid) {
+    $cid = trim($cid);
+    if (preg_match('/^[a-f0-9]{12,64}$/', $cid)) {
+      $ids[] = $cid;
+    }
+  }
+  if (empty($ids)) {
+    header('Content-Type: application/json');
+    errorResponse('Invalid container IDs', 400);
+  }
+  $onlyContainerIds = array_flip($ids);
 }
 
 // Allow unlimited execution time — image pulls can take minutes
@@ -130,9 +161,13 @@ try {
         $containers = $dockerClient->listContainers(true);
         $matchingContainers = [];
         foreach ($containers as $container) {
-          if ($container['image'] === $image) {
-            $matchingContainers[] = $container;
+          if ($container['image'] !== $image) {
+            continue;
           }
+          if ($onlyContainerIds !== null && !isset($onlyContainerIds[$container['id']])) {
+            continue;
+          }
+          $matchingContainers[] = $container;
         }
 
         logUpdate("RECREATE Found " . count($matchingContainers) . " container(s) using {$image}");

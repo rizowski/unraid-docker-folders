@@ -324,6 +324,10 @@ function parseBody(req: any): Promise<any> {
   });
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function parseUrl(url: string) {
   const parsed = new URL(url, 'http://localhost');
   return { path: parsed.pathname, params: Object.fromEntries(parsed.searchParams) };
@@ -499,6 +503,7 @@ const settings: Record<string, string> = {
   notify_on_updates: '0',
   update_check_exclude: '',
   post_pull_action: 'pull_only',
+  update_concurrency: '3',
   replace_docker_section: '0',
   show_legacy_containers: '0',
   show_legacy_buttons: '0',
@@ -615,6 +620,9 @@ async function handleUpdates(req: any, res: any, params: Record<string, string>)
     // Simulate checking — mark a few containers as having updates.
     // A payload of {images: [...]} restricts the check (targeted mode).
     const body = await parseBody(req);
+    // A real check hits a registry per image; without latency here the
+    // in-progress indicators are impossible to see in dev.
+    await sleep(900);
     const allImages = [...new Set(containers.map((c) => c.image))];
     const imagesToCheck = Array.isArray(body?.images)
       ? allImages.filter((img) => body.images.includes(img))
@@ -667,6 +675,15 @@ function handlePull(req: any, res: any, params: Record<string, string>) {
   const statuses = ['Pulling fs layer', 'Downloading', 'Downloading', 'Download complete', 'Extracting', 'Pull complete'];
   let step = 0;
 
+  // Stagger pull speed per image (deterministically, so runs are repeatable).
+  // Uniform timings would make a broken concurrency pool look fine — units
+  // need to finish out of order for the shared cursor to be exercised.
+  let hash = 0;
+  for (let i = 0; i < image.length; i++) {
+    hash = (hash * 31 + image.charCodeAt(i)) >>> 0;
+  }
+  const stepMs = 150 + (hash % 8) * 70; // ~2.7s to ~12.4s per image
+
   function sendEvent(event: string, data: any) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   }
@@ -701,7 +718,7 @@ function handlePull(req: any, res: any, params: Record<string, string>) {
 
     sendEvent('progress', data);
     step++;
-  }, 200);
+  }, stepMs);
 
   req.on('close', () => clearInterval(interval));
 }
@@ -803,7 +820,7 @@ function handleCompose(req: any, res: any, params: Record<string, string>) {
 
 // --- Mock Schedules ---
 
-let nextScheduleId = 3;
+let nextScheduleId = 5;
 const mockSchedules = [
   {
     id: 1, name: 'Nightly Plex Backup', target_type: 'container', target_id: 'plex',
@@ -813,6 +830,26 @@ const mockSchedules = [
     last_run_message: 'Backup created: plex.2026-04-10_030000.tar.gz',
     next_run_at: Math.floor(Date.now() / 1000) + 3600,
     created_at: Math.floor(Date.now() / 1000) - 604800, updated_at: Math.floor(Date.now() / 1000) - 86400,
+  },
+  // Two more on plex so manage mode's bulk enable/disable and multi-delete are
+  // exercisable in the dev server, and so a disabled row and a failed run each
+  // have a representative.
+  {
+    id: 3, name: 'Weekly Plex Restart', target_type: 'container', target_id: 'plex',
+    action: 'restart', cron_expression: '0 4 * * 0', enabled: false,
+    backup_config: null,
+    last_run_at: Math.floor(Date.now() / 1000) - 172800, last_run_status: 'error',
+    last_run_message: 'Container did not come back up',
+    next_run_at: Math.floor(Date.now() / 1000) + 259200,
+    created_at: Math.floor(Date.now() / 1000) - 1209600, updated_at: Math.floor(Date.now() / 1000) - 172800,
+  },
+  {
+    id: 4, name: 'Pause Plex overnight', target_type: 'container', target_id: 'plex',
+    action: 'pause', cron_expression: '0 2 * * *', enabled: true,
+    backup_config: null,
+    last_run_at: null, last_run_status: null, last_run_message: null,
+    next_run_at: Math.floor(Date.now() / 1000) + 93600,
+    created_at: Math.floor(Date.now() / 1000) - 7200, updated_at: Math.floor(Date.now() / 1000) - 7200,
   },
   {
     id: 2, name: 'Stop postgres weeknights', target_type: 'container', target_id: 'postgres',
@@ -824,9 +861,10 @@ const mockSchedules = [
   },
 ];
 
-function handleSchedules(req: any, res: any, params: URLSearchParams) {
-  const action = params.get('action');
-  const id = params.get('id') ? parseInt(params.get('id')!) : null;
+async function handleSchedules(req: any, res: any, params: Record<string, string>) {
+  // parseUrl hands every handler a plain object, not URLSearchParams.
+  const action = params.action;
+  const id = params.id ? parseInt(params.id) : null;
 
   if (req.method === 'GET') {
     if (action === 'history' && id) {
@@ -841,8 +879,8 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
       const s = mockSchedules.find(s => s.id === id);
       return s ? json(res, { schedule: s }) : json(res, { error: true, message: 'Not found' }, 404);
     }
-    const targetType = params.get('target_type');
-    const targetId = params.get('target_id');
+    const targetType = params.target_type;
+    const targetId = params.target_id;
     let filtered = mockSchedules;
     if (targetType) filtered = filtered.filter(s => s.target_type === targetType);
     if (targetId) filtered = filtered.filter(s => s.target_id === targetId);
@@ -855,17 +893,47 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
       if (s) s.enabled = !s.enabled;
       return json(res, { success: true });
     }
+    if (action === 'bulk_toggle') {
+      const body = await parseBody(req);
+      let changed = 0;
+      for (const u of body.updates || []) {
+        const s = mockSchedules.find(s => s.id === u.id);
+        if (!s) continue;
+        s.enabled = !!u.enabled;
+        // Mirrors the backend: enabling recomputes the next run.
+        if (s.enabled) s.next_run_at = Math.floor(Date.now() / 1000) + 3600;
+        changed++;
+      }
+      return json(res, { success: true, changed });
+    }
+    if (action === 'bulk_delete') {
+      const body = await parseBody(req);
+      let deleted = 0;
+      for (const rawId of body.ids || []) {
+        const idx = mockSchedules.findIndex(s => s.id === rawId);
+        if (idx >= 0) { mockSchedules.splice(idx, 1); deleted++; }
+      }
+      return json(res, { success: true, deleted });
+    }
     if (action === 'run' && id) {
       return json(res, { success: true, schedule_id: id, status: 'success', message: 'Executed' });
     }
     if (action === 'delete_backup') {
       return json(res, { success: true });
     }
-    // Create
+    // Create — echo the submitted schedule so the list and the edit form
+    // round-trip like they do against the real API.
+    const body = await parseBody(req);
     const newId = nextScheduleId++;
     mockSchedules.push({
-      id: newId, name: 'New Schedule', target_type: 'container', target_id: 'plex',
-      action: 'backup', cron_expression: '0 3 * * *', enabled: true, backup_config: null,
+      id: newId,
+      name: body.name || 'New Schedule',
+      target_type: body.target_type || 'container',
+      target_id: body.target_id || 'plex',
+      action: body.action || 'backup',
+      cron_expression: body.cron_expression || '0 3 * * *',
+      enabled: body.enabled ?? true,
+      backup_config: body.backup_config || null,
       last_run_at: null, last_run_status: null, last_run_message: null,
       next_run_at: Math.floor(Date.now() / 1000) + 3600,
       created_at: Math.floor(Date.now() / 1000), updated_at: Math.floor(Date.now() / 1000),
@@ -874,6 +942,9 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
   }
 
   if (req.method === 'PUT' && id) {
+    const body = await parseBody(req);
+    const s = mockSchedules.find(s => s.id === id);
+    if (s) Object.assign(s, body, { id, updated_at: Math.floor(Date.now() / 1000) });
     return json(res, { success: true });
   }
 
@@ -884,6 +955,75 @@ function handleSchedules(req: any, res: any, params: URLSearchParams) {
   }
 
   json(res, { error: true, message: 'Not found' }, 404);
+}
+
+// --- Compose stream mock (SSE) ---
+
+function handleComposeStream(req: any, res: any, params: Record<string, string>) {
+  if (req.method !== 'POST') {
+    return json(res, { error: true, message: 'Method not allowed' }, 405);
+  }
+
+  const action = params.action;
+  const project = params.project;
+  if ((action !== 'up' && action !== 'pull') || !project) {
+    return json(res, { error: true, message: 'Missing or invalid action/project' }, 400);
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'X-Accel-Buffering': 'no',
+    'Connection': 'keep-alive',
+  });
+
+  function sendEvent(event: string, data: any) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  const services = ['web', 'db', 'cache'];
+  const steps: { event: string; data: any }[] = [
+    { event: 'phase', data: { phase: 'pulling', message: 'Pulling images...' } },
+    ...services.flatMap((svc) => [
+      { event: 'log', data: { line: `${svc} Pulling`, stream: 'stdout' } },
+      { event: 'log', data: { line: `${svc} Downloading  12.3MB/45.1MB`, stream: 'stdout' } },
+      { event: 'log', data: { line: `${svc} Pulled`, stream: 'stdout' } },
+    ]),
+  ];
+
+  if (action === 'up') {
+    steps.push(
+      { event: 'phase', data: { phase: 'starting', message: 'Starting containers...' } },
+      ...services.map((svc) => ({
+        event: 'log',
+        data: { line: `Container ${project}-${svc}-1  Started`, stream: 'stdout' },
+      })),
+    );
+  }
+
+  sendEvent('status', {
+    message: action === 'pull' ? `Pulling images for ${project}...` : `Starting ${project}...`,
+  });
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i >= steps.length) {
+      clearInterval(interval);
+      sendEvent('complete', {
+        message: action === 'pull'
+          ? `Images for ${project} pulled successfully`
+          : `${project} started successfully`,
+        project,
+      });
+      sendEvent('done', { finished: true });
+      res.end();
+      return;
+    }
+    const step = steps[i++];
+    sendEvent(step.event, step.data);
+  }, 250);
+
+  req.on('close', () => clearInterval(interval));
 }
 
 // --- Vite plugin ---
@@ -915,8 +1055,10 @@ export function mockApiPlugin(): Plugin {
             handlePull(req, res, params);
           } else if (endpoint === 'compose.php') {
             handleCompose(req, res, params);
+          } else if (endpoint === 'compose-stream.php') {
+            handleComposeStream(req, res, params);
           } else if (endpoint === 'schedules.php') {
-            handleSchedules(req, res, params);
+            await handleSchedules(req, res, params);
           } else {
             json(res, { error: true, message: 'Not found' }, 404);
           }

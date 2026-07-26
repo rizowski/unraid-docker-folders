@@ -50,6 +50,12 @@
         <span class="hidden sm:inline">{{ folderUpdateCount }} update{{ folderUpdateCount > 1 ? 's' : '' }}</span>
         <span class="sm:hidden">{{ folderUpdateCount }}</span>
       </span>
+      <!-- The kebab item that starts this check disappears with the menu, so
+           the only sign it is running has to live in the always-visible header. -->
+      <span v-if="folderCheckingUpdates" class="shrink-0 inline-flex items-center gap-1 h-6 px-2 ml-1 text-xs text-text-secondary" title="Checking for image updates">
+        <svg class="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        <span class="hidden sm:inline">Checking…</span>
+      </span>
       <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
       <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0">
@@ -185,6 +191,10 @@ const folderImages = computed(() => {
 
 const folderUpdateCheckRunning = computed(() =>
   folderImages.value.some((image) => updatesStore.isCheckingImage(image))
+);
+
+const folderCheckingUpdates = computed(() =>
+  folderImages.value.some((image) => updatesStore.isTargetedCheck(image))
 );
 
 // Drive from actual docker state so stale compose metadata can't claim "running".

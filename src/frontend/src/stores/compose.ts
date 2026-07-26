@@ -189,24 +189,9 @@ export const useComposeStore = defineStore('compose', () => {
     }
   }
 
-  async function stackPull(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
-    try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=pull`, {
-        method: 'POST',
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to pull images');
-      }
-
-      return data;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      console.error('Error pulling images:', e);
-      return { success: false, error: msg };
-    }
-  }
+  // Note: pulling a stack's images goes through the streaming endpoint
+  // (api/compose-stream.php) via ComposeProgressModal, not through a store
+  // action — a bare await gave no sign anything was happening.
 
   async function validateCompose(
     project: string,
@@ -494,7 +479,6 @@ export const useComposeStore = defineStore('compose', () => {
     stackDown,
     stackStop,
     stackRestart,
-    stackPull,
     validateCompose,
     getComposeFile,
     saveComposeFile,

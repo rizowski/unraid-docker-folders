@@ -1,160 +1,92 @@
 <template>
   <!-- Grid (card) view -->
   <div v-if="view === 'grid'" class="container-card-enter flex flex-col border border-border/50 rounded-lg bg-bg-card hover:border-border hover:shadow-sm transition" :class="{ 'state-change-pulse': stateChangePulse, 'z-50': menuOpen, 'col-span-full': expanded }" :data-container-id="container.id">
-    <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
-      <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" />
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
-      <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
-      <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
-      <a
-        v-if="hasUpdate && releaseNotesUrl"
-        :href="releaseNotesUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning hover:bg-warning/30"
-        title="View release notes"
-        @click.stop
-      >Update</a>
-      <span
-        v-else-if="hasUpdate"
-        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
-      >Update</span>
-      <span
-        v-if="hasPortConflict"
-        class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
-        :title="portConflictTitle"
-      >Port Conflict</span>
-    </div>
-
-    <!-- Clickable summary row -->
-    <div class="flex items-center gap-2 px-4 sm:px-6 py-2 cursor-pointer select-none" @click="expanded = !expanded">
-      <p class="flex-1 text-[11px] text-text-secondary font-mono truncate min-w-0">
-        <ImageLink :image="container.image" :href="imageLink" />
-      </p>
-      <span class="text-[11px] text-text shrink-0">{{ container.status }}</span>
-      <ChevronIcon :expanded="expanded" />
-    </div>
-
-    <!-- Compact ports (collapsed) -->
-    <div v-if="compactPorts && !expanded" class="px-4 sm:px-6 pb-0.5">
-      <span class="text-[11px] text-text font-mono truncate block">Ports: {{ compactPorts }}</span>
-    </div>
-
-    <!-- Compact stats loading state -->
-    <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
-      <StatsBar label="CPU" :percent="null" />
-      <StatsBar label="MEM" :percent="null" />
-    </div>
-
-    <!-- Compact stats bars (always visible for running containers) -->
-    <div v-if="isRunning && containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
-      <StatsBar label="CPU" :percent="containerStats.cpuPercent" />
-      <StatsBar label="MEM" :percent="containerStats.memoryPercent" />
-      <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
-        <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium">
-          {{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}
+    <!-- Everything above the action footer toggles the card. Only the footer
+         (all buttons/links) and the expanded body are excluded. -->
+    <div class="cursor-pointer select-none" @click="expanded = !expanded">
+      <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
+        <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" @click.stop />
+        <ContainerIcon
+          :src="container.icon || fallbackIcon"
+          :alt="container.name"
+          :halo-class="status.halo"
+          :status-tooltip="status.tooltip"
+          :href="iconWebui"
+        />
+        <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
+        <a
+          v-if="hasUpdate && releaseNotesUrl"
+          :href="releaseNotesUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning hover:bg-warning/30"
+          title="View release notes"
+          @click.stop
+        >Update</a>
+        <span
+          v-else-if="hasUpdate"
+          class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+        >Update</span>
+        <span
+          v-if="checkingUpdates"
+          class="shrink-0 inline-flex items-center gap-1 text-[10px] text-text-secondary"
+          title="Checking for image updates"
+        >
+          <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+          Checking
         </span>
+        <span
+          v-if="hasPortConflict"
+          class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+          :title="portConflictTitle"
+        >Port Conflict</span>
+      </div>
+  
+      <!-- Summary row — carries the chevron affordance -->
+      <div class="flex items-center gap-2 px-4 sm:px-6 py-2">
+        <p class="flex-1 text-[11px] text-text-secondary font-mono truncate min-w-0">
+          <ImageLink :image="container.image" :href="imageLink" />
+        </p>
+        <span class="text-[11px] text-text shrink-0">{{ container.status }}</span>
+        <ChevronIcon :expanded="expanded" />
+      </div>
+  
+      <!-- Compact ports (collapsed) -->
+      <div v-if="compactPorts && !expanded" class="px-4 sm:px-6 pb-0.5">
+        <span class="text-[11px] text-text font-mono truncate block">Ports: {{ compactPorts }}</span>
+      </div>
+  
+      <!-- Compact stats loading state -->
+      <div v-if="isRunning && showStats && !containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
+        <StatsBar label="CPU" :percent="null" />
+        <StatsBar label="MEM" :percent="null" />
+      </div>
+  
+      <!-- Compact stats bars (always visible for running containers) -->
+      <div v-if="isRunning && containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
+        <StatsBar label="CPU" :percent="containerStats.cpuPercent" />
+        <StatsBar label="MEM" :percent="containerStats.memoryPercent" />
+        <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium">
+            {{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}
+          </span>
+        </div>
       </div>
     </div>
 
     <!-- Accordion details -->
     <Transition @enter="expandEnter" @after-enter="expandAfterEnter" @leave="expandLeave" @after-leave="expandAfterLeave">
-    <div v-if="expanded" class="overflow-hidden">
-        <div class="px-4 sm:px-6 pb-2 space-y-3 text-xs border-t border-border pt-3">
-      <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 min-w-0">
-        <template v-if="container.image">
-          <span class="text-text-secondary shrink-0">Image</span>
-          <span class="text-text font-mono truncate">
-            <ImageLink :image="container.image" :href="imageLink" />
-          </span>
-        </template>
-        <template v-if="networkInfo">
-          <span class="text-text-secondary shrink-0">Network</span>
-          <span class="text-text font-mono truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</span>
-        </template>
-        <template v-if="displayPorts.length">
-          <span class="text-text-secondary shrink-0">Ports</span>
-          <div class="font-mono space-y-0.5 min-w-0">
-            <p v-for="(port, i) in displayPorts" :key="i" class="truncate" :class="port.conflictWith ? 'text-error' : 'text-text'">
-              {{ port.text }}<span v-if="port.conflictWith"> — conflicts with {{ port.conflictWith.join(', ') }}</span>
-            </p>
-          </div>
-        </template>
-        <template v-if="displayMounts.length">
-          <span class="text-text-secondary shrink-0">Volumes</span>
-          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-hidden">
-            <p v-for="mount in displayMounts" :key="mount.destination" class="sm:whitespace-nowrap truncate sm:overflow-visible sm:text-clip" :title="`${mount.source} -> ${mount.destination}`">
-              <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
-            </p>
-          </div>
-        </template>
+      <div v-if="expanded" class="overflow-hidden">
+        <ContainerDetails
+          class="block px-4 sm:px-6 pb-2 pt-3 border-t border-border"
+          :container="container"
+          :container-stats="containerStats"
+          :show-stats="showStats"
+          :is-running="isRunning"
+          :image-link="imageLink"
+          :show-logs="false"
+        />
       </div>
-      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-text-secondary italic">No additional details available</div>
-
-      <!-- Resource Usage Stats -->
-      <div v-if="isRunning && containerStats" class="space-y-2 pt-2 border-t border-border">
-        <p class="text-text-secondary text-xs">Resource Usage</p>
-        <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
-        <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
-        <!-- Numeric Stats -->
-        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs pt-1">
-          <span class="text-text-secondary">Block I/O</span>
-          <span class="text-text font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-          <span class="text-text-secondary">Network</span>
-          <span class="text-text font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-          <span class="text-text-secondary">PIDs</span>
-          <span class="text-text font-mono">{{ containerStats.pids }}</span>
-          <span class="text-text-secondary">Restarts</span>
-          <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-          <span class="text-text-secondary">Uptime</span>
-          <span class="text-text font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-          <span class="text-text-secondary">Image Size</span>
-          <span class="text-text font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-          <span class="text-text-secondary">Log Size</span>
-          <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
-          <template v-if="healthStatus">
-            <span class="text-text-secondary">Health</span>
-            <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-          </template>
-          <template v-if="container.command">
-            <span class="text-text-secondary">Command</span>
-            <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
-          </template>
-        </div>
-        <!-- Labels -->
-        <div v-if="displayLabels.length" class="space-y-1 pt-1 text-xs">
-          <p class="text-text-secondary">Labels</p>
-          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
-            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
-              <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-            </p>
-          </div>
-        </div>
-      </div>
-      <!-- Container info when not running (no stats section) -->
-      <div v-else class="space-y-2 pt-2 border-t border-border">
-        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-          <template v-if="healthStatus">
-            <span class="text-text-secondary">Health</span>
-            <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-          </template>
-          <template v-if="container.command">
-            <span class="text-text-secondary">Command</span>
-            <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
-          </template>
-        </div>
-        <div v-if="displayLabels.length" class="space-y-1 pt-1">
-          <p class="text-text-secondary text-xs">Labels</p>
-          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
-            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
-              <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-            </p>
-          </div>
-        </div>
-        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-text-secondary text-xs italic">Container not running</div>
-      </div>
-    </div>
-    </div>
     </Transition>
 
     <div class="flex items-center gap-3 px-4 py-2 sm:px-6 sm:py-3 mt-auto border-t border-border/30">
@@ -197,8 +129,13 @@
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
       <DragHandle v-if="!dragLocked" :size="14" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2" @click.stop />
       <ChevronIcon :expanded="expanded" :size="12" />
-      <span class="w-[3px] h-5 rounded-full shrink-0" :class="statusBarClass" :title="statusTooltip"></span>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
+      <ContainerIcon
+        :src="container.icon || fallbackIcon"
+        :alt="container.name"
+        :halo-class="status.halo"
+        :status-tooltip="status.tooltip"
+        :href="iconWebui"
+      />
 
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
         <div class="flex items-center gap-3 min-w-0">
@@ -216,6 +153,14 @@
             v-else-if="hasUpdate"
             class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
           >Update</span>
+          <span
+            v-if="checkingUpdates"
+            class="shrink-0 inline-flex items-center gap-1 text-[10px] text-text-secondary"
+            title="Checking for image updates"
+          >
+            <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+            Checking
+          </span>
           <span
             v-if="hasPortConflict"
             class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
@@ -283,149 +228,22 @@
 
     <!-- List accordion details -->
     <Transition @enter="expandEnter" @after-enter="expandAfterEnter" @leave="expandLeave" @after-leave="expandAfterLeave">
-    <div v-if="expanded" class="overflow-hidden">
-        <div class="px-2 sm:px-4 pb-4 pt-2 border-t border-border space-y-3 text-sm">
-      <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-        <template v-if="container.image">
-          <span class="text-text-secondary shrink-0">Image</span>
-          <span class="text-text font-mono truncate">
-            <ImageLink :image="container.image" :href="imageLink" />
-          </span>
-        </template>
+      <div v-if="expanded" class="overflow-hidden">
+        <ContainerDetails
+          class="block px-2 sm:px-4 pb-4 pt-2 border-t border-border"
+          :container="container"
+          :container-stats="containerStats"
+          :show-stats="showStats"
+          :is-running="isRunning"
+          :image-link="imageLink"
+          :show-logs="shouldShowInlineLogs"
+          :log-lines="logLines"
+          :log-error="logError"
+          :logs-loading="logsLoading"
+          :new-line-count="newLineCount"
+          @refresh-logs="fetchLogs"
+        />
       </div>
-      <div v-if="networkInfo || displayPorts.length || displayMounts.length" class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
-        <div v-if="networkInfo || displayPorts.length">
-          <p class="text-text-secondary text-xs mb-1">Network{{ displayPorts.length ? ' / Ports' : '' }}</p>
-          <div class="text-text font-mono text-xs space-y-0.5">
-            <p v-if="networkInfo" class="truncate">{{ networkInfo.name }} {{ networkInfo.ip }}</p>
-            <p v-for="(port, i) in displayPorts" :key="i" class="truncate" :class="port.conflictWith ? 'text-error' : ''">
-              {{ port.text }}<span v-if="port.conflictWith"> — conflicts with {{ port.conflictWith.join(', ') }}</span>
-            </p>
-          </div>
-        </div>
-        <div v-if="displayMounts.length">
-          <p class="text-text-secondary text-xs mb-1">Volumes</p>
-          <div class="text-text font-mono text-xs space-y-0.5 overflow-x-auto">
-            <p v-for="mount in displayMounts" :key="mount.destination" class="sm:whitespace-nowrap" :title="`${mount.source} -> ${mount.destination}`">
-              <a :href="`/Shares/Browse?dir=${encodeURIComponent(mount.source)}`" class="inline-flex items-center gap-1 hover:underline" @click.stop><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 inline"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>{{ mount.sourceShort }}</a> -&gt; {{ mount.destination }}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div v-if="!container.image && !networkInfo && !displayPorts.length && !displayMounts.length" class="text-text-secondary text-xs italic">No additional details available</div>
-
-      <!-- Resource Usage Stats (list view) -->
-      <div v-if="isRunning && containerStats" class="space-y-1.5 pt-2 border-t border-border">
-        <div :class="shouldShowInlineLogs ? 'grid grid-cols-1 lg:grid-cols-2 gap-4' : ''">
-          <!-- Stats column -->
-          <div class="space-y-1.5">
-            <p class="text-text-secondary text-xs">Resource Usage</p>
-            <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
-            <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
-            <!-- Detailed Stats + Container Info -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs pt-0.5">
-              <!-- Left column: I/O, Network, PIDs etc -->
-              <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 content-start">
-                <span class="text-text-secondary">Block I/O</span>
-                <span class="text-text font-mono truncate">R: {{ formatBytes(containerStats.blockRead) }} / W: {{ formatBytes(containerStats.blockWrite) }}</span>
-                <span class="text-text-secondary">Network</span>
-                <span class="text-text font-mono truncate">RX: {{ formatBytes(containerStats.netRx) }} / TX: {{ formatBytes(containerStats.netTx) }}</span>
-                <span class="text-text-secondary">PIDs</span>
-                <span class="text-text font-mono">{{ containerStats.pids }}</span>
-                <span class="text-text-secondary">Restarts</span>
-                <span class="font-mono" :class="restartClass">{{ containerStats.restartCount }}</span>
-                <span class="text-text-secondary">Uptime</span>
-                <span class="text-text font-mono">{{ formatUptime(containerStats.startedAt) }}</span>
-                <span class="text-text-secondary">Image Size</span>
-                <span class="text-text font-mono">{{ formatBytes(containerStats.imageSize) }}</span>
-                <span class="text-text-secondary">Log Size</span>
-                <span class="font-mono" :class="logSizeClass">{{ formatBytes(containerStats.logSize) }}</span>
-              </div>
-              <!-- Right column: Health, Command, Labels -->
-              <div class="space-y-2 min-w-0 content-start">
-                <div v-if="healthStatus || container.command" class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
-                  <template v-if="healthStatus">
-                    <span class="text-text-secondary">Health</span>
-                    <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-                  </template>
-                  <template v-if="container.command">
-                    <span class="text-text-secondary">Command</span>
-                    <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
-                  </template>
-                </div>
-                <div v-if="displayLabels.length" class="space-y-1">
-                  <p class="text-text-secondary text-xs">Labels</p>
-                  <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
-                    <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
-                      <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- Inline logs column -->
-          <div v-if="shouldShowInlineLogs" class="flex flex-col min-w-0">
-            <div class="flex items-center justify-between mb-1">
-              <p class="text-text-secondary text-xs">Logs</p>
-              <button
-                class="flex items-center justify-center w-5 h-5 rounded text-muted hover:text-text transition"
-                title="Refresh logs"
-                :disabled="logsLoading"
-                @click.stop="fetchLogs"
-              >
-                <svg :class="{ 'animate-spin': logsLoading }" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="1 4 1 10 7 10" />
-                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-                </svg>
-              </button>
-            </div>
-            <div
-              ref="logPanelRef"
-              class="flex-1 rounded bg-black/5 dark:bg-white/5 border border-border/50 p-2 font-mono text-[11px] leading-relaxed text-text-secondary overflow-y-auto max-h-[300px] break-all"
-            >
-              <template v-if="logsLoading && logLines.length === 0">
-                <span class="text-muted italic">Loading logs...</span>
-              </template>
-              <template v-else-if="logLines.length > 0">
-                <div
-                  v-for="(line, idx) in logLines"
-                  :key="idx"
-                  class="whitespace-pre-wrap"
-                  :class="{ 'log-line-new': idx < newLineCount }"
-                >{{ line }}</div>
-              </template>
-              <template v-else>
-                <span class="text-muted italic">No logs available.</span>
-              </template>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Container info when not running (no stats section) -->
-      <div v-else class="space-y-2 pt-2 border-t border-border">
-        <div class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
-          <template v-if="healthStatus">
-            <span class="text-text-secondary">Health</span>
-            <span class="font-mono" :class="healthClass">{{ healthStatus }}</span>
-          </template>
-          <template v-if="container.command">
-            <span class="text-text-secondary">Command</span>
-            <span class="text-text font-mono truncate" :title="container.command">{{ container.command }}</span>
-          </template>
-        </div>
-        <div v-if="displayLabels.length" class="space-y-1 pt-1">
-          <p class="text-text-secondary text-xs">Labels</p>
-          <div class="text-text font-mono space-y-0.5 min-w-0 overflow-x-auto">
-            <p v-for="label in displayLabels" :key="label.key" class="text-[11px] whitespace-nowrap" :title="`${label.key}=${label.value}`">
-              <span class="text-text">{{ label.key }}</span>=<span class="text-text-secondary">{{ label.value }}</span>
-            </p>
-          </div>
-        </div>
-        <div v-if="!isRunning && !container.command && !healthStatus && !displayLabels.length" class="text-text-secondary text-xs italic">Container not running</div>
-      </div>
-    </div>
-    </div>
     </Transition>
   </div>
 
@@ -461,12 +279,11 @@
 
 <script setup lang="ts">
 import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
-import { useDockerStore, type Container, type HostPortBinding } from '@/stores/docker';
+import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
-import { formatBytes, formatPercent, formatUptime } from '@/utils/format';
 import { apiFetch } from '@/utils/csrf';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
@@ -476,6 +293,8 @@ import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
+import ContainerDetails from '@/components/docker/ContainerDetails.vue';
+import ContainerIcon from '@/components/docker/ContainerIcon.vue';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -563,6 +382,11 @@ const expanded = ref(false);
 const settingsStore = useSettingsStore();
 const updatesStore = useUpdatesStore();
 
+// Height transition on the accordion. The details are only mounted while open,
+// so this rides Vue's enter/leave rather than a CSS class toggle — the element
+// and its content appear and disappear together, with no half-rendered frame.
+// After the enter settles the height is cleared back to auto, so content that
+// grows later (streaming logs) is not pinned to a stale measurement.
 const EXPAND_DURATION = 200;
 function expandEnter(el: Element, done: () => void) {
   const htmlEl = el as HTMLElement;
@@ -608,17 +432,26 @@ const portConflictTitle = computed(() =>
 );
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
+// The kebab item that starts the check closes with the menu, so the running
+// state needs a home on the card itself.
+const checkingUpdates = computed(
+  () => settingsStore.enableUpdateChecks && updatesStore.isTargetedCheck(props.container.image),
+);
 const releaseNotesUrl = computed<string | null>(() => {
   const u = updatesStore.updates[props.container.image];
   return u?.source_url ? `${u.source_url}/releases` : null;
 });
 
-// Inline logs panel (list view only)
+// Inline logs panel (list view only). Ownership stays here rather than in
+// ContainerDetails: that child is mid-leave-transition during a collapse and
+// stops receiving prop updates, so it cannot tell when to stop polling.
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 const logLines = ref<string[]>([]);
 const newLineCount = ref(0);
 const logsLoading = ref(false);
-const logPanelRef = ref<HTMLElement | null>(null);
+// Why Docker wouldn't serve the logs, when it says so. Distinct from an empty
+// logLines, which just means the container hasn't logged anything.
+const logError = ref('');
 const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
 
 const shouldShowInlineLogs = computed(
@@ -644,10 +477,14 @@ async function fetchLogs() {
       }
 
       logLines.value = lines;
+      // Matches the API's error envelope: `error` is a boolean, the human text
+      // is in `message`.
+      logError.value = data.error ? data.message || 'Failed to load logs.' : '';
     }
   } catch (e) {
     console.error('Error fetching logs:', e);
-    logLines.value = ['Failed to load logs.'];
+    logLines.value = [];
+    logError.value = 'Failed to load logs.';
     newLineCount.value = 0;
   } finally {
     logsLoading.value = false;
@@ -671,28 +508,12 @@ function stopLogPolling() {
 }
 
 watch(shouldShowInlineLogs, (show) => {
-  if (show) {
-    startLogPolling();
-  } else {
-    stopLogPolling();
-  }
+  if (show) startLogPolling();
+  else stopLogPolling();
 });
 
 watch(() => settingsStore.logRefreshInterval, () => {
-  if (shouldShowInlineLogs.value) {
-    startLogPolling();
-  }
-});
-
-const logSizeClass = computed(() => {
-  const size = containerStats.value?.logSize ?? 0;
-  if (size > 1_073_741_824) return 'text-error';
-  if (size > 104_857_600) return 'text-warning';
-  return 'text-text-secondary';
-});
-
-const restartClass = computed(() => {
-  return (containerStats.value?.restartCount ?? 0) > 0 ? 'text-error' : 'text-text-secondary';
+  if (shouldShowInlineLogs.value) startLogPolling();
 });
 
 // State change pulse animation
@@ -715,27 +536,22 @@ const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
 const isHealthy = computed(() => props.container.status?.toLowerCase().includes('(healthy)'));
 
-const statusDotClass = computed(() => {
+// Health/state is carried by a feathered halo around the container icon in both
+// views (see .status-halo in main.css), replacing the old dot and bar. Halo and
+// tooltip resolve together so a newly handled state can't land in one and be
+// forgotten in the other — they were previously two parallel branch chains.
+const status = computed(() => {
   const state = props.container.state;
-  if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'bg-green-500';
-  if (state === 'running' && distinguishHealthy.value) return 'bg-info';
-  if (state === 'running') return 'bg-green-500';
-  if (state === 'exited' || state === 'stopped') return 'bg-red-500';
-  return 'bg-muted';
-});
-
-// Vertical bar variant for list view (same color logic)
-const statusBarClass = computed(() => statusDotClass.value);
-
-const statusTooltip = computed(() => {
-  const state = props.container.state;
-  if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'Running (healthy)';
-  if (state === 'running' && distinguishHealthy.value) return 'Running (no health check)';
-  if (state === 'running') return 'Running';
-  if (state === 'exited') return 'Exited';
-  if (state === 'stopped') return 'Stopped';
-  if (state === 'created') return 'Created';
-  return state.charAt(0).toUpperCase() + state.slice(1);
+  if (state === 'running') {
+    if (!distinguishHealthy.value) return { halo: 'status-halo-success', tooltip: 'Running' };
+    return isHealthy.value
+      ? { halo: 'status-halo-success', tooltip: 'Running (healthy)' }
+      : { halo: 'status-halo-info', tooltip: 'Running (no health check)' };
+  }
+  if (state === 'exited') return { halo: 'status-halo-error', tooltip: 'Exited' };
+  if (state === 'stopped') return { halo: 'status-halo-error', tooltip: 'Stopped' };
+  if (state === 'created') return { halo: 'status-halo-muted', tooltip: 'Created' };
+  return { halo: 'status-halo-muted', tooltip: state.charAt(0).toUpperCase() + state.slice(1) };
 });
 
 const editUrl = computed(() => {
@@ -757,6 +573,10 @@ const resolvedWebui = computed(() => {
   });
   return url;
 });
+
+// Same gate as the footer WebUI link, so the two can never disagree about
+// whether a container has a reachable web interface.
+const iconWebui = computed(() => (isRunning.value ? resolvedWebui.value : null));
 
 function openContainerTerminal(mode: 'console' | 'logs') {
   const name = props.container.name;
@@ -842,79 +662,6 @@ const imageLink = computed(() => {
   return `https://hub.docker.com/_/${nameOnly}`;
 });
 
-const networkInfo = computed(() => {
-  const nets = props.container.networkSettings;
-  if (!nets) return null;
-  const entries = Object.entries(nets);
-  if (entries.length === 0) return null;
-  const [name, data] = entries[0];
-  return { name, ip: data?.IPAddress || '' };
-});
-
-// Conflicting host ports for this container, keyed by `${hostPort}/${type}` →
-// names of the running containers holding them.
-const conflictByHostPort = computed(() => {
-  const map = new Map<string, string[]>();
-  const info = portConflict.value;
-  if (info) {
-    for (const d of info.conflicts) {
-      map.set(`${d.hostPort}/${d.type}`, d.heldBy);
-    }
-  }
-  return map;
-});
-
-interface PortRow {
-  text: string;
-  conflictWith: string[] | null;
-}
-
-const displayPorts = computed<PortRow[]>(() => {
-  const ports = props.container.ports ?? [];
-  const hostPorts = props.container.hostPorts ?? [];
-  const conflicts = conflictByHostPort.value;
-
-  // Index configured host bindings by container port + protocol so we can
-  // attach a host binding (and its conflict state) to each exposed port —
-  // stopped containers don't carry PublicPort in their runtime ports.
-  const bindingsByContainerPort = new Map<string, HostPortBinding[]>();
-  for (const b of hostPorts) {
-    const key = `${b.containerPort}/${b.type}`;
-    const list = bindingsByContainerPort.get(key);
-    if (list) list.push(b);
-    else bindingsByContainerPort.set(key, [b]);
-  }
-
-  const row = (text: string, hostPort: number, type: string): PortRow => ({
-    text,
-    conflictWith: conflicts.get(`${hostPort}/${type}`) ?? null,
-  });
-
-  const rows: PortRow[] = [];
-
-  if (ports.length) {
-    for (const p of ports) {
-      const bindings = bindingsByContainerPort.get(`${p.PrivatePort}/${p.Type}`);
-      if (bindings?.length) {
-        for (const b of bindings) {
-          rows.push(row(`${p.PrivatePort}/${p.Type} -> ${b.hostIp || '0.0.0.0'}:${b.hostPort}`, b.hostPort, b.type));
-        }
-      } else if (p.PublicPort) {
-        rows.push(row(`${p.PrivatePort}/${p.Type} -> ${p.IP || '0.0.0.0'}:${p.PublicPort}`, p.PublicPort, p.Type));
-      } else {
-        rows.push({ text: `${p.PrivatePort}/${p.Type}`, conflictWith: null });
-      }
-    }
-  } else {
-    // No runtime ports (some stopped containers) — show configured bindings.
-    for (const b of hostPorts) {
-      rows.push(row(`${b.containerPort}/${b.type} -> ${b.hostIp || '0.0.0.0'}:${b.hostPort}`, b.hostPort, b.type));
-    }
-  }
-
-  return rows.slice(0, 3);
-});
-
 const compactPorts = computed(() => {
   const ports = props.container.ports;
   if (!ports?.length) return '';
@@ -925,51 +672,4 @@ const compactPorts = computed(() => {
     .join(', ');
 });
 
-const displayMounts = computed(() => {
-  const mounts = props.container.mounts;
-  if (!mounts?.length) return [];
-  return mounts.slice(0, 2).map((m) => {
-    // Show full path — strip /mnt/user/ prefix for brevity on Unraid shares
-    let srcShort = m.Source;
-    if (srcShort.startsWith('/mnt/user/')) {
-      srcShort = srcShort.slice('/mnt/user/'.length);
-    }
-    return { destination: m.Destination, source: m.Source, sourceShort: srcShort };
-  });
-});
-
-const healthStatus = computed(() => {
-  const status = props.container.status?.toLowerCase() || '';
-  if (status.includes('(healthy)')) return 'healthy';
-  if (status.includes('(unhealthy)')) return 'unhealthy';
-  if (status.includes('(health: starting)')) return 'starting';
-  return null;
-});
-
-const healthClass = computed(() => {
-  switch (healthStatus.value) {
-    case 'healthy': return 'text-success';
-    case 'unhealthy': return 'text-error';
-    case 'starting': return 'text-warning';
-    default: return 'text-text-secondary';
-  }
-});
-
-const displayLabels = computed(() => {
-  const labels = props.container.labels;
-  if (!labels) return [];
-  // Filter out internal/noisy labels
-  const hidden = new Set([
-    'maintainer',
-    'org.opencontainers.image.created',
-    'org.opencontainers.image.revision',
-    'org.opencontainers.image.source',
-    'org.opencontainers.image.version',
-  ]);
-  return Object.entries(labels)
-    .filter(([key]) => !hidden.has(key))
-    .sort(([a], [b]) => a.localeCompare(b))
-    .slice(0, 15)
-    .map(([key, value]) => ({ key, value }));
-});
 </script>

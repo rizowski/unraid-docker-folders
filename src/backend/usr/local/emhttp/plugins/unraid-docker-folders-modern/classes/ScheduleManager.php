@@ -151,6 +151,96 @@ class ScheduleManager
     return true;
   }
 
+  /**
+   * Apply enabled/disabled to many schedules in one transaction.
+   *
+   * $updates is a list of ['id' => int, 'enabled' => bool]. Rows may move in
+   * either direction in the same call, which is why this takes a per-row value
+   * rather than one flag for the whole set.
+   *
+   * Rewrites next_run_at for rows being enabled, exactly as toggleSchedule
+   * does, but rebuilds the scheduler cron once at the end instead of per row.
+   *
+   * Returns the number of rows updated. Ids that no longer exist are skipped.
+   */
+  public function bulkSetEnabled($updates)
+  {
+    if (empty($updates)) {
+      return 0;
+    }
+
+    $now = time();
+    $changed = 0;
+
+    $this->db->beginTransaction();
+    try {
+      foreach ($updates as $entry) {
+        $id = isset($entry['id']) ? (int) $entry['id'] : 0;
+        if (!$id) {
+          continue;
+        }
+        $enabled = !empty($entry['enabled']);
+
+        $schedule = $this->db->fetchOne('SELECT cron_expression FROM schedules WHERE id = ?', [$id]);
+        if (!$schedule) {
+          continue;
+        }
+
+        $update = [
+          'enabled' => $enabled ? 1 : 0,
+          'updated_at' => $now,
+        ];
+        if ($enabled) {
+          $update['next_run_at'] = self::computeNextRun($schedule['cron_expression'], $now);
+        }
+
+        $this->db->update('schedules', $update, 'id = ?', [$id]);
+        $changed++;
+      }
+      $this->db->commit();
+    } catch (Exception $e) {
+      $this->db->rollback();
+      throw $e;
+    }
+
+    CronManager::ensureSchedulerCron($this->db);
+
+    return $changed;
+  }
+
+  /**
+   * Delete many schedules in one transaction, rebuilding the scheduler cron
+   * once at the end. Returns the number of ids acted on.
+   */
+  public function bulkDelete($ids)
+  {
+    if (empty($ids)) {
+      return 0;
+    }
+
+    $deleted = 0;
+
+    $this->db->beginTransaction();
+    try {
+      foreach ($ids as $rawId) {
+        $id = (int) $rawId;
+        if (!$id) {
+          continue;
+        }
+        $this->db->delete('schedules', 'id = ?', [$id]);
+        $deleted++;
+      }
+      $this->db->commit();
+    } catch (Exception $e) {
+      $this->db->rollback();
+      throw $e;
+    }
+
+    CronManager::ensureSchedulerCron($this->db);
+
+    return $deleted;
+  }
+
   public function runDueSchedules()
   {
     $now = time();

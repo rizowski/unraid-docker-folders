@@ -2,7 +2,7 @@
   <div id="unraid-docker-folders-modern" class="unapi px-3 py-2 sm:px-6 sm:py-4 font-sans text-text bg-bg">
     <header class="flex flex-wrap justify-between items-center gap-y-3 gap-x-4 mb-4 pb-4 sm:mb-8 sm:pb-6 border-b-2 border-border">
       <div class="flex items-center gap-2 sm:gap-4 min-w-0">
-        <a href="/Settings/DockerFoldersSettings" class="nav-btn shrink-0" title="Settings" style="text-decoration: none;">
+        <a href="/Settings/DockerFoldersSettings" class="nav-btn shrink-0" title="Settings">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3" />
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -94,6 +94,16 @@
           <span class="sm:hidden">Update ({{ updatesStore.updatesAvailableCount }})</span>
           <span class="hidden sm:inline">Update All ({{ updatesStore.updatesAvailableCount }})</span>
         </button>
+        <!-- Links out to Unraid's native Add Container form. A plain relative
+             href breaks out of the plugin iframe via <base target="_parent">. -->
+        <a
+          href="/Docker/AddContainer"
+          class="nav-btn active"
+          title="Create a new container"
+        >
+          <span class="sm:hidden">+ Container</span>
+          <span class="hidden sm:inline">+ Create Container</span>
+        </a>
         <button
           v-if="composeStore.composeAvailable && composeStore.managementEnabled"
           @click="openCreateStack"
@@ -184,11 +194,6 @@
           </div>
         </div>
 
-        <!-- Schedules Panel -->
-        <div v-if="scheduleStore.scheduleCount > 0 || !dockerStore.containerCount" class="mt-8 pt-4 border-t border-border">
-          <SchedulesPanel />
-        </div>
-
         <!-- Empty State -->
         <div v-if="dockerStore.containerCount === 0" class="text-center py-8 px-6 text-text-secondary">
           <p>No Docker containers found</p>
@@ -217,10 +222,11 @@
       @recompose="openComposeRecompose"
     />
 
-    <!-- Compose Start / Recompose Progress -->
-    <ComposeStartProgressModal
+    <!-- Compose Start / Recompose / Pull Progress -->
+    <ComposeProgressModal
       :is-open="composeProgressOpen"
       :project-name="composeProgressProject"
+      :mode="composeProgressMode"
       :force-recreate="composeProgressForceRecreate"
       @close="closeComposeProgress"
       @complete="handleComposeProgressComplete"
@@ -238,37 +244,34 @@
 
     <!-- Batch Pull Progress Modal -->
     <BatchPullProgressModal
-      :is-open="batchPullContainers.length > 0"
-      :containers="batchPullContainers"
+      :is-open="batchPullUnits.length > 0"
+      :units="batchPullUnits"
       @close="handleBatchPullClose"
       @complete="handleBatchPullComplete"
     />
 
-    <Teleport to="body">
-      <ConfirmModal
-        :is-open="!!deletingFolderId"
-        title="Delete Folder"
-        :message="`Delete &quot;${deletingFolderName}&quot;? Containers will be moved to unfoldered.`"
-        confirm-label="Delete"
-        variant="danger"
-        @confirm="confirmDeleteFolder"
-        @cancel="deletingFolderId = null"
-      />
-      <ConfirmModal
-        :is-open="showBatchConfirm"
-        title="Update Containers"
-        :message="`Pull updates for ${pendingBatchContainers.length} container(s)? This will download newer images from the registry.`"
-        confirm-label="Update"
-        @confirm="confirmBatchPull"
-        @cancel="showBatchConfirm = false; pendingBatchContainers = []"
-      />
-    </Teleport>
+    <!-- BaseModal teleports its own overlay to the app root, so no wrapper needed -->
+    <ConfirmModal
+      :is-open="!!deletingFolderId"
+      title="Delete Folder"
+      :message="`Delete &quot;${deletingFolderName}&quot;? Containers will be moved to unfoldered.`"
+      confirm-label="Delete"
+      variant="danger"
+      @confirm="confirmDeleteFolder"
+      @cancel="deletingFolderId = null"
+    />
+    <UpdateConfirmModal
+      :is-open="showBatchConfirm"
+      :units="pendingUnits"
+      @confirm="confirmBatchPull"
+      @cancel="showBatchConfirm = false; pendingUnits = []"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, watch, nextTick, provide, toRef } from 'vue';
-import { useDockerStore } from '@/stores/docker';
+import { useDockerStore, type Container } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
@@ -280,14 +283,15 @@ import FolderContainer from '@/components/folders/FolderContainer.vue';
 import FolderEditModal from '@/components/folders/FolderEditModal.vue';
 import ComposeSetupBanner from '@/components/compose/ComposeSetupBanner.vue';
 import ComposeFileEditor from '@/components/compose/ComposeFileEditor.vue';
-import ComposeStartProgressModal from '@/components/compose/ComposeStartProgressModal.vue';
+import ComposeProgressModal from '@/components/compose/ComposeProgressModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
+import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
+import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
-import SchedulesPanel from '@/components/schedules/SchedulesPanel.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import Sortable from 'sortablejs';
 
@@ -301,9 +305,9 @@ const composeStore = useComposeStore();
 
 const actionsInProgress = ref<Map<string, string>>(new Map());
 const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
-const batchPullContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
+const batchPullUnits = ref<UpdateUnit[]>([]);
 const showBatchConfirm = ref(false);
-const pendingBatchContainers = ref<{ image: string; name: string; managed: string | null }[]>([]);
+const pendingUnits = ref<UpdateUnit[]>([]);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
@@ -328,6 +332,7 @@ const composeEditorProject = ref('');
 
 // Compose progress modal (start/recompose)
 const composeProgressProject = ref('');
+const composeProgressMode = ref<'up' | 'pull'>('up');
 const composeProgressForceRecreate = ref(false);
 const composeProgressOpen = ref(false);
 
@@ -345,22 +350,38 @@ function openCreateStack() {
 
 function openComposeUp(project: string) {
   composeProgressProject.value = project;
+  composeProgressMode.value = 'up';
   composeProgressForceRecreate.value = false;
   composeProgressOpen.value = true;
 }
 
 function openComposeRecompose(project: string) {
   composeProgressProject.value = project;
+  composeProgressMode.value = 'up';
   composeProgressForceRecreate.value = true;
   composeProgressOpen.value = true;
 }
 
-async function handleComposePull(project: string) {
-  await composeStore.stackPull(project);
-  await composeStore.fetchStacks(true);
+// Pull streams its output into the same progress modal as up/recompose —
+// a bare await gave no sign anything was happening.
+function handleComposePull(project: string) {
+  composeProgressProject.value = project;
+  composeProgressMode.value = 'pull';
+  composeProgressForceRecreate.value = false;
+  composeProgressOpen.value = true;
 }
 
 async function handleComposeProgressComplete() {
+  // A pull only changes image digests on disk — nothing is created, started or
+  // stopped — so the container list and folder assignments are unchanged.
+  // fetchContainers() is the most expensive call the plugin makes (a Docker
+  // socket enumeration plus a scan of Unraid's template directory), so don't
+  // pay for it here.
+  if (composeProgressMode.value === 'pull') {
+    await composeStore.fetchStacks(true);
+    return;
+  }
+
   await Promise.all([
     dockerStore.fetchContainers(),
     folderStore.fetchFolders(),
@@ -371,6 +392,7 @@ async function handleComposeProgressComplete() {
 function closeComposeProgress() {
   composeProgressOpen.value = false;
   composeProgressProject.value = '';
+  composeProgressMode.value = 'up';
   composeProgressForceRecreate.value = false;
 }
 
@@ -569,6 +591,23 @@ async function handleRemove(id: string, removeImage = false) {
 }
 
 function handlePull(data: { image: string; name: string; managed: string | null }) {
+  // Pulling an image recreates *every* container using it. When this container
+  // is the only one, go straight to the pull; when it has siblings, show them
+  // first so nothing gets recreated invisibly.
+  const container = dockerStore.containers.find((c) => c.name === data.name);
+  if (container) {
+    const units = buildUpdateUnits(
+      [container],
+      dockerStore.containers,
+      composeStore.managementEnabled,
+    );
+    const affected = units.reduce((total, u) => total + u.containers.length, 0);
+    if (affected > 1) {
+      pendingUnits.value = units;
+      showBatchConfirm.value = true;
+      return;
+    }
+  }
   pullingContainer.value = data;
 }
 
@@ -578,44 +617,66 @@ async function handlePullComplete(image: string) {
   await updatesStore.fetchCachedUpdates();
 }
 
-function handleUpdateAll() {
-  const containersWithUpdates = updatesStore.getContainersWithUpdates().map((c) => ({
-    image: c.image,
-    name: c.name,
-    managed: c.managed,
-  }));
-  if (containersWithUpdates.length === 0) return;
-  pendingBatchContainers.value = containersWithUpdates;
+function openUpdateConfirm(containers: Container[]) {
+  if (containers.length === 0) return;
+  const units = buildUpdateUnits(
+    containers,
+    dockerStore.containers,
+    composeStore.managementEnabled,
+  );
+  if (units.length === 0) return;
+  pendingUnits.value = units;
   showBatchConfirm.value = true;
+}
+
+function handleUpdateAll() {
+  openUpdateConfirm(updatesStore.getContainersWithUpdates());
 }
 
 function handleUpdateFolder(folder: Folder) {
-  const containersWithUpdates: { image: string; name: string; managed: string | null }[] = [];
+  const containersWithUpdates: Container[] = [];
   for (const assoc of folder.containers) {
     const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
     if (container && updatesStore.hasUpdate(container.image)) {
-      containersWithUpdates.push({ image: container.image, name: container.name, managed: container.managed });
+      containersWithUpdates.push(container);
     }
   }
-  if (containersWithUpdates.length === 0) return;
-  pendingBatchContainers.value = containersWithUpdates;
-  showBatchConfirm.value = true;
+  openUpdateConfirm(containersWithUpdates);
 }
 
-function confirmBatchPull() {
+function confirmBatchPull(units: UpdateUnit[]) {
   showBatchConfirm.value = false;
-  batchPullContainers.value = [...pendingBatchContainers.value];
-  pendingBatchContainers.value = [];
+  batchPullUnits.value = units;
+  pendingUnits.value = [];
 }
 
 async function handleBatchPullComplete() {
   // Refresh data after batch pull completes
   await dockerStore.fetchContainers(true);
   await updatesStore.fetchCachedUpdates();
+  await recheckComposeImages();
+}
+
+/**
+ * Re-check images updated through the compose CLI.
+ *
+ * `pull.php` records fresh digests itself, so image units clear their own
+ * update flag. `compose-stream.php` doesn't — without this, a stack updated
+ * via `docker compose` keeps showing an "Update" badge until the next
+ * scheduled check.
+ */
+async function recheckComposeImages() {
+  const images = new Set<string>();
+  for (const unit of batchPullUnits.value) {
+    if (unit.kind !== 'compose') continue;
+    for (const container of unit.containers) images.add(container.image);
+  }
+  if (images.size === 0) return;
+  await updatesStore.checkImagesForUpdates([...images]);
 }
 
 function handleBatchPullClose() {
-  batchPullContainers.value = [];
+  batchPullUnits.value = [];
   // Clear update flags for successfully pulled images
   dockerStore.fetchContainers(true);
   updatesStore.fetchCachedUpdates();

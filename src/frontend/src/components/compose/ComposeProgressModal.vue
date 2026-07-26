@@ -2,13 +2,13 @@
   <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="672px" @close="handleClose">
           <div class="flex items-center justify-between px-6 py-4 border-b border-border">
             <div class="min-w-0">
-              <h2 class="text-base font-semibold text-text truncate">Start Stack</h2>
+              <h2 class="text-base font-semibold text-text truncate">{{ heading }}</h2>
               <p class="text-xs text-text-secondary font-mono truncate mt-0.5">{{ projectName }}</p>
             </div>
             <button
               v-if="isDone"
               @click="handleClose"
-              class="p-1.5 border-none rounded cursor-pointer transition text-text-secondary hover:text-text shrink-0"
+              class="icon-btn cursor-pointer text-text-secondary hover:text-text shrink-0"
               aria-label="Close"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -57,13 +57,20 @@ import { getCsrfToken } from '@/utils/csrf';
 import { useParentModal } from '@/composables/useParentModal';
 import BaseModal from '@/components/BaseModal.vue';
 
+type ComposeProgressMode = 'up' | 'pull';
+
 interface Props {
   isOpen: boolean;
   projectName: string;
+  /** 'up' pulls then starts the stack; 'pull' only pulls images. */
+  mode?: ComposeProgressMode;
   forceRecreate?: boolean;
 }
 
-const props = withDefaults(defineProps<Props>(), { forceRecreate: false });
+const props = withDefaults(defineProps<Props>(), { mode: 'up', forceRecreate: false });
+
+const isPull = computed(() => props.mode === 'pull');
+const heading = computed(() => (isPull.value ? 'Pull Images' : 'Start Stack'));
 
 const emit = defineEmits<{
   close: [];
@@ -91,8 +98,8 @@ const { inIframe } = parentModal;
 
 function openParent() {
   parentModal.open({
-    kind: 'compose-start-progress',
-    title: `Start Stack — ${props.projectName}`,
+    kind: 'compose-progress',
+    title: `${heading.value} — ${props.projectName}`,
     size: 'lg',
     fillHeight: true,
     dismissable: false,
@@ -170,11 +177,11 @@ async function startStream() {
   const token = getCsrfToken();
   const body = new URLSearchParams();
   if (token) body.append('csrf_token', token);
-  if (props.forceRecreate) body.append('force_recreate', '1');
+  if (!isPull.value && props.forceRecreate) body.append('force_recreate', '1');
 
   try {
     const response = await fetch(
-      `${API_BASE}/compose-stream.php?action=up&project=${encodeURIComponent(props.projectName)}`,
+      `${API_BASE}/compose-stream.php?action=${props.mode}&project=${encodeURIComponent(props.projectName)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -230,7 +237,7 @@ async function startStream() {
     }
   } catch (e: any) {
     if (e.name !== 'AbortError') {
-      errorMessage.value = e.message || 'Stack start failed';
+      errorMessage.value = e.message || (isPull.value ? 'Image pull failed' : 'Stack start failed');
       statusMessage.value = 'Error';
     }
   }
@@ -256,7 +263,7 @@ function handleSSEEvent(event: string, data: any) {
       if (typeof data.line === 'string') appendLine(data.line);
       break;
     case 'complete':
-      statusMessage.value = data.message || 'Stack started';
+      statusMessage.value = data.message || (isPull.value ? 'Images pulled' : 'Stack started');
       isComplete.value = true;
       patchStatus();
       emit('complete', props.projectName);

@@ -735,17 +735,10 @@ class ComposeManager
    */
   public function stackUpStreaming($projectName, $forceRecreate, $onPhase, $onLine)
   {
-    list($cmd, $stack) = $this->buildComposeCmd($projectName);
-
-    $cd = '';
-    if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
-      $cd = 'cd ' . escapeshellarg($stack['working_dir']) . ' && ';
-    }
+    $cmd = $this->composeCmdFor($projectName);
 
     // Phase 1: pull (best-effort — local-build services may not have images)
-    call_user_func($onPhase, 'pulling', 'Pulling images...');
-    $pullCmd = $cd . $cmd . ' pull 2>&1';
-    $pullResult = $this->execCommandStreaming($pullCmd, $onLine, 600);
+    $pullResult = $this->streamPull($cmd, $onPhase, $onLine);
 
     if (!$pullResult['success']) {
       // Don't abort — continue to up so locally-built or partial stacks still start
@@ -754,7 +747,7 @@ class ComposeManager
 
     // Phase 2: up
     call_user_func($onPhase, 'starting', 'Starting containers...');
-    $upCmd = $cd . $cmd . ' up -d';
+    $upCmd = $cmd . ' up -d';
     if ($forceRecreate) {
       $upCmd .= ' --force-recreate';
     }
@@ -762,6 +755,46 @@ class ComposeManager
     $upResult = $this->execCommandStreaming($upCmd, $onLine, 600);
 
     return $upResult;
+  }
+
+  /**
+   * Pull the latest images for a compose stack, streaming progress via
+   * callbacks. Same first phase as stackUpStreaming(), without the up.
+   * $onPhase receives ($phase, $message). $onLine receives ($line, $stream).
+   */
+  public function stackPullStreaming($projectName, $onPhase, $onLine)
+  {
+    return $this->streamPull($this->composeCmdFor($projectName), $onPhase, $onLine);
+  }
+
+  /**
+   * The compose invocation for a stack, prefixed with a cd into its working
+   * directory when it has one.
+   *
+   * @return string
+   */
+  private function composeCmdFor($projectName)
+  {
+    list($cmd, $stack) = $this->buildComposeCmd($projectName);
+
+    if ($stack && $stack['working_dir'] && is_dir($stack['working_dir'])) {
+      $cmd = 'cd ' . escapeshellarg($stack['working_dir']) . ' && ' . $cmd;
+    }
+
+    return $cmd;
+  }
+
+  /**
+   * Run the pull phase against an already-built compose command.
+   *
+   * @param string $cmd Output of composeCmdFor()
+   * @return array execCommandStreaming() result
+   */
+  private function streamPull($cmd, $onPhase, $onLine)
+  {
+    call_user_func($onPhase, 'pulling', 'Pulling images...');
+
+    return $this->execCommandStreaming($cmd . ' pull 2>&1', $onLine, 600);
   }
 
   /**

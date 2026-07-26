@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026.07.26
+### Changes
+- feat: list containers before updating, and update several at once
+- feat: show a container's schedules in its expanded card
+- fix: read logs from TTY containers, brighten secondary text, link container icons
+- feat: replace container status dot/bar with a halo around the icon
+- feat: restructure expanded container card and widen its click target
+- fix: modals and add create container button
+
+## 2026.07.25
+### Changes
+- fix: schedules modal
+
 ## 2026.07.18
 ### Changes
 - Faint tint on collapsed folders; fix expand animation snapping open

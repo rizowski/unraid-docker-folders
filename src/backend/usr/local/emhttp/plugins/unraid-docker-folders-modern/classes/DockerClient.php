@@ -12,6 +12,8 @@ class DockerClient
   private $socketPath;
   private $apiVersion;
   private $lastError = '';
+  /** HTTP status behind the last failure, or 0 if it wasn't an HTTP error. */
+  private $lastErrorCode = 0;
   private $imageInfoCache = [];
 
   private static $cgroupLayout = null;
@@ -265,43 +267,72 @@ class DockerClient
   /**
    * Get container logs
    *
-   * Docker's /logs endpoint returns a multiplexed byte stream with 8-byte
-   * frame headers (byte 0 = stream type, bytes 4-7 = frame size big-endian,
-   * then payload). This method strips those headers and ANSI escape sequences
-   * for clean text output.
-   *
    * @param string $id Container ID or name
    * @param int $tail Number of lines from end
-   * @return string Logs
+   * @return string|false Logs, or false if Docker refused to serve them
+   *                      (see getLastError). An empty string means the
+   *                      container simply hasn't logged anything.
    */
   public function getContainerLogs($id, $tail = 100)
   {
     $raw = $this->requestRaw('GET', "/containers/{$id}/logs?stdout=1&stderr=1&timestamps=1&tail={$tail}");
-    if ($raw === false || $raw === '') {
+    if ($raw === false) {
+      // A 400 from /logs specifically means the container's logging driver
+      // can't be read back (--log-driver=none, syslog, …). This is the only
+      // layer that knows which endpoint was called, so the explanation is
+      // attached here rather than sniffed out of the message text upstream.
+      if ($this->lastErrorCode === 400) {
+        $this->lastError .= " \u{2014} this container's logging driver may not support reading logs";
+      }
+      return false;
+    }
+    if ($raw === '') {
       return '';
     }
 
-    // Strip Docker multiplexed stream headers (8 bytes per frame)
-    $output = '';
-    $offset = 0;
-    $len = strlen($raw);
-    while ($offset + 8 <= $len) {
-      // bytes 4-7: payload size (big-endian uint32)
-      $frameSize = unpack('N', substr($raw, $offset + 4, 4))[1];
-      $offset += 8;
-      if ($frameSize > 0 && $offset + $frameSize <= $len) {
-        $output .= substr($raw, $offset, $frameSize);
-      }
-      $offset += $frameSize;
-    }
+    return $this->formatLogStream($raw);
+  }
 
-    // Strip ANSI escape sequences
-    $output = preg_replace('/\x1b\[[0-9;]*[a-zA-Z]/', '', $output);
+  /**
+   * Turn a raw /logs response into display-ready text, newest line first.
+   *
+   * Pure (no socket access) so it can be exercised directly against fixtures.
+   *
+   * @param string $raw Raw response body from the /logs endpoint
+   * @return string
+   */
+  private function formatLogStream($raw)
+  {
+    $output = $this->looksMultiplexed($raw) ? $this->demuxLogStream($raw) : $raw;
+
+    // Normalise line endings. TTY containers emit CRLF; everything downstream
+    // (and the frontend's split on "\n") assumes bare LF.
+    $output = str_replace("\r\n", "\n", $output);
+
+    // Strip terminal escape sequences: CSI (including private-parameter forms
+    // like \x1b[?25l, which TTY containers emit constantly) and OSC title
+    // sequences terminated by BEL or ST.
+    $output = preg_replace(
+      '/\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\\\)/',
+      '',
+      $output
+    );
 
     // Simplify Docker RFC3339Nano timestamps to YYYY-MM-DD HH:MM:SS
     $output = preg_replace(
       '/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\.\d+Z/',
       '$1 $2',
+      $output
+    );
+
+    // A bare CR rewrites the current line in a terminal, so keep only what a
+    // terminal would leave visible. Docker timestamps each *write*, not each
+    // CR-separated segment, so the prefix is captured and put back — otherwise
+    // progress lines come out untimestamped among timestamped neighbours.
+    // Greedy `.` never crosses a newline, so this is per line.
+    $output = preg_replace(
+      '/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} )?.*\r/m',
+      '$1',
       $output
     );
 
@@ -319,6 +350,66 @@ class DockerClient
     // Reverse line order so newest lines appear first
     $lines = array_reverse($lines);
     $output = implode("\n", $lines);
+
+    return $output;
+  }
+
+  /**
+   * Does this response use Docker's multiplexed framing?
+   *
+   * Docker only frames the log stream when the container was created *without*
+   * a TTY. With Tty=true it returns a raw stream and the 8-byte headers are
+   * absent — parsing that as framed silently yields nothing, because the log
+   * text decodes to an absurd frame size that fails the bounds check.
+   *
+   * Because we always request timestamps=1, a raw stream begins with the ASCII
+   * digit of the year ("2", 0x32), which fails the stream-type test below;
+   * a framed stream begins with 0x00-0x02 followed by three NUL bytes. Real
+   * log text cannot plausibly start that way.
+   *
+   * @param string $raw
+   * @return bool
+   */
+  private function looksMultiplexed($raw)
+  {
+    if (strlen($raw) < 8) {
+      return false;
+    }
+
+    // byte 0: stream type (0 = stdin, 1 = stdout, 2 = stderr)
+    if (ord($raw[0]) > 2) {
+      return false;
+    }
+
+    // bytes 1-3: reserved, always NUL
+    if ($raw[1] !== "\0" || $raw[2] !== "\0" || $raw[3] !== "\0") {
+      return false;
+    }
+
+    // bytes 4-7: payload size (big-endian uint32)
+    return unpack('N', substr($raw, 4, 4))[1] > 0;
+  }
+
+  /**
+   * Strip Docker's 8-byte multiplexed stream headers, concatenating payloads.
+   *
+   * @param string $raw
+   * @return string
+   */
+  private function demuxLogStream($raw)
+  {
+    $output = '';
+    $offset = 0;
+    $len = strlen($raw);
+    while ($offset + 8 <= $len) {
+      // bytes 4-7: payload size (big-endian uint32)
+      $frameSize = unpack('N', substr($raw, $offset + 4, 4))[1];
+      $offset += 8;
+      if ($frameSize > 0 && $offset + $frameSize <= $len) {
+        $output .= substr($raw, $offset, $frameSize);
+      }
+      $offset += $frameSize;
+    }
 
     return $output;
   }
@@ -1601,6 +1692,7 @@ class DockerClient
   private function requestRaw($method, $path, $timeout = 5)
   {
     $this->lastError = '';
+    $this->lastErrorCode = 0;
 
     if (!file_exists($this->socketPath)) {
       $this->lastError = "Docker socket not found: {$this->socketPath}";
@@ -1630,6 +1722,7 @@ class DockerClient
     }
 
     if ($httpCode < 200 || $httpCode >= 300) {
+      $this->lastErrorCode = $httpCode;
       $this->lastError = "Docker API HTTP {$httpCode}";
       error_log($this->lastError);
       return false;
@@ -1649,6 +1742,7 @@ class DockerClient
   private function request($method, $path, $data = null, $timeout = 5)
   {
     $this->lastError = '';
+    $this->lastErrorCode = 0;
 
     if (!file_exists($this->socketPath)) {
       $this->lastError = "Docker socket not found: {$this->socketPath}";
@@ -1695,6 +1789,7 @@ class DockerClient
 
     // Extract error message from Docker API response
     if ($httpCode < 200 || $httpCode >= 300) {
+      $this->lastErrorCode = $httpCode;
       $errorMsg = "Docker API HTTP {$httpCode}";
       $decoded = json_decode($response, true);
       if ($decoded && isset($decoded['message'])) {

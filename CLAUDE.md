@@ -10,6 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Current Status**: Phases 1-3 code complete (including live stats, search, UI polish), pending on-device testing. See STATUS.md for details.
 
+**UI work**: See DESIGN.md for the design system — theme tokens, button vocabulary, modal chrome, and the Unraid CSS reset gotchas. It is normative; follow it for any frontend change.
+
 ---
 
 ## Design Guardrails (MANDATORY for any UI change)
@@ -296,6 +298,7 @@ Key="Value"
 ## Important Development Notes
 
 ### When Modifying Frontend
+- **Read DESIGN.md first.** It defines the design system: Unraid theme variables and derived Tailwind tokens, the `.nav-btn` button vocabulary, modal chrome and the `BaseModal` positioning contract, form field patterns, and the Unraid CSS reset that silently strips styles from any button not carrying `.nav-btn`.
 - Run `npm run build` in `src/frontend/`
 - Or use full release build: `./build/build.sh --release`
 - Assets automatically copied to backend during build

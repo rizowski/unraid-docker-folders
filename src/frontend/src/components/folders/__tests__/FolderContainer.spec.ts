@@ -3,31 +3,8 @@ import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import FolderContainer from '../FolderContainer.vue';
 import type { Folder } from '@/types/folder';
-import type { Container } from '@/stores/docker';
 import { useDockerStore } from '@/stores/docker';
-
-function makeContainer(overrides: Partial<Container> = {}): Container {
-  return {
-    id: 'abc123',
-    name: 'test-container',
-    image: 'nginx:latest',
-    state: 'running',
-    status: 'Up 2 hours',
-    command: '/entrypoint.sh',
-    ports: [],
-    hostPorts: [],
-    mounts: [],
-    networkSettings: {},
-    created: Date.now() / 1000,
-    icon: null,
-    managed: 'dockerman',
-    webui: null,
-    labels: {},
-    autostart: false,
-    autostartDelay: 0,
-    ...overrides,
-  };
-}
+import { makeContainer } from '@/test/fixtures';
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
   return {

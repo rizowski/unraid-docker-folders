@@ -27,6 +27,10 @@ $updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
 $notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
 $updateCheckExclude = $settings['update_check_exclude'] ?? '';
 $postPullAction = $settings['post_pull_action'] ?? 'pull_only';
+$updateConcurrency = (int) ($settings['update_concurrency'] ?? 3);
+if ($updateConcurrency < 1 || $updateConcurrency > 5) {
+  $updateConcurrency = 3;
+}
 $composeExportDir = $settings['compose_export_dir'] ?? COMPOSE_STACKS_DIR;
 
 // Count excluded images for display
@@ -783,6 +787,21 @@ if (file_exists($changelogPath)) {
             <option value="pull_and_auto_recreate" <?= $postPullAction === 'pull_and_auto_recreate' ? 'selected' : '' ?>>Pull + auto recreate</option>
           </select>
           <span id="save-status-post-pull-action" class="save-status">Saved</span>
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <label for="update-concurrency">Concurrent updates</label>
+          <div class="description">How many containers to pull and recreate at the same time during a batch update. Higher is faster but uses more bandwidth and PHP worker slots. Set to 1 to update one at a time.</div>
+        </div>
+        <div class="setting-control">
+          <select id="update-concurrency" onchange="saveSetting('update_concurrency', this.value)">
+            <?php for ($i = 1; $i <= 5; $i++): ?>
+              <option value="<?= $i ?>" <?= $updateConcurrency === $i ? 'selected' : '' ?>><?= $i ?></option>
+            <?php endfor; ?>
+          </select>
+          <span id="save-status-update-concurrency" class="save-status">Saved</span>
         </div>
       </div>
 

@@ -107,6 +107,34 @@ function handlePost()
     return;
   }
 
+  // Apply many enable/disable changes at once. Body: { updates: [{ id, enabled }] }.
+  // Takes a per-row value because the UI stages changes in both directions and
+  // commits them together.
+  if ($action === 'bulk_toggle') {
+    $data = getRequestData();
+    $updates = isset($data['updates']) && is_array($data['updates']) ? $data['updates'] : null;
+    if ($updates === null) {
+      errorResponse('Missing updates array', 400);
+    }
+    $changed = $manager->bulkSetEnabled($updates);
+    WebSocketPublisher::publish('schedules', 'toggled', ['count' => $changed]);
+    jsonResponse(['success' => true, 'changed' => $changed]);
+    return;
+  }
+
+  // Delete many schedules at once. Body: { ids: [1, 2, 3] }.
+  if ($action === 'bulk_delete') {
+    $data = getRequestData();
+    $ids = isset($data['ids']) && is_array($data['ids']) ? $data['ids'] : null;
+    if ($ids === null) {
+      errorResponse('Missing ids array', 400);
+    }
+    $deleted = $manager->bulkDelete($ids);
+    WebSocketPublisher::publish('schedules', 'deleted', ['count' => $deleted]);
+    jsonResponse(['success' => true, 'deleted' => $deleted]);
+    return;
+  }
+
   if ($action === 'run') {
     $id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
     if (!$id) {
