@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { ref } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ContainerCard from '../ContainerCard.vue';
@@ -55,6 +56,37 @@ describe('ContainerCard', () => {
     // The kebab dropdown should not be rendered initially
     const menuItems = wrapper.findAll('.kebab-menu-item');
     expect(menuItems.length).toBe(0);
+  });
+
+  describe('status halo on the container icon', () => {
+    // The halo sits on the span wrapping the icon, not the img itself.
+    const iconClasses = (w: ReturnType<typeof mount>) =>
+      w.find('img').element.parentElement!.className.split(' ');
+
+    it('marks a healthy running container with a success halo (grid)', () => {
+      expect(iconClasses(mountCard({ status: 'Up 2 hours (healthy)' }))).toContain('status-halo-success');
+    });
+
+    it('marks a running container with no health check as info (grid)', () => {
+      expect(iconClasses(mountCard({ status: 'Up 2 hours' }))).toContain('status-halo-info');
+    });
+
+    it('marks a stopped container with an error halo (list)', () => {
+      const wrapper = mountCard({ state: 'exited', status: 'Exited (0) 3 hours ago' }, { view: 'list' });
+      expect(iconClasses(wrapper)).toContain('status-halo-error');
+    });
+
+    it('falls back to success for running containers when distinguishHealthy is off', () => {
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer({ status: 'Up 2 hours' }), view: 'grid' as const },
+        global: {
+          plugins: [createPinia()],
+          provide: { distinguishHealthy: ref(false) },
+          stubs: { Teleport: true },
+        },
+      });
+      expect(iconClasses(wrapper)).toContain('status-halo-success');
+    });
   });
 
   describe('expand click target (grid view)', () => {

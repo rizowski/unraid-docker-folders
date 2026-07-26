@@ -6,8 +6,9 @@
     <div class="cursor-pointer select-none" @click="expanded = !expanded">
       <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
         <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" @click.stop />
-        <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
-        <span class="w-3 h-3 rounded-full shrink-0" :class="statusDotClass" :title="statusTooltip"></span>
+        <span class="shrink-0 flex p-0.5 status-halo" :class="statusHaloClass" :title="statusTooltip">
+          <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain" />
+        </span>
         <h3 class="flex-1 text-sm font-semibold text-text truncate">{{ container.name }}</h3>
         <a
           v-if="hasUpdate && releaseNotesUrl"
@@ -127,8 +128,9 @@
     <div class="flex items-center gap-2 sm:gap-4 px-2 sm:px-4 py-3 cursor-pointer select-none" @click="expanded = !expanded">
       <DragHandle v-if="!dragLocked" :size="14" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2" @click.stop />
       <ChevronIcon :expanded="expanded" :size="12" />
-      <span class="w-[3px] h-5 rounded-full shrink-0" :class="statusBarClass" :title="statusTooltip"></span>
-      <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain shrink-0" />
+      <span class="shrink-0 flex p-0.5 status-halo" :class="statusHaloClass" :title="statusTooltip">
+        <img :src="container.icon || fallbackIcon" :alt="container.name" class="w-7 h-7 object-contain" />
+      </span>
 
       <div class="flex flex-col flex-1 min-w-0 gap-0.5">
         <div class="flex items-center gap-3 min-w-0">
@@ -520,17 +522,16 @@ const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
 const isHealthy = computed(() => props.container.status?.toLowerCase().includes('(healthy)'));
 
-const statusDotClass = computed(() => {
+// Health/state is carried by a feathered halo around the container icon in both
+// views (see .status-halo in main.css), replacing the old dot and bar.
+const statusHaloClass = computed(() => {
   const state = props.container.state;
-  if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'bg-green-500';
-  if (state === 'running' && distinguishHealthy.value) return 'bg-info';
-  if (state === 'running') return 'bg-green-500';
-  if (state === 'exited' || state === 'stopped') return 'bg-red-500';
-  return 'bg-muted';
+  if (state === 'running' && distinguishHealthy.value && isHealthy.value) return 'status-halo-success';
+  if (state === 'running' && distinguishHealthy.value) return 'status-halo-info';
+  if (state === 'running') return 'status-halo-success';
+  if (state === 'exited' || state === 'stopped') return 'status-halo-error';
+  return 'status-halo-muted';
 });
-
-// Vertical bar variant for list view (same color logic)
-const statusBarClass = computed(() => statusDotClass.value);
 
 const statusTooltip = computed(() => {
   const state = props.container.state;
