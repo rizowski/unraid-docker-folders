@@ -58,6 +58,9 @@ class StubDatabase
     /** Stale-entry count reported to the cleanup logic */
     public int $staleCount = 0;
 
+    /** Simulates the release-notes read failing (missing table, locked DB, ...) */
+    public bool $throwOnFetchAll = false;
+
     public function setExcludePatterns(string $patterns): void
     {
         $this->settings['update_check_exclude'] = $patterns;
@@ -73,10 +76,37 @@ class StubDatabase
         return false;
     }
 
+    /** @var array<string, array<string, mixed>> Seeded/written release_notes rows, keyed by repo */
+    public array $releaseNotes = [];
+
     public function query(string $sql, array $params = []): mixed
     {
         $this->executedQueries[] = $sql;
+
+        if (str_contains($sql, 'INSERT OR REPLACE INTO release_notes')) {
+            $row = [];
+            foreach ($params as $key => $value) {
+                $row[ltrim((string) $key, ':')] = $value;
+            }
+            $this->releaseNotes[$row['repo']] = $row;
+        }
+
         return true;
+    }
+
+    public function fetchAll(string $sql, array $params = []): array
+    {
+        if ($this->throwOnFetchAll) {
+            throw new RuntimeException('no such table: release_notes');
+        }
+        if (!str_contains($sql, 'release_notes')) {
+            return [];
+        }
+        $wanted = array_flip(array_map('strval', $params));
+        return array_values(array_filter(
+            $this->releaseNotes,
+            fn ($row) => isset($wanted[$row['repo']])
+        ));
     }
 
     public function fetchValue(string $sql, array $params = []): mixed
@@ -420,5 +450,316 @@ final class UpdateCheckTest extends TestCase
         // would delete every other image's cached status.
         $deletes = array_filter($this->db->executedQueries, fn ($sql) => str_contains($sql, 'DELETE'));
         $this->assertEmpty($deletes, 'Targeted check must not delete other images\' cached entries');
+    }
+
+    // --- Release notes ---------------------------------------------------
+
+    /**
+     * Build a $results entry the way checkAllImageUpdates does.
+     */
+    private function resultEntry(string $image, ?string $repo, bool $updateAvailable): array
+    {
+        return [
+            'image' => $image,
+            'local_digest' => 'sha256:local',
+            'remote_digest' => 'sha256:remote',
+            'update_available' => $updateAvailable,
+            'checked_at' => 1700000000,
+            'error' => null,
+            'source_url' => $repo === null ? null : 'https://github.com/' . $repo,
+            'source_repo' => $repo,
+            'release' => null,
+        ];
+    }
+
+    /**
+     * A fetcher stub that records calls and replays canned outcomes.
+     *
+     * @param array<string, array> $outcomes repo => fetchLatest() return value
+     * @param string[] $calls Populated with each repo requested, in order
+     */
+    private function fetcher(array $outcomes, array &$calls): callable
+    {
+        $default = [
+            'status' => 'ok',
+            'http' => 200,
+            'release' => ['tag' => 'v1', 'name' => '1', 'published_at' => 1, 'url' => 'u', 'summary' => 's'],
+        ];
+        return function (string $repo) use ($outcomes, &$calls, $default) {
+            $calls[] = $repo;
+            return $outcomes[$repo] ?? $default;
+        };
+    }
+
+    private function seedNote(string $repo, string $status, int $fetchedAt): void
+    {
+        $this->db->releaseNotes[$repo] = [
+            'repo' => $repo,
+            'tag' => 'v0',
+            'name' => '0',
+            'published_at' => 1,
+            'url' => 'https://example.test',
+            'summary' => 'cached',
+            'etag' => null,
+            'status' => $status,
+            'fetched_at' => $fetchedAt,
+        ];
+    }
+
+    #[Test]
+    public function parseRepoAcceptsGithubUrlShapes(): void
+    {
+        $this->assertSame('grafana/grafana', ReleaseNotes::parseRepo('https://github.com/grafana/grafana'));
+        $this->assertSame('grafana/grafana', ReleaseNotes::parseRepo('https://github.com/grafana/grafana/'));
+        $this->assertSame('grafana/grafana', ReleaseNotes::parseRepo('https://github.com/grafana/grafana/tree/main'));
+        $this->assertSame('grafana/grafana', ReleaseNotes::parseRepo('https://github.com/grafana/grafana.git'));
+        $this->assertSame('foo/bar', ReleaseNotes::parseRepo('https://GitHub.com/Foo/Bar'));
+        $this->assertSame('foo/bar', ReleaseNotes::parseRepo('https://www.github.com/foo/bar'));
+    }
+
+    #[Test]
+    public function parseRepoRejectsEverythingElse(): void
+    {
+        $this->assertNull(ReleaseNotes::parseRepo('https://gitlab.com/foo/bar'));
+        $this->assertNull(ReleaseNotes::parseRepo('https://gitea.example.com/foo/bar'));
+        $this->assertNull(ReleaseNotes::parseRepo('https://github.com/onlyowner'));
+        $this->assertNull(ReleaseNotes::parseRepo('https://github.com/'));
+        $this->assertNull(ReleaseNotes::parseRepo('javascript:alert(1)'));
+        $this->assertNull(ReleaseNotes::parseRepo(''));
+        $this->assertNull(ReleaseNotes::parseRepo(null));
+    }
+
+    #[Test]
+    public function toPlainTextStripsMarkdownAndMarkup(): void
+    {
+        $md = "# Heading\n\n- A bullet with [a link](https://x.test) and ![img](https://y.test/i.png)\n"
+            . "```\ncode block that should vanish\n```\n"
+            . "<script>alert(1)</script>\n"
+            . "> quoted **bold** text";
+
+        $text = ReleaseNotes::toPlainText($md);
+
+        $this->assertStringNotContainsString('code block', $text);
+        $this->assertStringNotContainsString('<script>', $text);
+        $this->assertStringNotContainsString('https://y.test', $text);
+        $this->assertStringNotContainsString('](', $text);
+        $this->assertStringNotContainsString('**', $text);
+        $this->assertStringContainsString('a link', $text);
+        $this->assertStringContainsString('quoted bold text', $text);
+        $this->assertStringNotContainsString("\n", $text);
+    }
+
+    #[Test]
+    public function toPlainTextStripsBothEndsOfSingleEmphasis(): void
+    {
+        $this->assertSame('an italic word', ReleaseNotes::toPlainText('an *italic* word'));
+        $this->assertSame('an italic word', ReleaseNotes::toPlainText('an _italic_ word'));
+        // Identifiers must survive — they are not emphasis.
+        $this->assertSame('use snake_case_names here', ReleaseNotes::toPlainText('use snake_case_names here'));
+    }
+
+    #[Test]
+    public function toPlainTextTruncatesLongBodies(): void
+    {
+        $text = ReleaseNotes::toPlainText(str_repeat('word ', 2000));
+
+        $this->assertLessThanOrEqual(ReleaseNotes::SUMMARY_MAX_CHARS + 1, mb_strlen($text));
+        $this->assertStringEndsWith('…', $text);
+    }
+
+    #[Test]
+    public function releaseNotesOnlyFetchedForImagesWithUpdates(): void
+    {
+        $results = [
+            'a:1' => $this->resultEntry('a:1', 'owner/a', true),
+            'b:1' => $this->resultEntry('b:1', 'owner/b', false),
+        ];
+        $calls = [];
+
+        refreshReleaseNotes($results, $this->db, $this->log(), true, 1700000000, $this->fetcher([], $calls));
+
+        $this->assertSame(['owner/a'], $calls);
+    }
+
+    #[Test]
+    public function releaseNotesDedupeImageTagsSharingARepo(): void
+    {
+        $results = [
+            'grafana:latest' => $this->resultEntry('grafana:latest', 'grafana/grafana', true),
+            'grafana:next' => $this->resultEntry('grafana:next', 'grafana/grafana', true),
+        ];
+        $calls = [];
+
+        refreshReleaseNotes($results, $this->db, $this->log(), true, 1700000000, $this->fetcher([], $calls));
+
+        $this->assertSame(['grafana/grafana'], $calls);
+    }
+
+    #[Test]
+    public function freshCacheIsNotRefetched(): void
+    {
+        $now = 1700000000;
+        $this->seedNote('owner/a', 'ok', $now - 60);
+        $results = ['a:1' => $this->resultEntry('a:1', 'owner/a', true)];
+        $calls = [];
+
+        refreshReleaseNotes($results, $this->db, $this->log(), true, $now, $this->fetcher([], $calls));
+
+        $this->assertSame([], $calls);
+    }
+
+    #[Test]
+    public function notFoundIsNegativeCachedForAWeek(): void
+    {
+        $now = 1700000000;
+        $results = ['a:1' => $this->resultEntry('a:1', 'owner/a', true)];
+        $calls = [];
+        $notFound = ['status' => 'not_found', 'http' => 404, 'release' => null];
+
+        refreshReleaseNotes($results, $this->db, $this->log(), true, $now, $this->fetcher(['owner/a' => $notFound], $calls));
+        $this->assertSame('not_found', $this->db->releaseNotes['owner/a']['status']);
+        $this->assertNull($results['a:1']['release'], 'A 404 must not decorate the image with notes');
+
+        // Still inside the 7d TTL a day later.
+        $calls = [];
+        $results = ['a:1' => $this->resultEntry('a:1', 'owner/a', true)];
+        refreshReleaseNotes($results, $this->db, $this->log(), true, $now + 86400, $this->fetcher([], $calls));
+        $this->assertSame([], $calls);
+    }
+
+    #[Test]
+    public function rateLimitWritesNothingAndAbortsTheRun(): void
+    {
+        $results = [
+            'a:1' => $this->resultEntry('a:1', 'owner/a', true),
+            'b:1' => $this->resultEntry('b:1', 'owner/b', true),
+            'c:1' => $this->resultEntry('c:1', 'owner/c', true),
+        ];
+        $calls = [];
+        $limited = ['status' => 'rate_limited', 'http' => 403, 'release' => null];
+
+        refreshReleaseNotes(
+            $results,
+            $this->db,
+            $this->log(),
+            true,
+            1700000000,
+            $this->fetcher(['owner/a' => $limited, 'owner/b' => $limited, 'owner/c' => $limited], $calls)
+        );
+
+        // Aborted after the first 403 rather than burning the rest of the run.
+        $this->assertSame(['owner/a'], $calls);
+        // And cached nothing: a transient 403 must not suppress notes for hours.
+        $this->assertSame([], $this->db->releaseNotes);
+    }
+
+    #[Test]
+    public function fetchesAreCappedAndTakeTheOldestFirst(): void
+    {
+        $now = 1700000000;
+        $results = [];
+        // 25 stale repos, seeded with ascending fetched_at so the expected
+        // winners are unambiguous. repo-00 is oldest.
+        for ($i = 0; $i < 25; $i++) {
+            $repo = sprintf('owner/repo-%02d', $i);
+            $results["img-$i:1"] = $this->resultEntry("img-$i:1", $repo, true);
+            $this->seedNote($repo, 'ok', $now - 200000 + $i);
+        }
+        $calls = [];
+
+        refreshReleaseNotes($results, $this->db, $this->log(), true, $now, $this->fetcher([], $calls));
+
+        $this->assertCount(ReleaseNotes::MAX_FETCHES_PER_RUN, $calls);
+        $this->assertSame('owner/repo-00', $calls[0]);
+        $this->assertSame('owner/repo-19', $calls[ReleaseNotes::MAX_FETCHES_PER_RUN - 1]);
+    }
+
+    #[Test]
+    public function decoratesImagesWithoutUpdatesFromCache(): void
+    {
+        $now = 1700000000;
+        $this->seedNote('owner/a', 'ok', $now - 60);
+        // Not flagged for an update, so never fetched — but the GET and POST
+        // payloads must still be shaped the same, so it gets decorated.
+        $results = ['a:1' => $this->resultEntry('a:1', 'owner/a', false)];
+        $calls = [];
+
+        refreshReleaseNotes($results, $this->db, $this->log(), true, $now, $this->fetcher([], $calls));
+
+        $this->assertSame([], $calls);
+        $this->assertSame('v0', $results['a:1']['release']['tag']);
+    }
+
+    #[Test]
+    public function fetcherFailureLeavesTheResultsIntact(): void
+    {
+        $results = ['a:1' => $this->resultEntry('a:1', 'owner/a', true)];
+        $throwing = function (string $repo): array {
+            throw new RuntimeException('DNS is on fire');
+        };
+
+        // refreshReleaseNotes lets the throw escape; checkAllImageUpdates is
+        // what contains it, so assert both halves of that contract.
+        try {
+            refreshReleaseNotes($results, $this->db, $this->log(), true, 1700000000, $throwing);
+            $this->fail('Expected the fetcher exception to propagate');
+        } catch (RuntimeException $e) {
+            $this->assertSame('DNS is on fire', $e->getMessage());
+        }
+
+        $this->assertTrue($results['a:1']['update_available'], 'Digest results must survive a notes failure');
+    }
+
+    #[Test]
+    public function notesFailureDoesNotDisturbTheCheckCounters(): void
+    {
+        $this->docker->containers = [$this->makeContainer('nginx:latest')];
+        $this->docker->updateResults['nginx:latest'] = [
+            'update_available' => true,
+            'local_digest' => 'sha256:old',
+            'remote_digest' => 'sha256:new',
+            'error' => null,
+            'source_url' => 'https://github.com/nginx/nginx',
+        ];
+        // Blow up the moment refreshReleaseNotes touches the database.
+        $this->db->throwOnFetchAll = true;
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log());
+
+        $this->assertSame(1, $result['checked']);
+        $this->assertSame(0, $result['errors'], 'A notes failure is not a check failure');
+        $this->assertSame(1, $result['newUpdates']);
+        $this->assertSame('nginx/nginx', $result['results']['nginx:latest']['source_repo']);
+        $this->assertNull($result['results']['nginx:latest']['release']);
+        $this->assertNotEmpty(array_filter($this->logMessages, fn ($m) => str_starts_with($m, 'NOTES FATAL')));
+    }
+
+    #[Test]
+    public function sourceRepoIsRecordedForBothSuccessAndFailure(): void
+    {
+        $this->docker->containers = [
+            $this->makeContainer('nginx:latest'),
+            $this->makeContainer('redis:7'),
+        ];
+        $this->docker->updateResults['nginx:latest'] = [
+            'update_available' => false,
+            'local_digest' => 'sha256:a',
+            'remote_digest' => 'sha256:a',
+            'error' => null,
+            'source_url' => 'https://github.com/nginx/nginx',
+        ];
+        $this->docker->throwOn['redis:7'] = new RuntimeException('socket gone');
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log());
+
+        $this->assertSame('nginx/nginx', $result['results']['nginx:latest']['source_repo']);
+        $this->assertNull($result['results']['redis:7']['source_repo']);
+        $this->assertNull($result['results']['redis:7']['release']);
+
+        $upserts = array_filter($this->db->executedQueries, fn ($sql) => str_contains($sql, 'INSERT OR REPLACE INTO image_update_checks'));
+        $this->assertNotEmpty($upserts);
+        foreach ($upserts as $sql) {
+            $this->assertStringContainsString('source_repo', $sql);
+        }
     }
 }

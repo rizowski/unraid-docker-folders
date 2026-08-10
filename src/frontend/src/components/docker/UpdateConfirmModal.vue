@@ -20,6 +20,21 @@
         <span class="min-w-0 flex-1">
           <span class="block text-sm text-text truncate">{{ containerNames(unit) }}</span>
           <span class="block text-xs text-text-secondary font-mono truncate">{{ unitLabel(unit) }}</span>
+          <span v-if="noteFor(unit)" class="flex items-center gap-1 min-w-0">
+            <span class="text-xs text-text-secondary truncate" :title="noteFor(unit) || undefined">{{ noteFor(unit) }}</span>
+            <a
+              v-if="urlFor(unit)"
+              :href="urlFor(unit) || undefined"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="shrink-0 text-text-secondary hover:text-text"
+              title="View release notes"
+              aria-label="View release notes"
+              @click.stop
+            >
+              <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+            </a>
+          </span>
         </span>
         <span
           v-if="unit.kind === 'compose'"
@@ -46,7 +61,8 @@
 import { ref, computed, watch, nextTick } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
 import { useParentModal } from '@/composables/useParentModal';
-import { unitLabel, type UpdateUnit } from '@/utils/updateUnits';
+import { useUpdatesStore } from '@/stores/updates';
+import { unitLabel, unitReleaseSummary, unitReleaseUrl, type UpdateUnit } from '@/utils/updateUnits';
 
 interface Props {
   isOpen: boolean;
@@ -76,6 +92,26 @@ const summary = computed(() => {
 
 function containerNames(unit: UpdateUnit): string {
   return unit.containers.map((c) => c.name).join(', ');
+}
+
+const updatesStore = useUpdatesStore();
+
+/**
+ * Cached release notes for what this unit will pull, or null when we have
+ * none — the row then looks exactly as it did before notes existed. Reads
+ * cache only; the modal never waits on a network call to open.
+ */
+function noteFor(unit: UpdateUnit): string | null {
+  return unitReleaseSummary(unit, updatesStore.updates);
+}
+
+/**
+ * The row's link to the full notes. Null for units pulling several images —
+ * see unitReleaseUrl. The summary is capped server-side, so this is how the
+ * untruncated notes are reached.
+ */
+function urlFor(unit: UpdateUnit): string | null {
+  return unitReleaseUrl(unit, updatesStore.updates);
 }
 
 function toggle(id: string) {
@@ -128,6 +164,8 @@ function openParent() {
           // state badge, so fold the image/project into the label rather than
           // dropping it.
           label: `${containerNames(unit)} — ${unitLabel(unit)}`,
+          sublabel: noteFor(unit) ?? undefined,
+          sublabelUrl: urlFor(unit) ?? undefined,
           state: unit.kind === 'compose' ? 'stack' : undefined,
           checked: true,
         })),

@@ -1,4 +1,5 @@
 import type { Container } from '@/stores/docker';
+import type { ImageUpdateStatus } from '@/stores/updates';
 
 /**
  * An update unit is one update operation plus the exact set of containers it
@@ -101,4 +102,109 @@ export function buildUpdateUnits(
   }
 
   return units;
+}
+
+/**
+ * The repo's releases index, for images that advertise a source but have no
+ * cached release to link to. Shared with ContainerCard so both surfaces build
+ * the same URL.
+ */
+export function releaseIndexUrl(status: ImageUpdateStatus | undefined): string | null {
+  return status?.source_url ? `${status.source_url}/releases` : null;
+}
+
+/** One cached release a unit will actually pull in. */
+export interface UnitRelease {
+  /** Short repo name for multi-release labels, e.g. "grafana". */
+  repoName: string;
+  tag: string;
+  summary: string;
+  /** Where to read the notes in full — the release's own page. */
+  url: string | null;
+}
+
+/**
+ * The distinct releases a unit will pull, deduped by source repo.
+ *
+ * Only containers actually flagged for an update count. That filter is
+ * load-bearing: `buildUpdateUnits` lists *every* member of a compose project,
+ * not just the outdated ones, so without it a ten-service stack would
+ * advertise release notes for the eight services that aren't changing.
+ */
+export function unitReleases(
+  unit: UpdateUnit,
+  updates: Record<string, ImageUpdateStatus>,
+): UnitRelease[] {
+  const seen = new Set<string>();
+  const releases: UnitRelease[] = [];
+
+  for (const container of unit.containers) {
+    const status = updates[container.image];
+    if (!status?.update_available || !status.release) continue;
+
+    const key = status.source_repo ?? status.release.url ?? container.image;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    releases.push({
+      repoName: status.source_repo?.split('/').pop() ?? container.image,
+      tag: status.release.tag ?? status.release.name ?? '',
+      summary: status.release.summary ?? '',
+      // Prefer the exact tag's page; fall back to the repo's releases index.
+      url: status.release.url ?? releaseIndexUrl(status),
+    });
+  }
+
+  return releases;
+}
+
+/** How many releases get named before the summary collapses into "+N more". */
+const MAX_NAMED_RELEASES = 3;
+
+/**
+ * One-line release-notes sublabel for a unit's row, or null when nothing is
+ * cached — in which case the row renders exactly as it did before notes
+ * existed. That null is the degraded path for offline servers, images with no
+ * source label, and non-GitHub sources.
+ *
+ * Multiple releases show tags only: three different bodies do not fit on one
+ * row, and saying "three things changed" beats pretending one of them is the
+ * whole story.
+ */
+export function unitReleaseSummary(
+  unit: UpdateUnit,
+  updates: Record<string, ImageUpdateStatus>,
+): string | null {
+  const releases = unitReleases(unit, updates);
+  if (releases.length === 0) return null;
+
+  if (releases.length === 1) {
+    const { tag, summary } = releases[0];
+    if (tag && summary) return `${tag} — ${summary}`;
+    return tag || summary || null;
+  }
+
+  const named = releases
+    .slice(0, MAX_NAMED_RELEASES)
+    .map((r) => (r.tag ? `${r.repoName} ${r.tag}` : r.repoName));
+  const remaining = releases.length - named.length;
+  if (remaining > 0) named.push(`+${remaining} more`);
+
+  return named.join(' · ');
+}
+
+/**
+ * Where to read a unit's release notes in full, or null when there is no one
+ * page that would answer the question.
+ *
+ * Only single-release units get a link: a stack pulling three images has three
+ * sets of notes, and picking one of them to link would misrepresent the other
+ * two. Those rows keep the tag list and no link.
+ */
+export function unitReleaseUrl(
+  unit: UpdateUnit,
+  updates: Record<string, ImageUpdateStatus>,
+): string | null {
+  const releases = unitReleases(unit, updates);
+  return releases.length === 1 ? releases[0].url : null;
 }

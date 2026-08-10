@@ -122,11 +122,11 @@ cd "$FRONTEND_DIR"
 
 if [ ! -d "node_modules" ]; then
     echo "Installing frontend dependencies..."
-    npm ci
+    yarn install --frozen-lockfile
 fi
 
 echo "Running Vite build..."
-npm run build
+yarn build
 
 if [ ! -d "../backend/usr/local/emhttp/plugins/${PLUGIN_NAME}/assets" ]; then
     echo -e "${RED}✗${NC} Frontend build failed - assets directory not found"

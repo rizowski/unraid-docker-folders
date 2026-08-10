@@ -222,6 +222,53 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     return label;
   }
 
+  // Feather "external-link", built as a real anchor so it stays keyboard
+  // reachable and so clicks on it never activate an enclosing <label>.
+  // Only ever created for a real url — a hrefless placeholder would sit in
+  // the DOM of every row and be the first hit for any link query.
+  function makeExternalLink(url, title) {
+    var a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.title = title;
+    a.setAttribute('aria-label', title);
+    styleObj(a, {
+      display: 'inline-flex',
+      alignItems: 'center',
+      flexShrink: '0',
+      opacity: '0.65',
+      color: 'inherit'
+    });
+
+    var NS = 'http://www.w3.org/2000/svg';
+    var svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('width', '12');
+    svg.setAttribute('height', '12');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+
+    var path = document.createElementNS(NS, 'path');
+    path.setAttribute('d', 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6');
+    var poly = document.createElementNS(NS, 'polyline');
+    poly.setAttribute('points', '15 3 21 3 21 9');
+    var line = document.createElementNS(NS, 'line');
+    line.setAttribute('x1', '10');
+    line.setAttribute('y1', '14');
+    line.setAttribute('x2', '21');
+    line.setAttribute('y2', '3');
+
+    svg.appendChild(path);
+    svg.appendChild(poly);
+    svg.appendChild(line);
+    a.appendChild(svg);
+    return a;
+  }
+
   function makeCaption(text) {
     var caption = document.createElement('div');
     caption.textContent = text;
@@ -462,7 +509,7 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
       var row = document.createElement('label');
       styleObj(row, {
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: '10px',
         padding: '8px 12px',
         cursor: 'pointer',
@@ -472,6 +519,9 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
       cb.type = 'checkbox';
       cb.checked = !!item.checked;
       cb.style.cursor = 'pointer';
+      // Rows are top-aligned so a sublabel can grow downward; nudge the
+      // controls onto the first line.
+      cb.style.marginTop = '2px';
       (function(fieldId, itemId) {
         cb.addEventListener('change', function() {
           if (!currentId) return;
@@ -489,19 +539,64 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         var img = document.createElement('img');
         img.src = item.icon;
         img.alt = '';
-        styleObj(img, { width: '18px', height: '18px', objectFit: 'contain', flexShrink: '0' });
+        styleObj(img, { width: '18px', height: '18px', objectFit: 'contain', flexShrink: '0', marginTop: '1px' });
         row.appendChild(img);
       }
+      // minWidth:0 is required here — without it a flex child refuses to
+      // shrink and the ellipsis below never engages.
+      var textCol = document.createElement('span');
+      styleObj(textCol, {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2px',
+        flex: '1',
+        minWidth: '0'
+      });
       var name = document.createElement('span');
       name.textContent = item.label;
-      name.style.flex = '1';
-      name.style.fontSize = '14px';
-      row.appendChild(name);
+      styleObj(name, {
+        fontSize: '14px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      });
+      textCol.appendChild(name);
+      // Second line: release notes and similar detail, optionally followed by
+      // a link out. textContent only for the text — this renders into the
+      // parent Unraid document, so innerHTML here would be an XSS vector into
+      // the webgui, not just our iframe.
+      var sublabelRow = document.createElement('span');
+      styleObj(sublabelRow, {
+        display: item.sublabel ? 'flex' : 'none',
+        alignItems: 'center',
+        gap: '4px',
+        minWidth: '0'
+      });
+      var sublabel = document.createElement('span');
+      sublabel.textContent = item.sublabel || '';
+      if (item.sublabel) sublabel.title = item.sublabel;
+      styleObj(sublabel, {
+        fontSize: '11px',
+        opacity: '0.65',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      });
+      sublabelRow.appendChild(sublabel);
+      // The summary is capped server-side, so this is the way to the full
+      // notes. An <a> is interactive content, so clicking it does not
+      // activate the surrounding <label> — the checkbox stays put.
+      if (item.sublabelUrl) {
+        sublabelRow.appendChild(makeExternalLink(item.sublabelUrl, 'View release notes'));
+      }
+      textCol.appendChild(sublabelRow);
+      row.appendChild(textCol);
       if (item.state) {
         var badge = document.createElement('span');
         badge.textContent = item.state;
         styleObj(badge, {
           marginLeft: 'auto',
+          marginTop: '2px',
           padding: '2px 8px',
           borderRadius: '999px',
           fontSize: '11px',
@@ -1030,8 +1125,9 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
       }
     }
     // Checkbox list
-    if (fieldType === 'checkbox-list' && patch.items && refs.checkboxes) {
+    if (fieldType === 'checkbox-list' && patch.items) {
       patch.items.forEach(function(itemPatch) {
+        if (!refs.checkboxes) return;
         var cb = refs.checkboxes[itemPatch.id];
         if (cb && itemPatch.checked != null) cb.checked = !!itemPatch.checked;
       });

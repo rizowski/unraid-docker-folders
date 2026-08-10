@@ -83,13 +83,13 @@
 ./build/build.sh --release
 
 # Frontend only (type-check + build)
-cd src/frontend && npm run build
+cd src/frontend && yarn build
 
 # Type-check only
-cd src/frontend && npm run type-check
+cd src/frontend && yarn type-check
 
 # Dev server (localhost:5173)
-cd src/frontend && npm run dev
+cd src/frontend && yarn dev
 
 # Check version in PLG
 grep "<!ENTITY version" unraid-docker-folders-modern.plg

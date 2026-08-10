@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useUpdatesStore, type ImageUpdateStatus } from '../updates';
+import { makeUpdateStatus } from '@/test/fixtures';
 
 // Mock apiFetch so no real HTTP requests are made
 vi.mock('@/utils/csrf', () => ({
@@ -12,17 +13,16 @@ import { apiFetch } from '@/utils/csrf';
 
 const mockApiFetch = vi.mocked(apiFetch);
 
-function status(image: string, updateAvailable: boolean): ImageUpdateStatus {
-  return {
-    image,
-    local_digest: `${image}@sha256:local`,
-    remote_digest: updateAvailable ? 'sha256:remote' : 'sha256:local',
-    update_available: updateAvailable,
-    checked_at: 1700000000,
-    error: null,
-    source_url: null,
-  };
-}
+const status = makeUpdateStatus;
+
+const NGINX_RELEASE = {
+  tag: 'v1.27.0',
+  name: '1.27.0',
+  published_at: 1699990000,
+  url: 'https://github.com/nginx/nginx/releases/tag/v1.27.0',
+  summary: 'HTTP/3 is no longer experimental.',
+  fetched_at: 1700000000,
+};
 
 function okResponse(updates: Record<string, ImageUpdateStatus>): Response {
   return {
@@ -110,5 +110,39 @@ describe('updates store – targeted checks', () => {
 
     expect(store.updates['ghost:5']).toBeUndefined();
     expect(store.updates['nginx:latest']).toBeDefined();
+  });
+
+  it('carries source_repo and release through a full check', async () => {
+    const store = useUpdatesStore();
+    mockApiFetch.mockResolvedValueOnce(
+      okResponse({
+        'nginx:latest': status('nginx:latest', true, {
+          source_url: 'https://github.com/nginx/nginx',
+          source_repo: 'nginx/nginx',
+          release: NGINX_RELEASE,
+        }),
+      }),
+    );
+
+    await store.checkForUpdates();
+
+    expect(store.updates['nginx:latest'].source_repo).toBe('nginx/nginx');
+    expect(store.updates['nginx:latest'].release).toEqual(NGINX_RELEASE);
+  });
+
+  it('carries source_repo and release through a cached fetch', async () => {
+    const store = useUpdatesStore();
+    mockApiFetch.mockResolvedValueOnce(
+      okResponse({
+        'nginx:latest': status('nginx:latest', true, {
+          source_repo: 'nginx/nginx',
+          release: NGINX_RELEASE,
+        }),
+      }),
+    );
+
+    await store.fetchCachedUpdates();
+
+    expect(store.updates['nginx:latest'].release?.tag).toBe('v1.27.0');
   });
 });

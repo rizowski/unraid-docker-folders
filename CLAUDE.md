@@ -48,17 +48,35 @@ the commit message.
 cd src/frontend
 
 # Install dependencies
-npm ci
+yarn install --frozen-lockfile
 
 # Development server (localhost:5173)
-npm run dev
+yarn dev
 
 # Type check without building
-npm run type-check
+yarn type-check
+
+# Lint (oxlint; fails on any warning). `yarn lint:fix` auto-fixes what it can.
+yarn lint
+
+# Unit tests
+yarn test:run
 
 # Build for production (outputs to ../backend/.../assets/)
-npm run build
+yarn build
 ```
+
+**Package manager is yarn 1.22.21**, declared in `package.json`'s
+`packageManager` field and pinned in `.prototools`. `yarn.lock` is the only
+lockfile — do not run `npm install`/`npm ci` here. npm 7+ rewrites a `yarn.lock`
+it finds alongside, producing ~1600 lines of spurious diff.
+
+**Linting**: oxlint, configured in `src/frontend/.oxlintrc.json` at the
+`correctness` tier only. The broader `suspicious`/`perf` tiers are deliberately
+off — they flag stylistic patterns (`no-shadow`, `toSorted`, `addEventListener`
+over `onmessage`) throughout existing code and would turn a lint run into a
+refactor. Suppress a genuine false positive inline with
+`// oxlint-disable-next-line <rule>` plus a comment saying why.
 
 ### Backend + Package
 ```bash
@@ -70,7 +88,7 @@ npm run build
 ```
 
 **What the release build does**:
-1. Builds Vue frontend (`npm run build`)
+1. Builds Vue frontend (`yarn build`)
 2. Packages backend + assets into `.txz` archive
 3. Calculates MD5 checksum
 4. Updates `unraid-docker-folders-modern.plg` with version and MD5
@@ -234,7 +252,7 @@ Key="Value"
 - **No full HTML docs in .page files**: Output content fragments only
 - **Vite base path**: Must be `/plugins/unraid-docker-folders-modern/assets/` for Unraid integration
 - **File permissions**: .page files = 644, scripts = 755, handled by build script
-- **Node / npm via proto**: `.prototools` at the repo root pins `node = "22.18.0"` and `npm = "bundled"`. If `npm` isn't on PATH, run `proto use` in the repo root to install and shim them. Shims live at `~/.proto/shims/`.
+- **Node / yarn via proto**: `.prototools` at the repo root pins `node = "22.18.0"` and `yarn = "1.22.21"`. If `yarn` isn't on PATH, run `proto use` in the repo root to install and shim them. Shims live at `~/.proto/shims/`. (`npm = "bundled"` is pinned too, but see the package-manager note above — don't use it in `src/frontend`.)
 - **No local PHP**: Lint/validate PHP with the `php:8.2-cli` Docker image, e.g.:
   ```bash
   docker run --rm -v "$(pwd)":/app -w /app php:8.2-cli php -l path/to/file.php
@@ -299,7 +317,7 @@ Key="Value"
 
 ### When Modifying Frontend
 - **Read DESIGN.md first.** It defines the design system: Unraid theme variables and derived Tailwind tokens, the `.nav-btn` button vocabulary, modal chrome and the `BaseModal` positioning contract, form field patterns, and the Unraid CSS reset that silently strips styles from any button not carrying `.nav-btn`.
-- Run `npm run build` in `src/frontend/`
+- Run `yarn build` in `src/frontend/`
 - Or use full release build: `./build/build.sh --release`
 - Assets automatically copied to backend during build
 

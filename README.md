@@ -34,7 +34,7 @@ A modern Unraid plugin that adds folder organization to the Docker tab with real
 
 ```bash
 # Frontend build
-cd src/frontend && npm ci && npm run build
+cd src/frontend && yarn install --frozen-lockfile && yarn build
 
 # Release build (auto-increments version, tags, pushes)
 ./build/build.sh --release

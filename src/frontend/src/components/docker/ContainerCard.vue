@@ -285,6 +285,7 @@ import { useUpdatesStore } from '@/stores/updates';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { apiFetch } from '@/utils/csrf';
+import { releaseIndexUrl } from '@/utils/updateUnits';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
@@ -392,6 +393,10 @@ function expandEnter(el: Element, done: () => void) {
   const htmlEl = el as HTMLElement;
   htmlEl.style.height = '0';
   htmlEl.style.transition = `height ${EXPAND_DURATION}ms ease`;
+  // Reading offsetHeight forces a synchronous reflow so the browser commits
+  // the starting height before the transition target is set. Without it the
+  // two writes coalesce and the animation never runs.
+  // oxlint-disable-next-line no-unused-expressions
   htmlEl.offsetHeight;
   htmlEl.style.height = htmlEl.scrollHeight + 'px';
   setTimeout(done, EXPAND_DURATION);
@@ -404,6 +409,9 @@ function expandLeave(el: Element, done: () => void) {
   const htmlEl = el as HTMLElement;
   htmlEl.style.height = htmlEl.scrollHeight + 'px';
   htmlEl.style.transition = `height ${EXPAND_DURATION}ms ease`;
+  // Same forced reflow as expandEnter — commit the measured height before
+  // collapsing to 0, or the element just snaps shut.
+  // oxlint-disable-next-line no-unused-expressions
   htmlEl.offsetHeight;
   htmlEl.style.height = '0';
   setTimeout(done, EXPAND_DURATION);
@@ -437,10 +445,9 @@ const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStor
 const checkingUpdates = computed(
   () => settingsStore.enableUpdateChecks && updatesStore.isTargetedCheck(props.container.image),
 );
-const releaseNotesUrl = computed<string | null>(() => {
-  const u = updatesStore.updates[props.container.image];
-  return u?.source_url ? `${u.source_url}/releases` : null;
-});
+const releaseNotesUrl = computed<string | null>(() =>
+  releaseIndexUrl(updatesStore.updates[props.container.image]),
+);
 
 // Inline logs panel (list view only). Ownership stays here rather than in
 // ContainerDetails: that child is mid-leave-transition during a collapse and

@@ -135,7 +135,7 @@ marketing-style empty states. None of that belongs here.
 - Every change must work on **both dark and light Unraid themes**. All the
   theme tokens resolve from Unraid CSS variables — if a style only looks right
   on one theme, it's wrong. Never assume a dark background.
-- `npm run dev` is light-only; see the dark-theme recipe in §16.
+- `yarn dev` is light-only; see the dark-theme recipe in §16.
 
 ---
 
@@ -491,7 +491,7 @@ Recorded deliberately — do not "fix" these without evidence.
   `--color-muted` keep a hardcoded base in `@theme` and are only upgraded
   inside `@supports (color: color-mix(in srgb, red, blue))`. Don't move those
   declarations back into `@theme`. Only affects browsers without `color-mix`.
-- **Dev is light-only.** `npm run dev` never passes `?theme=`, so theme
+- **Dev is light-only.** `yarn dev` never passes `?theme=`, so theme
   regressions are invisible there. To check dark, append a URL-encoded theme
   param, e.g.
   `?theme={"--text-color":"#f2f2f2","--background-color":"#1a1a1a","--border-color":"#333","--header-background":"#ff8c2f","--header-text-color":"#fff"}`.
