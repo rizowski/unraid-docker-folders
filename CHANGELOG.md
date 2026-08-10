@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.08.10
+### Changes
+- feat: show release notes in the update confirm modal
+
 ## 2026.07.26
 ### Changes
 - feat: list containers before updating, and update several at once
