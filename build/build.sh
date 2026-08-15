@@ -250,6 +250,18 @@ if [ -f "${PROJECT_ROOT}/CHANGELOG.md" ]; then
     cp "${PROJECT_ROOT}/CHANGELOG.md" "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/"
 fi
 
+# Copy icon.png into plugin directory. The repo root is the source of truth so
+# Community Applications can reference it by raw URL; the PLG's icon= attribute
+# and DockerFoldersSettings.page's Icon= resolve it relative to plugdir.
+if [ -f "${PROJECT_ROOT}/icon.png" ]; then
+    cp "${PROJECT_ROOT}/icon.png" "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/"
+fi
+
+# Copy the license into the plugin directory so the installed package carries it
+if [ -f "${PROJECT_ROOT}/LICENSE" ]; then
+    cp "${PROJECT_ROOT}/LICENSE" "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/"
+fi
+
 # Remove macOS metadata files
 find "${BUILD_DIR}" -name "._*" -delete
 find "${BUILD_DIR}" -name ".DS_Store" -delete

@@ -2,6 +2,7 @@
   "name": "unraid-docker-folders-modern",
   "version": "1.0.0",
   "description": "Modern Unraid Docker tab plugin with real-time updates",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "MOCK_API=1 vite",

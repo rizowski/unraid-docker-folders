@@ -1,34 +1,54 @@
 # Unraid Docker Folders Modern
 
-A modern Unraid plugin that adds folder organization to the Docker tab with real-time updates and a clean Vue 3 interface. Replaces the outdated folderview2 plugin.
+An Unraid plugin that adds folder organization to the Docker tab with real-time updates and a clean Vue 3 interface.
 
 ## Features
 
-- **Folder Organization**: Group Docker containers into customizable folders with icons and colors
-- **Container Search**: Filter containers by name or image in real-time; folders auto-expand to show matches
-- **Live Resource Stats**: CPU, memory, I/O, network, PIDs, restart count, uptime, image/log size for running containers
-- **Real-Time Updates**: WebSocket integration via Unraid's nchan server - all open tabs update instantly
+### Organization
+- **Folders**: Group Docker containers into customizable folders with icons and colors
 - **Drag & Drop**: Organize containers by dragging them between folders (SortableJS)
+- **Compose Stack Grouping**: Auto-group containers belonging to the same Docker Compose project
+- **Grid and List Views**: Switch between layout modes
+- **Container Search**: Filter by name or image in real-time; folders auto-expand to show matches
+- **Import/Export**: Back up and share folder configurations as JSON
+
+### Container Management
 - **Container Actions**: Start, stop, restart, and remove containers directly from the folder view
-- **Import/Export**: Backup and share folder configurations as JSON
+- **Image Updates**: Check for available image updates, review release notes, and pull one or many containers at once
+- **Compose Management**: Edit and apply Docker Compose files from the UI, with version history
+- **Schedules**: Run container actions on a cron schedule
+- **Backups**: Automatic backups of folder and plugin configuration
+
+### Live Data
+- **Live Resource Stats**: CPU, memory, I/O, network, PIDs, restart count, uptime, image/log size for running containers
+- **Container Logs**: Stream logs from an expanded container card
+- **Real-Time Updates**: WebSocket integration via Unraid's nchan server — all open tabs update instantly
 - **Polling Fallback**: 30-second polling catches external changes (CLI, Portainer, etc.)
 - **CSRF Integration**: Properly authenticated against Unraid's webGUI security
 
 ## Technology Stack
 
-- **Frontend**: Vue 3 + TypeScript + Vite + Pinia
+- **Frontend**: Vue 3 + TypeScript + Vite + Pinia + Tailwind CSS 4
 - **Backend**: PHP 8.0+ with SQLite3
 - **Real-time**: nchan WebSocket pub/sub
 - **Drag & Drop**: SortableJS
 
 ## Installation
 
-### Manual Installation
+### Community Applications
 
-1. Download the latest `.plg` file from [Releases](https://github.com/rizowski/unraid-docker-folders/releases)
-2. Navigate to **Plugins** > **Install Plugin** in Unraid
-3. Paste the URL to the `.plg` file and click **Install**
-4. The "Folders" tab appears under **Docker** in the Unraid menu
+Search for **Docker Folders Modern** in the **Apps** tab.
+
+### Install by URL
+
+1. Navigate to **Plugins** > **Install Plugin** in Unraid
+2. Paste the following URL and click **Install**:
+   ```
+   https://raw.githubusercontent.com/rizowski/unraid-docker-folders/main/unraid-docker-folders-modern.plg
+   ```
+3. The "Folders" tab appears under **Docker** in the Unraid menu
+
+Past versions are available on the [Releases](https://github.com/rizowski/unraid-docker-folders/releases) page.
 
 ### Build from Source
 
@@ -36,42 +56,27 @@ A modern Unraid plugin that adds folder organization to the Docker tab with real
 # Frontend build
 cd src/frontend && yarn install --frozen-lockfile && yarn build
 
-# Release build (auto-increments version, tags, pushes)
-./build/build.sh --release
+# Package the plugin (development build)
+./build/build.sh
 
 # Output: archive/unraid-docker-folders-modern-<version>.txz
 ```
 
-After release build, manually create a GitHub release and upload the `.txz` file.
-
-## Roadmap
-
-### Phase 1: Core Infrastructure - COMPLETE
-- Docker container display, plugin installer, database setup, build system
-
-### Phase 2: Folder Management - COMPLETE
-- Folder CRUD, drag-and-drop, container assignment, import/export, menu integration
-
-### Phase 3: Real-Time Updates & Live Stats - COMPLETE (code written, pending on-device testing)
-- WebSocket publisher (nchan), frontend composable with reconnection, connection status indicator, polling fallback, CSRF token handling, container remove action
-- Live resource stats: CPU, memory, I/O, network, PIDs, restart count, uptime, image size, log size
-- Container search by name/image with folder filtering and auto-expand
-- Horizontally scrollable labels and volumes sections
-
-### Phase 4: UI/UX Polish (Planned)
-- Dark/light theme, responsive design, animations, loading skeletons
-
-### Phase 5: Testing & Release (Planned)
-- Unit tests, integration tests, documentation, v1.0 release
+Releases are cut automatically by GitHub Actions on push to `main` (stable) or
+`dev` (prerelease). The workflow runs `./build/build.sh --release`, which builds
+the frontend, packages the `.txz`, updates the `.plg`, tags the commit, and
+publishes the GitHub release.
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/rizowski/unraid-docker-folders/issues)
-- **Forum**: [Unraid Community Forums](https://forums.unraid.net)
+- **Issues and bug reports**: [GitHub Issues](https://github.com/rizowski/unraid-docker-folders/issues)
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) for details
+MIT License — see [LICENSE](https://github.com/rizowski/unraid-docker-folders/blob/main/LICENSE) for details.
+
+This project bundles [CodeMirror 5](https://codemirror.net/5/) (MIT), used for
+Compose file editing.
 
 ## Credits
 
