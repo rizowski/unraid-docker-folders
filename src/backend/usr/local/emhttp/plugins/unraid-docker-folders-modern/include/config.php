@@ -39,8 +39,15 @@ define('UPDATE_LOG_PATH', CONFIG_DIR . '/update-check.log');
 define('UPDATE_LOG_MAX_BYTES', 64 * 1024); // 64 KB max
 
 // Docker
-define('DOCKER_SOCKET', '/var/run/docker.sock');
-define('DOCKER_API_VERSION', 'v1.41');
+// Guarded: DockerClient.php is loadable without config.php (tests define these
+// directly so the class can be exercised in isolation), so config.php must not
+// redefine them when both end up in the same process.
+if (!defined('DOCKER_SOCKET')) {
+  define('DOCKER_SOCKET', '/var/run/docker.sock');
+}
+if (!defined('DOCKER_API_VERSION')) {
+  define('DOCKER_API_VERSION', 'v1.41');
+}
 
 // nchan WebSocket
 define('NCHAN_PUB_URL', 'http://localhost:4433/pub/docker-modern');
