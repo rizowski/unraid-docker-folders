@@ -19,6 +19,18 @@ define('BACKUP_DIR', CONFIG_DIR . '/backups');
 // Compose stacks storage (self-contained copies of imported compose files)
 define('COMPOSE_STACKS_DIR', CONFIG_DIR . '/compose-stacks');
 
+// Roots that user-supplied paths are allowed to point into.
+//
+// /mnt covers Unraid user shares and appdata, which is where compose stacks and
+// backups genuinely live. Everything outside these roots is rejected — notably
+// /etc, /root, and /var/local/emhttp/var.ini, which holds the CSRF token.
+//
+// A stack's own working_dir is allowed in addition to COMPOSE_ALLOWED_ROOTS, but
+// it is passed per-call rather than listed here because it varies per stack.
+define('COMPOSE_ALLOWED_ROOTS', ['/mnt', COMPOSE_STACKS_DIR]);
+define('EXPORT_ALLOWED_ROOTS', ['/mnt', CONFIG_DIR]);
+define('BACKUP_ALLOWED_ROOTS', ['/mnt', '/boot/config/plugins']);
+
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
 
@@ -46,6 +58,7 @@ if (defined('DEBUG') && DEBUG) {
 // Timezone
 date_default_timezone_set('UTC');
 
+require_once __DIR__ . '/paths.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
 
 /**

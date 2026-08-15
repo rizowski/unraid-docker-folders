@@ -14,5 +14,8 @@
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>
     </testsuite>
+    <testsuite name="PathSafety">
+      <file>PathSafetyTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>

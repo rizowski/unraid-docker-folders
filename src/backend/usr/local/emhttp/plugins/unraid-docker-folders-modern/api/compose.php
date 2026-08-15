@@ -353,7 +353,43 @@ function handlePost($composeManager)
       errorResponse('path is required', 400);
     }
 
-    $composeManager->setEnvFilePath($project, $data['path']);
+    // Validate here, at the HTTP boundary, rather than inside ComposeManager.
+    // upsertStack() is reached from the container-list GET with label-derived
+    // working_dir values that legitimately point anywhere on the box, so a
+    // containment check inside the manager would break the container list.
+    $requestedEnvPath = is_string($data['path']) ? trim($data['path']) : '';
+    $envWorkingDir = $composeManager->getStackWorkingDir($project);
+
+    if ($requestedEnvPath === '') {
+      // Empty means "revert to the default .env in working_dir".
+      $envPathToStore = null;
+    } else {
+      $resolvedEnvPath = resolveAgainst($requestedEnvPath, $envWorkingDir);
+
+      if ($resolvedEnvPath === null) {
+        errorResponse(
+          'This stack has no working directory, so a relative env file path cannot be resolved. Use an absolute path.',
+          400
+        );
+      }
+
+      $allowedEnvRoots = COMPOSE_ALLOWED_ROOTS;
+      if (!empty($envWorkingDir)) {
+        $allowedEnvRoots[] = $envWorkingDir;
+      }
+
+      if (!pathIsWithinAny($resolvedEnvPath, $allowedEnvRoots)) {
+        errorResponse('Env file path must be inside the stack directory or under /mnt', 400);
+      }
+
+      // Store the normalized absolute path. The compose CLI flags (--env-file)
+      // resolve env_file against the process working directory while the
+      // read/write helpers resolve it against working_dir; normalizing here
+      // makes those two agree.
+      $envPathToStore = $resolvedEnvPath;
+    }
+
+    $composeManager->setEnvFilePath($project, $envPathToStore);
 
     WebSocketPublisher::publish('compose', 'set_env_path', ['project' => $project]);
 

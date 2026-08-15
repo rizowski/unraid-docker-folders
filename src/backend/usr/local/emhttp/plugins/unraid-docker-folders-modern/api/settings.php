@@ -98,6 +98,28 @@ function handlePost()
     errorResponse('Value too long', 400);
   }
 
+  // Validate path settings before they are stored. These are the top of a chain
+  // that ends in mkdir/write as root: compose_export_dir reaches
+  // ComposeManager::exportConfigs and backup_destination reaches
+  // BackupManager::resolveDestination. An empty value means "use the default".
+  $pathSettingRoots = [
+    'compose_export_dir' => EXPORT_ALLOWED_ROOTS,
+    'backup_destination' => BACKUP_ALLOWED_ROOTS,
+  ];
+  if (isset($pathSettingRoots[$key]) && is_string($value) && trim($value) !== '') {
+    $normalizedSetting = normalizePath(trim($value));
+    if ($normalizedSetting === null) {
+      errorResponse('Path must be absolute', 400);
+    }
+    if (!pathIsWithinAny($normalizedSetting, $pathSettingRoots[$key])) {
+      errorResponse(
+        'Path must be under ' . implode(' or ', $pathSettingRoots[$key]),
+        400
+      );
+    }
+    $value = $normalizedSetting;
+  }
+
   // Clamp bounded numeric settings — the UI <select> is not the only writer.
   if ($key === 'update_concurrency') {
     $n = (int) $value;

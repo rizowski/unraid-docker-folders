@@ -339,36 +339,65 @@ class constant. **User-supplied `cron_expression` never reaches the crontab** �
 schedules are polled by a once-a-minute runner instead. Do not "simplify" this by
 writing user expressions into cron.
 
+### Paths
+
+**Every path from a request — or from a DB column a request can write — goes
+through `include/paths.php`.** It is required by `config.php`, so it is available
+everywhere.
+
+| Function | Use |
+|---|---|
+| `normalizePath($p)` | Lexically collapse `.`/`..`. **Absolute input only**, returns null otherwise. Deliberately does not touch the filesystem: `realpath()` returns false for a write target that does not exist yet. |
+| `resolveAgainst($p, $base)` | Join a relative path onto a base, then normalize. Absolute input passes through normalized. |
+| `pathIsWithin($p, $base)` | Containment, anchored on a trailing separator. |
+| `pathIsWithinAny($p, $bases)` | Any-of wrapper. |
+| `safeProjectName($n)` | Compose project names, `[a-zA-Z0-9][a-zA-Z0-9_-]*`. |
+| `safePathComponent($s)` | One filename segment or glob prefix. Rejects `/`, `..`, and `* ? [ ] { }`. |
+
+Three rules that are easy to get wrong:
+
+1. **Never normalize a relative path in isolation.** Join it to its base first
+   (`resolveAgainst`), *then* check containment. `../../etc/shadow` has no base to
+   collapse against on its own.
+2. **`pathIsWithin` fails closed on a weak base** — empty, relative, or `/`. Some
+   bases (`working_dir`, a mount `Source`) are label-derived and attacker-influenced;
+   containment against `/` would pass for everything.
+3. **Never use `strpos($a, $b) === 0` for containment.** That was the original bug:
+   `realpath()` never returns a trailing slash, so `/mnt/user/backups-evil` passed a
+   `/mnt/user/backups` check.
+
+Allowed roots live in `config.php`: `COMPOSE_ALLOWED_ROOTS`, `EXPORT_ALLOWED_ROOTS`,
+`BACKUP_ALLOWED_ROOTS`. A stack's own `working_dir` is allowed in addition, passed
+per-call because it varies per stack.
+
+**Validation lives at the HTTP boundary, not in the managers.** This is the
+non-obvious part. `ComposeManager::upsertStack` is reached from the *container-list
+GET* — `containers.php:98-105` → `FolderManager.php:460-465` reads
+`com.docker.compose.project.working_dir` off container labels. Those paths are
+legitimately unbounded (a stack lives wherever the user ran `docker compose up`,
+often `/mnt/user/appdata/...`). A containment check inside `upsertStack` would break
+the container list for those users. So `compose.php`, `settings.php`, and
+`containers.php` validate; the managers keep read-side containment checks only where
+a stored value is used to read or unlink a file.
+
+Covered by `tests/php/PathSafetyTest.php`.
+
 ### Known gaps
 
-Documented so they are not mistaken for intentional design. See the security
-review notes if these get addressed:
+Documented so they are not mistaken for intentional design:
 
-- **`action=set_env_path` stores an unvalidated path.** `compose.php:346-361` →
-  `ComposeManager.php:455-462` writes `$data['path']` straight into
-  `compose_stacks.env_file`; `resolveEnvFilePath` (`:1113-1131`) returns absolute
-  paths verbatim. `save_env` then writes attacker-chosen content to it as root
-  (`:1074`), and `action=env` (a GET) reads it back into the JSON response
-  (`:1033`). Compare `createStack:371`, which *does* validate its project name.
 - **A GET handler mutates the database.** `containers.php:98-105` calls
   `reconcileContainerIds()` and `syncComposeStacks()` on the list path, so it
   writes to `container_folders`, `folders`, and `compose_stacks` with no CSRF
   gate at any layer.
-- **`compose_export_dir` is validated only as "starts with `/`"**
-  (`ComposeManager.php:1535-1537`).
-- **`containers.php:158`** builds an XML template path from unvalidated
-  `$_GET['name']`. Bounded by a `file_exists()` check at `:174`.
-- **`BackupManager` containment checks are string prefixes, not path boundaries**
-  (`:168`, `:188-198`) — no `..` normalization, so `/mnt/../etc` passes and
-  `/mnt/user/backups-evil` satisfies a `/mnt/user/backups` prefix test.
 - **`schedules.php` PUT skips the `target_type`/`action` allowlists** that POST
   enforces (`:176-184` vs `ScheduleManager.php:100-105`). Not code execution —
   `dispatchAction` defaults to "Unknown action".
 - **No CORS, CSP, `X-Frame-Options`, or `X-Content-Type-Options` headers** are set
   anywhere. The `case 'OPTIONS'` branches are labelled "CORS preflight" but emit
   no `Access-Control-*` headers, so they are inert.
-- **No input sanitization helper exists.** `getRequestData()` returns decoded
-  JSON with no validation or type checking.
+- **No general input sanitization helper exists.** `getRequestData()` returns
+  decoded JSON with no validation or type checking. `paths.php` covers paths only.
 - Several handlers return raw exception text to the client (`folders.php:53`,
   `compose.php:41`, `containers.php:44`, `stats.php:36`); others correctly return
   a generic message (`settings.php:40`, `schedules.php:43`, `updates.php:41`).

@@ -130,6 +130,12 @@ function handlePost($dockerClient)
     if (!$name) {
       errorResponse('Container name is required', 400);
     }
+    // $name is interpolated into a template path below and written into the
+    // autostart flat file. Constrain it to the Docker container-name character
+    // set, which also blocks path separators and newline injection.
+    if (!preg_match('/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/', $name)) {
+      errorResponse('Invalid container name', 400);
+    }
     $data = getRequestData();
     $enabled = !empty($data['enabled']);
     $delay = isset($data['delay']) ? max(0, (int)$data['delay']) : null;
@@ -155,7 +161,9 @@ function handlePost($dockerClient)
     // Update AutostartDelay in XML template if delay provided
     if ($delay !== null) {
       $templateDir = '/boot/config/plugins/dockerMan/templates-user';
-      $xmlPath = $templateDir . '/my-' . $name . '.xml';
+      // basename() matches DockerClient::getImageFromTemplate, which builds the
+      // same path against the same directory.
+      $xmlPath = $templateDir . '/my-' . basename($name) . '.xml';
       if (!file_exists($xmlPath)) {
         // Scan for matching <Name> element
         $files = @glob($templateDir . '/my-*.xml');
