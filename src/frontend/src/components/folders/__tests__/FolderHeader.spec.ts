@@ -135,6 +135,47 @@ describe('FolderHeader', () => {
     });
   });
 
+  describe('compose actions while the status check is pending', () => {
+    /**
+     * Regression: these entries used to be gated on composeStore.composeAvailable,
+     * which is false until an async status fetch resolves. The menu therefore
+     * grew extra items a moment after load, which read as a blink.
+     */
+    it('shows compose actions immediately for a compose folder', async () => {
+      const wrapper = mountHeader({ compose_project: 'blog' });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).toContain('Stack Up');
+      expect(labels).toContain('Pull Latest Images');
+      expect(labels).toContain('Stack Details');
+    });
+
+    it('disables them until compose availability is known', async () => {
+      const wrapper = mountHeader({ compose_project: 'blog' });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+
+      const stackUp = wrapper
+        .findAll('button.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Stack Up')!;
+
+      expect(stackUp.attributes('disabled')).toBeDefined();
+      expect(stackUp.attributes('title')).toBe('Checking Docker Compose availability...');
+    });
+
+    it('omits compose actions entirely for a non-compose folder', async () => {
+      const wrapper = mountHeader();
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Stack Up');
+      expect(labels).not.toContain('Stack Details');
+    });
+  });
+
   it('click outside closes the menu', async () => {
     const wrapper = mountHeader();
     // Open menu

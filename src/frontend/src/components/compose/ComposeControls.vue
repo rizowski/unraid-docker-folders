@@ -3,7 +3,7 @@
     <!-- Stack Up (show when not fully running) -->
     <button
       v-if="!isFullyRunning"
-      :disabled="!composeStore.managementEnabled"
+      :disabled="composeStore.composeActionsDisabled"
       :title="buttonTitle('Start stack')"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
       @click="$emit('compose-up', projectName)"
@@ -14,7 +14,7 @@
     <!-- Recompose (show when stack has running services) -->
     <button
       v-if="isRunning"
-      :disabled="!composeStore.managementEnabled"
+      :disabled="composeStore.composeActionsDisabled"
       :title="buttonTitle('Recompose (pull + recreate)')"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-info disabled:opacity-40 disabled:cursor-not-allowed"
       @click="$emit('compose-recompose', projectName)"
@@ -25,7 +25,7 @@
     <!-- Stack Down (show when has running services) -->
     <button
       v-if="isRunning || actionInProgress === 'down'"
-      :disabled="!composeStore.managementEnabled || actionInProgress !== null"
+      :disabled="composeStore.composeActionsDisabled || actionInProgress !== null"
       :title="buttonTitle('Stop stack')"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-red-400 disabled:opacity-40 disabled:cursor-not-allowed"
       @click="handleDown"
@@ -84,9 +84,7 @@ const actionInProgress = ref<string | null>(null);
 const { isRunning, isFullyRunning } = useFolderRunningState(() => props.folder);
 
 function buttonTitle(defaultTitle: string): string {
-  if (!composeStore.composeAvailable) return 'Docker Compose not installed';
-  if (composeStore.composePluginInstalled) return 'Disabled: compose.manager plugin is installed';
-  return defaultTitle;
+  return composeStore.composeDisabledReason ?? defaultTitle;
 }
 
 async function handleDown() {

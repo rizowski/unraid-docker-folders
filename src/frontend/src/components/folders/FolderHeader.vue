@@ -243,15 +243,24 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
     );
   }
 
-  // Compose section — actions that affect the stack itself
-  if (props.folder.compose_project && composeStore.composeAvailable) {
+  // Compose section — actions that affect the stack itself.
+  //
+  // Gated only on the folder actually being a compose project. Compose
+  // availability is an async check, so these are disabled rather than hidden;
+  // hiding them made the menu reflow once the status landed.
+  //
+  // `show` is still used for genuinely state-dependent entries (up vs stop),
+  // which depend on container state we already have, not on the status check.
+  if (props.folder.compose_project) {
+    const composeDisabled = composeStore.composeActionsDisabled;
+    const composeReason = composeStore.composeDisabledReason ?? undefined;
     items.push(
-      { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: composeStore.managementEnabled && !isRunning.value },
-      { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: composeStore.managementEnabled && isRunning.value },
-      { label: 'Pull Latest Images', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'compose-pull', show: composeStore.managementEnabled },
-      { label: 'Recompose', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-recompose', show: composeStore.managementEnabled && isRunning.value },
+      { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: !isRunning.value, disabled: composeDisabled, title: composeReason },
+      { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: isRunning.value, disabled: composeDisabled, title: composeReason },
+      { label: 'Pull Latest Images', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'compose-pull', disabled: composeDisabled, title: composeReason },
+      { label: 'Recompose', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-recompose', show: isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Stack Details', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 16v-4|M12 8h.01', action: 'compose-edit' },
-      { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', show: composeStore.managementEnabled },
+      { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', disabled: composeDisabled, title: composeReason },
       { divider: true },
     );
   }

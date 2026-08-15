@@ -38,6 +38,34 @@ export const useComposeStore = defineStore('compose', () => {
   const managementEnabled = computed(() => status.value.management_enabled);
   const composePluginInstalled = computed(() => status.value.compose_plugin_installed);
 
+  /**
+   * Whether compose actions should be disabled.
+   *
+   * Compose buttons are rendered unconditionally and disabled when unusable,
+   * rather than hidden until the status check resolves. Hiding them made the
+   * toolbar and menus reflow a moment after load, which read as a blink.
+   *
+   * Disabled while the check is still in flight too, so an action cannot be
+   * fired before we know whether it is supported.
+   */
+  const composeActionsDisabled = computed(
+    () => !statusChecked.value || !status.value.management_enabled
+  );
+
+  /**
+   * Why compose actions are disabled, for use as a button title.
+   * Null when they are usable.
+   */
+  const composeDisabledReason = computed<string | null>(() => {
+    if (!statusChecked.value) return 'Checking Docker Compose availability...';
+    if (!status.value.compose_available) return 'Docker Compose is not installed';
+    if (status.value.compose_plugin_installed) {
+      return 'Disabled: the Compose Manager plugin is installed';
+    }
+    if (!status.value.management_enabled) return 'Compose management is unavailable';
+    return null;
+  });
+
   // Actions
   async function fetchStatus() {
     try {
@@ -469,6 +497,8 @@ export const useComposeStore = defineStore('compose', () => {
     managementEnabled,
     composePluginInstalled,
     statusChecked,
+    composeActionsDisabled,
+    composeDisabledReason,
 
     // Actions
     fetchStatus,

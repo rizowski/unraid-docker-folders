@@ -105,9 +105,10 @@
           <span class="hidden sm:inline">+ Create Container</span>
         </a>
         <button
-          v-if="composeStore.composeAvailable && composeStore.managementEnabled"
+          :disabled="composeStore.composeActionsDisabled"
+          :title="composeStore.composeDisabledReason ?? 'Create a Docker Compose stack'"
           @click="openCreateStack"
-          class="nav-btn active"
+          class="nav-btn active disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <span class="sm:hidden">+ Stack</span>
           <span class="hidden sm:inline">+ Create Stack</span>

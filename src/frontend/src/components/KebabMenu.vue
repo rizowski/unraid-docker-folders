@@ -35,9 +35,11 @@
         </a>
         <button
           v-else
-          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm transition cursor-pointer text-left border-none bg-transparent"
-          :class="item.class || 'text-text'"
-          @click="menuOpen = false; $emit('select', item.action!)"
+          :disabled="item.disabled"
+          :title="item.title"
+          class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm transition text-left border-none bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+          :class="[item.class || 'text-text', item.disabled ? '' : 'cursor-pointer']"
+          @click="onSelect(item)"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path v-for="(d, i) in (item.icon ?? '').split('|')" :key="i" :d="d" />
@@ -56,6 +58,14 @@ export interface KebabMenuItem {
   label?: string;
   icon?: string;
   show?: boolean;
+  /**
+   * Render the item greyed out and inert. Prefer this over `show: false` for
+   * actions that exist but are temporarily unavailable — hiding them makes the
+   * menu reflow once an async capability check resolves.
+   */
+  disabled?: boolean;
+  /** Tooltip, typically the reason an item is disabled. */
+  title?: string;
   href?: string;
   target?: string;
   action?: string;
@@ -78,12 +88,18 @@ const props = withDefaults(defineProps<Props>(), {
   iconSize: 16,
 });
 
-defineEmits<{
+const emit = defineEmits<{
   select: [action: string];
 }>();
 
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
+
+function onSelect(item: KebabMenuItem) {
+  if (item.disabled) return;
+  menuOpen.value = false;
+  emit('select', item.action!);
+}
 
 const visibleItems = computed(() => {
   const shown = props.items.filter((item) => item.show !== false);
