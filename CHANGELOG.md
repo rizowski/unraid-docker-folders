@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.08.16
+- fix(ui): render the update-check controls before settings land
 - docs: summarize each release in CHANGELOG, stop regenerating it
 - chore: drop the beta label from Image Updates settings
 - fix(ui): stop compose buttons blinking in while availability is checked
