@@ -136,18 +136,19 @@ fi
 echo -e "${GREEN}✓${NC} Frontend built successfully"
 echo ""
 
-# Generate CHANGELOG.md from git tags (release builds only)
-# Groups all same-day releases (e.g. 2026.02.23, 2026.02.23-2, ...-9) into one section.
+# Update CHANGELOG.md (release builds only)
+#
+# This PREPENDS the new release's commits. It deliberately does not regenerate
+# the file from git tags: CHANGELOG.md carries hand-written per-release
+# summaries, and regenerating would delete them every release.
+#
+# Same-day releases (2026.02.23, 2026.02.23-2, ...) add to the existing section
+# rather than creating a duplicate heading.
 if [ "$BUILD_TYPE" == "release" ]; then
-  echo -e "${YELLOW}[$((++STEP))/${TOTAL_STEPS}]${NC} Generating CHANGELOG.md..."
+  echo -e "${YELLOW}[$((++STEP))/${TOTAL_STEPS}]${NC} Updating CHANGELOG.md..."
   cd "$PROJECT_ROOT"
 
   CHANGELOG_FILE="${PROJECT_ROOT}/CHANGELOG.md"
-  echo "# Changelog" > "$CHANGELOG_FILE"
-  echo "" >> "$CHANGELOG_FILE"
-
-  # Get all tags sorted by version (newest first)
-  TAGS=($(git tag -l --sort=-version:refname))
 
   # Helper: strip -N or -devN build suffix to get base date
   strip_build_number() {
@@ -156,85 +157,58 @@ if [ "$BUILD_TYPE" == "release" ]; then
 
   CURRENT_BASE_DATE=$(strip_build_number "$VERSION")
 
-  # Collect unreleased commits (between latest tag and HEAD)
-  UNRELEASED=""
-  if [ ${#TAGS[@]} -gt 0 ]; then
-    UNRELEASED=$(git log "${TAGS[0]}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
+  if [ ! -f "$CHANGELOG_FILE" ]; then
+    printf '# Changelog\n\n' > "$CHANGELOG_FILE"
   fi
 
-  # If unreleased commits exist and current date is NEW (doesn't match newest tag's date),
-  # write a standalone section for it at the top
-  WROTE_CURRENT=false
-  if [ -n "$UNRELEASED" ] && [ ${#TAGS[@]} -gt 0 ]; then
-    NEWEST_TAG_DATE=$(strip_build_number "${TAGS[0]#v}")
-    if [ "$CURRENT_BASE_DATE" != "$NEWEST_TAG_DATE" ]; then
-      echo "## ${CURRENT_BASE_DATE}" >> "$CHANGELOG_FILE"
-      echo "### Changes" >> "$CHANGELOG_FILE"
-      echo "$UNRELEASED" >> "$CHANGELOG_FILE"
-      echo "" >> "$CHANGELOG_FILE"
-      WROTE_CURRENT=true
-    fi
+  # Commits since the most recent tag
+  LAST_TAG=$(git tag -l --sort=-version:refname | head -n 1)
+  if [ -n "$LAST_TAG" ]; then
+    UNRELEASED=$(git log "${LAST_TAG}..HEAD" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
+  else
+    UNRELEASED=$(git log --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
   fi
 
-  # Iterate tags (newest first), grouping by base date.
-  # When the date changes, flush the previous group as one changelog section.
-  PREV_DATE=""
-  GROUP_END_TAG=""   # newest tag in the current date group
+  if [ -z "$UNRELEASED" ]; then
+    echo -e "${YELLOW}⚠${NC} No new commits — CHANGELOG.md left unchanged"
+  else
+    NOTES_TMP=$(mktemp)
 
-  for i in "${!TAGS[@]}"; do
-    TAG="${TAGS[$i]}"
-    BASE_DATE=$(strip_build_number "${TAG#v}")
-
-    if [ "$BASE_DATE" != "$PREV_DATE" ]; then
-      # Flush previous date group
-      if [ -n "$PREV_DATE" ]; then
-        echo "## ${PREV_DATE}" >> "$CHANGELOG_FILE"
-        echo "### Changes" >> "$CHANGELOG_FILE"
-
-        # Commits from boundary tag (first of next date) to newest tag in this group
-        COMMITS=$(git log "${TAG}..${GROUP_END_TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
-
-        # Merge unreleased commits if this date matches the current build
-        if [ "$PREV_DATE" = "$CURRENT_BASE_DATE" ] && [ -n "$UNRELEASED" ] && [ "$WROTE_CURRENT" = false ]; then
-          echo "$UNRELEASED" >> "$CHANGELOG_FILE"
-          WROTE_CURRENT=true
-          [ -n "$COMMITS" ] && echo "$COMMITS" >> "$CHANGELOG_FILE"
-        elif [ -n "$COMMITS" ]; then
-          echo "$COMMITS" >> "$CHANGELOG_FILE"
-        else
-          echo "- Release ${PREV_DATE}" >> "$CHANGELOG_FILE"
-        fi
-
-        echo "" >> "$CHANGELOG_FILE"
-      fi
-
-      # Start new date group
-      PREV_DATE="$BASE_DATE"
-      GROUP_END_TAG="$TAG"
-    fi
-  done
-
-  # Flush the last (oldest) date group
-  if [ -n "$PREV_DATE" ]; then
-    echo "## ${PREV_DATE}" >> "$CHANGELOG_FILE"
-    echo "### Changes" >> "$CHANGELOG_FILE"
-
-    COMMITS=$(git log "${GROUP_END_TAG}" --pretty=format:"- %s" --no-merges | grep -v "^- Update PLG.*for release" || true)
-
-    if [ "$PREV_DATE" = "$CURRENT_BASE_DATE" ] && [ -n "$UNRELEASED" ] && [ "$WROTE_CURRENT" = false ]; then
-      echo "$UNRELEASED" >> "$CHANGELOG_FILE"
-      WROTE_CURRENT=true
-      [ -n "$COMMITS" ] && echo "$COMMITS" >> "$CHANGELOG_FILE"
-    elif [ -n "$COMMITS" ]; then
-      echo "$COMMITS" >> "$CHANGELOG_FILE"
+    if grep -q "^## ${CURRENT_BASE_DATE}$" "$CHANGELOG_FILE"; then
+      # Same-day release: insert under the heading that already exists
+      printf '%s\n' "$UNRELEASED" > "$NOTES_TMP"
+      awk -v heading="## ${CURRENT_BASE_DATE}" -v notesfile="$NOTES_TMP" '
+        { print }
+        $0 == heading && !inserted {
+          while ((getline line < notesfile) > 0) print line
+          close(notesfile)
+          inserted = 1
+        }
+      ' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp"
     else
-      echo "- Release ${PREV_DATE}" >> "$CHANGELOG_FILE"
+      # New date: insert a section above the newest existing one
+      printf '## %s\n%s\n\n' "$CURRENT_BASE_DATE" "$UNRELEASED" > "$NOTES_TMP"
+      awk -v notesfile="$NOTES_TMP" '
+        /^## / && !inserted {
+          while ((getline line < notesfile) > 0) print line
+          close(notesfile)
+          inserted = 1
+        }
+        { print }
+        END {
+          if (!inserted) {
+            while ((getline line < notesfile) > 0) print line
+            close(notesfile)
+          }
+        }
+      ' "$CHANGELOG_FILE" > "${CHANGELOG_FILE}.tmp"
     fi
 
-    echo "" >> "$CHANGELOG_FILE"
+    mv "${CHANGELOG_FILE}.tmp" "$CHANGELOG_FILE"
+    rm -f "$NOTES_TMP"
+    echo -e "${GREEN}✓${NC} CHANGELOG.md updated"
   fi
 
-  echo -e "${GREEN}✓${NC} CHANGELOG.md generated"
   echo ""
 fi
 
