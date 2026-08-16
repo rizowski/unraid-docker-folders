@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.08.16
+- docs: summarize each release in CHANGELOG, stop regenerating it
+- chore: drop the beta label from Image Updates settings
+- fix(ui): stop compose buttons blinking in while availability is checked
+- test: fix session tests broken by PHPUnit output, silence constant warnings
+- fix(security): validate every user-influenced filesystem path
+- chore: prepare repo for Community Applications submission
+
 ## 2026.08.10
 The update confirm modal now shows the release notes for each image.
 
