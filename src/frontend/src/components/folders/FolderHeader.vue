@@ -232,12 +232,19 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
     items.push({ divider: true });
   }
 
-  if (settingsStore.enableUpdateChecks && folderImages.value.length > 0) {
+  // The `loaded` half mirrors the header button: until settings land we don't
+  // know whether update checks are on, so show the entry disabled instead of
+  // letting the menu grow once the fetch resolves. The image-count half is
+  // data about this folder, not a capability, so it still hides the entry.
+  const updateChecksUnknownOrOn = !settingsStore.loaded || settingsStore.enableUpdateChecks;
+  if (updateChecksUnknownOrOn && folderImages.value.length > 0) {
     items.push(
       {
         label: folderUpdateCheckRunning.value ? 'Checking for Updates…' : 'Check for Updates',
         icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
         action: 'check-updates',
+        disabled: !settingsStore.loaded,
+        title: settingsStore.loaded ? undefined : 'Loading settings…',
       },
       { divider: true },
     );

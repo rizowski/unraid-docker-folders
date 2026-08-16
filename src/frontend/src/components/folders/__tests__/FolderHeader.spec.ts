@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { createPinia, setActivePinia } from 'pinia';
+import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import FolderHeader from '../FolderHeader.vue';
+import { useDockerStore } from '@/stores/docker';
+import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
@@ -20,18 +22,24 @@ function makeFolder(overrides: Partial<Folder> = {}): Folder {
   };
 }
 
+// The component must share the pinia the test writes to. Installing a second
+// `createPinia()` here would give the component its own stores, and any state
+// a test set up would be invisible to it.
+let pinia: Pinia;
+
 function mountHeader(folder?: Partial<Folder>) {
   return mount(FolderHeader, {
     props: { folder: makeFolder(folder) },
     global: {
-      plugins: [createPinia()],
+      plugins: [pinia],
     },
   });
 }
 
 describe('FolderHeader', () => {
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
   });
 
   it('menu is hidden by default', () => {
@@ -173,6 +181,73 @@ describe('FolderHeader', () => {
       const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
       expect(labels).not.toContain('Stack Up');
       expect(labels).not.toContain('Stack Details');
+    });
+  });
+
+  describe('update-check entry while settings are pending', () => {
+    /**
+     * Regression: this entry was gated on settingsStore.enableUpdateChecks,
+     * which is false until the settings fetch resolves. Whether update checks
+     * are on is a capability, not folder data, so the entry must render
+     * straight away and disable itself instead of appearing a moment later.
+     */
+    const openMenu = async (wrapper: ReturnType<typeof mountHeader>) => {
+      const kebab = wrapper
+        .findAll('button')
+        .find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+    };
+
+    const folderWithImage = {
+      containers: [{ container_name: 'nginx' } as unknown as Folder['containers'][number]],
+    };
+
+    it('shows the entry before settings land, disabled', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'nginx', image: 'nginx:latest' } as never];
+
+      const wrapper = mountHeader(folderWithImage);
+      await openMenu(wrapper);
+
+      const entry = wrapper
+        .findAll('button.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Check for Updates');
+
+      expect(entry).toBeTruthy();
+      expect(entry!.attributes('disabled')).toBeDefined();
+      expect(entry!.attributes('title')).toBe('Loading settings…');
+    });
+
+    it('hides the entry once settings report update checks are off', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'nginx', image: 'nginx:latest' } as never];
+      const settings = useSettingsStore();
+      settings.loaded = true;
+      settings.enableUpdateChecks = false;
+
+      const wrapper = mountHeader(folderWithImage);
+      await openMenu(wrapper);
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Check for Updates');
+    });
+
+    it('enables the entry once settings report update checks are on', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'nginx', image: 'nginx:latest' } as never];
+      const settings = useSettingsStore();
+      settings.loaded = true;
+      settings.enableUpdateChecks = true;
+
+      const wrapper = mountHeader(folderWithImage);
+      await openMenu(wrapper);
+
+      const entry = wrapper
+        .findAll('button.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Check for Updates');
+
+      expect(entry).toBeTruthy();
+      expect(entry!.attributes('disabled')).toBeUndefined();
     });
   });
 
