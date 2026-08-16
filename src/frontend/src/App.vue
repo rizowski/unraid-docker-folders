@@ -103,25 +103,29 @@
           href="/Docker/AddContainer"
           class="nav-btn active"
           title="Create a new container"
+          aria-label="Create a new container"
         >
-          <span class="sm:hidden">+ Container</span>
-          <span class="hidden sm:inline">+ Create Container</span>
+          <span aria-hidden="true">+</span>
+          <IconContainer />
         </a>
         <button
           :disabled="composeStore.composeActionsDisabled"
           :title="composeStore.composeDisabledReason ?? 'Create a Docker Compose stack'"
+          aria-label="Create a Docker Compose stack"
           @click="openCreateStack"
           class="nav-btn active disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <span class="sm:hidden">+ Stack</span>
-          <span class="hidden sm:inline">+ Create Stack</span>
+          <span aria-hidden="true">+</span>
+          <IconStack />
         </button>
         <button
           @click="openCreateFolderModal"
           class="nav-btn active"
+          title="Create a folder"
+          aria-label="Create a folder"
         >
-          <span class="sm:hidden">+ New</span>
-          <span class="hidden sm:inline">+ Create Folder</span>
+          <span aria-hidden="true">+</span>
+          <IconFolder />
         </button>
       </div>
     </header>
@@ -291,6 +295,9 @@ import ComposeProgressModal from '@/components/compose/ComposeProgressModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
+import IconContainer from '@/components/icons/IconContainer.vue';
+import IconStack from '@/components/icons/IconStack.vue';
+import IconFolder from '@/components/icons/IconFolder.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
