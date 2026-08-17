@@ -189,7 +189,7 @@ const { inIframe } = parentModal;
 
 /**
  * The parent renderer can only patch a checkbox-list's *checked* flags — it
- * cannot add or remove rows (`DockerFoldersMain.page:1128-1134`). So the
+ * cannot add or remove rows (`Folders.page:1128-1134`). So the
  * actions, which it can re-render, live here separately from the fields, which
  * need a full re-open when the unit list changes.
  */

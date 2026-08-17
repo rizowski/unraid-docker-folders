@@ -18,7 +18,7 @@
         min="7.0.0">
 
 <CHANGES>
-**Docker Folders Modern** — Organize your Docker containers into drag-and-drop folders with a modern Vue 3 interface, live resource stats, and real-time updates.
+**Docker Folders** — Organize your Docker containers into drag-and-drop folders with a modern Vue 3 interface, live resource stats, and real-time updates.
 
 
 
@@ -548,20 +548,20 @@ fi
 echo "Verifying installation..."
 VERIFY_FAIL=0
 
-if [ ! -f "${PLUGIN_DIR}/DockerFoldersSettings.page" ]; then
-  echo "  ✗ DockerFoldersSettings page not found."
-  echo "WARNING: DockerFoldersSettings page not found" >> "${LOG_FILE}"
+if [ ! -f "${PLUGIN_DIR}/DockerFolders.page" ]; then
+  echo "  ✗ DockerFolders page not found."
+  echo "WARNING: DockerFolders page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
 else
-  echo "  ✓ DockerFoldersSettings page found"
+  echo "  ✓ DockerFolders page found"
 fi
 
-if [ ! -f "${PLUGIN_DIR}/DockerFoldersMain.page" ]; then
-  echo "  ✗ DockerFoldersMain page not found."
-  echo "WARNING: DockerFoldersMain page not found" >> "${LOG_FILE}"
+if [ ! -f "${PLUGIN_DIR}/Folders.page" ]; then
+  echo "  ✗ Folders page not found."
+  echo "WARNING: Folders page not found" >> "${LOG_FILE}"
   VERIFY_FAIL=1
 else
-  echo "  ✓ DockerFoldersMain page found"
+  echo "  ✓ Folders page found"
 fi
 
 if [ ! -f "${CONFIG_DIR}/data.db" ]; then

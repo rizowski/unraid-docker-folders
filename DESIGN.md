@@ -1,6 +1,6 @@
 # DESIGN.md
 
-The design system for the Unraid Docker Folders Modern frontend.
+The design system for the Unraid Docker Folders frontend.
 
 This document is **normative**. When existing code disagrees with it, the code is
 wrong — fix the code, don't amend the doc. If a change genuinely requires
@@ -148,7 +148,7 @@ There are **two distinct CSS variable namespaces**. Don't conflate them.
 ### Unraid-provided variables (upstream)
 
 The Vue app runs in an iframe, which isolates it from Unraid's global CSS — but
-also from Unraid's theme variables. `DockerFoldersMain.page` reads them off the
+also from Unraid's theme variables. `Folders.page` reads them off the
 parent `documentElement` and passes them as a URL-encoded JSON `?theme=` param;
 `src/frontend/src/main.ts` applies them back onto `document.documentElement`.
 
@@ -315,7 +315,7 @@ Every modal exists twice:
 
 1. **In-iframe** — `BaseModal.vue`, guarded by `v-if="!inIframe"`.
 2. **Parent document** — described declaratively through `useParentModal.ts` and
-   rendered by `DockerFoldersMain.page` into `#dfm-modal-card`.
+   rendered by `Folders.page` into `#dfm-modal-card`.
 
 On a real Unraid box the parent surface is what users see; the in-iframe one is
 the dev-server fallback. **Prefer `useParentModal` for new modals.** Fall back to
@@ -457,7 +457,7 @@ existing shared classes (`.expand-grid`, `.state-change-pulse`,
 Recorded deliberately — do not "fix" these without evidence.
 
 - **`--text-color-secondary` is never bridged — resolved by deriving instead.**
-  That variable is not in `DockerFoldersMain.page`'s bridge list, so
+  That variable is not in `Folders.page`'s bridge list, so
   `--color-text-secondary` used to fall back to a hardcoded `#666666` on every
   theme. On a dark theme that is **3.0:1** against `#1a1a1a` — below AA, and the
   log pane renders 11px monospace in it. `main.css` now derives both greys from
@@ -482,7 +482,7 @@ Recorded deliberately — do not "fix" these without evidence.
   `ConfirmModal`'s danger path at it.
 - **`useModalElevation.ts` is dead.** It posts a legacy
   `{ type: 'docker-folders-modal', open, minHeight }` message that
-  `DockerFoldersMain.page` now explicitly ignores. Harmless; left in place.
+  `Folders.page` now explicitly ignores. Harmless; left in place.
 - **`color-mix` degrades.** Tailwind emits a non-`color-mix` fallback in which
   `bg-bg-card` and `bg-bg-input` collapse to the plain page background — cards
   lose their separation. Secondary text now depends on `color-mix` too, but
@@ -495,8 +495,8 @@ Recorded deliberately — do not "fix" these without evidence.
   regressions are invisible there. To check dark, append a URL-encoded theme
   param, e.g.
   `?theme={"--text-color":"#f2f2f2","--background-color":"#1a1a1a","--border-color":"#333","--header-background":"#ff8c2f","--header-text-color":"#fff"}`.
-- **The `.page` files are a parallel system.** `DockerFoldersMain.page` and
-  `DockerFoldersSettings.page` hand-roll inline styles with dark fallbacks
+- **The `.page` files are a parallel system.** `Folders.page` and
+  `DockerFolders.page` hand-roll inline styles with dark fallbacks
   (`#333`, `#1a1a1a`), while `main.css` uses light ones (`#e0e0e0`, `#f2f2f2`).
   The two halves disagree about what "no theme" means.
 

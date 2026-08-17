@@ -6,7 +6,7 @@ import { onUnmounted } from 'vue';
  * The Vue app runs inside an iframe on Unraid. In-iframe modals get clipped
  * when the parent page scrolls. This composable lets a Vue component describe
  * a modal declaratively and have it rendered in the parent document via
- * postMessage to `DockerFoldersMain.page`.
+ * postMessage to `Folders.page`.
  *
  * Messages (iframe -> parent):
  *   { type: 'docker-folders-modal', open: true, modal: ModalDescriptor }

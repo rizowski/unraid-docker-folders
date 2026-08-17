@@ -1,4 +1,4 @@
-**Docker Folders Modern**
+**Docker Folders**
 
 Organize your Docker containers into folders with drag-and-drop, live resource stats, and real-time updates. A modern replacement for folder.view built with Vue 3.
 

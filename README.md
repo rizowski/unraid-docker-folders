@@ -1,4 +1,4 @@
-# Unraid Docker Folders Modern
+# Unraid Docker Folders
 
 An Unraid plugin that adds folder organization to the Docker tab with real-time updates and a clean Vue 3 interface.
 
@@ -37,7 +37,7 @@ An Unraid plugin that adds folder organization to the Docker tab with real-time 
 
 ### Community Applications
 
-Search for **Docker Folders Modern** in the **Apps** tab.
+Search for **Docker Folders** in the **Apps** tab.
 
 ### Install by URL
 
