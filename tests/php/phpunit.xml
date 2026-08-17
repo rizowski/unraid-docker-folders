@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/11.0/phpunit.xsd"
-         bootstrap="AuthTest.php"
+         bootstrap="bootstrap.php"
          colors="true"
          stopOnFailure="false">
   <testsuites>
@@ -13,6 +13,9 @@
     </testsuite>
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>
+    </testsuite>
+    <testsuite name="PathSafety">
+      <file>PathSafetyTest.php</file>
     </testsuite>
   </testsuites>
 </phpunit>

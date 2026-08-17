@@ -181,10 +181,6 @@ if (file_exists($changelogPath)) {
   border-radius: 4px;
 }
 
-.settings-section.beta {
-  border-left-color: #ff9800;
-}
-
 .settings-section h3 {
   margin: 0 0 15px 0;
   font-size: 16px;
@@ -192,18 +188,6 @@ if (file_exists($changelogPath)) {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.badge-beta {
-  display: inline-block;
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  background: #ff9800;
-  color: #fff;
-  border-radius: 4px;
 }
 
 .setting-row {
@@ -731,9 +715,9 @@ if (file_exists($changelogPath)) {
     </div>
   </div>
 
-  <!-- Image Updates (Beta) -->
-  <div class="settings-section beta">
-    <h3>Image Updates <span class="badge-beta">Beta</span></h3>
+  <!-- Image Updates -->
+  <div class="settings-section">
+    <h3>Image Updates</h3>
 
     <div class="setting-row">
       <div class="setting-info">

@@ -314,7 +314,7 @@ function applyEvent(
     // pull.php: per-layer download progress.
     case 'progress': {
       if (!data.id) break;
-      const layers = { ...(unitLayers.value[id] || {}) };
+      const layers = { ...unitLayers.value[id] };
       const existing = layers[data.id] || { status: '', current: 0, total: 0, percent: 0 };
       const current = data.current ?? existing.current;
       const total = data.total ?? existing.total;

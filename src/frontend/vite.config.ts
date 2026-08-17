@@ -3,8 +3,8 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
-// Mock API: MOCK_API=1 npm run dev
-// Proxy to Unraid: UNRAID_HOST=192.168.1.100 npm run dev
+// Mock API: MOCK_API=1 yarn dev
+// Proxy to Unraid: UNRAID_HOST=192.168.1.100 yarn dev
 const useMock = !!process.env.MOCK_API;
 const unraidHost = process.env.UNRAID_HOST;
 const isProd = process.env.NODE_ENV === 'production';

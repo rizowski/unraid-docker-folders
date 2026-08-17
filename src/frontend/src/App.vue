@@ -65,12 +65,15 @@
           <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
           <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
         </button>
+        <!-- Rendered before settings land so the toolbar doesn't reflow once
+             they do. Until `loaded` flips we don't know whether update checks
+             are on, so show the button disabled rather than guessing. -->
         <button
-          v-if="settingsStore.enableUpdateChecks"
-          @click="updatesStore.checkForUpdates()"
+          v-if="!settingsStore.loaded || settingsStore.enableUpdateChecks"
+          @click="handleUpdateButton"
           class="nav-btn relative"
-          :disabled="updatesStore.checking"
-          title="Check for image updates"
+          :disabled="updatesStore.checking || !settingsStore.loaded"
+          :title="updateButtonTitle"
         >
           <svg v-if="updatesStore.checking" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -85,39 +88,35 @@
             <span v-if="updatesStore.updatesAvailableCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-warning text-white rounded-full text-[10px] font-bold">{{ updatesStore.updatesAvailableCount }}</span>
           </template>
         </button>
-        <button
-          v-if="settingsStore.enableUpdateChecks && updatesStore.updatesAvailableCount > 0"
-          @click="handleUpdateAll"
-          class="nav-btn warning"
-          title="Update all containers with available updates"
-        >
-          <span class="sm:hidden">Update ({{ updatesStore.updatesAvailableCount }})</span>
-          <span class="hidden sm:inline">Update All ({{ updatesStore.updatesAvailableCount }})</span>
-        </button>
         <!-- Links out to Unraid's native Add Container form. A plain relative
              href breaks out of the plugin iframe via <base target="_parent">. -->
         <a
           href="/Docker/AddContainer"
           class="nav-btn active"
           title="Create a new container"
+          aria-label="Create a new container"
         >
-          <span class="sm:hidden">+ Container</span>
-          <span class="hidden sm:inline">+ Create Container</span>
+          <span aria-hidden="true">+</span>
+          <IconContainer />
         </a>
         <button
-          v-if="composeStore.composeAvailable && composeStore.managementEnabled"
+          :disabled="composeStore.composeActionsDisabled"
+          :title="composeStore.composeDisabledReason ?? 'Create a Docker Compose stack'"
+          aria-label="Create a Docker Compose stack"
           @click="openCreateStack"
-          class="nav-btn active"
+          class="nav-btn active disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          <span class="sm:hidden">+ Stack</span>
-          <span class="hidden sm:inline">+ Create Stack</span>
+          <span aria-hidden="true">+</span>
+          <IconStack />
         </button>
         <button
           @click="openCreateFolderModal"
           class="nav-btn active"
+          title="Create a folder"
+          aria-label="Create a folder"
         >
-          <span class="sm:hidden">+ New</span>
-          <span class="hidden sm:inline">+ Create Folder</span>
+          <span aria-hidden="true">+</span>
+          <IconFolder />
         </button>
       </div>
     </header>
@@ -263,7 +262,10 @@
     <UpdateConfirmModal
       :is-open="showBatchConfirm"
       :units="pendingUnits"
+      :can-recheck="updateRecheckable"
+      :checking="updatesStore.checking"
       @confirm="confirmBatchPull"
+      @recheck="handleUpdateRecheck"
       @cancel="showBatchConfirm = false; pendingUnits = []"
     />
   </div>
@@ -287,6 +289,9 @@ import ComposeProgressModal from '@/components/compose/ComposeProgressModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
+import IconContainer from '@/components/icons/IconContainer.vue';
+import IconStack from '@/components/icons/IconStack.vue';
+import IconFolder from '@/components/icons/IconFolder.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
@@ -308,6 +313,13 @@ const pullingContainer = ref<{ image: string; name: string; managed: string | nu
 const batchPullUnits = ref<UpdateUnit[]>([]);
 const showBatchConfirm = ref(false);
 const pendingUnits = ref<UpdateUnit[]>([]);
+/**
+ * Whether the open confirm modal may offer "Check Again". Only true when it was
+ * opened from the header, where the scope is every container. A folder or
+ * single-container open is a *subset*, and a re-check rebuilds the list from
+ * everything that has an update — which would silently widen that subset.
+ */
+const updateRecheckable = ref(false);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
@@ -625,12 +637,60 @@ function openUpdateConfirm(containers: Container[]) {
     composeStore.managementEnabled,
   );
   if (units.length === 0) return;
+  updateRecheckable.value = false;
   pendingUnits.value = units;
   showBatchConfirm.value = true;
 }
 
+/**
+ * The header's update button does one of two things depending on what we know:
+ * with no updates on record it runs a check, and with updates on record it
+ * opens the confirm list. One button, because "check" and "review what the
+ * check found" are the same intent a moment apart.
+ */
+function handleUpdateButton() {
+  if (updatesStore.updatesAvailableCount > 0) {
+    handleUpdateAll();
+    return;
+  }
+  updatesStore.checkForUpdates();
+}
+
+const updateButtonTitle = computed(() => {
+  if (!settingsStore.loaded) return 'Loading settings…';
+  if (updatesStore.checking) return 'Checking for image updates…';
+  const n = updatesStore.updatesAvailableCount;
+  if (n === 0) return 'Check for image updates';
+  return n === 1 ? 'Review 1 available update' : `Review ${n} available updates`;
+});
+
 function handleUpdateAll() {
-  openUpdateConfirm(updatesStore.getContainersWithUpdates());
+  const containers = updatesStore.getContainersWithUpdates();
+  if (containers.length === 0) return;
+  const units = buildUpdateUnits(
+    containers,
+    dockerStore.containers,
+    composeStore.managementEnabled,
+  );
+  if (units.length === 0) return;
+  updateRecheckable.value = true;
+  pendingUnits.value = units;
+  showBatchConfirm.value = true;
+}
+
+/**
+ * "Check Again" from inside the open modal. Rebuilds the list from whatever the
+ * fresh check found, so containers that gained an update appear and ones that
+ * no longer have one drop out. An empty result leaves the modal open on its
+ * "everything is up to date" state rather than closing under the user.
+ */
+async function handleUpdateRecheck() {
+  await updatesStore.checkForUpdates();
+  pendingUnits.value = buildUpdateUnits(
+    updatesStore.getContainersWithUpdates(),
+    dockerStore.containers,
+    composeStore.managementEnabled,
+  );
 }
 
 function handleUpdateFolder(folder: Folder) {

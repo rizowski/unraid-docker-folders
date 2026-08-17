@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Profile>
+**Docker Folders Modern** — drag and drop your Docker containers into folders.
+
+Adds a "Folders" tab under the Docker menu where you can group containers into folders with custom icons and colors, then start, stop, restart, and update them from one place.
+
+- Live CPU, memory, network, and I/O stats
+- Schedules to run container actions on a cron
+- Port collision warnings before you start a container
+- Image update checks with release notes and batch pulls
+- Docker Compose editing and automatic stack grouping
+- Inline container logs
+- Real-time updates over WebSocket, so every open tab stays in sync
+
+Most of it is togglable — stats, folder ports, inline logs, health indicators, update checks, and notifications can each be turned on or off, and the plugin can optionally replace Unraid's built-in Docker section entirely.
+
+Support and bug reports: https://github.com/rizowski/unraid-docker-folders/issues
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/rizowski/unraid-docker-folders/main/icon.png</Icon>
+  <WebPage>https://github.com/rizowski/unraid-docker-folders</WebPage>
+</CommunityApplications>

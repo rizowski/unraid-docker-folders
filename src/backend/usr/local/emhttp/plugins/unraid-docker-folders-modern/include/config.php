@@ -19,6 +19,18 @@ define('BACKUP_DIR', CONFIG_DIR . '/backups');
 // Compose stacks storage (self-contained copies of imported compose files)
 define('COMPOSE_STACKS_DIR', CONFIG_DIR . '/compose-stacks');
 
+// Roots that user-supplied paths are allowed to point into.
+//
+// /mnt covers Unraid user shares and appdata, which is where compose stacks and
+// backups genuinely live. Everything outside these roots is rejected — notably
+// /etc, /root, and /var/local/emhttp/var.ini, which holds the CSRF token.
+//
+// A stack's own working_dir is allowed in addition to COMPOSE_ALLOWED_ROOTS, but
+// it is passed per-call rather than listed here because it varies per stack.
+define('COMPOSE_ALLOWED_ROOTS', ['/mnt', COMPOSE_STACKS_DIR]);
+define('EXPORT_ALLOWED_ROOTS', ['/mnt', CONFIG_DIR]);
+define('BACKUP_ALLOWED_ROOTS', ['/mnt', '/boot/config/plugins']);
+
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
 
@@ -27,8 +39,15 @@ define('UPDATE_LOG_PATH', CONFIG_DIR . '/update-check.log');
 define('UPDATE_LOG_MAX_BYTES', 64 * 1024); // 64 KB max
 
 // Docker
-define('DOCKER_SOCKET', '/var/run/docker.sock');
-define('DOCKER_API_VERSION', 'v1.41');
+// Guarded: DockerClient.php is loadable without config.php (tests define these
+// directly so the class can be exercised in isolation), so config.php must not
+// redefine them when both end up in the same process.
+if (!defined('DOCKER_SOCKET')) {
+  define('DOCKER_SOCKET', '/var/run/docker.sock');
+}
+if (!defined('DOCKER_API_VERSION')) {
+  define('DOCKER_API_VERSION', 'v1.41');
+}
 
 // nchan WebSocket
 define('NCHAN_PUB_URL', 'http://localhost:4433/pub/docker-modern');
@@ -45,6 +64,9 @@ if (defined('DEBUG') && DEBUG) {
 
 // Timezone
 date_default_timezone_set('UTC');
+
+require_once __DIR__ . '/paths.php';
+require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
 
 /**
  * Read JSON request data from the request body.
@@ -96,6 +118,37 @@ function logUpdate($message)
     }
     file_put_contents(UPDATE_LOG_PATH, $keep, LOCK_EX);
   }
+}
+
+/**
+ * One image's entry in an update-check response.
+ *
+ * Kept as a single defaulted shape because the same nine keys are also
+ * produced by the error path and read by api/updates.php, the frontend's
+ * ImageUpdateStatus, and the dev mock. A field added here reaches every
+ * caller at once instead of rotting in whichever branch was forgotten —
+ * historically the \Throwable branch, which nothing exercises field by field.
+ *
+ * Deliberately not shared with the SQLite upsert: that binds
+ * `update_available` as 1/0, while the response keeps it a real bool.
+ *
+ * @param string $image
+ * @param array $overrides
+ * @return array
+ */
+function imageCheckResult($image, array $overrides = [])
+{
+  return array_merge([
+    'image' => $image,
+    'local_digest' => null,
+    'remote_digest' => null,
+    'update_available' => false,
+    'checked_at' => time(),
+    'error' => null,
+    'source_url' => null,
+    'source_repo' => null,
+    'release' => null,
+  ], $overrides);
 }
 
 /**
@@ -198,10 +251,13 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
         $log('OK ' . $imageName . ': up to date');
       }
 
+      // Normalised GitHub repo, used to join cached release notes.
+      $sourceRepo = ReleaseNotes::parseRepo($check['source_url'] ?? null);
+
       // Upsert into database
       $db->query(
-        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error, source_url)
-         VALUES (:image, :local_digest, :remote_digest, :update_available, :checked_at, :error, :source_url)',
+        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error, source_url, source_repo)
+         VALUES (:image, :local_digest, :remote_digest, :update_available, :checked_at, :error, :source_url, :source_repo)',
         [
           ':image' => $imageName,
           ':local_digest' => $check['local_digest'],
@@ -210,31 +266,23 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
           ':checked_at' => time(),
           ':error' => $check['error'],
           ':source_url' => $check['source_url'] ?? null,
+          ':source_repo' => $sourceRepo,
         ]
       );
 
-      $results[$imageName] = [
-        'image' => $imageName,
+      $results[$imageName] = imageCheckResult($imageName, [
         'local_digest' => $check['local_digest'],
         'remote_digest' => $check['remote_digest'],
         'update_available' => $check['update_available'],
-        'checked_at' => time(),
         'error' => $check['error'],
         'source_url' => $check['source_url'] ?? null,
-      ];
+        'source_repo' => $sourceRepo,
+      ]);
     } catch (\Throwable $e) {
       $log('FATAL ' . $imageName . ': ' . $e->getMessage());
       $errors++;
       $checked++;
-      $results[$imageName] = [
-        'image' => $imageName,
-        'local_digest' => null,
-        'remote_digest' => null,
-        'update_available' => false,
-        'checked_at' => time(),
-        'error' => $e->getMessage(),
-        'source_url' => null,
-      ];
+      $results[$imageName] = imageCheckResult($imageName, ['error' => $e->getMessage()]);
     }
   }
 
@@ -258,6 +306,15 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     }
   }
 
+  // Release notes are a nice-to-have layered on top of a complete check. Any
+  // failure here — network, schema, anything — must leave the digest results
+  // and the counters below exactly as they are.
+  try {
+    refreshReleaseNotes($results, $db, $log, $onlyImages === null);
+  } catch (\Throwable $e) {
+    $log('NOTES FATAL ' . $e->getMessage());
+  }
+
   return [
     'results' => $results,
     'checked' => $checked,
@@ -265,6 +322,152 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     'errors' => $errors,
     'newUpdates' => $newUpdates,
   ];
+}
+
+/**
+ * Refresh and attach cached GitHub release notes for the checked images.
+ *
+ * Fetching is gated on update_available (no point spending a request on an
+ * image nobody is about to pull), but *decoration* is not: any image with a
+ * cached row gets its release attached. That keeps the POST response shaped
+ * identically to the GET one, which matters because the frontend store
+ * wholesale-replaces its state from either.
+ *
+ * @param array $results Per-image results, mutated in place
+ * @param Database $db Database instance
+ * @param callable $log Logging callback
+ * @param bool $full True for a full check (enables GC of orphaned rows)
+ * @param int|null $now Current timestamp; injectable for tests
+ * @param callable|null $fetcher Fetch callback; injectable so tests run offline
+ */
+function refreshReleaseNotes(array &$results, $db, callable $log, $full, $now = null, $fetcher = null)
+{
+  $now = $now ?? time();
+  $fetcher = $fetcher ?? ['ReleaseNotes', 'fetchLatest'];
+
+  // repo => whether any image on that repo actually has an update pending
+  $candidates = [];
+  foreach ($results as $info) {
+    $repo = $info['source_repo'] ?? null;
+    if ($repo === null || $repo === '') {
+      continue;
+    }
+    $candidates[$repo] = ($candidates[$repo] ?? false) || !empty($info['update_available']);
+  }
+
+  if (empty($candidates)) {
+    return;
+  }
+
+  $repos = array_keys($candidates);
+  $placeholders = implode(',', array_fill(0, count($repos), '?'));
+
+  // Full rows, not just the staleness columns: the fetch loop below keeps this
+  // map current as it writes, so it doubles as the source for the decoration
+  // pass and saves re-reading the same rows back out.
+  $rows = [];
+  foreach ($db->fetchAll("SELECT * FROM release_notes WHERE repo IN ({$placeholders})", $repos) as $row) {
+    $rows[$row['repo']] = $row;
+  }
+
+  // Stale = pending an update, and either never fetched or past its TTL.
+  $stale = [];
+  foreach ($candidates as $repo => $pending) {
+    if (!$pending) {
+      continue;
+    }
+    $row = $rows[$repo] ?? null;
+    if ($row === null) {
+      $stale[$repo] = 0;
+      continue;
+    }
+    $fetchedAt = (int) $row['fetched_at'];
+    if ($now - $fetchedAt >= ReleaseNotes::ttlFor($row['status'] ?? 'ok')) {
+      $stale[$repo] = $fetchedAt;
+    }
+  }
+
+  // Oldest first. Without the ordering the same repos win the cap every run
+  // and anything past the cap would never get notes at all.
+  asort($stale);
+  $toFetch = array_slice(array_keys($stale), 0, ReleaseNotes::MAX_FETCHES_PER_RUN);
+  if (count($stale) > count($toFetch)) {
+    $log('NOTES CAP ' . count($toFetch) . ' of ' . count($stale) . ' stale repo(s) this run');
+  }
+
+  $start = time();
+  foreach ($toFetch as $repo) {
+    if (time() - $start >= ReleaseNotes::MAX_WALL_SECONDS) {
+      $log('NOTES BUDGET Wall-clock budget reached, deferring remaining repo(s)');
+      break;
+    }
+
+    $result = call_user_func($fetcher, $repo);
+    $status = $result['status'] ?? 'error';
+
+    // Deliberately write nothing on a rate-limit: caching an empty row would
+    // suppress notes for this repo for hours because of a transient 403.
+    if ($status === 'rate_limited') {
+      $log('NOTES RATE-LIMIT GitHub budget exhausted, skipping remaining repo(s)');
+      break;
+    }
+
+    $release = $status === 'ok' ? ($result['release'] ?? null) : null;
+
+    $row = [
+      'repo' => $repo,
+      'tag' => $release['tag'] ?? null,
+      'name' => $release['name'] ?? null,
+      'published_at' => $release['published_at'] ?? null,
+      'url' => $release['url'] ?? null,
+      'summary' => $release['summary'] ?? null,
+      'etag' => null,
+      'status' => in_array($status, ['ok', 'not_found'], true) ? $status : 'error',
+      'fetched_at' => $now,
+    ];
+
+    $db->query(
+      'INSERT OR REPLACE INTO release_notes (repo, tag, name, published_at, url, summary, etag, status, fetched_at)
+       VALUES (:repo, :tag, :name, :published_at, :url, :summary, :etag, :status, :fetched_at)',
+      [
+        ':repo' => $row['repo'],
+        ':tag' => $row['tag'],
+        ':name' => $row['name'],
+        ':published_at' => $row['published_at'],
+        ':url' => $row['url'],
+        ':summary' => $row['summary'],
+        ':etag' => $row['etag'],
+        ':status' => $row['status'],
+        ':fetched_at' => $row['fetched_at'],
+      ]
+    );
+    $rows[$repo] = $row;
+
+    if ($status === 'ok') {
+      $log('NOTES OK ' . $repo . ' ' . ($release['tag'] ?? '(untagged)'));
+    } elseif ($status === 'not_found') {
+      $log('NOTES 404 ' . $repo . ': no releases published');
+    } else {
+      $log('NOTES ERROR ' . $repo . ': HTTP ' . ($result['http'] ?? 0));
+    }
+  }
+
+  // Decorate every image from $rows, which the fetch loop kept current.
+  foreach ($results as $image => $info) {
+    $repo = $info['source_repo'] ?? null;
+    $results[$image]['release'] = $repo !== null && isset($rows[$repo])
+      ? ReleaseNotes::payload($rows[$repo])
+      : null;
+  }
+
+  // Drop notes for repos no container references any more. Skipped on a
+  // targeted check, where $results only holds the requested subset.
+  if ($full) {
+    $db->query(
+      'DELETE FROM release_notes
+        WHERE repo NOT IN (SELECT source_repo FROM image_update_checks WHERE source_repo IS NOT NULL)'
+    );
+  }
 }
 
 // JSON response helper

@@ -121,6 +121,60 @@ describe('KebabMenu', () => {
     expect(wrapper.find('button').attributes('title')).toBe('Folder actions');
   });
 
+  describe('disabled items', () => {
+    const withDisabled: KebabMenuItem[] = [
+      { label: 'Stack Up', action: 'compose-up', disabled: true, title: 'Docker Compose is not installed' },
+      { label: 'Rename', action: 'rename' },
+    ];
+
+    /**
+     * The whole point of `disabled` over `show: false`: the item stays in the
+     * menu so it does not reflow when an async capability check resolves.
+     */
+    it('renders a disabled item rather than removing it', async () => {
+      const wrapper = mountMenu(withDisabled);
+      await wrapper.find('button').trigger('click');
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).toContain('Stack Up');
+      expect(labels.length).toBe(2);
+    });
+
+    it('marks the item disabled and shows the reason as a title', async () => {
+      const wrapper = mountMenu(withDisabled);
+      await wrapper.find('button').trigger('click');
+
+      const item = wrapper.findAll('button.kebab-menu-item')[0];
+      expect(item.attributes('disabled')).toBeDefined();
+      expect(item.attributes('title')).toBe('Docker Compose is not installed');
+    });
+
+    it('does not emit select when a disabled item is clicked', async () => {
+      const wrapper = mountMenu(withDisabled);
+      await wrapper.find('button').trigger('click');
+
+      await wrapper.findAll('button.kebab-menu-item')[0].trigger('click');
+      expect(wrapper.emitted('select')).toBeUndefined();
+    });
+
+    it('still emits select for enabled items alongside disabled ones', async () => {
+      const wrapper = mountMenu(withDisabled);
+      await wrapper.find('button').trigger('click');
+
+      await wrapper.findAll('button.kebab-menu-item')[1].trigger('click');
+      expect(wrapper.emitted('select')?.[0]).toEqual(['rename']);
+    });
+
+    it('does not mark ordinary items disabled', async () => {
+      const wrapper = mountMenu(buttonItems);
+      await wrapper.find('button').trigger('click');
+
+      const item = wrapper.find('button.kebab-menu-item');
+      expect(item.attributes('disabled')).toBeUndefined();
+      expect(item.classes()).toContain('cursor-pointer');
+    });
+  });
+
   it('link and button items share consistent layout classes', async () => {
     // Shared classes that must appear on both <a> and <button> menu items
     const sharedClasses = ['kebab-menu-item', 'flex', 'items-center', 'gap-2.5', 'w-full', 'px-3', 'py-2', 'text-sm', 'text-text', 'transition', 'cursor-pointer'];

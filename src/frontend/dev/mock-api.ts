@@ -4,7 +4,7 @@
  * Provides fake container and folder data so the UI can be tested
  * locally without a running Unraid server.
  *
- * Usage: MOCK_API=1 npm run dev
+ * Usage: MOCK_API=1 yarn dev
  */
 
 import type { Plugin } from 'vite';
@@ -581,35 +581,160 @@ function handleStats(_req: any, res: any, params: Record<string, string>) {
 
 // --- Updates mock ---
 
-const mockUpdateChecks: Record<string, any> = {
+/**
+ * Single source of truth for update/release fixtures.
+ *
+ * GET and POST both derive from this. They used to diverge — POST rebuilt
+ * rows from an `image.includes(...)` heuristic — which meant a manual check
+ * silently dropped whatever the seeded rows carried. The real API returns the
+ * same shape from both, so the mock must too.
+ *
+ * `hasUpdate` and `release` are independent on purpose: an image can carry a
+ * cached release without being flagged for an update (redis below), which is
+ * what proves the confirm modal only shows notes for what it will actually pull.
+ */
+const MOCK_IMAGE_FIXTURES: Record<
+  string,
+  { hasUpdate: boolean; source_url: string | null; source_repo: string | null; release: any }
+> = {
+  // Happy path: GitHub source, short one-line summary.
   'linuxserver/plex:latest': {
-    image: 'linuxserver/plex:latest',
-    local_digest: 'linuxserver/plex:latest@sha256:abc123old',
-    remote_digest: 'sha256:def456new',
-    update_available: true,
-    checked_at: Math.floor(Date.now() / 1000) - 3600,
-    error: null,
+    hasUpdate: true,
     source_url: 'https://github.com/linuxserver/docker-plex',
+    source_repo: 'linuxserver/docker-plex',
+    release: {
+      tag: 'v1.41.2.9200',
+      name: '1.41.2.9200',
+      published_at: Math.floor(Date.now() / 1000) - 172800,
+      url: 'https://github.com/linuxserver/docker-plex/releases/tag/v1.41.2.9200',
+      summary: 'Rebase to Ubuntu Noble. Fixes a transcoder crash on HDR content.',
+      fetched_at: Math.floor(Date.now() / 1000) - 3600,
+    },
   },
-  'postgres:16-alpine': {
-    image: 'postgres:16-alpine',
-    local_digest: 'postgres:16-alpine@sha256:pg123old',
-    remote_digest: 'sha256:pg456new',
-    update_available: true,
-    checked_at: Math.floor(Date.now() / 1000) - 3600,
-    error: null,
-    source_url: null,
-  },
+  // Long body, already truncated to the server-side cap so the row's ellipsis
+  // and the hover title are both exercised.
   'grafana/grafana:latest': {
-    image: 'grafana/grafana:latest',
-    local_digest: 'grafana/grafana:latest@sha256:graf123old',
-    remote_digest: 'sha256:graf456new',
-    update_available: true,
-    checked_at: Math.floor(Date.now() / 1000) - 3600,
-    error: null,
+    hasUpdate: true,
     source_url: 'https://github.com/grafana/grafana',
+    source_repo: 'grafana/grafana',
+    release: {
+      tag: 'v11.3.0',
+      name: '11.3.0',
+      published_at: Math.floor(Date.now() / 1000) - 432000,
+      url: 'https://github.com/grafana/grafana/releases/tag/v11.3.0',
+      summary:
+        'Alerting: the rule editor has been rebuilt around a simplified query and condition step, ' +
+        'so simple threshold rules no longer require configuring a reduce expression by hand. ' +
+        'Dashboards: panel edit now keeps the visualization suggestions pane open while you type. ' +
+        'Explore: logs volume histograms render for all datasources implementing the logs volume ' +
+        'API. Plugins: the plugin catalog surfaces signature status inline. Breaking: the legacy ' +
+        'alerting endpoints removed in 10.x n…',
+      fetched_at: Math.floor(Date.now() / 1000) - 3600,
+    },
+  },
+  // No source label at all — the row shows no notes line.
+  'pihole/pihole:latest': {
+    hasUpdate: true,
+    source_url: null,
+    source_repo: null,
+    release: null,
+  },
+  // Non-GitHub source: parsed to no repo, never fetched, falls back to the
+  // existing "/releases" link-out on the container card.
+  'caddy:2-alpine': {
+    hasUpdate: true,
+    source_url: 'https://gitea.example.com/caddy/caddy-docker',
+    source_repo: null,
+    release: null,
+  },
+  // GitHub repo that publishes tags but no Releases — the not_found negative
+  // cache. Repo is known, notes are not.
+  'itzg/minecraft-server:latest': {
+    hasUpdate: true,
+    source_url: 'https://github.com/itzg/docker-minecraft-server',
+    source_repo: 'itzg/docker-minecraft-server',
+    release: null,
+  },
+
+  // --- db-stack compose project: multiple images in one unit ---
+  'postgres:16-alpine': {
+    hasUpdate: true,
+    source_url: 'https://github.com/postgres/postgres',
+    source_repo: 'postgres/postgres',
+    release: {
+      tag: 'REL_16_4',
+      name: 'PostgreSQL 16.4',
+      published_at: Math.floor(Date.now() / 1000) - 604800,
+      url: 'https://github.com/postgres/postgres/releases/tag/REL_16_4',
+      summary: 'Fixes for VACUUM and a planner regression on partitioned tables.',
+      fetched_at: Math.floor(Date.now() / 1000) - 3600,
+    },
+  },
+  'valkey/valkey:8-alpine': {
+    hasUpdate: true,
+    source_url: 'https://github.com/valkey-io/valkey',
+    source_repo: 'valkey-io/valkey',
+    release: {
+      tag: '8.0.2',
+      name: '8.0.2',
+      published_at: Math.floor(Date.now() / 1000) - 259200,
+      url: 'https://github.com/valkey-io/valkey/releases/tag/8.0.2',
+      summary: 'Fixes a replica desync under heavy AOF rewrite load.',
+      fetched_at: Math.floor(Date.now() / 1000) - 3600,
+    },
+  },
+  'linuxserver/mariadb:latest': {
+    hasUpdate: true,
+    source_url: 'https://github.com/linuxserver/docker-mariadb',
+    source_repo: 'linuxserver/docker-mariadb',
+    release: {
+      tag: '11.4.3',
+      name: '11.4.3',
+      published_at: Math.floor(Date.now() / 1000) - 86400,
+      url: 'https://github.com/linuxserver/docker-mariadb/releases/tag/11.4.3',
+      summary: 'Bump MariaDB to 11.4.3 and rebase the base image.',
+      fetched_at: Math.floor(Date.now() / 1000) - 3600,
+    },
+  },
+  // Same stack, but NOT flagged for an update. Its cached release must stay
+  // out of the db-stack row.
+  'redis:7-alpine': {
+    hasUpdate: false,
+    source_url: 'https://github.com/redis/redis',
+    source_repo: 'redis/redis',
+    release: {
+      tag: '7.4.1',
+      name: '7.4.1',
+      published_at: Math.floor(Date.now() / 1000) - 1209600,
+      url: 'https://github.com/redis/redis/releases/tag/7.4.1',
+      summary: 'This release should not appear in the confirm modal.',
+      fetched_at: Math.floor(Date.now() / 1000) - 3600,
+    },
   },
 };
+
+function buildUpdateCheck(image: string, checkedAt: number) {
+  const fixture = MOCK_IMAGE_FIXTURES[image];
+  const hasUpdate = fixture?.hasUpdate ?? false;
+  return {
+    image,
+    local_digest: `${image}@sha256:abc123old`,
+    remote_digest: hasUpdate ? 'sha256:def456new' : 'sha256:abc123old',
+    update_available: hasUpdate,
+    checked_at: checkedAt,
+    error: null,
+    source_url: fixture?.source_url ?? null,
+    source_repo: fixture?.source_repo ?? null,
+    release: fixture?.release ?? null,
+  };
+}
+
+const mockUpdateChecks: Record<string, any> = Object.fromEntries(
+  Object.keys(MOCK_IMAGE_FIXTURES).map((image) => [
+    image,
+    buildUpdateCheck(image, Math.floor(Date.now() / 1000) - 3600),
+  ]),
+);
 
 async function handleUpdates(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {
@@ -617,7 +742,6 @@ async function handleUpdates(req: any, res: any, params: Record<string, string>)
   }
 
   if (req.method === 'POST' && params.action === 'check') {
-    // Simulate checking — mark a few containers as having updates.
     // A payload of {images: [...]} restricts the check (targeted mode).
     const body = await parseBody(req);
     // A real check hits a registry per image; without latency here the
@@ -631,19 +755,11 @@ async function handleUpdates(req: any, res: any, params: Record<string, string>)
 
     const results: Record<string, (typeof mockUpdateChecks)[string]> = {};
     for (const image of imagesToCheck) {
-      const hasUpdate = image.includes('plex') || image.includes('postgres') || image.includes('grafana');
-      let sourceUrl: string | null = null;
-      if (image.includes('plex')) sourceUrl = 'https://github.com/linuxserver/docker-plex';
-      else if (image.includes('grafana')) sourceUrl = 'https://github.com/grafana/grafana';
-      mockUpdateChecks[image] = {
-        image,
-        local_digest: `${image}@sha256:abc123`,
-        remote_digest: hasUpdate ? 'sha256:def456' : 'sha256:abc123',
-        update_available: hasUpdate,
-        checked_at: now,
-        error: null,
-        source_url: sourceUrl,
-      };
+      // Re-stamp what's already known rather than rebuilding from fixtures:
+      // the fixtures are the seed, and rebuilding would resurrect an update a
+      // pull just cleared, which the real backend never does.
+      const prev = mockUpdateChecks[image];
+      mockUpdateChecks[image] = prev ? { ...prev, checked_at: now } : buildUpdateCheck(image, now);
       results[image] = mockUpdateChecks[image];
     }
 

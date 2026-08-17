@@ -450,7 +450,34 @@ class ComposeManager
   }
 
   /**
+   * Read just the working_dir for a stack.
+   *
+   * getStack() shells out to `docker compose ps`, which is far too much work
+   * when a caller only needs the directory to resolve a path against.
+   *
+   * @return string|null working_dir, or null when the stack is unknown or the
+   *                     compose labels never supplied one
+   */
+  public function getStackWorkingDir($projectName)
+  {
+    $row = $this->db->fetchOne(
+      'SELECT working_dir FROM compose_stacks WHERE project_name = ?',
+      [$projectName]
+    );
+
+    if (!$row || empty($row['working_dir'])) {
+      return null;
+    }
+
+    return $row['working_dir'];
+  }
+
+  /**
    * Update env file path for a stack
+   *
+   * Callers must pass an already-validated absolute path, or null to fall back
+   * to the default .env in working_dir. Validation lives at the HTTP boundary
+   * in api/compose.php — see the note there for why it cannot live here.
    */
   public function setEnvFilePath($projectName, $path)
   {
@@ -1152,7 +1179,13 @@ class ComposeManager
     );
     if (!$stack) return;
 
-    $versionsDir = $stack['working_dir'] . '/.versions';
+    // working_dir is label-derived, so it can be empty or "/". Both would make
+    // the containment checks in pruneVersions/getFileVersionContent useless.
+    $versionsDir = normalizePath(rtrim((string) $stack['working_dir'], '/') . '/.versions');
+    if ($versionsDir === null || !pathIsWithin($versionsDir, $stack['working_dir'])) {
+      return;
+    }
+
     if (!is_dir($versionsDir)) {
       @mkdir($versionsDir, 0755, true);
     }
@@ -1210,8 +1243,12 @@ class ComposeManager
 
     foreach ($excess as $row) {
       if ($stack) {
-        $fullPath = $stack['working_dir'] . '/' . $row['file_path'];
-        @unlink($fullPath);
+        // file_path is plugin-written and timestamp-based, so this check should
+        // never fire in normal operation — which is exactly why it is cheap.
+        $fullPath = resolveAgainst($row['file_path'], $stack['working_dir']);
+        if ($fullPath !== null && pathIsWithin($fullPath, $stack['working_dir'])) {
+          @unlink($fullPath);
+        }
       }
       $this->db->query(
         'DELETE FROM compose_file_versions WHERE id = ?',
@@ -1251,7 +1288,13 @@ class ComposeManager
       return ['success' => false, 'error' => 'Version not found'];
     }
 
-    $fullPath = $version['working_dir'] . '/' . $version['file_path'];
+    // Reachable from a plain GET, so the read must be contained even though both
+    // components are plugin-written.
+    $fullPath = resolveAgainst($version['file_path'], $version['working_dir']);
+    if ($fullPath === null || !pathIsWithin($fullPath, $version['working_dir'])) {
+      return ['success' => false, 'error' => 'Version file path is not valid'];
+    }
+
     if (!file_exists($fullPath)) {
       return ['success' => false, 'error' => 'Version file missing from disk'];
     }
@@ -1286,27 +1329,6 @@ class ComposeManager
       return $this->saveComposeFileContent($projectName, $version['content']);
     } else {
       return $this->saveEnvFileContent($projectName, $version['content']);
-    }
-  }
-
-  public function deleteStackVersionFiles($projectName)
-  {
-    $stack = $this->db->fetchOne(
-      'SELECT working_dir FROM compose_stacks WHERE project_name = ?',
-      [$projectName]
-    );
-    if (!$stack) return;
-
-    $versionsDir = $stack['working_dir'] . '/.versions';
-    if (is_dir($versionsDir)) {
-      $files = @scandir($versionsDir);
-      if ($files) {
-        foreach ($files as $file) {
-          if ($file === '.' || $file === '..') continue;
-          @unlink($versionsDir . '/' . $file);
-        }
-      }
-      @rmdir($versionsDir);
     }
   }
 
@@ -1530,9 +1552,17 @@ class ComposeManager
       $exportDir = COMPOSE_STACKS_DIR;
     }
 
-    // Validate path is absolute
-    if ($exportDir[0] !== '/') {
+    // Validate path is absolute and inside an allowed root. settings.php also
+    // checks this at write time; this guards values stored before that existed.
+    $exportDir = normalizePath($exportDir);
+    if ($exportDir === null) {
       return ['success' => false, 'error' => 'Export directory must be an absolute path'];
+    }
+    if (!pathIsWithinAny($exportDir, EXPORT_ALLOWED_ROOTS)) {
+      return [
+        'success' => false,
+        'error' => 'Export directory must be under ' . implode(' or ', EXPORT_ALLOWED_ROOTS),
+      ];
     }
 
     // Create directory if needed

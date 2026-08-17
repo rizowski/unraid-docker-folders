@@ -8,6 +8,20 @@ import { apiFetch } from '@/utils/csrf';
 import { useSettingsStore } from '@/stores/settings';
 import { useDockerStore } from '@/stores/docker';
 
+/**
+ * Cached latest release for an image's source repo. The summary is already
+ * plain text and length-capped server-side, so it is safe to interpolate and
+ * never needs `v-html`.
+ */
+export interface ReleaseNote {
+  tag: string | null;
+  name: string | null;
+  published_at: number | null;
+  url: string | null;
+  summary: string;
+  fetched_at: number;
+}
+
 export interface ImageUpdateStatus {
   image: string;
   local_digest: string | null;
@@ -16,6 +30,9 @@ export interface ImageUpdateStatus {
   checked_at: number;
   error: string | null;
   source_url: string | null;
+  /** Normalised "owner/name" when source_url points at GitHub, else null. */
+  source_repo: string | null;
+  release: ReleaseNote | null;
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -116,7 +133,7 @@ export const useUpdatesStore = defineStore('updates', () => {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
-      updates.value = { ...updates.value, ...(data.updates || {}) };
+      updates.value = { ...updates.value, ...data.updates };
     } catch (e) {
       console.error('Error checking images for updates:', e);
     } finally {

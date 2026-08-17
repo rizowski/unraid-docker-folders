@@ -31,12 +31,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22.18.0'
-          cache: npm
-          cache-dependency-path: src/frontend/package-lock.json
+          cache: yarn
+          cache-dependency-path: src/frontend/yarn.lock
 
       - name: Install frontend dependencies
         working-directory: src/frontend
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Configure git identity
         run: |

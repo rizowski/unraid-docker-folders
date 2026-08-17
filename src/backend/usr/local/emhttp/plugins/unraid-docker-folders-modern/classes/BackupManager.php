@@ -111,8 +111,10 @@ class BackupManager
 
     $size = 0;
     $lastArchive = '';
-    $archivePattern = rtrim($destination, '/') . "/{$projectName}.*.tar.gz";
-    $files = glob($archivePattern);
+    $safeProject = sanitizeArchivePrefix($projectName);
+    $files = $safeProject === null
+      ? []
+      : glob(rtrim($destination, '/') . "/{$safeProject}.*.tar.gz");
     if ($files) {
       $lastArchive = end($files);
       $size = filesize($lastArchive);
@@ -133,7 +135,16 @@ class BackupManager
       return [];
     }
 
-    $prefix = $targetId;
+    // $targetId reaches here straight from the request. Unsanitized it would be
+    // injected into a glob pattern, where both ../ and the glob metacharacters
+    // turn this listing into a directory oracle over the whole filesystem.
+    // Must match generateArchiveName's sanitizer, or this stops finding the
+    // archives that were actually written.
+    $prefix = sanitizeArchivePrefix($targetId);
+    if ($prefix === null) {
+      return [];
+    }
+
     $pattern = rtrim($destination, '/') . '/' . $prefix . '.*.tar.gz';
     $files = glob($pattern);
 
@@ -164,8 +175,10 @@ class BackupManager
     $realDest = realpath($destination);
     $realFile = realpath($filePath);
 
-    // Only allow deleting files within the backup destination
-    if (!$realFile || !$realDest || strpos($realFile, $realDest) !== 0) {
+    // Only allow deleting files within the backup destination.
+    // pathIsWithin() anchors on a trailing separator; a bare strpos() prefix
+    // test would accept a sibling directory such as "<dest>-evil".
+    if (!$realFile || !$realDest || !pathIsWithin($realFile, $realDest)) {
       return false;
     }
 
@@ -184,20 +197,14 @@ class BackupManager
       $dest = $row ? $row['value'] : '/mnt/user/backups/docker-folders';
     }
 
-    // Block writing outside safe base paths
-    $allowed = ['/mnt/', '/boot/config/plugins/'];
-    $safe = false;
-    foreach ($allowed as $prefix) {
-      if (strpos($dest, $prefix) === 0) {
-        $safe = true;
-        break;
-      }
-    }
-    if (!$safe) {
+    // Block writing outside safe base paths. Normalize first: a raw prefix test
+    // accepts "/mnt/../etc", which collapses to somewhere else entirely.
+    $normalized = normalizePath($dest);
+    if ($normalized === null || !pathIsWithinAny($normalized, BACKUP_ALLOWED_ROOTS)) {
       throw new InvalidArgumentException("Backup destination must be under /mnt/ or /boot/config/plugins/");
     }
 
-    return $dest;
+    return $normalized;
   }
 
   private function resolveRetention($override)
@@ -253,15 +260,26 @@ class BackupManager
         // Pattern is a subpath of a mount destination
         if (strpos($pattern, $dest . '/') === 0) {
           $relative = substr($pattern, strlen($dest) + 1);
+
+          // $relative comes from user-supplied backup_config.paths and could
+          // otherwise climb back out of the mount source with "..".
+          if (in_array('..', explode('/', $relative), true)) {
+            break;
+          }
+
           $hostPath = $src . '/' . $relative;
 
           // Support glob patterns
           if (strpos($relative, '*') !== false || strpos($relative, '?') !== false) {
             $globbed = glob($hostPath);
             if ($globbed) {
-              $hostPaths = array_merge($hostPaths, $globbed);
+              foreach ($globbed as $match) {
+                if (pathIsWithin($match, $src)) {
+                  $hostPaths[] = $match;
+                }
+              }
             }
-          } elseif (file_exists($hostPath) || is_dir($hostPath)) {
+          } elseif (pathIsWithin($hostPath, $src) && (file_exists($hostPath) || is_dir($hostPath))) {
             $hostPaths[] = $hostPath;
           }
           break;
@@ -287,7 +305,15 @@ class BackupManager
 
   private function pruneOldBackups($destination, $prefix, $retention)
   {
-    $pattern = rtrim($destination, '/') . '/' . $prefix . '.*.tar.gz';
+    // Same glob-injection surface as listBackups, but this one unlinks.
+    // Must match generateArchiveName's sanitizer so retention still prunes the
+    // archives this prefix actually produced.
+    $safePrefix = sanitizeArchivePrefix($prefix);
+    if ($safePrefix === null) {
+      return 0;
+    }
+
+    $pattern = rtrim($destination, '/') . '/' . $safePrefix . '.*.tar.gz';
     $files = glob($pattern);
 
     if (!$files || count($files) <= $retention) {
@@ -302,6 +328,11 @@ class BackupManager
     $deleted = 0;
 
     foreach ($toDelete as $file) {
+      // Re-check containment per file. glob() can follow symlinks out of the
+      // destination even with a sanitized prefix.
+      if (!pathIsWithin($file, $destination)) {
+        continue;
+      }
       if (unlink($file)) {
         $deleted++;
       }
@@ -312,6 +343,14 @@ class BackupManager
 
   private function generateArchiveName($prefix)
   {
-    return $prefix . '.' . date('Y-m-d_His') . '.tar.gz';
+    // $prefix is a container name, or "project.service". Coerce rather than
+    // reject: backupStack() loops over services, so throwing here would abort
+    // the backups for every remaining service in the stack.
+    $safePrefix = sanitizeArchivePrefix($prefix);
+    if ($safePrefix === null) {
+      $safePrefix = 'backup';
+    }
+
+    return $safePrefix . '.' . date('Y-m-d_His') . '.tar.gz';
   }
 }

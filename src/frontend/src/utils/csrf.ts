@@ -17,7 +17,8 @@
  */
 
 declare global {
-  // eslint-disable-next-line no-var
+  // `var` is required here — it is the only declaration form that adds to the
+  // global scope from a `declare global` block.
   var csrf_token: string | undefined;
 }
 

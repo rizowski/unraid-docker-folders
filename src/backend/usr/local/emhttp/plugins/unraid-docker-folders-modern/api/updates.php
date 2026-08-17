@@ -49,9 +49,20 @@ function handleGet()
   $db = Database::getInstance();
   $results = [];
 
+  // Cached release notes, so the update confirm modal can show what a pull
+  // will bring in without making the modal wait on a network call. Read as a
+  // whole table rather than joined: `repo` is the primary key, so this is one
+  // small row per source repo, and it keeps ReleaseNotes::payload() the only
+  // place that shapes a release for the frontend.
+  $notes = [];
+  foreach ($db->fetchAll('SELECT * FROM release_notes') as $note) {
+    $notes[$note['repo']] = $note;
+  }
+
   $stmt = $db->query('SELECT * FROM image_update_checks');
   if ($stmt) {
     while ($row = $stmt->fetchArray(SQLITE3_ASSOC)) {
+      $repo = $row['source_repo'] ?? null;
       $results[$row['image']] = [
         'image' => $row['image'],
         'local_digest' => $row['local_digest'],
@@ -60,6 +71,10 @@ function handleGet()
         'checked_at' => (int) $row['checked_at'],
         'error' => $row['error'],
         'source_url' => $row['source_url'] ?? null,
+        'source_repo' => $repo,
+        // payload() returns null for a missing row and for any non-'ok'
+        // status, which is exactly the "no notes to show" case.
+        'release' => ReleaseNotes::payload($repo !== null ? ($notes[$repo] ?? null) : null),
       ];
     }
   }

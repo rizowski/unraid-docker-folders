@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { createPinia, setActivePinia } from 'pinia';
+import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import FolderHeader from '../FolderHeader.vue';
+import { useDockerStore } from '@/stores/docker';
+import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
@@ -20,18 +22,24 @@ function makeFolder(overrides: Partial<Folder> = {}): Folder {
   };
 }
 
+// The component must share the pinia the test writes to. Installing a second
+// `createPinia()` here would give the component its own stores, and any state
+// a test set up would be invisible to it.
+let pinia: Pinia;
+
 function mountHeader(folder?: Partial<Folder>) {
   return mount(FolderHeader, {
     props: { folder: makeFolder(folder) },
     global: {
-      plugins: [createPinia()],
+      plugins: [pinia],
     },
   });
 }
 
 describe('FolderHeader', () => {
   beforeEach(() => {
-    setActivePinia(createPinia());
+    pinia = createPinia();
+    setActivePinia(pinia);
   });
 
   it('menu is hidden by default', () => {
@@ -132,6 +140,114 @@ describe('FolderHeader', () => {
       const dropdown = wrapper.findAll('div').find((d) => d.classes().includes('shadow-lg'));
       expect(dropdown).toBeTruthy();
       expect(dropdown!.element.className).toContain('z-[100]');
+    });
+  });
+
+  describe('compose actions while the status check is pending', () => {
+    /**
+     * Regression: these entries used to be gated on composeStore.composeAvailable,
+     * which is false until an async status fetch resolves. The menu therefore
+     * grew extra items a moment after load, which read as a blink.
+     */
+    it('shows compose actions immediately for a compose folder', async () => {
+      const wrapper = mountHeader({ compose_project: 'blog' });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).toContain('Stack Up');
+      expect(labels).toContain('Pull Latest Images');
+      expect(labels).toContain('Stack Details');
+    });
+
+    it('disables them until compose availability is known', async () => {
+      const wrapper = mountHeader({ compose_project: 'blog' });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+
+      const stackUp = wrapper
+        .findAll('button.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Stack Up')!;
+
+      expect(stackUp.attributes('disabled')).toBeDefined();
+      expect(stackUp.attributes('title')).toBe('Checking Docker Compose availability...');
+    });
+
+    it('omits compose actions entirely for a non-compose folder', async () => {
+      const wrapper = mountHeader();
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Stack Up');
+      expect(labels).not.toContain('Stack Details');
+    });
+  });
+
+  describe('update-check entry while settings are pending', () => {
+    /**
+     * Regression: this entry was gated on settingsStore.enableUpdateChecks,
+     * which is false until the settings fetch resolves. Whether update checks
+     * are on is a capability, not folder data, so the entry must render
+     * straight away and disable itself instead of appearing a moment later.
+     */
+    const openMenu = async (wrapper: ReturnType<typeof mountHeader>) => {
+      const kebab = wrapper
+        .findAll('button')
+        .find((b) => b.attributes('title') === 'Folder actions')!;
+      await kebab.trigger('click');
+    };
+
+    const folderWithImage = {
+      containers: [{ container_name: 'nginx' } as unknown as Folder['containers'][number]],
+    };
+
+    it('shows the entry before settings land, disabled', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'nginx', image: 'nginx:latest' } as never];
+
+      const wrapper = mountHeader(folderWithImage);
+      await openMenu(wrapper);
+
+      const entry = wrapper
+        .findAll('button.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Check for Updates');
+
+      expect(entry).toBeTruthy();
+      expect(entry!.attributes('disabled')).toBeDefined();
+      expect(entry!.attributes('title')).toBe('Loading settings…');
+    });
+
+    it('hides the entry once settings report update checks are off', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'nginx', image: 'nginx:latest' } as never];
+      const settings = useSettingsStore();
+      settings.loaded = true;
+      settings.enableUpdateChecks = false;
+
+      const wrapper = mountHeader(folderWithImage);
+      await openMenu(wrapper);
+
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Check for Updates');
+    });
+
+    it('enables the entry once settings report update checks are on', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'nginx', image: 'nginx:latest' } as never];
+      const settings = useSettingsStore();
+      settings.loaded = true;
+      settings.enableUpdateChecks = true;
+
+      const wrapper = mountHeader(folderWithImage);
+      await openMenu(wrapper);
+
+      const entry = wrapper
+        .findAll('button.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Check for Updates');
+
+      expect(entry).toBeTruthy();
+      expect(entry!.attributes('disabled')).toBeUndefined();
     });
   });
 

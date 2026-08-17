@@ -78,6 +78,17 @@ export type ModalField = ModalFieldBase & (
       items: {
         id: string;
         label: string;
+        /**
+         * Small second line under the label. Rendered with textContent in the
+         * parent document — never as HTML.
+         */
+        sublabel?: string;
+        /**
+         * Optional external link rendered after the sublabel. An anchor is
+         * interactive content, so clicking it does not toggle the row's
+         * checkbox even though it sits inside the row's <label>.
+         */
+        sublabelUrl?: string;
         icon?: string;
         state?: string;
         checked: boolean;
