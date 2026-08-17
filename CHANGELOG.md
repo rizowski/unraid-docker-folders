@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.08.17
+- feat: rename to "Docker Folders" and shorten the page URLs
 - feat(ui): one update button, and a re-check inside the confirm modal
 - feat(ui): collapse the three create buttons to "+" plus an icon
 
