@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.08.17
+- feat(settings): add a "Buy me a coffee" Ko-fi link
 - feat(ui): collapse the create buttons into one menu, widen the search
 - feat: rename to "Docker Folders" and shorten the page URLs
 - feat(ui): one update button, and a re-check inside the confirm modal
