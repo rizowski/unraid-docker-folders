@@ -406,6 +406,8 @@ full width, `8px 12px` padding, 1px `--color-border`, 4px radius, and
 | `.compact` | `6px 10px` / 13px — fields inside a grouped or nested block |
 | `.mono` | monospace face, standard chrome — paths, cron expressions |
 | `.auto-width` | intrinsic width — time pickers, day selects |
+| `.has-clear` | `26px` right padding — reserves room for an overlaid clear `×` |
+| `.subtle` | 5%-text tint mixed into `transparent` — fields that live in a toolbar |
 
 Use `--color-bg-input`, **not** `--color-input-bg`: Unraid does not actually
 define `--input-background`, so that token falls back to white and is unreadable

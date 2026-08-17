@@ -8,23 +8,38 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </a>
+        <button
+          @click="dragLocked = !dragLocked"
+          class="nav-btn shrink-0"
+          :class="{ warning: dragLocked }"
+          :title="dragLocked ? 'Unlock drag & drop' : 'Lock drag & drop'"
+        >
+          <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
+        </button>
         <span class="text-xs sm:text-sm text-text-secondary truncate">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
       </div>
+      <!-- Its own header child rather than part of the button cluster so
+           `flex-1` can eat the whole gap between the two groups. `.form-input`
+           and not utilities: DESIGN.md §11 — the unlayered input reset kills
+           `w-full`/`border`/`py-*` on a bare <input>, so the old `w-52` was
+           already dead and the field had no box at all. -->
+      <div class="relative order-last w-full min-w-0 sm:order-none sm:flex-1">
+        <input
+          v-model="dockerStore.searchQuery"
+          type="text"
+          placeholder="Search containers..."
+          class="form-input subtle"
+          :class="{ 'has-clear': dockerStore.searchQuery }"
+        />
+        <button
+          v-if="dockerStore.searchQuery"
+          @click="dockerStore.searchQuery = ''"
+          class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
+          title="Clear search"
+        >&times;</button>
+      </div>
       <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
-        <div class="relative w-full sm:w-auto order-last sm:order-none mt-2 sm:mt-0">
-          <input
-            v-model="dockerStore.searchQuery"
-            type="text"
-            placeholder="Search containers..."
-            class="nav-btn text-sm pl-3 pr-7 py-2 sm:py-1 w-full sm:w-52 border border-border rounded bg-transparent text-text placeholder:text-text-secondary focus:outline-none focus:border-text-secondary"
-          />
-          <button
-            v-if="dockerStore.searchQuery"
-            @click="dockerStore.searchQuery = ''"
-            class="absolute right-1.5 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
-            title="Clear search"
-          >&times;</button>
-        </div>
         <div class="view-mode-toggle">
           <div class="view-mode-slider" :class="{ 'slider-right': viewMode === 'list' }"></div>
           <button
@@ -56,15 +71,6 @@
             </svg>
           </button>
         </div>
-        <button
-          @click="dragLocked = !dragLocked"
-          class="nav-btn"
-          :class="{ warning: dragLocked }"
-          :title="dragLocked ? 'Unlock drag & drop' : 'Lock drag & drop'"
-        >
-          <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
-        </button>
         <!-- Rendered before settings land so the toolbar doesn't reflow once
              they do. Until `loaded` flips we don't know whether update checks
              are on, so show the button disabled rather than guessing. -->
@@ -88,36 +94,11 @@
             <span v-if="updatesStore.updatesAvailableCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-warning text-white rounded-full text-[10px] font-bold">{{ updatesStore.updatesAvailableCount }}</span>
           </template>
         </button>
-        <!-- Links out to Unraid's native Add Container form. A plain relative
-             href breaks out of the plugin iframe via <base target="_parent">. -->
-        <a
-          href="/Docker/AddContainer"
-          class="nav-btn active"
-          title="Create a new container"
-          aria-label="Create a new container"
-        >
-          <span aria-hidden="true">+</span>
-          <IconContainer />
-        </a>
-        <button
-          :disabled="composeStore.composeActionsDisabled"
-          :title="composeStore.composeDisabledReason ?? 'Create a Docker Compose stack'"
-          aria-label="Create a Docker Compose stack"
-          @click="openCreateStack"
-          class="nav-btn active disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <span aria-hidden="true">+</span>
-          <IconStack />
-        </button>
-        <button
-          @click="openCreateFolderModal"
-          class="nav-btn active"
-          title="Create a folder"
-          aria-label="Create a folder"
-        >
-          <span aria-hidden="true">+</span>
-          <IconFolder />
-        </button>
+        <CreateMenu
+          :stack-disabled="composeStore.composeActionsDisabled"
+          :stack-disabled-reason="composeStore.composeDisabledReason"
+          @select="handleCreate"
+        />
       </div>
     </header>
 
@@ -289,9 +270,7 @@ import ComposeProgressModal from '@/components/compose/ComposeProgressModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
-import IconContainer from '@/components/icons/IconContainer.vue';
-import IconStack from '@/components/icons/IconStack.vue';
-import IconFolder from '@/components/icons/IconFolder.vue';
+import CreateMenu from '@/components/CreateMenu.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
@@ -358,6 +337,13 @@ function openCreateStack() {
   composeEditorProject.value = '';
   composeEditorMode.value = 'create';
   composeEditorOpen.value = true;
+}
+
+// "Container" is an anchor inside CreateMenu — it navigates the parent document
+// rather than emitting, so it never reaches here.
+function handleCreate(action: 'stack' | 'folder') {
+  if (action === 'stack') openCreateStack();
+  else openCreateFolderModal();
 }
 
 function openComposeUp(project: string) {
