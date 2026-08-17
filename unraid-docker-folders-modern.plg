@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.08.16-dev2">
-<!ENTITY md5 "76ca84c4438a9aa528f9d579fc722265">
+<!ENTITY version "2026.08.17-dev1">
+<!ENTITY md5 "85827229fea3743b3738eda50094b891">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -103,6 +103,10 @@
 
 
 
+
+###2026.08.17-dev1
+- feat(ui): one update button, and a re-check inside the confirm modal
+- feat(ui): collapse the three create buttons to "+" plus an icon
 ###2026.08.16-dev2
 - fix(ui): render the update-check controls before settings land
 ###2026.08.16-dev1

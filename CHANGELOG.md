@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.08.17
+- feat(ui): one update button, and a re-check inside the confirm modal
+- feat(ui): collapse the three create buttons to "+" plus an icon
+
 ## 2026.08.16
 - fix(ui): render the update-check controls before settings land
 - docs: summarize each release in CHANGELOG, stop regenerating it
