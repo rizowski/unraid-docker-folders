@@ -24,7 +24,11 @@ function composeUnit(project: string, names: string[]): UpdateUnit {
   };
 }
 
-function mountModal(units: UpdateUnit[], updates: Record<string, ImageUpdateStatus> = {}) {
+function mountModal(
+  units: UpdateUnit[],
+  updates: Record<string, ImageUpdateStatus> = {},
+  extraProps: { canRecheck?: boolean; checking?: boolean } = {},
+) {
   // The component resolves its store from the app-level pinia, so seed that
   // one rather than whatever setActivePinia left behind.
   const pinia = createPinia();
@@ -32,13 +36,16 @@ function mountModal(units: UpdateUnit[], updates: Record<string, ImageUpdateStat
   useUpdatesStore().updates = updates;
 
   return mount(UpdateConfirmModal, {
-    props: { isOpen: true, units },
+    props: { isOpen: true, units, ...extraProps },
     global: {
       plugins: [pinia],
       stubs: { Teleport: true },
     },
   });
 }
+
+const buttonNamed = (wrapper: ReturnType<typeof mountModal>, label: string) =>
+  wrapper.findAll('button').find((b) => b.text().trim() === label);
 
 const releaseStatus = (
   image: string,
@@ -201,5 +208,71 @@ describe('UpdateConfirmModal – release links', () => {
     await wrapper.get('a[title="View release notes"]').trigger('click');
 
     expect(box.element.checked).toBe(true);
+  });
+
+  describe('Check Again', () => {
+    it('is absent unless the modal covers every container', () => {
+      const wrapper = mountModal([imageUnit('nginx:latest', ['web'])]);
+      expect(buttonNamed(wrapper, 'Check Again')).toBeUndefined();
+    });
+
+    it('is offered when the modal was opened from the header', () => {
+      const wrapper = mountModal([imageUnit('nginx:latest', ['web'])], {}, { canRecheck: true });
+      expect(buttonNamed(wrapper, 'Check Again')).toBeTruthy();
+    });
+
+    it('emits recheck rather than cancelling', async () => {
+      const wrapper = mountModal([imageUnit('nginx:latest', ['web'])], {}, { canRecheck: true });
+
+      await buttonNamed(wrapper, 'Check Again')!.trigger('click');
+
+      expect(wrapper.emitted('recheck')).toBeTruthy();
+      expect(wrapper.emitted('cancel')).toBeFalsy();
+    });
+
+    /**
+     * A check takes seconds against a registry. Updating from a list that is
+     * mid-refresh would act on rows about to be replaced.
+     */
+    it('locks the footer while the check runs', () => {
+      const wrapper = mountModal(
+        [imageUnit('nginx:latest', ['web'])],
+        {},
+        { canRecheck: true, checking: true },
+      );
+
+      expect(buttonNamed(wrapper, 'Checking…')!.attributes('disabled')).toBeDefined();
+      expect(buttonNamed(wrapper, 'Update')!.attributes('disabled')).toBeDefined();
+      expect(buttonNamed(wrapper, 'Cancel')!.attributes('disabled')).toBeDefined();
+    });
+  });
+
+  describe('when a re-check clears every update', () => {
+    /**
+     * The modal stays open on an empty list instead of vanishing, so clicking
+     * "Check Again" has a visible result either way.
+     */
+    it('shows an up-to-date message instead of an empty list', () => {
+      const wrapper = mountModal([], {}, { canRecheck: true });
+
+      expect(wrapper.text()).toContain('Everything is up to date.');
+      expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false);
+    });
+
+    it('offers only Close', () => {
+      const wrapper = mountModal([], {}, { canRecheck: true });
+
+      expect(buttonNamed(wrapper, 'Close')).toBeTruthy();
+      expect(buttonNamed(wrapper, 'Update')).toBeUndefined();
+      expect(buttonNamed(wrapper, 'Check Again')).toBeUndefined();
+    });
+
+    it('Close dismisses the modal', async () => {
+      const wrapper = mountModal([], {}, { canRecheck: true });
+
+      await buttonNamed(wrapper, 'Close')!.trigger('click');
+
+      expect(wrapper.emitted('cancel')).toBeTruthy();
+    });
   });
 });

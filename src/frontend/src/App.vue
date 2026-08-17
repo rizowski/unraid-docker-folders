@@ -70,10 +70,10 @@
              are on, so show the button disabled rather than guessing. -->
         <button
           v-if="!settingsStore.loaded || settingsStore.enableUpdateChecks"
-          @click="updatesStore.checkForUpdates()"
+          @click="handleUpdateButton"
           class="nav-btn relative"
           :disabled="updatesStore.checking || !settingsStore.loaded"
-          :title="settingsStore.loaded ? 'Check for image updates' : 'Loading settings…'"
+          :title="updateButtonTitle"
         >
           <svg v-if="updatesStore.checking" class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -87,15 +87,6 @@
             </svg>
             <span v-if="updatesStore.updatesAvailableCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-warning text-white rounded-full text-[10px] font-bold">{{ updatesStore.updatesAvailableCount }}</span>
           </template>
-        </button>
-        <button
-          v-if="settingsStore.enableUpdateChecks && updatesStore.updatesAvailableCount > 0"
-          @click="handleUpdateAll"
-          class="nav-btn warning"
-          title="Update all containers with available updates"
-        >
-          <span class="sm:hidden">Update ({{ updatesStore.updatesAvailableCount }})</span>
-          <span class="hidden sm:inline">Update All ({{ updatesStore.updatesAvailableCount }})</span>
         </button>
         <!-- Links out to Unraid's native Add Container form. A plain relative
              href breaks out of the plugin iframe via <base target="_parent">. -->
@@ -271,7 +262,10 @@
     <UpdateConfirmModal
       :is-open="showBatchConfirm"
       :units="pendingUnits"
+      :can-recheck="updateRecheckable"
+      :checking="updatesStore.checking"
       @confirm="confirmBatchPull"
+      @recheck="handleUpdateRecheck"
       @cancel="showBatchConfirm = false; pendingUnits = []"
     />
   </div>
@@ -319,6 +313,13 @@ const pullingContainer = ref<{ image: string; name: string; managed: string | nu
 const batchPullUnits = ref<UpdateUnit[]>([]);
 const showBatchConfirm = ref(false);
 const pendingUnits = ref<UpdateUnit[]>([]);
+/**
+ * Whether the open confirm modal may offer "Check Again". Only true when it was
+ * opened from the header, where the scope is every container. A folder or
+ * single-container open is a *subset*, and a re-check rebuilds the list from
+ * everything that has an update — which would silently widen that subset.
+ */
+const updateRecheckable = ref(false);
 const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
@@ -636,12 +637,60 @@ function openUpdateConfirm(containers: Container[]) {
     composeStore.managementEnabled,
   );
   if (units.length === 0) return;
+  updateRecheckable.value = false;
   pendingUnits.value = units;
   showBatchConfirm.value = true;
 }
 
+/**
+ * The header's update button does one of two things depending on what we know:
+ * with no updates on record it runs a check, and with updates on record it
+ * opens the confirm list. One button, because "check" and "review what the
+ * check found" are the same intent a moment apart.
+ */
+function handleUpdateButton() {
+  if (updatesStore.updatesAvailableCount > 0) {
+    handleUpdateAll();
+    return;
+  }
+  updatesStore.checkForUpdates();
+}
+
+const updateButtonTitle = computed(() => {
+  if (!settingsStore.loaded) return 'Loading settings…';
+  if (updatesStore.checking) return 'Checking for image updates…';
+  const n = updatesStore.updatesAvailableCount;
+  if (n === 0) return 'Check for image updates';
+  return n === 1 ? 'Review 1 available update' : `Review ${n} available updates`;
+});
+
 function handleUpdateAll() {
-  openUpdateConfirm(updatesStore.getContainersWithUpdates());
+  const containers = updatesStore.getContainersWithUpdates();
+  if (containers.length === 0) return;
+  const units = buildUpdateUnits(
+    containers,
+    dockerStore.containers,
+    composeStore.managementEnabled,
+  );
+  if (units.length === 0) return;
+  updateRecheckable.value = true;
+  pendingUnits.value = units;
+  showBatchConfirm.value = true;
+}
+
+/**
+ * "Check Again" from inside the open modal. Rebuilds the list from whatever the
+ * fresh check found, so containers that gained an update appear and ones that
+ * no longer have one drop out. An empty result leaves the modal open on its
+ * "everything is up to date" state rather than closing under the user.
+ */
+async function handleUpdateRecheck() {
+  await updatesStore.checkForUpdates();
+  pendingUnits.value = buildUpdateUnits(
+    updatesStore.getContainersWithUpdates(),
+    dockerStore.containers,
+    composeStore.managementEnabled,
+  );
 }
 
 function handleUpdateFolder(folder: Folder) {

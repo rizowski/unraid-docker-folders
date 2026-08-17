@@ -2,10 +2,14 @@
   <BaseModal v-if="!inIframe" :is-open="isOpen" max-width="512px" @close="$emit('cancel')">
     <div class="px-6 py-4 border-b border-border">
       <h2 class="text-base font-semibold text-text">Update Containers</h2>
-      <p class="text-sm text-text-secondary mt-1">{{ summary }}</p>
+      <p v-if="!isEmpty" class="text-sm text-text-secondary mt-1">{{ summary }}</p>
     </div>
 
-    <div class="max-h-[320px] overflow-auto">
+    <p v-if="isEmpty" class="px-6 py-6 text-sm text-text-secondary">
+      Everything is up to date.
+    </p>
+
+    <div v-else class="max-h-[320px] overflow-auto">
       <label
         v-for="unit in units"
         :key="unit.id"
@@ -43,15 +47,27 @@
       </label>
     </div>
 
-    <div class="flex justify-end gap-2 px-6 py-3 border-t border-border">
-      <button type="button" @click="$emit('cancel')" class="nav-btn">Cancel</button>
+    <div v-if="isEmpty" class="flex justify-end gap-2 px-6 py-3 border-t border-border">
+      <button type="button" @click="$emit('cancel')" class="nav-btn active">Close</button>
+    </div>
+    <div v-else class="flex items-center gap-2 px-6 py-3 border-t border-border">
+      <button
+        v-if="canRecheck"
+        type="button"
+        @click="$emit('recheck')"
+        class="nav-btn"
+        :class="{ 'opacity-50 cursor-not-allowed': checking }"
+        :disabled="checking"
+      >{{ checking ? 'Checking…' : 'Check Again' }}</button>
+      <span class="flex-1"></span>
+      <button type="button" @click="$emit('cancel')" class="nav-btn" :disabled="checking">Cancel</button>
       <button
         ref="confirmBtn"
         type="button"
         @click="confirm"
         class="nav-btn active"
-        :class="{ 'opacity-50 cursor-not-allowed': selected.size === 0 }"
-        :disabled="selected.size === 0"
+        :class="{ 'opacity-50 cursor-not-allowed': selected.size === 0 || checking }"
+        :disabled="selected.size === 0 || checking"
       >Update</button>
     </div>
   </BaseModal>
@@ -60,19 +76,31 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
-import { useParentModal } from '@/composables/useParentModal';
+import { useParentModal, type ModalAction } from '@/composables/useParentModal';
 import { useUpdatesStore } from '@/stores/updates';
 import { unitLabel, unitReleaseSummary, unitReleaseUrl, type UpdateUnit } from '@/utils/updateUnits';
 
 interface Props {
   isOpen: boolean;
   units: UpdateUnit[];
+  /**
+   * Offer "Check Again". Only set when the modal covers every container — a
+   * re-check rebuilds the list from everything with an update, which would
+   * widen a folder or single-container list into a global one.
+   */
+  canRecheck?: boolean;
+  /** A re-check is in flight; the footer locks while it runs. */
+  checking?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  canRecheck: false,
+  checking: false,
+});
 
 const emit = defineEmits<{
   confirm: [units: UpdateUnit[]];
+  recheck: [];
   cancel: [];
 }>();
 
@@ -82,6 +110,12 @@ const confirmBtn = ref<HTMLButtonElement | null>(null);
 const containerCount = computed(() =>
   props.units.reduce((total, unit) => total + unit.containers.length, 0),
 );
+
+/**
+ * A re-check can empty the list. The modal stays open on this state rather
+ * than vanishing, so the click has a visible result.
+ */
+const isEmpty = computed(() => props.units.length === 0);
 
 const summary = computed(() => {
   const n = containerCount.value;
@@ -134,6 +168,12 @@ function confirm() {
 
 const parentModal = useParentModal({
   onAction({ actionId, values }) {
+    // Must come before the catch-all below, which reads every other action as
+    // a dismissal — "Check Again" would otherwise close the modal.
+    if (actionId === 'recheck') {
+      emit('recheck');
+      return;
+    }
     if (actionId !== 'confirm') {
       emit('cancel');
       return;
@@ -147,34 +187,59 @@ const parentModal = useParentModal({
 
 const { inIframe } = parentModal;
 
+/**
+ * The parent renderer can only patch a checkbox-list's *checked* flags — it
+ * cannot add or remove rows (`DockerFoldersMain.page:1128-1134`). So the
+ * actions, which it can re-render, live here separately from the fields, which
+ * need a full re-open when the unit list changes.
+ */
+const parentActions = computed<ModalAction[]>(() => {
+  if (isEmpty.value) {
+    return [{ id: 'cancel', label: 'Close', variant: 'primary' }];
+  }
+  const actions: ModalAction[] = [];
+  if (props.canRecheck) {
+    actions.push({
+      id: 'recheck',
+      label: props.checking ? 'Checking…' : 'Check Again',
+      variant: 'default',
+      disabled: props.checking,
+    });
+  }
+  actions.push(
+    { id: 'cancel', label: 'Cancel', variant: 'default', disabled: props.checking },
+    { id: 'confirm', label: 'Update', variant: 'primary', disabled: props.checking },
+  );
+  return actions;
+});
+
 function openParent() {
   parentModal.open({
     kind: 'update-confirm',
     title: 'Update Containers',
     size: 'md',
-    fields: [
-      { type: 'text', text: summary.value },
-      {
-        type: 'checkbox-list',
-        id: 'units',
-        caption: 'Uncheck anything you want to skip.',
-        items: props.units.map((unit) => ({
-          id: unit.id,
-          // The parent renderer gives items a single label line plus a small
-          // state badge, so fold the image/project into the label rather than
-          // dropping it.
-          label: `${containerNames(unit)} — ${unitLabel(unit)}`,
-          sublabel: noteFor(unit) ?? undefined,
-          sublabelUrl: urlFor(unit) ?? undefined,
-          state: unit.kind === 'compose' ? 'stack' : undefined,
-          checked: true,
-        })),
-      },
-    ],
-    actions: [
-      { id: 'cancel', label: 'Cancel', variant: 'default' },
-      { id: 'confirm', label: 'Update', variant: 'primary' },
-    ],
+    fields: isEmpty.value
+      ? [{ type: 'text', text: 'Everything is up to date.' }]
+      : [
+          { type: 'text', text: summary.value },
+          {
+            type: 'checkbox-list',
+            id: 'units',
+            caption: 'Uncheck anything you want to skip.',
+            items: props.units.map((unit) => ({
+              id: unit.id,
+              // The parent renderer gives items a single label line plus a small
+              // state badge, so fold the image/project into the label rather than
+              // dropping it.
+              label: `${containerNames(unit)} — ${unitLabel(unit)}`,
+              sublabel: noteFor(unit) ?? undefined,
+              sublabelUrl: urlFor(unit) ?? undefined,
+              state: unit.kind === 'compose' ? 'stack' : undefined,
+              checked: true,
+            })),
+          },
+        ],
+    actions: parentActions.value,
   });
 }
 
@@ -193,5 +258,14 @@ watch(
     }
   },
   { immediate: true },
+);
+
+// A check flipping in or out only changes the buttons, so patch them rather
+// than rebuilding the whole modal and losing the user's checkbox state.
+watch(
+  () => props.checking,
+  () => {
+    if (inIframe && props.isOpen) parentModal.update({ actions: parentActions.value });
+  },
 );
 </script>
