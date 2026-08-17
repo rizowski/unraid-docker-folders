@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Unraid Docker Folders Modern** - A modern Unraid plugin to replace the outdated folderview2 plugin with Vue 3 frontend, real-time WebSocket updates, and SQLite persistence. Allows organizing Docker containers into folders with drag-and-drop.
+**Unraid Docker Folders** - A modern Unraid plugin to replace the outdated folderview2 plugin with Vue 3 frontend, real-time WebSocket updates, and SQLite persistence. Allows organizing Docker containers into folders with drag-and-drop.
 
 **Current Status**: Shipping. Stable releases are cut from `main`, prereleases from `dev`. Beyond folder organization the plugin covers live resource stats, container logs, image update checking and batch pulls, Docker Compose editing and stack grouping, cron schedules, and configuration backups.
 
@@ -125,8 +125,9 @@ src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/
   ├── classes/             # PHP business logic (Database, DockerClient, FolderManager, WebSocketPublisher)
   ├── include/             # config.php, auth.php
   ├── migrations/          # SQL migration files
-  ├── DockerFoldersMain.page      # Menu="Docker:3" - Folders tab
-  ├── DockerFoldersSettings.page  # Menu="Utilities" - Settings (health status, etc.)
+  ├── Folders.page         # Menu="Docker:0" - Folders tab (/Docker/Folders)
+  ├── DockerFolders.page   # Menu="Utilities" - Settings (/Settings/DockerFolders)
+  ├── DockerFoldersInject.page  # Menu="Docker" - optional Docker-section replacement
   └── assets/              # ← Frontend build output goes here
 ```
 
@@ -161,23 +162,29 @@ Uses **SQLite3 native extension** (NOT PDO) because Unraid PHP lacks PDO SQLite 
 
 **Current configuration**:
 
-`DockerFolders.page` - Adds "Folders" tab under Docker menu:
+`Folders.page` — adds the "Folders" tab under the Docker menu. Serves
+`/Docker/Folders`:
 ```
-Menu="Docker:3"
+Menu="Docker:0"
 Title="Folders"
-Tag="folder"
+Tag="folder-open"
 Cond="is_file('/var/run/dockerd.pid')"
 Markdown="false"
 ```
 
-`Settings.page` - Adds settings page under Settings > Other:
+`DockerFolders.page` — adds the settings page under Settings > Utilities. Serves
+`/Settings/DockerFolders`, which is the link target in `App.vue:5`:
 ```
-Menu="OtherSettings"
-Title="Docker Folders Modern"
-Icon="folder"
+Menu="Utilities"
+Title="Docker Folders"
+Icon="icon.png"
 Tag="folder"
 Markdown="false"
 ```
+
+**The two names are not interchangeable.** `Folders.page` is the app;
+`DockerFolders.page` is the settings screen. `Folders` is also a deliberately
+generic key in the global `$site` map — see the filename warning above.
 
 **Valid Menu values**: `Tasks`, `Docker`, `VMs`, `Settings`, `OtherSettings`, `Utilities`, `UserPreferences`
 
@@ -293,7 +300,7 @@ Nothing enforces this.
 
 ### Token transport (two hops, neither is a query param at the server)
 
-1. `DockerFoldersMain.page:135,154` reads Unraid's global `csrf_token` and puts
+1. `Folders.page:135,154` reads Unraid's global `csrf_token` and puts
    it in the **iframe URL query string**.
 2. Inside the iframe `window.csrf_token` does not exist, so
    `utils/csrf.ts:31-33` falls back to reading it from `window.location.search`.
@@ -309,7 +316,7 @@ The JSON body lives in the `payload` field, which is what `getRequestData()`
 Note `apiFetch()` replaces `options.headers` wholesale, so callers cannot add an
 `X-CSRF-Token` header even though `auth.php:129` would accept one.
 
-`DockerFoldersSettings.page` is a native Unraid page, not an iframe — it reads
+`DockerFolders.page` is a native Unraid page, not an iframe — it reads
 `window.csrf_token` directly and hand-builds the same body format.
 
 ### SQL
@@ -412,7 +419,7 @@ acceptable.
 ## Known Issues & Gotchas
 
 ### Resolved Issues
-- ✅ Page rendering blank (Docker.page filename collision with built-in - renamed to DockerFolders.page)
+- ✅ Page rendering blank (Docker.page filename collision with built-in - renamed, now Folders.page)
 - ✅ XML parse errors in PLG (fixed with CDATA)
 - ✅ SQLite driver unavailable (switched from PDO to SQLite3 native)
 - ✅ Icon display (use FontAwesome names, not file paths)
@@ -463,7 +470,7 @@ console. Read the summary line, not the noise.
 ### Backend (PHPUnit)
 Lives in `tests/php/` (`AuthTest.php`, `DockerClientStatsTest.php`,
 `UpdateCheckTest.php`). There is no local PHP binary — the suite runs in Docker
-via `tests/php/run.sh`, with `Dockerfile` and `phpunit.xml` alongside it.
+via `tests/php/run.sh`, with `Dockerfile` and `phpunit.xml.dist` alongside it.
 
 ### Not covered by automated tests
 Anything that needs a real Unraid box: the nchan WebSocket channel, CSRF/session
@@ -519,8 +526,11 @@ reboots. Verify these by installing a build on-device.
 
 ### Useful URLs (on Unraid)
 - Direct app: `http://<unraid>/plugins/unraid-docker-folders-modern/assets/index.html`
-- Docker Folders tab: `http://<unraid>/Docker/DockerFolders` (tab under Docker menu)
-- Settings: `http://<unraid>/Settings/DockerFoldersModern` (under Other Settings)
+- Docker Folders tab: `http://<unraid>/Docker/Folders` (from `Folders.page`)
+- Settings: `http://<unraid>/Settings/DockerFolders` (from `DockerFolders.page`, `Menu="Utilities"`) — linked from `App.vue:5`
+
+Page URLs are `/<menu section>/<filename without .page>`. They come from the
+**filename**, not from `Title=`. Renaming a `Title=` does not move a URL.
 
 ### Key Constants (config.php)
 - `PLUGIN_NAME`: `unraid-docker-folders-modern`

@@ -229,6 +229,21 @@
   font-size: 13px;
 }
 
+/* Translucent fill for fields that sit in a toolbar rather than a form. Mixes
+   into `transparent` instead of the background color, so the field reads as
+   part of the bar rather than a box dropped on it. 5% is the lightest
+   established tint step (DESIGN.md §9). */
+#unraid-docker-folders-modern .form-input.subtle {
+  background: color-mix(in srgb, var(--text-color, #1a1a1a) 5%, transparent);
+}
+
+/* Fields with an overlaid clear button: reserve room so the value doesn't run
+   underneath it. Padding has to live here — the reset owns `padding` on inputs,
+   so a Tailwind `pr-*` would be dead. */
+#unraid-docker-folders-modern .form-input.has-clear {
+  padding-right: 26px;
+}
+
 /* Path / cron values keep the standard field chrome but a monospace face */
 #unraid-docker-folders-modern .form-input.mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;

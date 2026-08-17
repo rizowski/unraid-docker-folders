@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <CommunityApplications>
   <Profile>
-**Docker Folders Modern** — drag and drop your Docker containers into folders.
+**Docker Folders** — drag and drop your Docker containers into folders.
 
 Adds a "Folders" tab under the Docker menu where you can group containers into folders with custom icons and colors, then start, stop, restart, and update them from one place.
 

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Plugin>
-  <Name>Docker Folders Modern</Name>
+  <Name>Docker Folders</Name>
   <Overview>Organize Docker containers into drag-and-drop folders on the Docker tab. Live CPU, memory, network and I/O stats, image update checking, container scheduling, Docker Compose stack grouping, real-time updates over WebSocket, and import/export of folder layouts. A modern replacement for folder.view, built with Vue 3.</Overview>
   <PluginURL>https://raw.githubusercontent.com/rizowski/unraid-docker-folders/main/unraid-docker-folders-modern.plg</PluginURL>
   <PluginAuthor>rizowski</PluginAuthor>

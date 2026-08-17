@@ -226,7 +226,7 @@ fi
 
 # Copy icon.png into plugin directory. The repo root is the source of truth so
 # Community Applications can reference it by raw URL; the PLG's icon= attribute
-# and DockerFoldersSettings.page's Icon= resolve it relative to plugdir.
+# and DockerFolders.page's Icon= resolve it relative to plugdir.
 if [ -f "${PROJECT_ROOT}/icon.png" ]; then
     cp "${PROJECT_ROOT}/icon.png" "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/"
 fi
