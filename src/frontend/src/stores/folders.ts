@@ -4,7 +4,14 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Folder, FolderCreateData, FolderUpdateData, FolderExportConfig, FolderImportResult } from '@/types/folder';
+import type {
+  Folder,
+  FolderCreateData,
+  FolderUpdateData,
+  FolderContainerSelection,
+  FolderExportConfig,
+  FolderImportResult,
+} from '@/types/folder';
 import { apiFetch } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -198,6 +205,52 @@ export const useFolderStore = defineStore('folders', () => {
     }
   }
 
+  /**
+   * Make a folder's membership match `desired`, issuing only the add and remove
+   * calls for containers that actually changed.
+   *
+   * Re-adding a container that is already in the folder is not free: the backend
+   * deletes the row and reinserts it at MAX(position) + 1, so replacing the whole
+   * set renumbers every container into the caller's iteration order.
+   *
+   * The diff is keyed on container_name — that is the association's unique key,
+   * and container ids change whenever a container is recreated.
+   */
+  async function setFolderContainers(
+    folderId: number,
+    desired: FolderContainerSelection[],
+  ): Promise<boolean> {
+    const folder = folders.value.find((f) => f.id === folderId);
+    if (!folder) return false;
+
+    // Snapshot before mutating: removeContainerFromFolder optimistically splices
+    // folder.containers, so reading it lazily would corrupt the diff mid-loop.
+    const existingNames = new Set((folder.containers ?? []).map((c) => c.container_name));
+
+    const seen = new Set<string>();
+    const desiredList = desired.filter((c) => c.name && !seen.has(c.name) && seen.add(c.name));
+    const desiredNames = new Set(desiredList.map((c) => c.name));
+
+    const toRemove = [...existingNames].filter((n) => !desiredNames.has(n));
+    const toAdd = desiredList.filter((c) => !existingNames.has(c.name));
+
+    if (toAdd.length === 0 && toRemove.length === 0) return true;
+
+    // Sequential, removals first: each add reads MAX(position) server-side, so
+    // concurrent adds would collide on position, and removing first keeps a
+    // container moved out and back within one save off the UNIQUE constraint.
+    let ok = true;
+    for (const name of toRemove) {
+      ok = (await removeContainerFromFolder(name)) && ok;
+    }
+    for (const c of toAdd) {
+      ok = (await addContainerToFolder(folderId, c.id, c.name)) && ok;
+    }
+
+    await fetchFolders(true);
+    return ok;
+  }
+
   async function reorderContainers(folderId: number, containerIds: string[]): Promise<boolean> {
     try {
       const response = await apiFetch(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`, {
@@ -328,6 +381,7 @@ export const useFolderStore = defineStore('folders', () => {
     deleteFolder,
     addContainerToFolder,
     removeContainerFromFolder,
+    setFolderContainers,
     reorderContainers,
     reorderFolders,
     exportConfiguration,

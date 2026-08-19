@@ -37,18 +37,18 @@
         </div>
 
         <div v-if="availableContainers.length > 0" class="mb-6">
-          <label class="block mb-1 font-medium text-text">Add Containers</label>
-          <span class="block mb-2 text-sm text-text-secondary">Select unfoldered containers to add to this folder</span>
+          <label class="block mb-1 font-medium text-text">Containers</label>
+          <span class="block mb-2 text-sm text-text-secondary">Select which containers belong to this folder</span>
           <div class="max-h-[200px] overflow-auto border border-border rounded bg-bg">
             <label
               v-for="container in availableContainers"
               :key="container.id"
               class="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-bg-card transition-colors"
-              :class="{ 'bg-bg-card': selectedContainerIds.has(container.id) }"
+              :class="{ 'bg-bg-card': effectiveSelection.has(container.id) }"
             >
               <input
                 type="checkbox"
-                :checked="selectedContainerIds.has(container.id)"
+                :checked="effectiveSelection.has(container.id)"
                 @change="toggleContainer(container.id)"
                 class="shrink-0"
               />
@@ -76,7 +76,7 @@ import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import BaseModal from '@/components/BaseModal.vue';
 import { useParentModal } from '@/composables/useParentModal';
-import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
+import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 
 interface Props {
   isOpen: boolean;
@@ -87,7 +87,9 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   close: [];
-  save: [data: FolderCreateData | FolderUpdateData, containerIds: string[]];
+  // `null` means the container picker was never presented, so associations must
+  // be left alone. An empty array means "remove every container".
+  save: [data: FolderCreateData | FolderUpdateData, containers: FolderContainerSelection[] | null];
 }>();
 
 const dockerStore = useDockerStore();
@@ -100,7 +102,16 @@ const formData = ref({
   color: '#ff8c2f',
 });
 
-const selectedContainerIds = ref<Set<string>>(new Set());
+// `null` = the user has not touched the list, so the selection is derived from
+// the folder's current members. Seeding a Set up front would go stale: the watch
+// below only fires on [isOpen, folder], so a docker list that arrives afterwards
+// would leave every existing member rendered unchecked — which now reads as
+// "remove them all".
+const selectedContainerIds = ref<Set<string> | null>(null);
+
+const existingNames = computed(
+  () => new Set((props.folder?.containers ?? []).map((c) => c.container_name)),
+);
 
 const availableContainers = computed(() => {
   const assignedNames = new Set<string>();
@@ -109,11 +120,31 @@ const availableContainers = computed(() => {
     if (props.folder && folder.id === props.folder.id) return;
     folder.containers.forEach((assoc) => assignedNames.add(assoc.container_name));
   });
-  return dockerStore.sortedContainers.filter((c) => !assignedNames.has(c.name));
+  const unassigned = dockerStore.sortedContainers.filter((c) => !assignedNames.has(c.name));
+
+  if (!props.folder) return unassigned;
+
+  // This folder's own containers first, in their stored order, so the list
+  // mirrors the folder. folder.containers already arrives ordered by position.
+  const memberOrder = new Map(props.folder.containers.map((c, i) => [c.container_name, i]));
+  const members = unassigned
+    .filter((c) => memberOrder.has(c.name))
+    .sort((a, b) => memberOrder.get(a.name)! - memberOrder.get(b.name)!);
+
+  return [...members, ...unassigned.filter((c) => !memberOrder.has(c.name))];
 });
 
+const effectiveSelection = computed<Set<string>>(
+  () =>
+    selectedContainerIds.value ??
+    new Set(
+      availableContainers.value.filter((c) => existingNames.value.has(c.name)).map((c) => c.id),
+    ),
+);
+
 function toggleContainer(id: string) {
-  const next = new Set(selectedContainerIds.value);
+  // Seeds from the derived selection on first touch.
+  const next = new Set(effectiveSelection.value);
   if (next.has(id)) {
     next.delete(id);
   } else {
@@ -122,14 +153,40 @@ function toggleContainer(id: string) {
   selectedContainerIds.value = next;
 }
 
+/**
+ * Turn the checked ids into the full desired membership set.
+ *
+ * Associations the picker could not show — a container temporarily missing from
+ * Docker, e.g. mid-recreate — are passed through so that saving never silently
+ * drops them. Their stored `container_id` may be stale, which is safe only
+ * because a passed-through entry always matches an existing member by name and
+ * so is never sent to add_container.
+ */
+function resolveDesired(checkedIds: string[]): FolderContainerSelection[] {
+  const byId = new Set(checkedIds);
+  const picked = availableContainers.value
+    .filter((c) => byId.has(c.id))
+    .map((c) => ({ id: c.id, name: c.name }));
+
+  const shown = new Set(availableContainers.value.map((c) => c.name));
+  const preserved = (props.folder?.containers ?? [])
+    .filter((assoc) => !shown.has(assoc.container_name))
+    .map((assoc) => ({ id: assoc.container_id, name: assoc.container_name }));
+
+  return [...picked, ...preserved];
+}
+
 const parentModal = useParentModal({
   onAction({ actionId, values }) {
     if (actionId === 'save') {
       const name = typeof values.name === 'string' ? values.name.trim() : '';
       const color = typeof values.color === 'string' ? values.color : '#ff8c2f';
       if (!name) return;
-      const containerIds = Array.isArray(values.containers) ? (values.containers as string[]) : [];
-      emit('save', { name, color }, containerIds);
+      // Absent when the picker was never rendered — leave associations alone.
+      const containers = Array.isArray(values.containers)
+        ? resolveDesired(values.containers as string[])
+        : null;
+      emit('save', { name, color }, containers);
     } else {
       emit('close');
     }
@@ -171,8 +228,8 @@ function openParent() {
             {
               type: 'checkbox-list' as const,
               id: 'containers',
-              label: 'Add Containers',
-              caption: 'Select unfoldered containers to add to this folder',
+              label: 'Containers',
+              caption: 'Select which containers belong to this folder',
               items: availableContainers.value.map((c) => ({
                 id: c.id,
                 label: c.name,
@@ -200,7 +257,7 @@ function openParent() {
 watch(
   () => [props.isOpen, props.folder],
   () => {
-    selectedContainerIds.value = new Set();
+    selectedContainerIds.value = null;
     if (props.isOpen && props.folder) {
       formData.value = {
         name: props.folder.name,
@@ -226,6 +283,10 @@ function handleOverlayClick() {
 }
 
 function handleSubmit() {
-  emit('save', formData.value, Array.from(selectedContainerIds.value));
+  emit(
+    'save',
+    formData.value,
+    availableContainers.value.length > 0 ? resolveDesired([...effectiveSelection.value]) : null,
+  );
 }
 </script>

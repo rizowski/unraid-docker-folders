@@ -276,7 +276,7 @@ import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.v
 import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
 import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
-import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
+import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
@@ -743,7 +743,10 @@ function closeModal() {
   editingFolder.value = null;
 }
 
-async function saveFolder(data: FolderCreateData | FolderUpdateData, containerIds: string[] = []) {
+async function saveFolder(
+  data: FolderCreateData | FolderUpdateData,
+  containers: FolderContainerSelection[] | null = null,
+) {
   let folderId: number | null = null;
 
   if (editingFolder.value) {
@@ -754,12 +757,9 @@ async function saveFolder(data: FolderCreateData | FolderUpdateData, containerId
     folderId = folder?.id ?? null;
   }
 
-  if (folderId != null && containerIds.length > 0) {
-    for (const cid of containerIds) {
-      const name = dockerStore.getContainerById(cid)?.name || '';
-      await folderStore.addContainerToFolder(folderId, cid, name);
-    }
-    await folderStore.fetchFolders(true);
+  // `null` means the modal never showed the picker — leave associations alone.
+  if (folderId != null && containers) {
+    await folderStore.setFolderContainers(folderId, containers);
   }
 
   closeModal();

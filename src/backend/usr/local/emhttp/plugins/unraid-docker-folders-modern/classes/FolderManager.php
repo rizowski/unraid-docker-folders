@@ -161,6 +161,16 @@ class FolderManager
       return false;
     }
 
+    // Already in this folder? Keep the row — deleting and reinserting would move
+    // it to the end and renumber the folder. Refresh container_id rather than
+    // returning early: reorderContainers() matches on container_id, so a stale
+    // id would make drag-reorder silently skip this row.
+    $existing = $this->db->fetchOne('SELECT folder_id FROM container_folders WHERE container_name = ?', [$containerName]);
+    if ($existing && (int) $existing['folder_id'] === (int) $folderId) {
+      $this->db->update('container_folders', ['container_id' => $containerId], 'container_name = ?', [$containerName]);
+      return true;
+    }
+
     // Get max position in this folder
     $sql = 'SELECT MAX(position) FROM container_folders WHERE folder_id = ?';
     $maxPosition = $this->db->fetchValue($sql, [$folderId]) ?? -1;
