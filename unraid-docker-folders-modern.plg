@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.08.17-dev4">
-<!ENTITY md5 "bd894dc4e79d15a37d56bb3eb3bc78c6">
+<!ENTITY version "2026.08.19-dev1">
+<!ENTITY md5 "8f97df67c99992c88a49d05af756f824">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -107,6 +107,9 @@
 
 
 
+
+###2026.08.19-dev1
+- fix(folders): only add/remove containers that changed when saving a folder
 ###2026.08.17-dev4
 - feat(settings): add a "Buy me a coffee" Ko-fi link
 ###2026.08.17-dev3

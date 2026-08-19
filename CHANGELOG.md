@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.08.19
+- fix(folders): only add/remove containers that changed when saving a folder
+
 ## 2026.08.17
 - feat(settings): add a "Buy me a coffee" Ko-fi link
 - feat(ui): collapse the create buttons into one menu, widen the search
