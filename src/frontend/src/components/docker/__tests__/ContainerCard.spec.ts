@@ -1001,6 +1001,14 @@ describe('ContainerCard', () => {
       expect(entry!.attributes('title')).toContain('Settings > Docker Folders');
     });
 
+    it('still hides Autostart Delay on a managed container that has autostart off', async () => {
+      // The entry is `!isManaged || autostart`. This is the branch a future edit
+      // to that expression would break without any other test noticing.
+      const entry = await menuEntry({ managed: 'dockerman', autostart: false }, 'Autostart Delay');
+
+      expect(entry).toBeFalsy();
+    });
+
     it('leaves Edit live for a managed container', async () => {
       const entry = await menuEntry({ managed: 'dockerman', name: 'jellyfin' }, 'Edit');
 
