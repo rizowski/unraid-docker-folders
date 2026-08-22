@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.08.22
+- fix(ui): stop the unfoldered section clipping open kebab menus
+
 ## 2026.08.19
 - fix(folders): only add/remove containers that changed when saving a folder
 
