@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.08.22
+- fix(ui): keep an open kebab menu inside the frame instead of scrolling
 - fix(ui): stop the unfoldered section clipping open kebab menus
 
 ## 2026.08.19

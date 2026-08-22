@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.08.22-dev1">
-<!ENTITY md5 "651271d3db7aab0b7a5e16329fdefc9d">
+<!ENTITY version "2026.08.22-dev2">
+<!ENTITY md5 "12b5b75e0e8d677206531247d8a9e8fe">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -109,6 +109,9 @@
 
 
 
+
+###2026.08.22-dev2
+- fix(ui): keep an open kebab menu inside the frame instead of scrolling
 ###2026.08.22-dev1
 - fix(ui): stop the unfoldered section clipping open kebab menus
 ###2026.08.19-dev1
