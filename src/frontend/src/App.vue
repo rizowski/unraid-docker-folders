@@ -148,7 +148,7 @@
             }}</span>
           </div>
 
-          <div class="expand-grid" :class="{ 'expand-expanded': !unfolderedCollapsed }">
+          <div class="expand-grid" :class="{ 'expand-expanded': !unfolderedCollapsed, 'expand-settled': unfolderedSettled }">
             <div class="expand-inner">
               <div
                 class="container-list"
@@ -253,7 +253,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick, provide, toRef } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide, toRef } from 'vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
@@ -304,6 +304,26 @@ watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
 
 const unfolderedCollapsed = ref(localStorage.getItem('docker-folders-unfoldered-collapsed') === '1');
 watch(unfolderedCollapsed, (v) => localStorage.setItem('docker-folders-unfoldered-collapsed', v ? '1' : '0'));
+
+// `.expand-inner` is overflow:hidden so the collapse transition can animate, and
+// that clips a kebab menu opening off the bottom of the section — visible as
+// soon as the last row is near the edge, e.g. when a search matches one
+// container. `.expand-settled` restores overflow:visible, but only once the
+// 200ms transition has finished; flipping it early changes the grid row's
+// minimum track size and breaks the animation. Mirrors FolderContainer.vue.
+const unfolderedSettled = ref(!unfolderedCollapsed.value);
+let unfolderedSettleTimer: ReturnType<typeof setTimeout> | undefined;
+watch(unfolderedCollapsed, (collapsed) => {
+  clearTimeout(unfolderedSettleTimer);
+  if (collapsed) {
+    unfolderedSettled.value = false;
+  } else {
+    unfolderedSettleTimer = setTimeout(() => {
+      unfolderedSettled.value = true;
+    }, 220);
+  }
+});
+onUnmounted(() => clearTimeout(unfolderedSettleTimer));
 
 const dragLocked = ref(localStorage.getItem('docker-folders-drag-locked') === '1');
 watch(dragLocked, (v) => {
