@@ -702,7 +702,7 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
   { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: canAdopt.value },
   { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
-  { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
+  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   { divider: true },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
   { divider: true },

@@ -20,7 +20,7 @@
         <dl class="mt-4 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2">
           <template v-for="row in rows" :key="row.label">
             <dt class="text-xs uppercase tracking-wide text-text-secondary pt-0.5">{{ row.label }}</dt>
-            <dd class="text-sm text-text font-mono break-all">{{ row.value }}</dd>
+            <dd class="text-sm text-text font-mono break-all whitespace-pre-line">{{ row.value }}</dd>
           </template>
         </dl>
 
