@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.08.22-dev5">
-<!ENTITY md5 "ba928b3d7e394a4539b7675a70c9d561">
+<!ENTITY version "2026.08.22-dev6">
+<!ENTITY md5 "4cf11f55a96e20af49988d41e6fe40e9">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -113,6 +113,9 @@
 
 
 
+
+###2026.08.22-dev6
+- test(docker): pin the managed-with-autostart-off branch
 ###2026.08.22-dev5
 - fix(docker): correct three faults the browser check found
 - feat(docker): put Adopt on the container, not only in the kebab menu

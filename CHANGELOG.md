@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.08.22
+- test(docker): pin the managed-with-autostart-off branch
 - fix(docker): correct three faults the browser check found
 - feat(docker): put Adopt on the container, not only in the kebab menu
 - fix(docker): escape adopted values before they reach Unraid's shell
