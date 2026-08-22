@@ -396,9 +396,9 @@ final class AdoptBuilderTest extends TestCase
     {
         $extra = AdoptBuilder::build(self::inspect(), self::image())['fields']['contExtraParams'];
 
-        $this->assertStringContainsString('--restart=unless-stopped', $extra);
-        $this->assertStringContainsString('--cap-add=CAP_NET_ADMIN', $extra);
-        $this->assertStringContainsString('--security-opt seccomp=unconfined', $extra);
+        $this->assertStringContainsString("--restart='unless-stopped'", $extra);
+        $this->assertStringContainsString("--cap-add='CAP_NET_ADMIN'", $extra);
+        $this->assertStringContainsString("--security-opt 'seccomp=unconfined'", $extra);
     }
 
     #[Test]
@@ -440,7 +440,7 @@ final class AdoptBuilderTest extends TestCase
 
         $extra = AdoptBuilder::build($inspect, self::image())['fields']['contExtraParams'];
 
-        $this->assertStringContainsString('--restart=on-failure:5', $extra);
+        $this->assertStringContainsString("--restart='on-failure:5'", $extra);
     }
 
     #[Test]
@@ -475,7 +475,7 @@ final class AdoptBuilderTest extends TestCase
 
         $fields = AdoptBuilder::build($inspect, $image)['fields'];
 
-        $this->assertSame('nginx -g daemon off; worker_processes 2;', $fields['contPostArgs']);
+        $this->assertSame("'nginx' '-g' 'daemon off; worker_processes 2;'", $fields['contPostArgs']);
     }
 
     #[Test]
@@ -518,4 +518,77 @@ final class AdoptBuilderTest extends TestCase
 
         $this->assertSame('on', $fields['contPrivileged']);
     }
+
+    // ─── shell safety ─────────────────────────────────────────────────
+
+    /**
+     * Unraid splices PostArgs and ExtraParams into its `docker create` line
+     * verbatim and runs the result through a shell. Anything derived from a
+     * container's own config therefore has to survive that unquoted splice.
+     */
+    #[Test]
+    public function neutralises_a_semicolon_in_a_command_override(): void
+    {
+        // Real nginx images carry exactly this: `daemon off;`. Unescaped, the
+        // semicolon ends the docker invocation and the rest runs as its own
+        // shell command.
+        $inspect = self::inspect();
+        $inspect['Config']['Cmd'] = ['nginx', '-g', 'daemon off; touch /tmp/pwned'];
+        $image = self::image();
+        $image['Config']['Cmd'] = ['nginx'];
+
+        $postArgs = AdoptBuilder::build($inspect, $image)['fields']['contPostArgs'];
+
+        $this->assertSame("'nginx' '-g' 'daemon off; touch /tmp/pwned'", $postArgs);
+    }
+
+    #[Test]
+    public function keeps_argv_boundaries_in_a_command_override(): void
+    {
+        // Escaping per element, not on the joined string: an argument with a
+        // space is one argv entry, and re-splitting it would change the command.
+        $inspect = self::inspect();
+        $inspect['Config']['Cmd'] = ['sh', '-c', 'echo one two'];
+        $image = self::image();
+        $image['Config']['Cmd'] = ['nginx'];
+
+        $postArgs = AdoptBuilder::build($inspect, $image)['fields']['contPostArgs'];
+
+        $this->assertSame("'sh' '-c' 'echo one two'", $postArgs);
+    }
+
+    #[Test]
+    public function neutralises_shell_metacharacters_in_host_config_values(): void
+    {
+        $inspect = self::inspect();
+        $inspect['HostConfig']['SecurityOpt'] = ['seccomp=unconfined; touch /tmp/pwned'];
+        $inspect['HostConfig']['CapAdd'] = ['NET_ADMIN`id`'];
+        $inspect['HostConfig']['ExtraHosts'] = ['evil:1.2.3.4 && reboot'];
+
+        $extra = AdoptBuilder::build($inspect, self::image())['fields']['contExtraParams'];
+
+        // Every metacharacter ends up inside single quotes, so the shell sees
+        // one literal argument in each case.
+        $this->assertStringContainsString("--security-opt 'seccomp=unconfined; touch /tmp/pwned'", $extra);
+        $this->assertStringContainsString("--cap-add='NET_ADMIN`id`'", $extra);
+        $this->assertStringContainsString("--add-host='evil:1.2.3.4 && reboot'", $extra);
+    }
+
+    #[Test]
+    public function escapes_a_quote_in_a_value_rather_than_breaking_out(): void
+    {
+        $inspect = self::inspect();
+        $inspect['HostConfig']['SecurityOpt'] = ["a'; touch /tmp/pwned; '"];
+
+        $extra = AdoptBuilder::build($inspect, self::image())['fields']['contExtraParams'];
+
+        // escapeshellarg closes the quoting, emits an escaped quote, then
+        // reopens it, so the shell still sees one literal argument. Asserted
+        // against the exact expected bytes rather than a "does not contain"
+        // check, which is easy to write in a way that passes vacuously.
+        $expected = '--security-opt ' . "'a'\\''; touch /tmp/pwned; '\\'''";
+
+        $this->assertStringContainsString($expected, $extra);
+    }
+
 }

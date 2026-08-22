@@ -354,34 +354,36 @@ class AdoptBuilder
     $restart = (string)($host['RestartPolicy']['Name'] ?? '');
     if ($restart !== '' && $restart !== 'no') {
       $retries = (int)($host['RestartPolicy']['MaximumRetryCount'] ?? 0);
-      $params[] = ($restart === 'on-failure' && $retries > 0)
-        ? "--restart=on-failure:{$retries}"
-        : "--restart={$restart}";
+      $value = ($restart === 'on-failure' && $retries > 0)
+        ? "on-failure:{$retries}"
+        : $restart;
+      $params[] = '--restart=' . escapeshellarg($value);
     }
 
     foreach ((array)($host['CapAdd'] ?? []) as $cap) {
-      $params[] = '--cap-add=' . $cap;
+      $params[] = '--cap-add=' . escapeshellarg((string)$cap);
     }
     foreach ((array)($host['CapDrop'] ?? []) as $cap) {
-      $params[] = '--cap-drop=' . $cap;
+      $params[] = '--cap-drop=' . escapeshellarg((string)$cap);
     }
     foreach ((array)($host['SecurityOpt'] ?? []) as $opt) {
-      $params[] = '--security-opt ' . $opt;
+      $params[] = '--security-opt ' . escapeshellarg((string)$opt);
     }
     foreach ((array)($host['ExtraHosts'] ?? []) as $entry) {
-      $params[] = '--add-host=' . $entry;
+      $params[] = '--add-host=' . escapeshellarg((string)$entry);
     }
     foreach ((array)($host['Sysctls'] ?? []) as $key => $value) {
-      $params[] = '--sysctl ' . $key . '=' . $value;
+      $params[] = '--sysctl ' . escapeshellarg($key . '=' . $value);
     }
     foreach ((array)($host['Ulimits'] ?? []) as $ulimit) {
       $name = (string)($ulimit['Name'] ?? '');
       if ($name === '') continue;
       $soft = (int)($ulimit['Soft'] ?? 0);
       $hard = (int)($ulimit['Hard'] ?? $soft);
-      $params[] = '--ulimit ' . $name . '=' . $soft . ':' . $hard;
+      $params[] = '--ulimit ' . escapeshellarg($name . '=' . $soft . ':' . $hard);
     }
 
+    // Cast to int, so not attacker-shaped.
     $shm = (int)($host['ShmSize'] ?? 0);
     if ($shm > 0 && $shm !== self::DEFAULT_SHM_SIZE) {
       $params[] = '--shm-size=' . $shm;
@@ -389,7 +391,7 @@ class AdoptBuilder
 
     $runtime = (string)($host['Runtime'] ?? '');
     if ($runtime !== '' && $runtime !== self::DEFAULT_RUNTIME) {
-      $params[] = '--runtime=' . $runtime;
+      $params[] = '--runtime=' . escapeshellarg($runtime);
     }
 
     // Recognised, non-default, and genuinely not expressible. Reported so the
@@ -430,7 +432,13 @@ class AdoptBuilder
     // Repeating it is harmless, but inventing one is not.
     if (!$imageConfig) return '';
 
-    return implode(' ', $cmd);
+    // Each element escaped separately. Unraid splices PostArgs into the docker
+    // command line raw and runs the result through a shell, so a Cmd element
+    // like `daemon off; worker_processes 2;` — which nginx images really do
+    // carry — would otherwise end the docker invocation at the semicolon and run
+    // the rest as its own shell command. Escaping per element also preserves the
+    // original argv boundaries instead of re-splitting on spaces.
+    return implode(' ', array_map(fn($part) => escapeshellarg((string)$part), $cmd));
   }
 
   /**
