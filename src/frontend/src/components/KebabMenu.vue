@@ -1,9 +1,10 @@
 <template>
   <div ref="menuRef" class="relative">
     <button
+      ref="buttonRef"
       :class="buttonClass"
       :title="buttonTitle"
-      @click.stop="menuOpen = !menuOpen"
+      @click.stop="toggleMenu"
     >
       <svg xmlns="http://www.w3.org/2000/svg" :width="iconSize" :height="iconSize" viewBox="0 0 24 24" fill="currentColor" stroke="none">
         <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
@@ -11,8 +12,10 @@
     </button>
     <div
       v-if="menuOpen"
+      ref="dropdownRef"
       class="absolute right-0 bg-bg border border-border rounded-lg shadow-lg py-1.5 min-w-[160px] z-[100]"
-      :class="position === 'below' ? 'top-full mt-1' : 'bottom-full mb-1'"
+      :class="resolvedPosition === 'below' ? 'top-full mt-1' : 'bottom-full mb-1'"
+      :style="maxHeight === null ? undefined : { maxHeight: `${maxHeight}px`, overflowY: 'auto' }"
     >
       <template v-for="(item, idx) in visibleItems" :key="item.label ?? `div-${idx}`">
         <hr
@@ -52,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 
 export interface KebabMenuItem {
   label?: string;
@@ -75,6 +78,10 @@ export interface KebabMenuItem {
 
 interface Props {
   items: KebabMenuItem[];
+  /**
+   * Preferred side, not a guarantee. The menu flips to the other side when the
+   * preferred one cannot hold it and the other has more room — see fitToViewport.
+   */
   position?: 'below' | 'above';
   buttonTitle?: string;
   buttonClass?: string;
@@ -94,6 +101,73 @@ const emit = defineEmits<{
 
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
+const buttonRef = ref<HTMLElement | null>(null);
+const dropdownRef = ref<HTMLElement | null>(null);
+
+/** The side actually used this time round; `position` is only the preference. */
+const resolvedPosition = ref<'below' | 'above'>(props.position);
+/** null = unclamped. A number means the menu scrolls inside that many pixels. */
+const maxHeight = ref<number | null>(null);
+
+/** Breathing room kept between the menu and the edge of the viewport. */
+const EDGE_GAP = 8;
+/** Below this a clamped menu shows too little to be worth flipping for. */
+const MIN_USABLE_HEIGHT = 120;
+
+async function toggleMenu() {
+  if (menuOpen.value) {
+    menuOpen.value = false;
+    return;
+  }
+  // Reset before measuring: visibleItems changes per container, so last time's
+  // side and clamp say nothing about this time's.
+  resolvedPosition.value = props.position;
+  maxHeight.value = null;
+  menuOpen.value = true;
+  await nextTick();
+  fitToViewport();
+}
+
+/**
+ * Keep the menu inside the viewport.
+ *
+ * On Unraid the app runs in an iframe whose height tracks the app's own content
+ * (main.ts), so the viewport ends close to the last row. A menu opening off that
+ * edge is either clipped or forces the page to scroll, which is what this
+ * prevents: pick the roomier side, then cap the height so the menu scrolls
+ * internally rather than off the end of the frame.
+ */
+function fitToViewport() {
+  const button = buttonRef.value;
+  const dropdown = dropdownRef.value;
+  if (!button || !dropdown) return;
+
+  // scrollHeight, not offsetHeight: once max-height is set offsetHeight reports
+  // the clamp instead of the content. Zero means no layout (jsdom, or a hidden
+  // ancestor) — leave placement to the prop rather than act on bogus numbers.
+  const naturalHeight = dropdown.scrollHeight;
+  if (naturalHeight <= 0) return;
+
+  const rect = button.getBoundingClientRect();
+  const spaceBelow = window.innerHeight - rect.bottom - EDGE_GAP;
+  const spaceAbove = rect.top - EDGE_GAP;
+
+  const preferred = props.position;
+  const preferredSpace = preferred === 'below' ? spaceBelow : spaceAbove;
+  const otherSpace = preferred === 'below' ? spaceAbove : spaceBelow;
+
+  const fitsPreferred = naturalHeight <= preferredSpace;
+  const side = fitsPreferred || preferredSpace >= otherSpace
+    ? preferred
+    : preferred === 'below'
+      ? 'above'
+      : 'below';
+
+  resolvedPosition.value = side;
+
+  const space = side === 'below' ? spaceBelow : spaceAbove;
+  maxHeight.value = naturalHeight > space ? Math.max(space, MIN_USABLE_HEIGHT) : null;
+}
 
 function onSelect(item: KebabMenuItem) {
   if (item.disabled) return;

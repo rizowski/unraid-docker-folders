@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import KebabMenu from '../KebabMenu.vue';
 import type { KebabMenuItem } from '../KebabMenu.vue';
 
@@ -192,5 +193,110 @@ describe('KebabMenu', () => {
     for (const cls of sharedClasses) {
       expect(btn.classes(), `<button> missing class "${cls}"`).toContain(cls);
     }
+  });
+});
+
+/**
+ * Placement depends on real geometry, which jsdom does not do: every rect is
+ * zero and scrollHeight is 0. These stubs feed the resolver plausible numbers so
+ * the flip and the clamp can be exercised. The zero case is covered too — it is
+ * what the production guard bails on, and what every other test in this file
+ * runs under.
+ */
+describe('KebabMenu – fitting the viewport', () => {
+  function stubGeometry(opts: { top: number; bottom: number; menuHeight: number; innerHeight: number }) {
+    Object.defineProperty(window, 'innerHeight', { value: opts.innerHeight, configurable: true });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top: opts.top,
+      bottom: opts.bottom,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: opts.bottom - opts.top,
+      x: 0,
+      y: opts.top,
+      toJSON: () => ({}),
+    } as DOMRect);
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      value: opts.menuHeight,
+      configurable: true,
+    });
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
+  });
+
+  async function openMenu(props: Record<string, unknown> = {}) {
+    const wrapper = mountMenu(linkItems, props);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    await nextTick();
+    return wrapper;
+  }
+
+  function dropdownOf(wrapper: ReturnType<typeof mountMenu>) {
+    return wrapper.findAll('div').find((d) => d.classes().includes('absolute'))!;
+  }
+
+  it('keeps the preferred side and stays unclamped when the menu fits', async () => {
+    stubGeometry({ top: 100, bottom: 130, menuHeight: 200, innerHeight: 768 });
+    const dropdown = dropdownOf(await openMenu());
+
+    expect(dropdown.classes()).toContain('top-full');
+    expect(dropdown.attributes('style')).toBeUndefined();
+  });
+
+  it('flips above when the menu cannot fit below and there is more room above', async () => {
+    // Last row of a short iframe: 2px below the button, 552px above it.
+    stubGeometry({ top: 560, bottom: 590, menuHeight: 200, innerHeight: 600 });
+    const dropdown = dropdownOf(await openMenu());
+
+    expect(dropdown.classes()).toContain('bottom-full');
+    expect(dropdown.classes()).not.toContain('top-full');
+    expect(dropdown.attributes('style')).toBeUndefined();
+  });
+
+  it('clamps and scrolls internally when neither side can hold the menu', async () => {
+    // 212px below, 142px above, menu wants 400px. Below wins on room alone.
+    stubGeometry({ top: 150, bottom: 180, menuHeight: 400, innerHeight: 400 });
+    const dropdown = dropdownOf(await openMenu());
+
+    expect(dropdown.classes()).toContain('top-full');
+    expect(dropdown.attributes('style')).toContain('max-height: 212px');
+    expect(dropdown.attributes('style')).toContain('overflow-y: auto');
+  });
+
+  it('treats position="above" as a preference, not a guarantee', async () => {
+    // Grid view pins "above", but here there are only 12px above and 710 below.
+    stubGeometry({ top: 20, bottom: 50, menuHeight: 300, innerHeight: 768 });
+    const dropdown = dropdownOf(await openMenu({ position: 'above' }));
+
+    expect(dropdown.classes()).toContain('top-full');
+  });
+
+  it('leaves placement alone when there is no layout to measure', async () => {
+    // scrollHeight 0 is jsdom, a display:none ancestor, or a pre-paint frame.
+    stubGeometry({ top: 0, bottom: 0, menuHeight: 0, innerHeight: 768 });
+    const dropdown = dropdownOf(await openMenu({ position: 'above' }));
+
+    expect(dropdown.classes()).toContain('bottom-full');
+    expect(dropdown.attributes('style')).toBeUndefined();
+  });
+
+  it('re-measures on each open rather than reusing the last result', async () => {
+    stubGeometry({ top: 560, bottom: 590, menuHeight: 200, innerHeight: 600 });
+    const wrapper = await openMenu();
+    expect(dropdownOf(wrapper).classes()).toContain('bottom-full');
+
+    await wrapper.find('button').trigger('click');
+    vi.restoreAllMocks();
+    stubGeometry({ top: 100, bottom: 130, menuHeight: 200, innerHeight: 768 });
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    await nextTick();
+
+    expect(dropdownOf(wrapper).classes()).toContain('top-full');
   });
 });

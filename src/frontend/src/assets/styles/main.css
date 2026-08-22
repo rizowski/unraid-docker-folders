@@ -67,9 +67,16 @@
   font-size: 16px;
   line-height: 1.5;
   box-sizing: border-box;
-  /* Prevent horizontal overflow from pushing the iframe wider on mobile */
+  /* Prevent horizontal overflow from pushing the iframe wider on mobile.
+     `clip`, not `hidden`: pairing `overflow-x: hidden` with a visible
+     `overflow-y` makes the browser compute `overflow-y: auto`, turning this div
+     into a scroll container that clips at the app's own height. An open kebab
+     menu on the last row then got cut off, and the div scrolled instead.
+     `overflow-x: clip` leaves `overflow-y` visible, so nothing is clipped
+     vertically and the menu is bounded by the iframe alone. */
   max-width: 100vw;
-  overflow-x: hidden;
+  overflow-x: hidden; /* fallback for browsers without `clip` */
+  overflow-x: clip;
 }
 
 /* Reset all elements inside our app to border-box */
