@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026.08.22
+- fix(docker): correct three faults the browser check found
+- feat(docker): put Adopt on the container, not only in the kebab menu
 - fix(docker): escape adopted values before they reach Unraid's shell
 - feat(docker): adopt CLI-created containers into Unraid's container manager
 - fix(ui): keep an open kebab menu inside the frame instead of scrolling
