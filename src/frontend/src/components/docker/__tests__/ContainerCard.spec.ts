@@ -844,4 +844,41 @@ describe('ContainerCard', () => {
       });
     });
   });
+
+  /**
+   * Adopting hands the container to Unraid's own container manager, which
+   * removes and recreates it. The entry must therefore appear on exactly the
+   * containers that need it and on no others.
+   */
+  describe('Adopt into Unraid', () => {
+    async function menuLabels(container: Partial<Container>) {
+      const wrapper = mountCard(container);
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    }
+
+    it('offers it for a container Unraid does not manage', async () => {
+      expect(await menuLabels({ managed: null })).toContain('Adopt into Unraid');
+    });
+
+    it('hides it once the container is managed', async () => {
+      expect(await menuLabels({ managed: 'dockerman' })).not.toContain('Adopt into Unraid');
+    });
+
+    it('hides it for a compose container', async () => {
+      // Adopting one would detach it from its stack, and `docker compose up`
+      // would then fight Unraid over the same container.
+      const labels = await menuLabels({
+        managed: null,
+        labels: { 'com.docker.compose.project': 'db-stack' },
+      });
+      expect(labels).not.toContain('Adopt into Unraid');
+    });
+
+    it('offers it for a container managed by something else', async () => {
+      expect(await menuLabels({ managed: 'portainer' })).toContain('Adopt into Unraid');
+    });
+  });
+
 });

@@ -274,6 +274,16 @@
       @confirm="handleDelayConfirm"
       @cancel="showDelayModal = false"
     />
+    <AdoptModal
+      :is-open="adoptOpen"
+      :container-name="container.name"
+      :data="adoptData"
+      :error="adoptError"
+      :is-running="isRunning"
+      @adopt="runAdopt(false)"
+      @dry-run="runAdopt(true)"
+      @cancel="adoptOpen = false"
+    />
   </Teleport>
 </template>
 
@@ -286,8 +296,10 @@ import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { apiFetch } from '@/utils/csrf';
 import { releaseIndexUrl } from '@/utils/updateUnits';
+import { submitAdopt, type AdoptFields } from '@/utils/unraidHandoff';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
+import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
@@ -350,6 +362,41 @@ async function handleToggleAutostart() {
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
 const removeImageToo = ref(false);
 const showDelayModal = ref(false);
+
+// Handing a CLI-created container to Unraid's container manager. The modal opens
+// straight away and fills in when the field set lands, so the click has a
+// visible result even on a slow inspect.
+const adoptOpen = ref(false);
+const adoptData = ref<AdoptFields | null>(null);
+const adoptError = ref<string | null>(null);
+
+async function openAdopt() {
+  adoptData.value = null;
+  adoptError.value = null;
+  adoptOpen.value = true;
+  try {
+    const res = await apiFetch(
+      `${API_BASE}/containers.php?action=adopt-fields&id=${encodeURIComponent(props.container.name)}`,
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.message || 'Failed to read the container');
+    adoptData.value = data as AdoptFields;
+  } catch (e) {
+    adoptError.value = e instanceof Error ? e.message : 'Failed to read the container';
+  }
+}
+
+/**
+ * Hand off to Unraid. This navigates the whole Unraid page, so the modal is
+ * closed first — coming back to a stale open modal would be worse than losing it.
+ */
+function runAdopt(dryRun: boolean) {
+  const data = adoptData.value;
+  if (!data) return;
+  adoptOpen.value = false;
+  submitAdopt(data, dryRun);
+}
 
 async function handleDelayConfirm(value: string) {
   const delay = Math.max(0, parseInt(value) || 0);
@@ -621,6 +668,9 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
+  // Compose containers are excluded on purpose: adopting one detaches it from
+  // its stack, and `docker compose up` would then fight Unraid over it.
+  { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: props.container.managed !== 'dockerman' && !isCompose.value },
   { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
   { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: props.container.managed === 'dockerman' && props.container.autostart },
   { divider: true },
@@ -647,6 +697,8 @@ async function handleMenuAction(action: string) {
     }
   } else if (action === 'toggle-autostart') {
     handleToggleAutostart();
+  } else if (action === 'adopt') {
+    void openAdopt();
   } else if (action === 'set-autostart-delay') {
     showDelayModal.value = true;
   } else if (action === 'schedules') {

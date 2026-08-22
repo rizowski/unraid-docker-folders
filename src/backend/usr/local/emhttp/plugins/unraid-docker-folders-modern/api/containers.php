@@ -11,6 +11,7 @@ require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/DockerClient.php';
 require_once dirname(__DIR__) . '/classes/FolderManager.php';
+require_once dirname(__DIR__) . '/classes/AdoptBuilder.php';
 require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 // Set JSON content type
@@ -76,6 +77,40 @@ function handleGet($dockerClient)
     }
 
     jsonResponse(['logs' => $logs]);
+    return;
+  }
+
+  // Field set for handing a CLI-created container to Unraid's own
+  // /Docker/UpdateContainer endpoint, which writes the dockerMan template and
+  // recreates the container with the net.unraid.docker.* labels. Read-only here:
+  // nothing is written until the browser posts these fields to Unraid.
+  if ($action === 'adopt-fields') {
+    if (!$id) {
+      errorResponse('Container ID is required', 400);
+    }
+
+    $inspect = $dockerClient->inspectContainerRaw($id);
+    if (!$inspect) {
+      errorResponse('Container not found', 404);
+    }
+
+    // The image is what makes the environment diff possible. Losing it is not
+    // fatal, but every baked-in image variable then looks user-set, so the
+    // caller is told rather than quietly handed a noisy result.
+    $image = [];
+    $imageId = $inspect['Image'] ?? '';
+    if ($imageId) {
+      $image = $dockerClient->getImageInfo($imageId) ?: [];
+    }
+
+    // The driver decides whether Unraid publishes ports or turns them into
+    // TCP_PORT_n variables, so the preview cannot describe ports without it.
+    $driver = $dockerClient->getNetworkDriver((string)($inspect['HostConfig']['NetworkMode'] ?? ''));
+
+    $result = AdoptBuilder::build($inspect, $image, $driver);
+    $result['managed'] = $inspect['Config']['Labels']['net.unraid.docker.managed'] ?? null;
+
+    jsonResponse($result);
     return;
   }
 

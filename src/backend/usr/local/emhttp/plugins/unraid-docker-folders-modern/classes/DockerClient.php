@@ -439,6 +439,25 @@ class DockerClient
   }
 
   /**
+   * Get a network's driver (bridge, macvlan, ipvlan, host, null).
+   *
+   * Unraid publishes ports with -p only on bridge networks; on the others it
+   * converts them to TCP_PORT_n variables instead. Adoption needs the driver to
+   * describe that accurately before the user commits.
+   *
+   * @param string $name Network name, e.g. 'bridge' or 'br0'
+   * @return string Driver name, or '' when it cannot be determined
+   */
+  public function getNetworkDriver($name)
+  {
+    if ($name === '' || strpos($name, 'container:') === 0) {
+      return '';
+    }
+    $response = $this->request('GET', '/networks/' . urlencode($name));
+    return is_array($response) ? (string)($response['Driver'] ?? '') : '';
+  }
+
+  /**
    * Get container log file size
    *
    * @param string $fullId Full container ID (64 chars)

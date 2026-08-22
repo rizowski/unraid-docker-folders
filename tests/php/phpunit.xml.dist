@@ -17,5 +17,8 @@
     <testsuite name="PathSafety">
       <file>PathSafetyTest.php</file>
     </testsuite>
+    <testsuite name="AdoptBuilder">
+      <file>AdoptBuilderTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>
