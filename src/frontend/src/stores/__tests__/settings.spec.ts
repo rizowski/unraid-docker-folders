@@ -162,3 +162,51 @@ describe('settings store – logRefreshInterval', () => {
     expect(opts?.body).toContain('"30"');
   });
 });
+
+describe('settings store – enableAdopt', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('defaults enableAdopt to true', () => {
+    // Default off would hide the button, which is the fault this setting fixes.
+    const store = useSettingsStore();
+    expect(store.enableAdopt).toBe(true);
+  });
+
+  it('fetchSettings reads enable_adopt="0" as false', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: { enable_adopt: '0' } }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.enableAdopt).toBe(false);
+  });
+
+  it('fetchSettings leaves enableAdopt on when the key is absent', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: {} }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.enableAdopt).toBe(true);
+  });
+
+  it('setEnableAdopt posts the key the backend allowlist expects', async () => {
+    mockApiFetch.mockResolvedValueOnce({ ok: true } as Response);
+
+    const store = useSettingsStore();
+    await store.setEnableAdopt(false);
+
+    expect(store.enableAdopt).toBe(false);
+    const [, options] = mockApiFetch.mock.calls[0];
+    expect(JSON.parse(options!.body as string)).toEqual({ key: 'enable_adopt', value: '0' });
+  });
+});

@@ -105,10 +105,12 @@
       <button v-if="isRunning" @click="confirmAction = 'restart'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="20" /></button>
       <button v-if="!isRunning" @click="confirmAction = 'remove'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="20" /></button>
       <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="20" /></button>
+      <!-- Adopt: only for a container Unraid does not manage yet -->
+      <button v-if="canAdopt" @click.stop="openAdopt" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text" title="Adopt into Unraid — let Unraid manage this container"><IconAdopt :size="20" /></button>
       </template>
       <!-- Autostart toggle -->
-      <button v-if="container.managed === 'dockerman'" @click.stop="handleToggleAutostart" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="20" /></button>
-      <span v-else class="flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="Autostart not available (not managed by Unraid Docker Manager)"><IconAutostart :size="20" /></span>
+      <button v-if="isManaged" @click.stop="handleToggleAutostart" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="20" /></button>
+      <span v-else class="flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" :title="`Autostart: ${manageHint}`"><IconAutostart :size="20" /></span>
       <!-- WebUI (always shown, disabled when no webui) -->
       <a v-if="resolvedWebui && isRunning" :href="resolvedWebui" target="_blank" rel="noopener" class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary hover:text-primary transition" title="Open WebUI" @click.stop><IconGlobe :size="20" /></a>
       <span v-else class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary opacity-30" title="No WebUI configured. Set the WebUI field in the container's Unraid template to enable this."><IconGlobe :size="20" /></span>
@@ -212,8 +214,10 @@
         <button v-if="isRunning" @click="confirmAction = 'restart'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="18" /></button>
         <button v-if="!isRunning" @click="confirmAction = 'remove'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="18" /></button>
         <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="18" /></button>
-        <button v-if="container.managed === 'dockerman'" @click.stop="handleToggleAutostart" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="18" /></button>
-        <span v-else class="action-btn hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="Autostart not available (not managed by Unraid Docker Manager)"><IconAutostart :size="18" /></span>
+        <!-- Adopt: only for a container Unraid does not manage yet -->
+        <button v-if="canAdopt" @click.stop="openAdopt" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text" title="Adopt into Unraid — let Unraid manage this container"><IconAdopt :size="18" /></button>
+        <button v-if="isManaged" @click.stop="handleToggleAutostart" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="18" /></button>
+        <span v-else class="action-btn hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" :title="`Autostart: ${manageHint}`"><IconAutostart :size="18" /></span>
         </template>
         <!-- Kebab menu -->
         <KebabMenu
@@ -315,6 +319,7 @@ import IconTrash from '@/components/icons/IconTrash.vue';
 import IconDownload from '@/components/icons/IconDownload.vue';
 import IconGlobe from '@/components/icons/IconGlobe.vue';
 import IconAutostart from '@/components/icons/IconAutostart.vue';
+import IconAdopt from '@/components/icons/IconAdopt.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
@@ -647,6 +652,31 @@ function openContainerTerminal(mode: 'console' | 'logs') {
 
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 
+const isManaged = computed(() => props.container.managed === 'dockerman');
+
+/**
+ * Compose containers are excluded on purpose: adopting one detaches it from its
+ * stack, and `docker compose up` would then fight Unraid over it.
+ *
+ * The setting defaults to on, so treat "not loaded yet" as on. Otherwise the
+ * action row reflows a moment after the page settles.
+ */
+const canAdopt = computed(
+  () => !isManaged.value && !isCompose.value && (!settingsStore.loaded || settingsStore.enableAdopt),
+);
+
+/** Why an Unraid-only action is inert. Three different reasons, three answers. */
+const manageHint = computed(() => {
+  if (isManaged.value) return undefined;
+  if (isCompose.value) {
+    return 'Unraid does not manage Compose containers. Edit the stack instead.';
+  }
+  if (!canAdopt.value) {
+    return 'Only available for containers that Unraid manages. Turn on adoption in Settings > Docker Folders.';
+  }
+  return 'Only available for containers that Unraid manages. Use Adopt into Unraid first.';
+});
+
 const supportUrl = computed(() => {
   return props.container.labels?.['net.unraid.docker.support'] || null;
 });
@@ -662,17 +692,17 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   // Shown before settings land so the menu doesn't grow an entry a moment
   // after it opens; disabled until we know update checks are actually on.
   { label: updatesStore.isCheckingImage(props.container.image) ? 'Checking for Updates…' : 'Check for Updates', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'check-updates', show: !settingsStore.loaded || settingsStore.enableUpdateChecks, disabled: !settingsStore.loaded, title: settingsStore.loaded ? undefined : 'Loading settings…' },
-  { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
+  // `href` is empty for an unmanaged container, so KebabMenu falls through to
+  // its button branch, which is the only one that honours disabled/title.
+  { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
   { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
   { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
   { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
-  // Compose containers are excluded on purpose: adopting one detaches it from
-  // its stack, and `docker compose up` would then fight Unraid over it.
-  { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: props.container.managed !== 'dockerman' && !isCompose.value },
-  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
-  { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: props.container.managed === 'dockerman' && props.container.autostart },
+  { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: canAdopt.value },
+  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
+  { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   { divider: true },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
   { divider: true },

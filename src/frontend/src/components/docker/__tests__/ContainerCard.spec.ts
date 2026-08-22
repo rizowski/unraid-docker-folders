@@ -879,6 +879,134 @@ describe('ContainerCard', () => {
     it('offers it for a container managed by something else', async () => {
       expect(await menuLabels({ managed: 'portainer' })).toContain('Adopt into Unraid');
     });
+
+    /**
+     * The kebab entry alone was invisible in practice: on a typical box almost
+     * every container is already managed, so the entry never appeared and read
+     * as broken. The action row carries a button of its own.
+     */
+    describe('action row button', () => {
+      function mountWithSettings(
+        container: Partial<Container>,
+        settings: { loaded?: boolean; enableAdopt?: boolean } = {},
+        view: 'grid' | 'list' = 'grid',
+      ) {
+        const pinia = createPinia();
+        setActivePinia(pinia);
+
+        const settingsStore = useSettingsStore();
+        if (settings.enableAdopt !== undefined) settingsStore.enableAdopt = settings.enableAdopt;
+        if (settings.loaded !== undefined) settingsStore.loaded = settings.loaded;
+
+        return mount(ContainerCard, {
+          props: { container: makeContainer(container), view },
+          global: { plugins: [pinia], stubs: { Teleport: true } },
+        });
+      }
+
+      function adoptButton(wrapper: ReturnType<typeof mount>) {
+        return wrapper
+          .findAll('button')
+          .find((b) => (b.attributes('title') ?? '').startsWith('Adopt into Unraid'));
+      }
+
+      for (const view of ['grid', 'list'] as const) {
+        it(`shows the button for an unmanaged container (${view})`, () => {
+          expect(adoptButton(mountWithSettings({ managed: null }, {}, view))).toBeTruthy();
+        });
+
+        it(`hides the button once Unraid manages the container (${view})`, () => {
+          expect(adoptButton(mountWithSettings({ managed: 'dockerman' }, {}, view))).toBeFalsy();
+        });
+      }
+
+      it('hides the button for a compose container', () => {
+        const wrapper = mountWithSettings({
+          managed: null,
+          labels: { 'com.docker.compose.project': 'db-stack' },
+        });
+        expect(adoptButton(wrapper)).toBeFalsy();
+      });
+
+      it('hides the button when adoption is turned off in settings', () => {
+        const wrapper = mountWithSettings({ managed: null }, { loaded: true, enableAdopt: false });
+        expect(adoptButton(wrapper)).toBeFalsy();
+      });
+
+      it('shows the button before settings arrive, because the setting defaults on', () => {
+        // Otherwise the action row reflows a moment after the page settles.
+        const wrapper = mountWithSettings({ managed: null }, { loaded: false, enableAdopt: false });
+        expect(adoptButton(wrapper)).toBeTruthy();
+      });
+
+      it('drops the kebab entry when adoption is turned off', async () => {
+        const wrapper = mountWithSettings({ managed: null }, { loaded: true, enableAdopt: false });
+        const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+        await kebab.trigger('click');
+
+        const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+        expect(labels).not.toContain('Adopt into Unraid');
+      });
+    });
+  });
+
+  /**
+   * Hiding an Unraid-only action made an unadopted container look identical to
+   * a broken one. The entries stay, greyed out, and say why.
+   */
+  describe('Unraid-only actions on an unadopted container', () => {
+    async function menuEntry(container: Partial<Container>, label: string, enableAdopt = true) {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+
+      const settingsStore = useSettingsStore();
+      settingsStore.enableAdopt = enableAdopt;
+      settingsStore.loaded = true;
+
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer(container), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+
+      return wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim().startsWith(label));
+    }
+
+    for (const label of ['Edit', 'Enable Autostart', 'Autostart Delay']) {
+      it(`keeps ${label} visible but disabled, and points at adoption`, async () => {
+        const entry = await menuEntry({ managed: null }, label);
+
+        expect(entry).toBeTruthy();
+        expect(entry!.attributes('disabled')).toBeDefined();
+        expect(entry!.attributes('title')).toContain('Adopt into Unraid');
+      });
+    }
+
+    it('names the stack instead of adoption for a compose container', async () => {
+      const entry = await menuEntry(
+        { managed: null, labels: { 'com.docker.compose.project': 'db-stack' } },
+        'Edit',
+      );
+
+      expect(entry!.attributes('disabled')).toBeDefined();
+      expect(entry!.attributes('title')).toContain('Compose');
+      expect(entry!.attributes('title')).not.toContain('Adopt into Unraid');
+    });
+
+    it('points at the settings page when adoption is turned off', async () => {
+      const entry = await menuEntry({ managed: null }, 'Edit', false);
+
+      expect(entry!.attributes('title')).toContain('Settings > Docker Folders');
+    });
+
+    it('leaves Edit live for a managed container', async () => {
+      const entry = await menuEntry({ managed: 'dockerman', name: 'jellyfin' }, 'Edit');
+
+      expect(entry!.attributes('disabled')).toBeUndefined();
+      expect(entry!.attributes('href')).toContain('my-jellyfin.xml');
+    });
   });
 
 });

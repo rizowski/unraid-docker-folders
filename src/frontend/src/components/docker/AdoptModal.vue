@@ -13,7 +13,9 @@
       <p v-else-if="!data" class="text-sm text-text-secondary">Reading the container…</p>
 
       <template v-else>
-        <p class="text-sm text-warning">{{ warningText }}</p>
+        <p class="text-sm text-text-secondary">{{ benefitsText }}</p>
+
+        <p class="mt-3 text-sm text-warning">{{ warningText }}</p>
 
         <dl class="mt-4 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2">
           <template v-for="row in rows" :key="row.label">
@@ -99,6 +101,11 @@ function ofType(type: string) {
 
 const hasPorts = computed(() => ofType('Port').length > 0);
 
+/** Why a user would want this. The modal states the cost as well — see warningText. */
+const benefitsText =
+  'After adoption Unraid manages this container. You get the Edit form in the Docker tab, '
+  + 'autostart control, and a template you can reuse.';
+
 /**
  * A stopped container does not stay stopped. CreateDocker.php sets
  * $startContainer = true and only clears it in a rename branch that this flow
@@ -175,6 +182,7 @@ function parentFields(): ModalField[] {
   if (!data) return [{ type: 'text', text: 'Reading the container…', variant: 'muted' }];
 
   const fields: ModalField[] = [
+    { type: 'text', text: benefitsText, variant: 'muted' },
     { type: 'text', text: warningText.value, variant: 'error' },
   ];
 

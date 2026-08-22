@@ -68,6 +68,13 @@ describe('AdoptModal', () => {
     target.remove();
   });
 
+  it('says what adoption gives you, not only what it costs', () => {
+    mountModal();
+
+    expect(bodyText()).toContain('Unraid manages this container');
+    expect(bodyText()).toContain('Edit form');
+  });
+
   it('always says the container gets recreated', () => {
     mountModal();
 
