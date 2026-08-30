@@ -15,6 +15,7 @@ function makeFolder(overrides: Partial<Folder> = {}): Folder {
     position: 0,
     collapsed: false,
     compose_project: null,
+    sort_mode: 'manual',
     created_at: 0,
     updated_at: 0,
     containers: [],

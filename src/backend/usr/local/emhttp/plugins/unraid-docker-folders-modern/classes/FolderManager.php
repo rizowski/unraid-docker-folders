@@ -79,6 +79,7 @@ class FolderManager
       'position' => $maxPosition + 1,
       'collapsed' => 0,
       'compose_project' => $data['compose_project'] ?? null,
+      'sort_mode' => 'manual',
       'created_at' => $now,
       'updated_at' => $now,
     ]);
@@ -118,6 +119,10 @@ class FolderManager
     }
     if (isset($data['collapsed'])) {
       $updates['collapsed'] = $data['collapsed'] ? 1 : 0;
+    }
+    if (isset($data['sort_mode'])) {
+      // Validated in folders.php before this is called.
+      $updates['sort_mode'] = $data['sort_mode'];
     }
 
     $this->db->update('folders', $updates, 'id = ?', [$id]);

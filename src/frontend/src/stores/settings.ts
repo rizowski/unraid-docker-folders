@@ -5,11 +5,13 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/utils/csrf';
+import type { SortMode } from '@/types/folder';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 export const useSettingsStore = defineStore('settings', () => {
   const distinguishHealthy = ref(true);
+  const sortMode = ref<SortMode>('manual');
   const showStats = ref(true);
   const replaceDockerSection = ref(false);
   const showFolderPorts = ref(true);
@@ -36,6 +38,10 @@ export const useSettingsStore = defineStore('settings', () => {
 
       if ('distinguish_healthy' in settings) {
         distinguishHealthy.value = settings.distinguish_healthy !== '0';
+      }
+      if ('sort_mode' in settings) {
+        const validModes: SortMode[] = ['manual', 'name-asc', 'name-desc', 'status', 'created-asc', 'created-desc'];
+        sortMode.value = validModes.includes(settings.sort_mode as SortMode) ? (settings.sort_mode as SortMode) : 'manual';
       }
       if ('show_stats' in settings) {
         showStats.value = settings.show_stats !== '0';
@@ -93,6 +99,19 @@ export const useSettingsStore = defineStore('settings', () => {
       await apiFetch(`${API_BASE}/settings.php`, {
         method: 'POST',
         body: JSON.stringify({ key: 'distinguish_healthy', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setSortMode(value: SortMode) {
+    sortMode.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'sort_mode', value }),
       });
     } catch (e) {
       console.error('Error saving setting:', e);
@@ -271,6 +290,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     distinguishHealthy,
+    sortMode,
     showStats,
     replaceDockerSection,
     showFolderPorts,
@@ -287,6 +307,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loaded,
     fetchSettings,
     setDistinguishHealthy,
+    setSortMode,
     setShowStats,
     setShowFolderPorts,
     setShowInlineLogs,

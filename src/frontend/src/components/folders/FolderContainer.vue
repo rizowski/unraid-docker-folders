@@ -62,6 +62,7 @@ import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
+import { sortByMode } from '@/utils/sortMode';
 import FolderHeader from './FolderHeader.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 
@@ -141,7 +142,15 @@ const folderContainers = computed(() => {
       return container?.state === 'running';
     });
   }
-  return list;
+  return sortByMode(list, props.folder.sort_mode, (assoc) => {
+    const container = getContainer(assoc.container_name);
+    return {
+      position: assoc.position,
+      name: container?.name ?? assoc.container_name,
+      state: container?.state,
+      created: container?.created,
+    };
+  });
 });
 
 // Preview list for compose folders whose stack is down.

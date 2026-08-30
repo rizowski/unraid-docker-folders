@@ -5,7 +5,9 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useFolderStore } from './folders';
+import { useSettingsStore } from './settings';
 import { apiFetch } from '@/utils/csrf';
+import { sortByMode } from '@/utils/sortMode';
 
 export interface ContainerPort {
   IP: string;
@@ -153,6 +155,7 @@ export const useDockerStore = defineStore('docker', () => {
 
   const unfolderedContainers = computed(() => {
     const folderStore = useFolderStore();
+    const settingsStore = useSettingsStore();
     const assignedContainerNames = new Set<string>();
 
     // Collect all assigned container names (stable across recreations)
@@ -162,8 +165,20 @@ export const useDockerStore = defineStore('docker', () => {
       });
     });
 
-    // Return containers that aren't in any folder, sorted by state
-    return sortedContainers.value.filter((c) => !assignedContainerNames.has(c.name));
+    const unfoldered = containers.value.filter((c) => !assignedContainerNames.has(c.name));
+
+    // Unfoldered containers have no persisted manual order, so 'manual'
+    // mode keeps the existing running-first default instead of a no-op sort.
+    if (settingsStore.sortMode === 'manual') {
+      return [...unfoldered].sort((a, b) => (stateOrder[a.state] ?? 3) - (stateOrder[b.state] ?? 3));
+    }
+
+    return sortByMode(unfoldered, settingsStore.sortMode, (c) => ({
+      position: 0,
+      name: c.name,
+      state: c.state,
+      created: c.created,
+    }));
   });
 
   // Actions
