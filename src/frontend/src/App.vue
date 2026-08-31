@@ -289,6 +289,7 @@ import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import { SORT_MODE_OPTIONS } from '@/types/folder';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
@@ -311,15 +312,15 @@ const pendingUnits = ref<UpdateUnit[]>([]);
  * everything that has an update — which would silently widen that subset.
  */
 const updateRecheckable = ref(false);
-const viewMode = ref<'grid' | 'list'>((localStorage.getItem('docker-folders-view') as 'grid' | 'list') || 'grid');
-watch(viewMode, (v) => localStorage.setItem('docker-folders-view', v));
+const viewMode = ref<'grid' | 'list'>((safeLocalStorageGet('docker-folders-view') as 'grid' | 'list') || 'grid');
+watch(viewMode, (v) => safeLocalStorageSet('docker-folders-view', v));
 
-const unfolderedCollapsed = ref(localStorage.getItem('docker-folders-unfoldered-collapsed') === '1');
-watch(unfolderedCollapsed, (v) => localStorage.setItem('docker-folders-unfoldered-collapsed', v ? '1' : '0'));
+const unfolderedCollapsed = ref(safeLocalStorageGet('docker-folders-unfoldered-collapsed') === '1');
+watch(unfolderedCollapsed, (v) => safeLocalStorageSet('docker-folders-unfoldered-collapsed', v ? '1' : '0'));
 
-const dragLocked = ref(localStorage.getItem('docker-folders-drag-locked') === '1');
+const dragLocked = ref(safeLocalStorageGet('docker-folders-drag-locked') === '1');
 watch(dragLocked, (v) => {
-  localStorage.setItem('docker-folders-drag-locked', v ? '1' : '0');
+  safeLocalStorageSet('docker-folders-drag-locked', v ? '1' : '0');
   nextTick(() => initializeDragAndDrop());
 });
 

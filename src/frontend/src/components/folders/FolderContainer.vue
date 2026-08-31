@@ -63,6 +63,7 @@ import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
 import { sortByMode } from '@/utils/sortMode';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import FolderHeader from './FolderHeader.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 
@@ -96,8 +97,8 @@ const settingsStore = useSettingsStore();
 const actionsInProgress = ref<Map<string, string>>(new Map());
 
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
-const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
-watch(hideStopped, (v) => localStorage.setItem(storageKey.value, v ? '1' : '0'));
+const hideStopped = ref(safeLocalStorageGet(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
+watch(hideStopped, (v) => safeLocalStorageSet(storageKey.value, v ? '1' : '0'));
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
