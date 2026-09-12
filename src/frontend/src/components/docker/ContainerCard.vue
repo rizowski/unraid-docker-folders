@@ -283,6 +283,16 @@
       @confirm="handleDelayConfirm"
       @cancel="showDelayModal = false"
     />
+    <FolderPickerModal
+      :is-open="showFolderPicker"
+      :title="currentFolder ? 'Move to Folder' : 'Add to Folder'"
+      :description="`Choose a folder for ${container.name}.`"
+      :options="folderTargets"
+      :initial-value="folderTargets[0]?.value ?? ''"
+      :confirm-label="currentFolder ? 'Move' : 'Add'"
+      @confirm="handleFolderPicked"
+      @cancel="showFolderPicker = false"
+    />
     <AdoptModal
       :is-open="adoptOpen"
       :container-name="container.name"
@@ -301,6 +311,7 @@ import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
+import { useFolderStore } from '@/stores/folders';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { apiFetch } from '@/utils/csrf';
@@ -308,6 +319,7 @@ import { releaseIndexUrl } from '@/utils/updateUnits';
 import { submitAdopt, type AdoptFields } from '@/utils/unraidHandoff';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
+import FolderPickerModal from '@/components/folders/FolderPickerModal.vue';
 import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
@@ -372,6 +384,33 @@ async function handleToggleAutostart() {
 const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
 const removeImageToo = ref(false);
 const showDelayModal = ref(false);
+
+// Folder picker: the menu-driven twin of drag and drop. Same store calls as the
+// SortableJS onAdd handlers in App.vue, so both paths behave identically.
+const folderStore = useFolderStore();
+const showFolderPicker = ref(false);
+const currentFolder = computed(() => folderStore.getFolderForContainer(props.container.name));
+const folderTargets = computed(() => {
+  const targets = folderStore.sortedFolders
+    .filter((f) => f.id !== currentFolder.value?.id)
+    .map((f) => ({ value: String(f.id), label: f.name }));
+  if (currentFolder.value) {
+    targets.push({ value: '', label: 'No folder' });
+  }
+  return targets;
+});
+const canPickFolder = computed(() => folderTargets.value.length > 0);
+
+async function handleFolderPicked(value: string) {
+  showFolderPicker.value = false;
+  const name = props.container.name;
+  if (value === '') {
+    await folderStore.removeContainerFromFolder(name);
+  } else {
+    await folderStore.addContainerToFolder(Number(value), props.container.id, name);
+  }
+  await folderStore.fetchFolders(true);
+}
 
 // Handing a CLI-created container to Unraid's container manager. The modal opens
 // straight away and fills in when the field set lands, so the click has a
@@ -710,6 +749,7 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   { divider: true },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
+  { label: currentFolder.value ? 'Move to Folder…' : 'Add to Folder…', icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: canPickFolder.value },
   { divider: true },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
@@ -738,6 +778,8 @@ async function handleMenuAction(action: string) {
     showDelayModal.value = true;
   } else if (action === 'schedules') {
     emit('schedules', 'container', props.container.name);
+  } else if (action === 'pick-folder') {
+    showFolderPicker.value = true;
   } else if (action === 'console') {
     openContainerTerminal('console');
   } else if (action === 'logs') {

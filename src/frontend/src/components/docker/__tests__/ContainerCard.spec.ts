@@ -6,6 +6,8 @@ import ContainerCard from '../ContainerCard.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
+import { useFolderStore } from '@/stores/folders';
+import type { Folder } from '@/types/folder';
 import { makeContainer as baseContainer } from '@/test/fixtures';
 
 // This suite's default container publishes a port — several tests assert on the
@@ -195,6 +197,103 @@ describe('ContainerCard', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.findAll('.kebab-menu-item').length).toBe(0);
+  });
+
+  describe('folder picker in the kebab menu', () => {
+    function folder(id: number, name: string, containerNames: string[] = []): Folder {
+      return {
+        id,
+        name,
+        icon: null,
+        color: null,
+        position: id,
+        collapsed: false,
+        compose_project: null,
+        created_at: 0,
+        updated_at: 0,
+        containers: containerNames.map((n, i) => ({ id: i + 1, container_id: `id-${n}`, container_name: n, folder_id: id, position: i })),
+      };
+    }
+
+    function mountWithFolders(folders: Folder[], container: Partial<Container> = {}) {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      useFolderStore().folders = folders;
+      return mount(ContainerCard, {
+        props: { container: makeContainer(container), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+    }
+
+    async function openMenuLabels(wrapper: ReturnType<typeof mountWithFolders>) {
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    }
+
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+        new Response(JSON.stringify({ success: true, folder: folder(2, 'Web'), folders: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    it('offers Add to Folder when the container is unfoldered and folders exist', async () => {
+      const wrapper = mountWithFolders([folder(1, 'Media'), folder(2, 'Web')]);
+      const labels = await openMenuLabels(wrapper);
+      expect(labels).toContain('Add to Folder…');
+      expect(labels).not.toContain('Move to Folder…');
+    });
+
+    it('hides the item when there is no folder to pick', async () => {
+      const wrapper = mountWithFolders([]);
+      const labels = await openMenuLabels(wrapper);
+      expect(labels).not.toContain('Add to Folder…');
+      expect(labels).not.toContain('Move to Folder…');
+    });
+
+    it('moves the container to the chosen folder through the same endpoint as drag and drop', async () => {
+      const wrapper = mountWithFolders([folder(1, 'Media', ['web']), folder(2, 'Web')], { name: 'web' });
+      const labels = await openMenuLabels(wrapper);
+      expect(labels).toContain('Move to Folder…');
+
+      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Move to Folder…')!;
+      await item.trigger('click');
+      await flushPromises();
+
+      // Current folder is excluded; the remaining real folder is first, "No folder" last.
+      const select = wrapper.find('select');
+      expect(select.findAll('option').map((o) => o.text())).toEqual(['Web', 'No folder']);
+
+      await select.setValue('2');
+      const confirm = wrapper.findAll('button').find((b) => b.text() === 'Move')!;
+      await confirm.trigger('click');
+      await flushPromises();
+
+      const urls: string[] = fetchSpy.mock.calls.map((c: unknown[]) => (typeof c[0] === 'string' ? c[0] : (c[0] as Request).url));
+      expect(urls.some((u) => u.includes('folders.php?id=2&action=add_container'))).toBe(true);
+    });
+
+    it('removes the container from its folder when No folder is picked', async () => {
+      const wrapper = mountWithFolders([folder(1, 'Media', ['web'])], { name: 'web' });
+      await openMenuLabels(wrapper);
+      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Move to Folder…')!;
+      await item.trigger('click');
+      await flushPromises();
+
+      await wrapper.find('select').setValue('');
+      await wrapper.findAll('button').find((b) => b.text() === 'Move')!.trigger('click');
+      await flushPromises();
+
+      const urls: string[] = fetchSpy.mock.calls.map((c: unknown[]) => (typeof c[0] === 'string' ? c[0] : (c[0] as Request).url));
+      expect(urls.some((u) => u.includes('action=remove_container'))).toBe(true);
+    });
   });
 
   describe('z-index stacking', () => {
@@ -448,10 +547,12 @@ describe('ContainerCard', () => {
       const wrapper = mountCardWithSharedPinia(
         { state: 'running' },
         { view: 'grid' },
-        { enableLogs: true, seedStatsId: 'abc123' },
+        { enableLogs, seedStatsId: 'abc123' },
       );
       await wrapper.find('.cursor-pointer').trigger('click');
       await flushPromises();
+      return wrapper;
+    }
 
     it('shows the log panel in grid view when the setting is on', async () => {
       const wrapper = await mountExpandedGridCard(true);
@@ -553,7 +654,7 @@ describe('ContainerCard', () => {
       const gridCard = mountCardWithSharedPinia(
         { state: 'running' },
         { view: 'grid' },
-        { enableLogs, seedStatsId: 'abc123' },
+        { enableLogs: true, seedStatsId: 'abc123' },
       );
       await gridCard.find('.cursor-pointer').trigger('click');
       await flushPromises();
@@ -563,8 +664,6 @@ describe('ContainerCard', () => {
       expect(gridRow).toBeTruthy();
       // Same info-row grid definition, and the same sections underneath.
       expect(gridRow!.classes()).toEqual(listRow!.classes());
-      return wrapper;
-    }
       for (const section of ['Resource Usage', 'Block I/O', 'Net I/O', 'Uptime']) {
         expect(gridCard.text()).toContain(section);
       }

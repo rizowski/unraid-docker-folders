@@ -36,6 +36,12 @@ export const useFolderStore = defineStore('folders', () => {
     return [...folders.value].sort((a, b) => a.position - b.position);
   });
 
+  // Membership is keyed on container name, the stable key across recreates.
+  const getFolderForContainer = computed(() => {
+    return (containerName: string) =>
+      folders.value.find((f) => f.containers.some((c) => c.container_name === containerName));
+  });
+
   // Actions
   async function fetchFolders(force = false) {
     const now = Date.now();
@@ -373,6 +379,7 @@ export const useFolderStore = defineStore('folders', () => {
     folderCount,
     getFolderById,
     sortedFolders,
+    getFolderForContainer,
 
     // Actions
     fetchFolders,

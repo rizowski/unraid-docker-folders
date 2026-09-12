@@ -175,3 +175,22 @@ describe('folders store – setFolderContainers', () => {
     expect(ok).toBe(false);
   });
 });
+
+describe('getFolderForContainer', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('finds the folder a container belongs to by name, or undefined when unfoldered', () => {
+    const store = useFolderStore();
+    store.folders = [
+      makeFolder(['plex'], { id: 1, name: 'Media' }),
+      makeFolder(['nginx'], { id: 2, name: 'Web' }),
+    ];
+
+    expect(store.getFolderForContainer('nginx')?.name).toBe('Web');
+    expect(store.getFolderForContainer('plex')?.name).toBe('Media');
+    expect(store.getFolderForContainer('orphan')).toBeUndefined();
+  });
+});
