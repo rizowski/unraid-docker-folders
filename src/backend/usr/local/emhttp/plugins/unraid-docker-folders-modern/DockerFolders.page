@@ -771,7 +771,7 @@ if (file_exists($changelogPath)) {
       <div class="setting-row">
         <div class="setting-info">
           <label for="notify-on-updates">Notify on updates</label>
-          <div class="description">Send an Unraid notification when background checks find new container updates.</div>
+          <div class="description">Send an Unraid notification that names the containers when a background check finds new updates.</div>
         </div>
         <div class="setting-control">
           <input type="checkbox" id="notify-on-updates" <?= $notifyOnUpdates ? 'checked' : '' ?> onchange="saveSetting('notify_on_updates', this.checked ? '1' : '0')" />

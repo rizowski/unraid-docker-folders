@@ -177,15 +177,25 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     $excludePatterns = array_filter($excludePatterns, function ($p) { return $p !== ''; });
   }
 
-  // Collect unique images
+  // Collect unique images, and which containers run each one. The notification
+  // names containers, not images, so the caller needs the reverse map.
   $uniqueImages = [];
+  $containersByImage = [];
   foreach ($containers as $container) {
     $image = $container['image'] ?? '';
     $imageId = $container['imageId'] ?? '';
     if ($image && !isset($uniqueImages[$image])) {
       $uniqueImages[$image] = $imageId;
     }
+    $name = ltrim($container['name'] ?? '', '/');
+    if ($image && $name !== '') {
+      $containersByImage[$image][] = $name;
+    }
   }
+  foreach ($containersByImage as &$names) {
+    sort($names, SORT_NATURAL | SORT_FLAG_CASE);
+  }
+  unset($names);
 
   // Targeted check: restrict to the requested images. Only images that
   // actually belong to a container are checked — unknown names are ignored.
@@ -321,7 +331,46 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     'skipped' => $skipped,
     'errors' => $errors,
     'newUpdates' => $newUpdates,
+    'containersByImage' => $containersByImage,
   ];
+}
+
+/**
+ * Compose the Unraid notification for newly available updates.
+ *
+ * Counts containers rather than images (one image can back several
+ * containers) and names them in the description, capped so a big server does
+ * not produce a wall of text.
+ *
+ * @param string[] $newImages Images that flipped to update-available this run
+ * @param array<string, string[]> $containersByImage Image => container names
+ * @return array{subject: string, description: string}|null Null when no container uses a new image
+ */
+function buildUpdateNotification(array $newImages, array $containersByImage, $maxNames = 10)
+{
+  $names = [];
+  foreach ($newImages as $image) {
+    foreach ($containersByImage[$image] ?? [] as $name) {
+      $names[$name] = true;
+    }
+  }
+  $names = array_keys($names);
+  if (empty($names)) {
+    return null;
+  }
+  sort($names, SORT_NATURAL | SORT_FLAG_CASE);
+
+  $count = count($names);
+  $subject = $count . ' container update' . ($count === 1 ? '' : 's') . ' available';
+
+  $shown = array_slice($names, 0, $maxNames);
+  $description = implode(', ', $shown);
+  $rest = $count - count($shown);
+  if ($rest > 0) {
+    $description .= ' and ' . $rest . ' more';
+  }
+
+  return ['subject' => $subject, 'description' => $description];
 }
 
 /**

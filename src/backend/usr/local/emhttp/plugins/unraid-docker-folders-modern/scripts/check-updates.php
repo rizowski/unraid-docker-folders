@@ -46,23 +46,32 @@ if ($stmt) {
 
 $result = checkAllImageUpdates($dockerClient, $db, 'logUpdate');
 
-// Count truly new updates (not previously known)
-$newUpdatesCount = 0;
+// Collect truly new updates (not previously known)
+$newImages = [];
 foreach ($result['results'] as $imageName => $info) {
   if ($info['update_available'] && !($previousUpdates[$imageName] ?? false)) {
-    $newUpdatesCount++;
+    $newImages[] = $imageName;
   }
 }
+$newUpdatesCount = count($newImages);
 
 // Publish WebSocket event so frontends refresh
 WebSocketPublisher::publish('updates', 'checked');
 
-// Send Unraid notification if new updates were found
+// Send Unraid notification if new updates were found. The subject carries the
+// container count, the description names them, and the link opens the tab.
 if ($newUpdatesCount > 0 && $notifyEnabled) {
-  $s = $newUpdatesCount === 1 ? '' : 's';
-  $msg = escapeshellarg("{$newUpdatesCount} container update{$s} available");
-  exec("/usr/local/emhttp/webGui/scripts/notify -s 'Docker Folders' -d {$msg} -i normal");
-  logUpdate('NOTIFY Sent notification: ' . $newUpdatesCount . ' new update(s)');
+  $notification = buildUpdateNotification($newImages, $result['containersByImage'] ?? []);
+  if ($notification !== null) {
+    $cmd = '/usr/local/emhttp/webGui/scripts/notify'
+      . ' -e ' . escapeshellarg('Docker Folders')
+      . ' -s ' . escapeshellarg($notification['subject'])
+      . ' -d ' . escapeshellarg($notification['description'])
+      . ' -i normal'
+      . ' -l ' . escapeshellarg('/Docker/Folders');
+    exec($cmd);
+    logUpdate('NOTIFY Sent notification: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
+  }
 }
 
 logUpdate('DONE Checked ' . $result['checked'] . ', skipped ' . $result['skipped'] . ', errors ' . $result['errors'] . ', new updates ' . $newUpdatesCount);
