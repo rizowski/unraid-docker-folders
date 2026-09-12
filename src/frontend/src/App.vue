@@ -219,6 +219,8 @@
       :image="pullingContainer?.image ?? ''"
       :container-name="pullingContainer?.name ?? ''"
       :managed="pullingContainer?.managed ?? null"
+      :container-id="pullingContainer?.id ?? ''"
+      :force="pullingContainer?.force ?? false"
       @close="pullingContainer = null"
       @complete="handlePullComplete"
     />
@@ -255,7 +257,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide, toRef } from 'vue';
-import { useDockerStore, type Container } from '@/stores/docker';
+import { useDockerStore, type Container, type PullRequest } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
@@ -289,7 +291,7 @@ const updatesStore = useUpdatesStore();
 const composeStore = useComposeStore();
 
 const actionsInProgress = ref<Map<string, string>>(new Map());
-const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
+const pullingContainer = ref<PullRequest | null>(null);
 const batchPullUnits = ref<UpdateUnit[]>([]);
 const showBatchConfirm = ref(false);
 const pendingUnits = ref<UpdateUnit[]>([]);
@@ -622,7 +624,14 @@ async function handleRemove(id: string, removeImage = false) {
   }
 }
 
-function handlePull(data: { image: string; name: string; managed: string | null }) {
+function handlePull(data: PullRequest) {
+  // A forced update targets exactly the chosen container by id, so it must
+  // never fall into the sibling-batch-confirm path below (which recreates
+  // every container sharing the image).
+  if (data.force) {
+    pullingContainer.value = data;
+    return;
+  }
   // Pulling an image recreates *every* container using it. When this container
   // is the only one, go straight to the pull; when it has siblings, show them
   // first so nothing gets recreated invisibly.

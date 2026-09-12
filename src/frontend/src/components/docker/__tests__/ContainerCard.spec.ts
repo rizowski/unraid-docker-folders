@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia';
 import ContainerCard from '../ContainerCard.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
+import { useUpdatesStore } from '@/stores/updates';
 import { useStatsStore } from '@/stores/stats';
 import { useFolderStore } from '@/stores/folders';
 import type { Folder } from '@/types/folder';
@@ -1154,6 +1155,74 @@ describe('ContainerCard', () => {
       const icon = wrapper.find('img').element.parentElement!;
       expect(icon.className.split(' ')).toContain('status-halo-warning');
       expect(icon.getAttribute('title')).toBe('Paused');
+    });
+  });
+
+  describe('Force Update', () => {
+    it('shows Force Update in the kebab menu when there is no update available', async () => {
+      const wrapper = mountCard();
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).toContain('Force Update');
+    });
+
+    it('hides Force Update when an update is already available', async () => {
+      // Configure the stores on a shared pinia BEFORE mounting, mirroring the
+      // pattern in the "inline logs panel" tests above — mutating a store
+      // fetched after mountCard() would touch a different pinia instance.
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      const settingsStore = useSettingsStore();
+      settingsStore.enableUpdateChecks = true;
+      const updatesStore = useUpdatesStore();
+      updatesStore.updates = {
+        'nginx:latest': {
+          image: 'nginx:latest',
+          local_digest: 'a',
+          remote_digest: 'b',
+          update_available: true,
+          checked_at: 0,
+          error: null,
+          source_url: null,
+          source_repo: null,
+          release: null,
+        },
+      };
+
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer({ image: 'nginx:latest' }), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Force Update');
+    });
+
+    it('hides Force Update for a compose-labelled container', async () => {
+      const wrapper = mountCard({ labels: { 'com.docker.compose.project': 'db-stack' } });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Force Update');
+    });
+
+    it('confirming Force Update emits pull with force: true and the container id', async () => {
+      const wrapper = mountCard({ id: 'force-1', name: 'my-app', image: 'nginx:latest', managed: 'dockerman' });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Force Update')!;
+      await item.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const confirmBtn = wrapper.findAll('button').find((b) => b.text() === 'Force Update')!;
+      await confirmBtn.trigger('click');
+
+      expect(wrapper.emitted('pull')).toEqual([
+        [{ image: 'nginx:latest', name: 'my-app', managed: 'dockerman', id: 'force-1', force: true }],
+      ]);
     });
   });
 

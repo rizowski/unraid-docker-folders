@@ -57,7 +57,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useDockerStore } from '@/stores/docker';
+import { useDockerStore, type PullRequest } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
@@ -79,7 +79,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   edit: [folder: Folder];
   delete: [id: number];
-  pull: [data: { image: string; name: string; managed: string | null }];
+  pull: [data: PullRequest];
   'update-folder': [folder: Folder];
   'edit-compose': [project: string];
   'compose-up': [project: string];

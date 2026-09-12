@@ -3,7 +3,7 @@
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-border">
           <div class="min-w-0">
-            <h2 class="text-base font-semibold text-text truncate">Pull Image Update</h2>
+            <h2 class="text-base font-semibold text-text truncate">{{ force ? 'Force Update' : 'Pull Image Update' }}</h2>
             <p class="text-xs text-text-secondary font-mono truncate mt-0.5">{{ image }}</p>
           </div>
           <button
@@ -60,7 +60,7 @@
           </div>
 
           <!-- Apply update link for dockerMan containers -->
-          <div v-if="isComplete && managed === 'dockerman' && postPullAction === 'pull_and_offer_restart'" class="pt-2 border-t border-border">
+          <div v-if="isComplete && managed === 'dockerman' && postPullAction === 'pull_and_offer_restart' && !force" class="pt-2 border-t border-border">
             <a
               :href="applyUpdateUrl"
               class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-text rounded text-sm font-medium no-underline hover:brightness-110 transition"
@@ -93,6 +93,8 @@ interface Props {
   image: string;
   containerName: string;
   managed: string | null;
+  containerId?: string;
+  force?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -138,7 +140,7 @@ const { inIframe } = parentModal;
 function openParent() {
   parentModal.open({
     kind: 'pull-progress',
-    title: `Pull Image — ${props.image}`,
+    title: `${props.force ? 'Force Update' : 'Pull Image'} — ${props.image}`,
     size: 'md',
     dismissable: false,
     fields: [
@@ -222,6 +224,10 @@ async function startPull() {
   const token = getCsrfToken();
   const body = new URLSearchParams();
   if (token) body.append('csrf_token', token);
+  if (props.force && props.containerId) {
+    body.append('recreate', '1');
+    body.append('containers', props.containerId);
+  }
 
   try {
     const response = await fetch(

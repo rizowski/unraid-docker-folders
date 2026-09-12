@@ -39,6 +39,14 @@ export interface ConflictInfo {
   conflicts: ConflictDetail[];
 }
 
+export interface PullRequest {
+  image: string;
+  name: string;
+  managed: string | null;
+  id: string;
+  force?: boolean;
+}
+
 export interface Container {
   id: string;
   name: string;
