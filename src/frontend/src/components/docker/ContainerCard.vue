@@ -79,16 +79,7 @@
       <div v-if="expanded" class="overflow-hidden">
         <ContainerDetails
           class="block px-4 sm:px-6 pb-2 pt-3 border-t border-border"
-          :container="container"
-          :container-stats="containerStats"
-          :show-stats="showStats"
-          :is-running="isRunning"
-          :image-link="imageLink"
-          :show-logs="shouldShowInlineLogs"
-          :log-lines="logLines"
-          :log-error="logError"
-          :logs-loading="logsLoading"
-          :new-line-count="newLineCount"
+          v-bind="detailsProps"
           @refresh-logs="fetchLogs"
         />
       </div>
@@ -240,16 +231,7 @@
       <div v-if="expanded" class="overflow-hidden">
         <ContainerDetails
           class="block px-2 sm:px-4 pb-4 pt-2 border-t border-border"
-          :container="container"
-          :container-stats="containerStats"
-          :show-stats="showStats"
-          :is-running="isRunning"
-          :image-link="imageLink"
-          :show-logs="shouldShowInlineLogs"
-          :log-lines="logLines"
-          :log-error="logError"
-          :logs-loading="logsLoading"
-          :new-line-count="newLineCount"
+          v-bind="detailsProps"
           @refresh-logs="fetchLogs"
         />
       </div>
@@ -283,13 +265,12 @@
       @confirm="handleDelayConfirm"
       @cancel="showDelayModal = false"
     />
-    <FolderPickerModal
+    <SelectModal
       :is-open="showFolderPicker"
-      :title="currentFolder ? 'Move to Folder' : 'Add to Folder'"
+      :title="`${folderVerb} to Folder`"
       :description="`Choose a folder for ${container.name}.`"
       :options="folderTargets"
-      :initial-value="folderTargets[0]?.value ?? ''"
-      :confirm-label="currentFolder ? 'Move' : 'Add'"
+      :confirm-label="folderVerb"
       @confirm="handleFolderPicked"
       @cancel="showFolderPicker = false"
     />
@@ -319,7 +300,7 @@ import { releaseIndexUrl } from '@/utils/updateUnits';
 import { submitAdopt, type AdoptFields } from '@/utils/unraidHandoff';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
-import FolderPickerModal from '@/components/folders/FolderPickerModal.vue';
+import SelectModal from '@/components/SelectModal.vue';
 import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
@@ -385,11 +366,12 @@ const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
 const removeImageToo = ref(false);
 const showDelayModal = ref(false);
 
-// Folder picker: the menu-driven twin of drag and drop. Same store calls as the
-// SortableJS onAdd handlers in App.vue, so both paths behave identically.
+// Folder picker: the menu-driven twin of drag and drop, through the same store
+// action. An empty value means "no folder".
 const folderStore = useFolderStore();
 const showFolderPicker = ref(false);
 const currentFolder = computed(() => folderStore.getFolderForContainer(props.container.name));
+const folderVerb = computed(() => (currentFolder.value ? 'Move' : 'Add'));
 const folderTargets = computed(() => {
   const targets = folderStore.sortedFolders
     .filter((f) => f.id !== currentFolder.value?.id)
@@ -399,17 +381,10 @@ const folderTargets = computed(() => {
   }
   return targets;
 });
-const canPickFolder = computed(() => folderTargets.value.length > 0);
 
 async function handleFolderPicked(value: string) {
   showFolderPicker.value = false;
-  const name = props.container.name;
-  if (value === '') {
-    await folderStore.removeContainerFromFolder(name);
-  } else {
-    await folderStore.addContainerToFolder(Number(value), props.container.id, name);
-  }
-  await folderStore.fetchFolders(true);
+  await folderStore.moveContainerToFolder(value === '' ? null : Number(value), props.container.id, props.container.name);
 }
 
 // Handing a CLI-created container to Unraid's container manager. The modal opens
@@ -560,6 +535,20 @@ const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
 const shouldShowInlineLogs = computed(
   () => settingsStore.showInlineLogs && expanded.value && isRunning.value,
 );
+
+// Both view branches render the same details; only the padding differs.
+const detailsProps = computed(() => ({
+  container: props.container,
+  containerStats: containerStats.value,
+  showStats: showStats.value,
+  isRunning: isRunning.value,
+  imageLink: imageLink.value,
+  showLogs: shouldShowInlineLogs.value,
+  logLines: logLines.value,
+  logError: logError.value,
+  logsLoading: logsLoading.value,
+  newLineCount: newLineCount.value,
+}));
 
 async function fetchLogs() {
   logsLoading.value = true;
@@ -749,7 +738,7 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   { divider: true },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
-  { label: currentFolder.value ? 'Move to Folder…' : 'Add to Folder…', icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: canPickFolder.value },
+  { label: `${folderVerb.value} to Folder…`, icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: folderTargets.value.length > 0 },
   { divider: true },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },

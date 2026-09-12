@@ -8,7 +8,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useFolderStore } from '@/stores/folders';
 import type { Folder } from '@/types/folder';
-import { makeContainer as baseContainer } from '@/test/fixtures';
+import { makeContainer as baseContainer, makeFolder } from '@/test/fixtures';
 
 // This suite's default container publishes a port — several tests assert on the
 // rendered port summary — so it layers that onto the shared fixture.
@@ -17,6 +17,11 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     ports: [{ IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }],
     ...overrides,
   });
+}
+
+/** Every URL a fetch spy was called with, whether given as a string or a Request. */
+function fetchedUrls(spy: { mock: { calls: unknown[][] } }): string[] {
+  return spy.mock.calls.map((c) => (typeof c[0] === 'string' ? c[0] : (c[0] as Request).url));
 }
 
 function mountCard(container?: Partial<Container>, props: Record<string, unknown> = {}) {
@@ -201,18 +206,7 @@ describe('ContainerCard', () => {
 
   describe('folder picker in the kebab menu', () => {
     function folder(id: number, name: string, containerNames: string[] = []): Folder {
-      return {
-        id,
-        name,
-        icon: null,
-        color: null,
-        position: id,
-        collapsed: false,
-        compose_project: null,
-        created_at: 0,
-        updated_at: 0,
-        containers: containerNames.map((n, i) => ({ id: i + 1, container_id: `id-${n}`, container_name: n, folder_id: id, position: i })),
-      };
+      return makeFolder(containerNames, { id, name, position: id });
     }
 
     function mountWithFolders(folders: Folder[], container: Partial<Container> = {}) {
@@ -225,9 +219,12 @@ describe('ContainerCard', () => {
       });
     }
 
-    async function openMenuLabels(wrapper: ReturnType<typeof mountWithFolders>) {
+    async function openMenu(wrapper: ReturnType<typeof mountWithFolders>) {
       const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
       await kebab.trigger('click');
+    }
+
+    function menuLabels(wrapper: ReturnType<typeof mountWithFolders>) {
       return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
     }
 
@@ -246,21 +243,24 @@ describe('ContainerCard', () => {
 
     it('offers Add to Folder when the container is unfoldered and folders exist', async () => {
       const wrapper = mountWithFolders([folder(1, 'Media'), folder(2, 'Web')]);
-      const labels = await openMenuLabels(wrapper);
+      await openMenu(wrapper);
+      const labels = menuLabels(wrapper);
       expect(labels).toContain('Add to Folder…');
       expect(labels).not.toContain('Move to Folder…');
     });
 
     it('hides the item when there is no folder to pick', async () => {
       const wrapper = mountWithFolders([]);
-      const labels = await openMenuLabels(wrapper);
+      await openMenu(wrapper);
+      const labels = menuLabels(wrapper);
       expect(labels).not.toContain('Add to Folder…');
       expect(labels).not.toContain('Move to Folder…');
     });
 
     it('moves the container to the chosen folder through the same endpoint as drag and drop', async () => {
       const wrapper = mountWithFolders([folder(1, 'Media', ['web']), folder(2, 'Web')], { name: 'web' });
-      const labels = await openMenuLabels(wrapper);
+      await openMenu(wrapper);
+      const labels = menuLabels(wrapper);
       expect(labels).toContain('Move to Folder…');
 
       const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Move to Folder…')!;
@@ -276,13 +276,12 @@ describe('ContainerCard', () => {
       await confirm.trigger('click');
       await flushPromises();
 
-      const urls: string[] = fetchSpy.mock.calls.map((c: unknown[]) => (typeof c[0] === 'string' ? c[0] : (c[0] as Request).url));
-      expect(urls.some((u) => u.includes('folders.php?id=2&action=add_container'))).toBe(true);
+      expect(fetchedUrls(fetchSpy).some((u) => u.includes('folders.php?id=2&action=add_container'))).toBe(true);
     });
 
     it('removes the container from its folder when No folder is picked', async () => {
       const wrapper = mountWithFolders([folder(1, 'Media', ['web'])], { name: 'web' });
-      await openMenuLabels(wrapper);
+      await openMenu(wrapper);
       const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Move to Folder…')!;
       await item.trigger('click');
       await flushPromises();
@@ -291,8 +290,7 @@ describe('ContainerCard', () => {
       await wrapper.findAll('button').find((b) => b.text() === 'Move')!.trigger('click');
       await flushPromises();
 
-      const urls: string[] = fetchSpy.mock.calls.map((c: unknown[]) => (typeof c[0] === 'string' ? c[0] : (c[0] as Request).url));
-      expect(urls.some((u) => u.includes('action=remove_container'))).toBe(true);
+      expect(fetchedUrls(fetchSpy).some((u) => u.includes('action=remove_container'))).toBe(true);
     });
   });
 
@@ -491,13 +489,7 @@ describe('ContainerCard', () => {
 
     /** Count how many fetch calls targeted the logs endpoint */
     function logsCallCount() {
-      return fetchSpy.mock.calls.filter(
-        (call: unknown[]) => {
-          const input = call[0];
-          const url = typeof input === 'string' ? input : (input as Request).url;
-          return url.includes('action=logs');
-        },
-      ).length;
+      return fetchedUrls(fetchSpy).filter((u) => u.includes('action=logs')).length;
     }
 
     /** Find the first fetch call targeting the logs endpoint */

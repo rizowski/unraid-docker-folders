@@ -37,9 +37,19 @@ export const useFolderStore = defineStore('folders', () => {
   });
 
   // Membership is keyed on container name, the stable key across recreates.
+  // Built once per folders change, so a lookup from every card is one map get.
+  const folderByContainerName = computed(() => {
+    const map = new Map<string, Folder>();
+    for (const folder of folders.value) {
+      for (const assoc of folder.containers) {
+        map.set(assoc.container_name, folder);
+      }
+    }
+    return map;
+  });
+
   const getFolderForContainer = computed(() => {
-    return (containerName: string) =>
-      folders.value.find((f) => f.containers.some((c) => c.container_name === containerName));
+    return (containerName: string) => folderByContainerName.value.get(containerName);
   });
 
   // Actions
@@ -212,6 +222,25 @@ export const useFolderStore = defineStore('folders', () => {
   }
 
   /**
+   * Put a container in `folderId`, or in no folder when null. Drag and drop and
+   * the menu picker both go through here. The forced refetch is needed because
+   * addContainerToFolder only swaps the target folder into state while the
+   * backend also drops the row from the source folder.
+   */
+  async function moveContainerToFolder(
+    folderId: number | null,
+    containerId: string,
+    containerName: string,
+  ): Promise<boolean> {
+    const ok =
+      folderId === null
+        ? await removeContainerFromFolder(containerName)
+        : await addContainerToFolder(folderId, containerId, containerName);
+    await fetchFolders(true);
+    return ok;
+  }
+
+  /**
    * Make a folder's membership match `desired`, issuing only the add and remove
    * calls for containers that actually changed.
    *
@@ -379,6 +408,7 @@ export const useFolderStore = defineStore('folders', () => {
     folderCount,
     getFolderById,
     sortedFolders,
+    folderByContainerName,
     getFolderForContainer,
 
     // Actions
@@ -388,6 +418,7 @@ export const useFolderStore = defineStore('folders', () => {
     deleteFolder,
     addContainerToFolder,
     removeContainerFromFolder,
+    moveContainerToFolder,
     setFolderContainers,
     reorderContainers,
     reorderFolders,

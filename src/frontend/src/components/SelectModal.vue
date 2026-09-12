@@ -5,7 +5,7 @@
       <p v-if="description" class="text-sm text-text-secondary mt-1">{{ description }}</p>
     </div>
     <div class="px-4 sm:px-6 py-3">
-      <select ref="selectEl" v-model="selected" class="form-input w-full" aria-label="Folder">
+      <select ref="selectEl" v-model="selected" class="form-input w-full" :aria-label="title">
         <option v-for="opt in options" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
       </select>
     </div>
@@ -21,24 +21,26 @@ import { ref, watch, nextTick } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
 import { useParentModal } from '@/composables/useParentModal';
 
-export interface FolderPickerOption {
+export interface SelectOption {
   value: string;
   label: string;
 }
 
+/**
+ * One-question prompt with a select, the sibling of InputModal. The first
+ * option is preselected, so callers order the options by preference.
+ */
 interface Props {
   isOpen: boolean;
   title: string;
-  options: FolderPickerOption[];
+  options: SelectOption[];
   description?: string;
-  initialValue?: string;
   confirmLabel?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   description: '',
-  initialValue: '',
-  confirmLabel: 'Move',
+  confirmLabel: 'Select',
 });
 
 const emit = defineEmits<{
@@ -47,13 +49,13 @@ const emit = defineEmits<{
 }>();
 
 const selectEl = ref<HTMLSelectElement | null>(null);
-const selected = ref(props.initialValue);
+const firstValue = () => props.options[0]?.value ?? '';
+const selected = ref(firstValue());
 
 const parentModal = useParentModal({
   onAction({ actionId, values }) {
     if (actionId === 'confirm') {
-      const v = values.folder;
-      emit('confirm', typeof v === 'string' ? v : String(v ?? ''));
+      emit('confirm', String(values.value ?? ''));
     } else {
       emit('cancel');
     }
@@ -64,15 +66,15 @@ const { inIframe } = parentModal;
 
 function openParent() {
   parentModal.open({
-    kind: 'folder-picker',
+    kind: 'select',
     title: props.title,
     size: 'sm',
     fields: [
       ...(props.description ? [{ type: 'text' as const, text: props.description, variant: 'muted' as const }] : []),
       {
         type: 'select',
-        id: 'folder',
-        value: props.initialValue,
+        id: 'value',
+        value: firstValue(),
         options: props.options,
       },
     ],
@@ -92,7 +94,7 @@ watch(() => props.isOpen, (open) => {
     if (open) openParent();
     else parentModal.close();
   } else if (open) {
-    selected.value = props.initialValue;
+    selected.value = firstValue();
     nextTick(() => selectEl.value?.focus());
   }
 }, { immediate: true });

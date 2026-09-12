@@ -811,10 +811,10 @@ final class UpdateCheckTest extends TestCase
     }
 
     #[Test]
-    public function checkResultMapsEachImageToItsSortedContainerNames(): void
+    public function checkResultMapsEachImageToItsContainerNames(): void
     {
         $a = $this->makeContainer('nginx:latest');
-        $a['name'] = '/zeta';
+        $a['name'] = 'zeta';
         $b = $this->makeContainer('nginx:latest');
         $b['name'] = 'alpha';
         $c = $this->makeContainer('redis:7');
@@ -824,7 +824,7 @@ final class UpdateCheckTest extends TestCase
         $result = checkAllImageUpdates($this->docker, $this->db, $this->log());
 
         $this->assertSame(
-            ['nginx:latest' => ['alpha', 'zeta'], 'redis:7' => ['cache']],
+            ['nginx:latest' => ['zeta', 'alpha'], 'redis:7' => ['cache']],
             $result['containersByImage']
         );
     }

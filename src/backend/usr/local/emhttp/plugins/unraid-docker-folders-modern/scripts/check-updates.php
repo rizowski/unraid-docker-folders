@@ -60,18 +60,16 @@ WebSocketPublisher::publish('updates', 'checked');
 
 // Send Unraid notification if new updates were found. The subject carries the
 // container count, the description names them, and the link opens the tab.
-if ($newUpdatesCount > 0 && $notifyEnabled) {
-  $notification = buildUpdateNotification($newImages, $result['containersByImage'] ?? []);
-  if ($notification !== null) {
-    $cmd = '/usr/local/emhttp/webGui/scripts/notify'
-      . ' -e ' . escapeshellarg('Docker Folders')
-      . ' -s ' . escapeshellarg($notification['subject'])
-      . ' -d ' . escapeshellarg($notification['description'])
-      . ' -i normal'
-      . ' -l ' . escapeshellarg('/Docker/Folders');
-    exec($cmd);
-    logUpdate('NOTIFY Sent notification: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
-  }
+$notification = $notifyEnabled ? buildUpdateNotification($newImages, $result['containersByImage']) : null;
+if ($notification !== null) {
+  $cmd = '/usr/local/emhttp/webGui/scripts/notify'
+    . ' -e ' . escapeshellarg('Docker Folders')
+    . ' -s ' . escapeshellarg($notification['subject'])
+    . ' -d ' . escapeshellarg($notification['description'])
+    . ' -i normal'
+    . ' -l ' . escapeshellarg('/Docker/Folders');
+  exec($cmd);
+  logUpdate('NOTIFY Sent notification: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
 }
 
 logUpdate('DONE Checked ' . $result['checked'] . ', skipped ' . $result['skipped'] . ', errors ' . $result['errors'] . ', new updates ' . $newUpdatesCount);

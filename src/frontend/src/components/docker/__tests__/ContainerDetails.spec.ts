@@ -125,6 +125,10 @@ function mountWithSchedules(schedules: Schedule[]) {
       isRunning: true,
       imageLink: null,
       showLogs: false,
+      logLines: [],
+      logError: '',
+      logsLoading: false,
+      newLineCount: 0,
     },
     global: { plugins: [pinia] },
   });

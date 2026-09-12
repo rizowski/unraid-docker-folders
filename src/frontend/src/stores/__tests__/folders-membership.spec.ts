@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useFolderStore } from '../folders';
-import type { Folder, ContainerAssociation } from '@/types/folder';
+import type { Folder } from '@/types/folder';
+import { makeFolder } from '@/test/fixtures';
 
 // Mock apiFetch so no real HTTP requests are made
 vi.mock('@/utils/csrf', () => ({
@@ -12,32 +13,6 @@ vi.mock('@/utils/csrf', () => ({
 import { apiFetch } from '@/utils/csrf';
 
 const mockApiFetch = vi.mocked(apiFetch);
-
-function assoc(name: string, position: number): ContainerAssociation {
-  return {
-    id: position + 1,
-    container_id: `id-${name}`,
-    container_name: name,
-    folder_id: 1,
-    position,
-  };
-}
-
-function makeFolder(containerNames: string[], overrides: Partial<Folder> = {}): Folder {
-  return {
-    id: 1,
-    name: 'Media',
-    icon: null,
-    color: '#ff8c2f',
-    position: 0,
-    collapsed: false,
-    compose_project: null,
-    created_at: 0,
-    updated_at: 0,
-    containers: containerNames.map((n, i) => assoc(n, i)),
-    ...overrides,
-  };
-}
 
 /** Every mutation endpoint returns `{ folder }`; the store swaps it into state. */
 function okResponse(folder: Folder): Response {

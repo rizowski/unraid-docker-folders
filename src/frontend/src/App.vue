@@ -529,8 +529,7 @@ function initializeDragAndDrop() {
           const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 
           if (containerId) {
-            await folderStore.addContainerToFolder(folderId, containerId, containerName);
-            await folderStore.fetchFolders(true);
+            await folderStore.moveContainerToFolder(folderId, containerId, containerName);
           }
         },
         onUpdate: async () => {
@@ -557,8 +556,7 @@ function initializeDragAndDrop() {
           const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 
           if (containerName) {
-            await folderStore.removeContainerFromFolder(containerName);
-            await folderStore.fetchFolders(true);
+            await folderStore.moveContainerToFolder(null, containerId ?? '', containerName);
           }
         },
       })

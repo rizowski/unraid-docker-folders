@@ -187,15 +187,11 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     if ($image && !isset($uniqueImages[$image])) {
       $uniqueImages[$image] = $imageId;
     }
-    $name = ltrim($container['name'] ?? '', '/');
+    $name = $container['name'] ?? '';
     if ($image && $name !== '') {
       $containersByImage[$image][] = $name;
     }
   }
-  foreach ($containersByImage as &$names) {
-    sort($names, SORT_NATURAL | SORT_FLAG_CASE);
-  }
-  unset($names);
 
   // Targeted check: restrict to the requested images. Only images that
   // actually belong to a container are checked — unknown names are ignored.
@@ -346,8 +342,9 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
  * @param array<string, string[]> $containersByImage Image => container names
  * @return array{subject: string, description: string}|null Null when no container uses a new image
  */
-function buildUpdateNotification(array $newImages, array $containersByImage, $maxNames = 10)
+function buildUpdateNotification(array $newImages, array $containersByImage)
 {
+  $maxNames = 10;
   $names = [];
   foreach ($newImages as $image) {
     foreach ($containersByImage[$image] ?? [] as $name) {

@@ -152,18 +152,10 @@ export const useDockerStore = defineStore('docker', () => {
   });
 
   const unfolderedContainers = computed(() => {
-    const folderStore = useFolderStore();
-    const assignedContainerNames = new Set<string>();
-
-    // Collect all assigned container names (stable across recreations)
-    folderStore.folders.forEach((folder) => {
-      folder.containers.forEach((assoc) => {
-        assignedContainerNames.add(assoc.container_name);
-      });
-    });
-
-    // Return containers that aren't in any folder, sorted by state
-    return sortedContainers.value.filter((c) => !assignedContainerNames.has(c.name));
+    // Membership is keyed on name (stable across recreations); the folder
+    // store owns the one map of it.
+    const assigned = useFolderStore().folderByContainerName;
+    return sortedContainers.value.filter((c) => !assigned.has(c.name));
   });
 
   // Actions
