@@ -26,6 +26,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const updateConcurrency = ref(3);
   const backupDestination = ref('/mnt/user/backups/docker-folders');
   const defaultRetentionCount = ref(7);
+  /** Read-only: the timezone the backend PHP process is actually running in. */
+  const serverTimezone = ref<string | null>(null);
   const loaded = ref(false);
 
   async function fetchSettings() {
@@ -83,6 +85,9 @@ export const useSettingsStore = defineStore('settings', () => {
       if ('default_retention_count' in settings) {
         const parsed = parseInt(settings.default_retention_count, 10);
         defaultRetentionCount.value = Number.isNaN(parsed) ? 7 : parsed;
+      }
+      if ('server_timezone' in settings) {
+        serverTimezone.value = settings.server_timezone || null;
       }
 
       loaded.value = true;
@@ -303,6 +308,7 @@ export const useSettingsStore = defineStore('settings', () => {
     updateConcurrency,
     backupDestination,
     defaultRetentionCount,
+    serverTimezone,
     loaded,
     fetchSettings,
     setDistinguishHealthy,

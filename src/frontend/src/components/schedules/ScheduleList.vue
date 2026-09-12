@@ -130,6 +130,7 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 import ScheduleForm from './ScheduleForm.vue';
 import ScheduleHistoryModal from './ScheduleHistoryModal.vue';
 import { useScheduleStore } from '@/stores/schedules';
+import { useSettingsStore } from '@/stores/settings';
 import { formatTimestamp, scheduleStatusClass } from '@/utils/format';
 import type { TargetType } from '@/types/schedule';
 
@@ -143,6 +144,7 @@ const props = defineProps<Props>();
 defineEmits<{ close: [] }>();
 
 const scheduleStore = useScheduleStore();
+const settingsStore = useSettingsStore();
 const loading = computed(() => scheduleStore.loading);
 
 const formOpen = ref(false);
@@ -154,7 +156,7 @@ const targetSchedules = computed(() =>
   scheduleStore.schedulesForTarget(props.targetType, props.targetId),
 );
 
-const formatTime = formatTimestamp;
+const formatTime = (ts: number) => formatTimestamp(ts, settingsStore.serverTimezone);
 const statusClass = scheduleStatusClass;
 
 // This modal stays mounted between openings, so drop any open form on close.

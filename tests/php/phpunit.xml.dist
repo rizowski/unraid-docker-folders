@@ -23,5 +23,11 @@
     <testsuite name="FolderManager">
       <file>FolderManagerTest.php</file>
     </testsuite>
+    <testsuite name="ServerTimezone">
+      <file>ServerTimezoneTest.php</file>
+    </testsuite>
+    <testsuite name="ScheduleManager">
+      <file>ScheduleManagerTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>

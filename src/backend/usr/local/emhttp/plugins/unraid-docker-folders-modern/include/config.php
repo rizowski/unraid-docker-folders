@@ -63,7 +63,53 @@ if (defined('DEBUG') && DEBUG) {
 }
 
 // Timezone
-date_default_timezone_set('UTC');
+//
+// Schedules (cron expressions) are entered by the user in server-local time,
+// and ScheduleManager::computeNextRun() uses date()/mktime() under whatever
+// zone PHP is set to. If we stayed pinned to UTC, a schedule entered as
+// "15:30" would run at 15:30 UTC instead of 15:30 in the user's own Unraid
+// timezone. So adopt the Unraid-configured zone instead.
+/**
+ * Determine the timezone Unraid itself is configured for.
+ *
+ * Tries, in order:
+ *   1. The `timeZone` key Unraid writes to ident.cfg (e.g. `timeZone="America/Denver"`).
+ *   2. The target of the /etc/localtime symlink, which Unraid also maintains,
+ *      read as the path segment after "zoneinfo/".
+ *   3. UTC, if neither yields a timezone identifier PHP recognizes.
+ *
+ * @param string $identCfg  Path to ident.cfg (overridable for tests).
+ * @param string $localtime Path to the localtime symlink (overridable for tests).
+ * @return string A valid PHP timezone identifier.
+ */
+function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime = '/etc/localtime') {
+  $validZones = DateTimeZone::listIdentifiers();
+  $candidates = [];
+
+  if (is_readable($identCfg)) {
+    $ident = @parse_ini_file($identCfg);
+    if (is_array($ident) && !empty($ident['timeZone'])) {
+      $candidates[] = $ident['timeZone'];
+    }
+  }
+
+  if (is_link($localtime) || file_exists($localtime)) {
+    $target = @readlink($localtime);
+    if ($target !== false && preg_match('#zoneinfo/(.+)$#', $target, $matches)) {
+      $candidates[] = $matches[1];
+    }
+  }
+
+  foreach ($candidates as $candidate) {
+    if (in_array($candidate, $validZones, true)) {
+      return $candidate;
+    }
+  }
+
+  return 'UTC';
+}
+
+date_default_timezone_set(detectServerTimezone());
 
 require_once __DIR__ . '/paths.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';

@@ -210,3 +210,39 @@ describe('settings store – enableAdopt', () => {
     expect(JSON.parse(options!.body as string)).toEqual({ key: 'enable_adopt', value: '0' });
   });
 });
+
+describe('settings store – serverTimezone', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('defaults serverTimezone to null', () => {
+    const store = useSettingsStore();
+    expect(store.serverTimezone).toBeNull();
+  });
+
+  it('fetchSettings reads server_timezone from the payload', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: { server_timezone: 'America/Denver' } }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.serverTimezone).toBe('America/Denver');
+  });
+
+  it('fetchSettings leaves serverTimezone null when the key is absent', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: {} }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.serverTimezone).toBeNull();
+  });
+});

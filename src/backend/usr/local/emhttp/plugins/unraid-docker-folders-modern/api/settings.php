@@ -50,6 +50,11 @@ function handleGet()
     $settings[$row['key']] = $row['value'];
   }
 
+  // Synthetic, read-only: the zone PHP is actually running in (see
+  // detectServerTimezone() in config.php). Not in the POST allowlist, so it
+  // cannot be overwritten by a client.
+  $settings['server_timezone'] = date_default_timezone_get();
+
   jsonResponse(['settings' => $settings]);
 }
 

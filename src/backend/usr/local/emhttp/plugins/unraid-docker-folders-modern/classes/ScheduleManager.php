@@ -241,6 +241,38 @@ class ScheduleManager
     return $deleted;
   }
 
+  /**
+   * Recompute next_run_at for every enabled schedule.
+   *
+   * Needed whenever the interpretation of a cron expression could have
+   * changed without the expression itself changing — e.g. after config.php
+   * starts resolving the server's actual timezone instead of always using
+   * UTC. Existing next_run_at values would otherwise still reflect the old
+   * zone until each schedule happened to fire or be edited.
+   *
+   * Returns the number of schedules updated.
+   */
+  public function recomputeAllNextRuns()
+  {
+    $rows = $this->db->fetchAll('SELECT id, cron_expression FROM schedules WHERE enabled = 1');
+
+    $now = time();
+    $count = 0;
+    foreach ($rows as $row) {
+      $nextRun = self::computeNextRun($row['cron_expression'], $now);
+      if ($nextRun === null) {
+        // Unparseable expression (shouldn't happen — validateCronExpression
+        // gates writes — but next_run_at is polled with `<= ?`, which a NULL
+        // would never satisfy, silently disabling the schedule forever).
+        continue;
+      }
+      $this->db->update('schedules', ['next_run_at' => $nextRun], 'id = ?', [$row['id']]);
+      $count++;
+    }
+
+    return $count;
+  }
+
   public function runDueSchedules()
   {
     $now = time();

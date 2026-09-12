@@ -16,8 +16,25 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
-export function formatTimestamp(unixSeconds: number): string {
-  return new Date(unixSeconds * 1000).toLocaleString();
+/**
+ * Format a unix timestamp for display.
+ *
+ * When `timeZone` is given (e.g. the backend's `server_timezone`, since
+ * schedules are entered and evaluated in server time), render in that zone
+ * instead of the browser's own. An unrecognized zone throws a RangeError in
+ * `toLocaleString`, so fall back to the browser-zone rendering rather than
+ * blowing up the caller.
+ */
+export function formatTimestamp(unixSeconds: number, timeZone?: string | null): string {
+  const date = new Date(unixSeconds * 1000);
+  if (timeZone) {
+    try {
+      return date.toLocaleString(undefined, { timeZone });
+    } catch {
+      return date.toLocaleString();
+    }
+  }
+  return date.toLocaleString();
 }
 
 /**
