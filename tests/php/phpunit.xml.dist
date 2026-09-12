@@ -23,5 +23,8 @@
     <testsuite name="FolderManager">
       <file>FolderManagerTest.php</file>
     </testsuite>
+    <testsuite name="ScheduleAction">
+      <file>ScheduleActionTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>
