@@ -163,6 +163,7 @@
                   :view="viewMode"
 
                   @start="handleStart"
+                  @resume="handleResume"
                   @stop="handleStop"
                   @restart="handleRestart"
                   @remove="handleRemove"
@@ -580,6 +581,15 @@ async function handleStart(id: string) {
   actionsInProgress.value.set(id, 'start');
   try {
     await dockerStore.startContainer(id);
+  } finally {
+    actionsInProgress.value.delete(id);
+  }
+}
+
+async function handleResume(id: string) {
+  actionsInProgress.value.set(id, 'resume');
+  try {
+    await dockerStore.resumeContainer(id);
   } finally {
     actionsInProgress.value.delete(id);
   }

@@ -242,8 +242,21 @@ function handlePost($dockerClient)
 
   switch ($action) {
     case 'start':
-      $success = $dockerClient->startContainer($id);
-      $message = $success ? 'Container started successfully' : 'Failed to start container';
+      // Docker's start endpoint 304s (already-started) on a paused container
+      // without resuming it, so check first and unpause instead when needed.
+      $startInfo = $dockerClient->inspectContainerRaw($id);
+      if (!empty($startInfo['State']['Paused'])) {
+        $success = $dockerClient->unpauseContainer($id);
+        $message = $success ? 'Container resumed successfully' : 'Failed to resume container';
+      } else {
+        $success = $dockerClient->startContainer($id);
+        $message = $success ? 'Container started successfully' : 'Failed to start container';
+      }
+      break;
+
+    case 'resume':
+      $success = $dockerClient->unpauseContainer($id);
+      $message = $success ? 'Container resumed successfully' : 'Failed to resume container';
       break;
 
     case 'stop':

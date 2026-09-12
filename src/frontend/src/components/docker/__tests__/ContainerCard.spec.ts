@@ -400,6 +400,7 @@ describe('ContainerCard', () => {
     it('displays correct text for each action type', () => {
       const actions = [
         { action: 'start', text: 'Starting...' },
+        { action: 'resume', text: 'Resuming...' },
         { action: 'stop', text: 'Stopping...' },
         { action: 'restart', text: 'Restarting...' },
         { action: 'remove', text: 'Removing...' },
@@ -1117,6 +1118,42 @@ describe('ContainerCard', () => {
 
       expect(entry!.attributes('disabled')).toBeUndefined();
       expect(entry!.attributes('href')).toContain('my-jellyfin.xml');
+    });
+  });
+
+  describe('paused container', () => {
+    it('shows a single Resume action and hides Start/Stop/Restart/Remove (grid)', () => {
+      const wrapper = mountCard({ state: 'paused' }, { view: 'grid' });
+      const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
+      expect(titles).toContain('Resume');
+      expect(titles).not.toContain('Start');
+      expect(titles).not.toContain('Stop');
+      expect(titles).not.toContain('Restart');
+      expect(titles).not.toContain('Remove');
+    });
+
+    it('shows a single Resume action and hides Start/Stop/Restart/Remove (list)', () => {
+      const wrapper = mountCard({ state: 'paused' }, { view: 'list' });
+      const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
+      expect(titles).toContain('Resume');
+      expect(titles).not.toContain('Start');
+      expect(titles).not.toContain('Stop');
+      expect(titles).not.toContain('Restart');
+      expect(titles).not.toContain('Remove');
+    });
+
+    it('emits resume when the Resume button is clicked', async () => {
+      const wrapper = mountCard({ state: 'paused', id: 'paused-1' });
+      const resumeBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Resume')!;
+      await resumeBtn.trigger('click');
+      expect(wrapper.emitted('resume')).toEqual([['paused-1']]);
+    });
+
+    it('gives the icon a warning halo with a Paused tooltip', () => {
+      const wrapper = mountCard({ state: 'paused' });
+      const icon = wrapper.find('img').element.parentElement!;
+      expect(icon.className.split(' ')).toContain('status-halo-warning');
+      expect(icon.getAttribute('title')).toBe('Paused');
     });
   });
 

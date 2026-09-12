@@ -225,6 +225,26 @@ export const useDockerStore = defineStore('docker', () => {
     }
   }
 
+  async function resumeContainer(id: string): Promise<boolean> {
+    try {
+      const response = await apiFetch(`${API_BASE}/containers.php?action=resume&id=${id}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to resume container`);
+      }
+
+      // Refresh container list
+      await fetchContainers();
+
+      return true;
+    } catch (e) {
+      console.error('Error resuming container:', e);
+      return false;
+    }
+  }
+
   async function stopContainer(id: string): Promise<boolean> {
     try {
       const response = await apiFetch(`${API_BASE}/containers.php?action=stop&id=${id}`, {
@@ -330,6 +350,7 @@ export const useDockerStore = defineStore('docker', () => {
     // Actions
     fetchContainers,
     startContainer,
+    resumeContainer,
     stopContainer,
     restartContainer,
     removeContainer,

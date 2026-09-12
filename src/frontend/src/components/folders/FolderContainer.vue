@@ -19,6 +19,7 @@
             :action-in-progress="actionsInProgress.get(getContainer(assoc.container_name)?.id ?? '') ?? null"
             :view="view"
             @start="handleStart"
+            @resume="handleResume"
             @stop="handleStop"
             @restart="handleRestart"
             @remove="handleRemove"
@@ -138,7 +139,7 @@ const folderContainers = computed(() => {
   if (hideStopped.value) {
     list = list.filter((assoc) => {
       const container = getContainer(assoc.container_name);
-      return container?.state === 'running';
+      return container?.state === 'running' || container?.state === 'paused';
     });
   }
   return list;
@@ -169,7 +170,7 @@ const hiddenCount = computed(() => {
   const all = props.folder.containers || [];
   return all.length - all.filter((assoc) => {
     const container = getContainer(assoc.container_name);
-    return container?.state === 'running';
+    return container?.state === 'running' || container?.state === 'paused';
   }).length;
 });
 
@@ -234,6 +235,15 @@ async function handleStart(id: string) {
   actionsInProgress.value.set(id, 'start');
   try {
     await dockerStore.startContainer(id);
+  } finally {
+    actionsInProgress.value.delete(id);
+  }
+}
+
+async function handleResume(id: string) {
+  actionsInProgress.value.set(id, 'resume');
+  try {
+    await dockerStore.resumeContainer(id);
   } finally {
     actionsInProgress.value.delete(id);
   }
