@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.09.12
+- refactor: share the move-to-folder action and the select modal
+- feat(updates): name the containers in the update notification
+- feat(folders): add a folder picker to the container menu
+- fix(compose): rename the Stack Details menu item to Edit Stack
+- feat(docker): show the inline log panel in card view
+
 ## 2026.08.22
 - test(docker): pin the managed-with-autostart-off branch
 - fix(docker): correct three faults the browser check found
