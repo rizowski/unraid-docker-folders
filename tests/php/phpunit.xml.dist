@@ -20,5 +20,8 @@
     <testsuite name="AdoptBuilder">
       <file>AdoptBuilderTest.php</file>
     </testsuite>
+    <testsuite name="FolderManager">
+      <file>FolderManagerTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>

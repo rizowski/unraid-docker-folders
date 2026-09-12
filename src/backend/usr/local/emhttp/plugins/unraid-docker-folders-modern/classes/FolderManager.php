@@ -14,9 +14,12 @@ class FolderManager
 {
   private $db;
 
-  public function __construct()
+  /**
+   * @param Database|null $db Injected for tests; defaults to the singleton.
+   */
+  public function __construct($db = null)
   {
-    $this->db = Database::getInstance();
+    $this->db = $db ?? Database::getInstance();
   }
 
   /**
@@ -296,6 +299,61 @@ class FolderManager
   }
 
   /**
+   * Replace the manual order of the containers that are in no folder.
+   *
+   * Full-replace semantics: the client sends the whole unfoldered list in
+   * display order, so any name absent from $containerNames loses its row and
+   * falls back to the state-first default. Non-strings, empty strings, and
+   * duplicates are skipped; positions stay contiguous from 0.
+   *
+   * @param array $containerNames Container names in new order
+   * @return bool Success
+   */
+  public function setUnfolderedOrder(array $containerNames)
+  {
+    $this->db->beginTransaction();
+
+    try {
+      $this->db->delete('unfoldered_order', '1 = 1');
+
+      $position = 0;
+      $seen = [];
+      foreach ($containerNames as $name) {
+        if (!is_string($name) || $name === '' || isset($seen[$name])) {
+          continue;
+        }
+        $seen[$name] = true;
+
+        $this->db->insert('unfoldered_order', [
+          'container_name' => $name,
+          'position' => $position,
+        ]);
+        $position++;
+      }
+
+      $this->db->commit();
+      return true;
+    } catch (Exception $e) {
+      $this->db->rollback();
+      error_log('Error reordering unfoldered containers: ' . $e->getMessage());
+      return false;
+    }
+  }
+
+  /**
+   * Get the saved manual order of unfoldered containers.
+   *
+   * @return string[] Container names, first to last
+   */
+  public function getUnfolderedOrder()
+  {
+    $rows = $this->db->fetchAll('SELECT container_name FROM unfoldered_order ORDER BY position ASC');
+    return array_map(function ($row) {
+      return (string) $row['container_name'];
+    }, $rows);
+  }
+
+  /**
    * Get containers in a folder
    *
    * @param int $folderId Folder ID
@@ -495,10 +553,9 @@ class FolderManager
    */
   public function removeContainerByName($containerName)
   {
-    return $this->db->execute(
-      'DELETE FROM container_folders WHERE container_name = ?',
-      [$containerName]
-    );
+    $this->db->delete('container_folders', 'container_name = ?', [$containerName]);
+    $this->db->delete('unfoldered_order', 'container_name = ?', [$containerName]);
+    return true;
   }
 
   /**

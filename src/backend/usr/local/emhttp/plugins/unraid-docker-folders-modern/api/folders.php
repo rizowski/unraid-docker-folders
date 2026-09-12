@@ -90,6 +90,7 @@ function handleGet($folderManager)
   jsonResponse([
     'folders' => $folders,
     'count' => count($folders),
+    'unfoldered_order' => $folderManager->getUnfolderedOrder(),
   ]);
 }
 
@@ -194,6 +195,36 @@ function handlePost($folderManager)
     jsonResponse([
       'success' => true,
       'folder' => $folder,
+    ]);
+  }
+
+  // Reorder containers that are in no folder (whole list, full replace)
+  if ($action === 'reorder_unfoldered') {
+    $data = getRequestData();
+
+    if (!isset($data['container_names']) || !is_array($data['container_names'])) {
+      errorResponse('container_names array is required', 400);
+    }
+
+    foreach ($data['container_names'] as $name) {
+      if (!is_string($name) || strlen($name) > 255) {
+        errorResponse('container_names must be strings of at most 255 characters', 400);
+      }
+    }
+
+    $success = $folderManager->setUnfolderedOrder($data['container_names']);
+
+    if (!$success) {
+      errorResponse('Failed to reorder unfoldered containers', 500);
+    }
+
+    $order = $folderManager->getUnfolderedOrder();
+
+    WebSocketPublisher::publish('folder', 'reorder_unfoldered', ['unfoldered_order' => $order]);
+
+    jsonResponse([
+      'success' => true,
+      'unfoldered_order' => $order,
     ]);
   }
 

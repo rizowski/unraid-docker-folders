@@ -19,6 +19,8 @@ const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 export const useFolderStore = defineStore('folders', () => {
   // State
   const folders = ref<Folder[]>([]);
+  // Manual drag order of the containers that are in no folder, by name.
+  const unfolderedOrder = ref<string[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   let lastFetchTime = 0;
@@ -75,6 +77,7 @@ export const useFolderStore = defineStore('folders', () => {
 
       const data = await response.json();
       folders.value = data.folders || [];
+      unfolderedOrder.value = Array.isArray(data.unfoldered_order) ? data.unfoldered_order : [];
       initialLoadDone = true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -315,6 +318,33 @@ export const useFolderStore = defineStore('folders', () => {
     }
   }
 
+  /**
+   * Save the manual order of the unfoldered list. The whole list is sent in
+   * display order; the backend replaces the saved order with it.
+   */
+  async function reorderUnfoldered(containerNames: string[]): Promise<boolean> {
+    try {
+      const response = await apiFetch(`${API_BASE}/folders.php?action=reorder_unfoldered`, {
+        method: 'POST',
+        body: JSON.stringify({
+          container_names: containerNames,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to reorder unfoldered containers`);
+      }
+
+      const result = await response.json();
+      unfolderedOrder.value = Array.isArray(result.unfoldered_order) ? result.unfoldered_order : containerNames;
+
+      return true;
+    } catch (e) {
+      console.error('Error reordering unfoldered containers:', e);
+      return false;
+    }
+  }
+
   async function reorderFolders(folderIds: number[]): Promise<boolean> {
     try {
       const response = await apiFetch(`${API_BASE}/folders.php?action=reorder_folders`, {
@@ -401,6 +431,7 @@ export const useFolderStore = defineStore('folders', () => {
   return {
     // State
     folders,
+    unfolderedOrder,
     loading,
     error,
 
@@ -421,6 +452,7 @@ export const useFolderStore = defineStore('folders', () => {
     moveContainerToFolder,
     setFolderContainers,
     reorderContainers,
+    reorderUnfoldered,
     reorderFolders,
     exportConfiguration,
     importConfiguration,

@@ -476,9 +476,12 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
   }
 }
 
+// Manual order of the unfoldered list, by container name (mirrors unfoldered_order).
+let unfolderedOrder: string[] = [];
+
 async function handleFolders(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {
-    return json(res, { folders, count: folders.length });
+    return json(res, { folders, count: folders.length, unfoldered_order: unfolderedOrder });
   }
 
   const data = await parseBody(req);
@@ -499,10 +502,17 @@ async function handleFolders(req: any, res: any, params: Record<string, string>)
     }
 
     if (action === 'remove_container') {
+      // The store sends container_name; container_id is the legacy field.
+      const name = data.container_name ?? data.container_id;
       for (const f of folders) {
-        f.containers = f.containers.filter((c: any) => c.container_id !== data.container_id);
+        f.containers = f.containers.filter((c: any) => c.container_name !== name);
       }
       return json(res, { success: true });
+    }
+
+    if (action === 'reorder_unfoldered') {
+      unfolderedOrder = data.container_names ?? [];
+      return json(res, { success: true, unfoldered_order: unfolderedOrder });
     }
 
     if (action === 'reorder_containers' && id) {

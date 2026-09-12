@@ -559,6 +559,12 @@ function initializeDragAndDrop() {
             await folderStore.moveContainerToFolder(null, containerId ?? '', containerName);
           }
         },
+        onUpdate: async () => {
+          const names = Array.from(unfolderedEl.children)
+            .map((child) => dockerStore.getContainerById((child as HTMLElement).dataset.containerId || '')?.name)
+            .filter((n): n is string => !!n);
+          await folderStore.reorderUnfoldered(names);
+        },
       })
     );
   }

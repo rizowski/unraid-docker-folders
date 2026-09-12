@@ -154,8 +154,23 @@ export const useDockerStore = defineStore('docker', () => {
   const unfolderedContainers = computed(() => {
     // Membership is keyed on name (stable across recreations); the folder
     // store owns the one map of it.
-    const assigned = useFolderStore().folderByContainerName;
-    return sortedContainers.value.filter((c) => !assigned.has(c.name));
+    const folderStore = useFolderStore();
+    const assigned = folderStore.folderByContainerName;
+    const unfoldered = sortedContainers.value.filter((c) => !assigned.has(c.name));
+
+    // Saved order first; unplaced containers keep the state-first default
+    // after it. A folder member is never listed even if its name is ranked.
+    const rank = new Map<string, number>();
+    folderStore.unfolderedOrder.forEach((name, i) => {
+      if (!rank.has(name)) rank.set(name, i);
+    });
+    if (rank.size === 0) return unfoldered;
+
+    const ranked = unfoldered
+      .filter((c) => rank.has(c.name))
+      .sort((a, b) => rank.get(a.name)! - rank.get(b.name)!);
+    const unranked = unfoldered.filter((c) => !rank.has(c.name));
+    return [...ranked, ...unranked];
   });
 
   // Actions
