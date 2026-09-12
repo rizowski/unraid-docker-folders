@@ -84,7 +84,12 @@
           :show-stats="showStats"
           :is-running="isRunning"
           :image-link="imageLink"
-          :show-logs="false"
+          :show-logs="shouldShowInlineLogs"
+          :log-lines="logLines"
+          :log-error="logError"
+          :logs-loading="logsLoading"
+          :new-line-count="newLineCount"
+          @refresh-logs="fetchLogs"
         />
       </div>
     </Transition>
@@ -501,7 +506,7 @@ const releaseNotesUrl = computed<string | null>(() =>
   releaseIndexUrl(updatesStore.updates[props.container.image]),
 );
 
-// Inline logs panel (list view only). Ownership stays here rather than in
+// Inline logs panel, shown in both grid and list view. Ownership stays here rather than in
 // ContainerDetails: that child is mid-leave-transition during a collapse and
 // stops receiving prop updates, so it cannot tell when to stop polling.
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -514,7 +519,7 @@ const logError = ref('');
 const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
 
 const shouldShowInlineLogs = computed(
-  () => settingsStore.showInlineLogs && props.view === 'list' && expanded.value && isRunning.value,
+  () => settingsStore.showInlineLogs && expanded.value && isRunning.value,
 );
 
 async function fetchLogs() {

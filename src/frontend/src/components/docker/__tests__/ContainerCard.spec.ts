@@ -443,19 +443,29 @@ describe('ContainerCard', () => {
       expect(logsHeaders.length).toBe(0);
     });
 
-    it('does not show log panel in grid view even when setting is on', async () => {
+    /** Mount a grid-view card and expand it, optionally enabling inline logs */
+    async function mountExpandedGridCard(enableLogs: boolean) {
       const wrapper = mountCardWithSharedPinia(
         { state: 'running' },
         { view: 'grid' },
         { enableLogs: true, seedStatsId: 'abc123' },
       );
-
-      // Expand grid card
-      const summary = wrapper.find('.cursor-pointer');
-      await summary.trigger('click');
+      await wrapper.find('.cursor-pointer').trigger('click');
       await flushPromises();
 
-      // Should not have the inline log panel
+    it('shows the log panel in grid view when the setting is on', async () => {
+      const wrapper = await mountExpandedGridCard(true);
+
+      expect(logsCallCount()).toBeGreaterThan(0);
+      expect(wrapper.text()).toContain('server started');
+      const refreshBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Refresh logs');
+      expect(refreshBtn).toBeDefined();
+    });
+
+    it('does not show the log panel in grid view when the setting is off', async () => {
+      const wrapper = await mountExpandedGridCard(false);
+
+      expect(logsCallCount()).toBe(0);
       const refreshBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Refresh logs');
       expect(refreshBtn).toBeUndefined();
     });
@@ -543,7 +553,7 @@ describe('ContainerCard', () => {
       const gridCard = mountCardWithSharedPinia(
         { state: 'running' },
         { view: 'grid' },
-        { enableLogs: true, seedStatsId: 'abc123' },
+        { enableLogs, seedStatsId: 'abc123' },
       );
       await gridCard.find('.cursor-pointer').trigger('click');
       await flushPromises();
@@ -553,6 +563,8 @@ describe('ContainerCard', () => {
       expect(gridRow).toBeTruthy();
       // Same info-row grid definition, and the same sections underneath.
       expect(gridRow!.classes()).toEqual(listRow!.classes());
+      return wrapper;
+    }
       for (const section of ['Resource Usage', 'Block I/O', 'Net I/O', 'Uptime']) {
         expect(gridCard.text()).toContain(section);
       }
