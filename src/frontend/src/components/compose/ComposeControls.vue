@@ -43,9 +43,9 @@
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
     </button>
 
-    <!-- Stack Details (compose file + logs tab) -->
+    <!-- Edit stack (compose file + logs tab) -->
     <button
-      :title="composeStore.composePluginInstalled ? 'View stack details (read-only, compose.manager installed)' : 'Stack details'"
+      :title="composeStore.composePluginInstalled ? 'View stack (read-only, compose.manager installed)' : 'Edit stack'"
       class="p-1 rounded cursor-pointer transition text-text-secondary hover:text-info"
       @click="$emit('edit-compose', projectName)"
     >
