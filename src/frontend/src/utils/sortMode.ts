@@ -16,6 +16,19 @@ const STATE_ORDER: Record<string, number> = {
   dead: 3,
 };
 
+/**
+ * The highest-ranked state in a group (running before paused before exited),
+ * so a folder sorts under "Status" by its most active container.
+ */
+export function bestState(states: Array<string | undefined>): string | undefined {
+  let best: string | undefined;
+  for (const state of states) {
+    if (state === undefined) continue;
+    if (best === undefined || (STATE_ORDER[state] ?? 4) < (STATE_ORDER[best] ?? 4)) best = state;
+  }
+  return best;
+}
+
 const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
 
 export interface SortableFields {

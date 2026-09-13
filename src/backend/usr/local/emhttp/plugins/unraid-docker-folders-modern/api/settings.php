@@ -94,7 +94,7 @@ function handlePost()
     'compose_export_dir',
     'backup_destination',
     'default_retention_count',
-    'sort_mode',
+    'sort_mode', 'sort_folders',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);

@@ -14,7 +14,8 @@ import type {
 } from '@/types/folder';
 import { apiFetch } from '@/utils/csrf';
 import { useSettingsStore } from '@/stores/settings';
-import { sortByMode } from '@/utils/sortMode';
+import { useDockerStore, type Container } from '@/stores/docker';
+import { bestState, sortByMode } from '@/utils/sortMode';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
@@ -36,13 +37,28 @@ export const useFolderStore = defineStore('folders', () => {
     return (id: number) => folders.value.find((f) => f.id === id);
   });
 
-  const sortedFolders = computed(() => {
+  // Folders keep their drag order unless the user turned on "Sort folders too".
+  // Under an automatic mode a folder ranks by its containers: its most active
+  // state for "Status", and its newest container for the date modes.
+  // Explicit types break the folders <-> docker store inference cycle.
+  const sortedFolders = computed<Folder[]>(() => {
     const settingsStore = useSettingsStore();
-    return sortByMode(folders.value, settingsStore.sortMode, (f) => ({
-      position: f.position,
-      name: f.name,
-      created: f.created_at,
-    }));
+    const mode = settingsStore.sortFolders ? settingsStore.sortMode : 'manual';
+    if (mode === 'manual') {
+      return sortByMode(folders.value, mode, (f) => ({ position: f.position, name: f.name }));
+    }
+    const dockerStore = useDockerStore();
+    return sortByMode(folders.value, mode, (f: Folder) => {
+      const members: Container[] = f.containers
+        .map((assoc) => dockerStore.containersByName.get(assoc.container_name))
+        .filter((c): c is Container => c !== undefined);
+      return {
+        position: f.position,
+        name: f.name,
+        state: bestState(members.map((c) => c.state)),
+        created: members.length > 0 ? Math.max(...members.map((c) => c.created)) : f.created_at,
+      };
+    });
   });
 
   // Membership is keyed on container name, the stable key across recreates.

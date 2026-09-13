@@ -1,6 +1,6 @@
 <!--
-  Toolbar control for the global sort mode (folder order, and the order of
-  unfoldered containers). Chrome mirrors CreateMenu.vue so the two toolbar
+  Toolbar control for the global sort mode (container order, and folder order
+  when "Sort folders too" is on). Chrome mirrors CreateMenu.vue so the two toolbar
   dropdowns read as one pattern; see DESIGN.md §11 — every item carries
   `.kebab-menu-item` or the Unraid reset strips its padding.
 -->
@@ -72,6 +72,22 @@
           <path d="M20 6L9 17l-5-5" />
         </svg>
       </button>
+      <hr class="my-1 border-0 border-t border-border" />
+      <!-- Stays open on toggle, so the user sees the check change. -->
+      <button
+        role="menuitemcheckbox"
+        :aria-checked="sortFolders"
+        class="kebab-menu-item flex items-center gap-2.5 w-full px-3 py-2 text-sm transition text-left border-none bg-transparent cursor-pointer whitespace-nowrap text-text"
+        @click.stop="emit('update:sortFolders', !sortFolders)"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0" aria-hidden="true">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+        <span class="flex-1">Sort folders too</span>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0" :class="{ invisible: !sortFolders }" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>
@@ -80,14 +96,20 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { SORT_MODE_OPTIONS, type SortMode } from '@/types/folder';
 
-const props = defineProps<{
-  modelValue: SortMode;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: SortMode;
+    /** Whether an automatic mode also reorders folders. */
+    sortFolders?: boolean;
+  }>(),
+  { sortFolders: false }
+);
 
 const activeOption = computed(() => SORT_MODE_OPTIONS.find((o) => o.value === props.modelValue) ?? SORT_MODE_OPTIONS[0]);
 
 const emit = defineEmits<{
   'update:modelValue': [value: SortMode];
+  'update:sortFolders': [value: boolean];
 }>();
 
 const menuOpen = ref(false);
