@@ -255,6 +255,7 @@ const folders: any[] = [
     position: 0,
     collapsed: false,
     compose_project: null,
+    sort_mode: 'manual',
     created_at: Date.now(),
     updated_at: Date.now(),
     containers: [
@@ -269,6 +270,7 @@ const folders: any[] = [
     position: 1,
     collapsed: false,
     compose_project: null,
+    sort_mode: 'manual',
     created_at: Date.now(),
     updated_at: Date.now(),
     containers: [
@@ -284,6 +286,7 @@ const folders: any[] = [
     position: 2,
     collapsed: false,
     compose_project: null,
+    sort_mode: 'manual',
     created_at: Date.now(),
     updated_at: Date.now(),
     containers: [
@@ -554,6 +557,7 @@ async function handleFolders(req: any, res: any, params: Record<string, string>)
       color: data.color || '#ff8c2f',
       position: folders.length,
       collapsed: false,
+      sort_mode: 'manual',
       created_at: Date.now(),
       updated_at: Date.now(),
       containers: [],
@@ -595,6 +599,7 @@ const settings: Record<string, string> = {
   replace_docker_section: '0',
   show_legacy_containers: '0',
   show_legacy_buttons: '0',
+  sort_mode: 'manual',
 };
 
 async function handleSettings(req: any, res: any) {

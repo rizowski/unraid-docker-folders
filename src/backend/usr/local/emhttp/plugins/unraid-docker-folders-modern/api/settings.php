@@ -94,9 +94,15 @@ function handlePost()
     'compose_export_dir',
     'backup_destination',
     'default_retention_count',
+    'sort_mode',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);
+  }
+
+  // Validate sort_mode against the known set of modes.
+  if ($key === 'sort_mode' && !in_array($value, SORT_MODES, true)) {
+    errorResponse('Invalid sort_mode', 400);
   }
 
   // Validate value length

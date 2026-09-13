@@ -65,7 +65,7 @@ class FolderManager
   /**
    * Create a new folder
    *
-   * @param array $data Folder data (name, icon, color)
+   * @param array $data Folder data (name, icon, color, sort_mode)
    * @return array Created folder
    */
   public function createFolder($data)
@@ -82,6 +82,8 @@ class FolderManager
       'position' => $maxPosition + 1,
       'collapsed' => 0,
       'compose_project' => $data['compose_project'] ?? null,
+      // Unknown or missing modes (e.g. from an import file) fall back to 'manual'.
+      'sort_mode' => in_array($data['sort_mode'] ?? null, SORT_MODES, true) ? $data['sort_mode'] : 'manual',
       'created_at' => $now,
       'updated_at' => $now,
     ]);
@@ -121,6 +123,9 @@ class FolderManager
     }
     if (isset($data['collapsed'])) {
       $updates['collapsed'] = $data['collapsed'] ? 1 : 0;
+    }
+    if (in_array($data['sort_mode'] ?? null, SORT_MODES, true)) {
+      $updates['sort_mode'] = $data['sort_mode'];
     }
 
     $this->db->update('folders', $updates, 'id = ?', [$id]);
@@ -397,6 +402,7 @@ class FolderManager
           'icon' => $folder['icon'],
           'color' => $folder['color'],
           'position' => $folder['position'],
+          'sort_mode' => $folder['sort_mode'] ?? 'manual',
           'containers' => array_map(function ($c) {
             return [
               'id' => $c['container_id'],
@@ -438,6 +444,7 @@ class FolderManager
           'name' => $folderData['name'] ?? 'Imported Folder',
           'icon' => $folderData['icon'] ?? null,
           'color' => $folderData['color'] ?? null,
+          'sort_mode' => $folderData['sort_mode'] ?? null,
         ]);
 
         $result['folders_created']++;

@@ -284,6 +284,10 @@ function handlePut($folderManager)
     errorResponse('Invalid JSON data', 400);
   }
 
+  if (isset($data['sort_mode']) && !in_array($data['sort_mode'], SORT_MODES, true)) {
+    errorResponse('Invalid sort_mode', 400);
+  }
+
   $folder = $folderManager->updateFolder($id, $data);
 
   if ($folder === null) {

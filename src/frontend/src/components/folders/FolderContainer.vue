@@ -63,6 +63,8 @@ import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
+import { sortByMode } from '@/utils/sortMode';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import FolderHeader from './FolderHeader.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 
@@ -96,8 +98,8 @@ const settingsStore = useSettingsStore();
 const actionsInProgress = ref<Map<string, string>>(new Map());
 
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
-const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
-watch(hideStopped, (v) => localStorage.setItem(storageKey.value, v ? '1' : '0'));
+const hideStopped = ref(safeLocalStorageGet(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
+watch(hideStopped, (v) => safeLocalStorageSet(storageKey.value, v ? '1' : '0'));
 
 // "Hide stopped" keeps running and paused containers; both are alive.
 const isShownWhenHidingStopped = (c?: { state: string }) => c?.state === 'running' || c?.state === 'paused';
@@ -145,7 +147,15 @@ const folderContainers = computed(() => {
       return isShownWhenHidingStopped(container);
     });
   }
-  return list;
+  return sortByMode(list, props.folder.sort_mode, (assoc) => {
+    const container = getContainer(assoc.container_name);
+    return {
+      position: assoc.position,
+      name: container?.name ?? assoc.container_name,
+      state: container?.state,
+      created: container?.created,
+    };
+  });
 });
 
 // Preview list for compose folders whose stack is down.
@@ -178,7 +188,7 @@ const hiddenCount = computed(() => {
 });
 
 function getContainer(name: string) {
-  return dockerStore.containers.find((c) => c.name === name);
+  return dockerStore.containersByName.get(name);
 }
 
 function toggleCollapse() {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useDockerStore } from '../docker';
 import { useFolderStore } from '../folders';
+import { useSettingsStore } from '../settings';
 import { makeContainer, makeFolder } from '@/test/fixtures';
 
 // Mock apiFetch so instantiating the stores never makes real HTTP requests.
@@ -82,5 +83,23 @@ describe('docker store – unfolderedContainers with a saved order', () => {
     folderStore.unfolderedOrder = ['plex', 'beta', 'alpha'];
 
     expect(names(store)).toEqual(['beta', 'alpha']);
+  });
+
+  it('uses the global sort mode instead of the saved order when it is not manual', () => {
+    const store = useDockerStore();
+    const folderStore = useFolderStore();
+    const settingsStore = useSettingsStore();
+    store.containers = [
+      makeContainer({ id: 'c', name: 'charlie', state: 'running' }),
+      makeContainer({ id: 'a', name: 'alpha', state: 'exited' }),
+      makeContainer({ id: 'b', name: 'bravo', state: 'running' }),
+    ];
+    folderStore.unfolderedOrder = ['charlie', 'bravo', 'alpha'];
+
+    settingsStore.sortMode = 'name-asc';
+    expect(names(store)).toEqual(['alpha', 'bravo', 'charlie']);
+
+    settingsStore.sortMode = 'manual';
+    expect(names(store)).toEqual(['charlie', 'bravo', 'alpha']);
   });
 });

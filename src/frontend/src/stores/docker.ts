@@ -5,7 +5,9 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { useFolderStore } from './folders';
+import { useSettingsStore } from './settings';
 import { apiFetch } from '@/utils/csrf';
+import { sortByMode } from '@/utils/sortMode';
 
 export interface ContainerPort {
   IP: string;
@@ -163,11 +165,21 @@ export const useDockerStore = defineStore('docker', () => {
     // Membership is keyed on name (stable across recreations); the folder
     // store owns the one map of it.
     const folderStore = useFolderStore();
+    const settingsStore = useSettingsStore();
     const assigned = folderStore.folderByContainerName;
     const unfoldered = sortedContainers.value.filter((c) => !assigned.has(c.name));
 
-    // Saved order first; unplaced containers keep the state-first default
-    // after it. A folder member is never listed even if its name is ranked.
+    if (settingsStore.sortMode !== 'manual') {
+      return sortByMode(unfoldered, settingsStore.sortMode, (c) => ({
+        position: 0,
+        name: c.name,
+        state: c.state,
+        created: c.created,
+      }));
+    }
+
+    // Manual: saved order first; unplaced containers keep the state-first
+    // default after it. A folder member is never listed even if its name is ranked.
     const rank = new Map<string, number>();
     folderStore.unfolderedOrder.forEach((name, i) => {
       if (!rank.has(name)) rank.set(name, i);

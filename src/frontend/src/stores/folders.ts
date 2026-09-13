@@ -13,6 +13,8 @@ import type {
   FolderImportResult,
 } from '@/types/folder';
 import { apiFetch } from '@/utils/csrf';
+import { useSettingsStore } from '@/stores/settings';
+import { sortByMode } from '@/utils/sortMode';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
@@ -35,7 +37,12 @@ export const useFolderStore = defineStore('folders', () => {
   });
 
   const sortedFolders = computed(() => {
-    return [...folders.value].sort((a, b) => a.position - b.position);
+    const settingsStore = useSettingsStore();
+    return sortByMode(folders.value, settingsStore.sortMode, (f) => ({
+      position: f.position,
+      name: f.name,
+      created: f.created_at,
+    }));
   });
 
   // Membership is keyed on container name, the stable key across recreates.
