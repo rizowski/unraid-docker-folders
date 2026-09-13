@@ -1,0 +1,41 @@
+name: PR base branch
+
+# Pull requests must target dev. Only dev itself, from this repository, may
+# open a pull request against main.
+#
+# pull_request_target runs with a token that can comment on pull requests from
+# forks. It is safe here because the job never checks out or runs code from the
+# pull request. Keep it that way.
+on:
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+    branches: [main]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  check-base:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require dev as the base branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          if [ "$HEAD_REPO" = "$GH_REPO" ] && [ "$HEAD_REF" = "dev" ]; then
+            echo "dev -> main release pull request. OK."
+            exit 0
+          fi
+
+          # Comment once, when the pull request is opened or reopened.
+          if [ "$ACTION" = "opened" ] || [ "$ACTION" = "reopened" ]; then
+            gh pr comment "$PR_NUMBER" --body "Thank you for the pull request. Please change the base branch to \`dev\`: click **Edit** next to the title and select \`dev\`. Changes reach \`main\` only through \`dev\`. See [CONTRIBUTING.md](https://github.com/$GH_REPO/blob/dev/CONTRIBUTING.md)."
+          fi
+
+          echo "::error::Pull requests must target dev, not main. Change the base branch to dev."
+          exit 1
