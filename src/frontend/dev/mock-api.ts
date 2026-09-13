@@ -463,9 +463,6 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
 
     switch (action) {
       case 'start':
-        container.state = 'running';
-        container.status = 'Up 1 second';
-        break;
       case 'resume':
         container.state = 'running';
         container.status = 'Up 1 second';

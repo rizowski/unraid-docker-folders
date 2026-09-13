@@ -319,7 +319,9 @@ class FolderManager
       $position = 0;
       $seen = [];
       foreach ($containerNames as $name) {
-        if (!is_string($name) || $name === '' || isset($seen[$name])) {
+        // folders.php already rejects non-strings; dedupe matters because
+        // container_name is the primary key.
+        if ($name === '' || isset($seen[$name])) {
           continue;
         }
         $seen[$name] = true;
@@ -555,7 +557,6 @@ class FolderManager
   {
     $this->db->delete('container_folders', 'container_name = ?', [$containerName]);
     $this->db->delete('unfoldered_order', 'container_name = ?', [$containerName]);
-    return true;
   }
 
   /**

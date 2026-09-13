@@ -97,11 +97,11 @@
       </template>
       <template v-else>
       <button v-if="isPaused" @click="emit('resume', container.id)" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Resume"><IconPlay :size="20" /></button>
-      <button v-else-if="container.state === 'running'" @click="confirmAction = 'stop'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="20" /></button>
+      <button v-else-if="isRunning" @click="confirmAction = 'stop'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="20" /></button>
       <button v-else @click="emit('start', container.id)" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Start"><IconPlay :size="20" /></button>
       <button v-if="isRunning" @click="confirmAction = 'restart'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="20" /></button>
-      <button v-if="!isRunning && !isPaused" @click="confirmAction = 'remove'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="20" /></button>
-      <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed, id: container.id })" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="20" /></button>
+      <button v-if="isStopped" @click="confirmAction = 'remove'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="20" /></button>
+      <button v-if="hasUpdate" @click="emit('pull', pullPayload())" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="20" /></button>
       <!-- Adopt: only for a container Unraid does not manage yet -->
       <button v-if="canAdopt" @click.stop="openAdopt" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text" title="Adopt into Unraid — let Unraid manage this container"><IconAdopt :size="20" /></button>
       </template>
@@ -207,11 +207,11 @@
         <a v-if="resolvedWebui && isRunning" :href="resolvedWebui" target="_blank" rel="noopener" class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition" title="Open WebUI" @click.stop><IconGlobe :size="18" /></a>
         <span v-else class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="No WebUI configured. Set the WebUI field in the container's Unraid template to enable this."><IconGlobe :size="18" /></span>
         <button v-if="isPaused" @click="emit('resume', container.id)" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Resume"><IconPlay :size="18" /></button>
-        <button v-else-if="container.state === 'running'" @click="confirmAction = 'stop'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="18" /></button>
+        <button v-else-if="isRunning" @click="confirmAction = 'stop'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="18" /></button>
         <button v-else @click="emit('start', container.id)" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Start"><IconPlay :size="18" /></button>
         <button v-if="isRunning" @click="confirmAction = 'restart'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="18" /></button>
-        <button v-if="!isRunning && !isPaused" @click="confirmAction = 'remove'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="18" /></button>
-        <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed, id: container.id })" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="18" /></button>
+        <button v-if="isStopped" @click="confirmAction = 'remove'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="18" /></button>
+        <button v-if="hasUpdate" @click="emit('pull', pullPayload())" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="18" /></button>
         <!-- Adopt: only for a container Unraid does not manage yet -->
         <button v-if="canAdopt" @click.stop="openAdopt" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text" title="Adopt into Unraid — let Unraid manage this container"><IconAdopt :size="18" /></button>
         <button v-if="isManaged" @click.stop="handleToggleAutostart" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="18" /></button>
@@ -447,13 +447,18 @@ const confirmModalConfig = computed(() => {
   }
 });
 
+function pullPayload(force = false): PullRequest {
+  const { image, name, managed, id } = props.container;
+  return force ? { image, name, managed, id, force } : { image, name, managed, id };
+}
+
 function handleConfirm() {
   const action = confirmAction.value;
   confirmAction.value = null;
   if (action === 'stop') emit('stop', props.container.id);
   else if (action === 'restart') emit('restart', props.container.id);
   else if (action === 'remove') emit('remove', props.container.id, removeImageToo.value);
-  else if (action === 'force-update') emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed, id: props.container.id, force: true });
+  else if (action === 'force-update') emit('pull', pullPayload(true));
   removeImageToo.value = false;
 }
 
@@ -501,6 +506,7 @@ function expandAfterLeave(el: Element) {
 
 const isRunning = computed(() => props.container.state === 'running');
 const isPaused = computed(() => props.container.state === 'paused');
+const isStopped = computed(() => !isRunning.value && !isPaused.value);
 
 const { showStats, containerStats } = useContainerStats({
   containerId: () => props.container.id,
@@ -728,7 +734,7 @@ const projectUrl = computed(() => {
 });
 
 const menuItems = computed<KebabMenuItem[]>(() => [
-  { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: props.view === 'list' && isMobile.value && !isRunning.value && !isPaused.value },
+  { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: props.view === 'list' && isMobile.value && isStopped.value },
   { label: 'Resume', icon: 'M6 4l14 8-14 8z', action: 'resume', class: 'text-success', show: props.view === 'list' && isMobile.value && isPaused.value },
   { label: 'Restart', icon: 'M1 4v6h6|M3.51 15a9 9 0 1 0 2.13-9.36L1 10', action: 'restart', class: 'text-primary', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning', show: hasUpdate.value },
@@ -752,7 +758,7 @@ const menuItems = computed<KebabMenuItem[]>(() => [
   { label: `${folderVerb.value} to Folder…`, icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: folderTargets.value.length > 0 },
   { divider: true },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
-  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value && !isPaused.value },
+  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && isStopped.value },
 ]);
 
 async function handleMenuAction(action: string) {
@@ -767,7 +773,7 @@ async function handleMenuAction(action: string) {
   } else if (action === 'remove') {
     confirmAction.value = 'remove';
   } else if (action === 'update') {
-    emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed, id: props.container.id });
+    emit('pull', pullPayload());
   } else if (action === 'force-update') {
     confirmAction.value = 'force-update';
   } else if (action === 'check-updates') {

@@ -83,7 +83,14 @@ if (defined('DEBUG') && DEBUG) {
  * @return string A valid PHP timezone identifier.
  */
 function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime = '/etc/localtime') {
-  $validZones = DateTimeZone::listIdentifiers();
+  // Memoised per path pair: config.php is loaded on every request, including
+  // the stats poll, and the answer cannot change within one process.
+  static $cache = [];
+  $key = $identCfg . '|' . $localtime;
+  if (isset($cache[$key])) {
+    return $cache[$key];
+  }
+
   $candidates = [];
 
   if (is_readable($identCfg)) {
@@ -93,20 +100,22 @@ function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime =
     }
   }
 
-  if (is_link($localtime) || file_exists($localtime)) {
-    $target = @readlink($localtime);
-    if ($target !== false && preg_match('#zoneinfo/(.+)$#', $target, $matches)) {
-      $candidates[] = $matches[1];
-    }
+  // readlink() returns false for a missing path or a non-symlink.
+  $target = @readlink($localtime);
+  if ($target !== false && preg_match('#zoneinfo/(.+)$#', $target, $matches)) {
+    $candidates[] = $matches[1];
   }
 
+  $validZones = DateTimeZone::listIdentifiers();
+  $zone = 'UTC';
   foreach ($candidates as $candidate) {
     if (in_array($candidate, $validZones, true)) {
-      return $candidate;
+      $zone = $candidate;
+      break;
     }
   }
 
-  return 'UTC';
+  return $cache[$key] = $zone;
 }
 
 date_default_timezone_set(detectServerTimezone());

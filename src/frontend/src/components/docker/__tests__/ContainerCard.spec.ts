@@ -1123,18 +1123,8 @@ describe('ContainerCard', () => {
   });
 
   describe('paused container', () => {
-    it('shows a single Resume action and hides Start/Stop/Restart/Remove (grid)', () => {
-      const wrapper = mountCard({ state: 'paused' }, { view: 'grid' });
-      const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
-      expect(titles).toContain('Resume');
-      expect(titles).not.toContain('Start');
-      expect(titles).not.toContain('Stop');
-      expect(titles).not.toContain('Restart');
-      expect(titles).not.toContain('Remove');
-    });
-
-    it('shows a single Resume action and hides Start/Stop/Restart/Remove (list)', () => {
-      const wrapper = mountCard({ state: 'paused' }, { view: 'list' });
+    it.each(['grid', 'list'] as const)('shows a single Resume action and hides Start/Stop/Restart/Remove (%s)', (view) => {
+      const wrapper = mountCard({ state: 'paused' }, { view });
       const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
       expect(titles).toContain('Resume');
       expect(titles).not.toContain('Start');

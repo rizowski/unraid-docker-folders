@@ -23,6 +23,9 @@ final class FolderManagerTest extends TestCase
 {
     private const MIGRATIONS_DIR = __DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/migrations';
 
+    /** Migration SQL is read once; every test still gets a fresh database. */
+    private static ?array $migrationSql = null;
+
     private Database $db;
     private FolderManager $manager;
 
@@ -45,18 +48,30 @@ final class FolderManagerTest extends TestCase
         $prop->setAccessible(true);
         $prop->setValue($database, $sqlite);
 
-        $files = glob(self::MIGRATIONS_DIR . '/*.sql');
-        self::assertNotFalse($files);
-        self::assertNotEmpty($files, 'no migration files found');
-        sort($files);
-
-        foreach ($files as $file) {
-            $sql = file_get_contents($file);
-            self::assertNotFalse($sql, "could not read $file");
+        foreach (self::migrationSql() as $sql) {
             $database->exec($sql);
         }
 
         return $database;
+    }
+
+    /** @return string[] */
+    private static function migrationSql(): array
+    {
+        if (self::$migrationSql === null) {
+            $files = glob(self::MIGRATIONS_DIR . '/*.sql');
+            self::assertNotFalse($files);
+            self::assertNotEmpty($files, 'no migration files found');
+            sort($files);
+
+            self::$migrationSql = array_map(static function (string $file): string {
+                $sql = file_get_contents($file);
+                self::assertNotFalse($sql, "could not read $file");
+                return $sql;
+            }, $files);
+        }
+
+        return self::$migrationSql;
     }
 
     /** @return array<int, array{container_name: string, position: int}> */
@@ -98,16 +113,13 @@ final class FolderManagerTest extends TestCase
     }
 
     #[Test]
-    public function skipsNonStringsEmptyStringsAndDuplicatesKeepingPositionsContiguous(): void
+    public function skipsEmptyStringsAndDuplicatesKeepingPositionsContiguous(): void
     {
         self::assertTrue($this->manager->setUnfolderedOrder([
             'plex',
-            42,
             '',
-            null,
             'sonarr',
             'plex',
-            ['nested'],
             'radarr',
             'sonarr',
         ]));
@@ -141,7 +153,7 @@ final class FolderManagerTest extends TestCase
         self::assertTrue($this->manager->addContainerToFolder($folder['id'], 'id-sonarr', 'sonarr'));
         $this->manager->setUnfolderedOrder(['plex', 'radarr']);
 
-        self::assertTrue($this->manager->removeContainerByName('plex'));
+        $this->manager->removeContainerByName('plex');
 
         self::assertSame(
             [],
@@ -152,8 +164,13 @@ final class FolderManagerTest extends TestCase
     }
 
     #[Test]
-    public function removeContainerByNameSucceedsWhenNothingMatches(): void
+    public function removeContainerByNameIsANoOpWhenNothingMatches(): void
     {
-        self::assertTrue($this->manager->removeContainerByName('ghost'));
+        $this->manager->setUnfolderedOrder(['plex']);
+
+        $this->manager->removeContainerByName('ghost');
+
+        self::assertSame(0, $this->db->getRowCount('container_folders'));
+        self::assertSame(['plex'], $this->manager->getUnfolderedOrder());
     }
 }

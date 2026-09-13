@@ -198,6 +198,13 @@ class DockerClient
    */
   public function startContainer($id)
   {
+    // Docker answers a start on a paused container with 304 and leaves it
+    // paused, so a paused container is resumed instead. Every caller (the
+    // API, schedules) gets that for free.
+    $info = $this->inspectContainerRaw($id);
+    if (!empty($info['State']['Paused'])) {
+      return $this->unpauseContainer($id);
+    }
     $response = $this->request('POST', "/containers/{$id}/start");
     return $response !== false;
   }

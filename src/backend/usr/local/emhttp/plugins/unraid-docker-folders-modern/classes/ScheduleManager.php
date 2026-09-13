@@ -258,16 +258,23 @@ class ScheduleManager
 
     $now = time();
     $count = 0;
-    foreach ($rows as $row) {
-      $nextRun = self::computeNextRun($row['cron_expression'], $now);
-      if ($nextRun === null) {
-        // Unparseable expression (shouldn't happen — validateCronExpression
-        // gates writes — but next_run_at is polled with `<= ?`, which a NULL
-        // would never satisfy, silently disabling the schedule forever).
-        continue;
+    $this->db->beginTransaction();
+    try {
+      foreach ($rows as $row) {
+        $nextRun = self::computeNextRun($row['cron_expression'], $now);
+        if ($nextRun === null) {
+          // Unparseable expression (shouldn't happen — validateCronExpression
+          // gates writes — but next_run_at is polled with `<= ?`, which a NULL
+          // would never satisfy, silently disabling the schedule forever).
+          continue;
+        }
+        $this->db->update('schedules', ['next_run_at' => $nextRun], 'id = ?', [$row['id']]);
+        $count++;
       }
-      $this->db->update('schedules', ['next_run_at' => $nextRun], 'id = ?', [$row['id']]);
-      $count++;
+      $this->db->commit();
+    } catch (Exception $e) {
+      $this->db->rollback();
+      throw $e;
     }
 
     return $count;
@@ -396,11 +403,13 @@ class ScheduleManager
    * both 'start'-while-paused and 'resume' — that method itself is not
    * renamed, only the action identifiers that select it.
    */
-  public static function resolveContainerMethod($action, $state)
+  public static function resolveContainerMethod($action)
   {
+    // 'start' needs no state: DockerClient::startContainer resumes a paused
+    // container itself, so the rule lives in one place for every caller.
     switch ($action) {
       case 'start':
-        return $state === 'paused' ? 'unpauseContainer' : 'startContainer';
+        return 'startContainer';
       case 'resume':
         return 'unpauseContainer';
       case 'stop':
@@ -432,7 +441,7 @@ class ScheduleManager
     }
 
     $state = $container['state'] ?? '';
-    $method = self::resolveContainerMethod($action, $state);
+    $method = self::resolveContainerMethod($action);
     if ($method === null) {
       return ['success' => false, 'message' => "Unknown action: {$action}"];
     }
@@ -445,7 +454,7 @@ class ScheduleManager
 
     $id = $container['id'];
     $ok = $docker->$method($id);
-    $verb = $method === 'unpauseContainer' ? 'Resume' : ucfirst($action);
+    $verb = ucfirst($action);
     $msg = $ok ? "{$verb} succeeded for {$containerName}" : "{$verb} failed for {$containerName}: " . $docker->getLastError();
     return ['success' => $ok, 'message' => $msg];
   }

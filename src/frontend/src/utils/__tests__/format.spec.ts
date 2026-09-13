@@ -13,21 +13,14 @@ describe('formatTimestamp', () => {
   });
 
   it('falls back to the no-zone rendering for an unrecognized zone rather than throwing', () => {
-    expect(() => formatTimestamp(FIXED_EPOCH, 'Not/ARealZone')).not.toThrow();
-
     const withInvalidZone = formatTimestamp(FIXED_EPOCH, 'Not/ARealZone');
     const withoutZone = formatTimestamp(FIXED_EPOCH);
 
     expect(withInvalidZone).toBe(withoutZone);
   });
 
-  it('is unchanged for a call with no timezone argument', () => {
+  it.each([undefined, null])('renders in the browser zone when the zone is %s', (zone) => {
     const expected = new Date(FIXED_EPOCH * 1000).toLocaleString();
-    expect(formatTimestamp(FIXED_EPOCH)).toBe(expected);
-  });
-
-  it('treats a null timezone the same as no timezone', () => {
-    const expected = new Date(FIXED_EPOCH * 1000).toLocaleString();
-    expect(formatTimestamp(FIXED_EPOCH, null)).toBe(expected);
+    expect(formatTimestamp(FIXED_EPOCH, zone)).toBe(expected);
   });
 });

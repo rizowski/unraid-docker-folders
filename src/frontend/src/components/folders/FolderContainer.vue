@@ -99,6 +99,9 @@ const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id
 const hideStopped = ref(localStorage.getItem(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
 watch(hideStopped, (v) => localStorage.setItem(storageKey.value, v ? '1' : '0'));
 
+// "Hide stopped" keeps running and paused containers; both are alive.
+const isShownWhenHidingStopped = (c?: { state: string }) => c?.state === 'running' || c?.state === 'paused';
+
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
 const isExpanded = computed(() => !props.folder.collapsed || isSearching.value);
@@ -139,7 +142,7 @@ const folderContainers = computed(() => {
   if (hideStopped.value) {
     list = list.filter((assoc) => {
       const container = getContainer(assoc.container_name);
-      return container?.state === 'running' || container?.state === 'paused';
+      return isShownWhenHidingStopped(container);
     });
   }
   return list;
@@ -170,7 +173,7 @@ const hiddenCount = computed(() => {
   const all = props.folder.containers || [];
   return all.length - all.filter((assoc) => {
     const container = getContainer(assoc.container_name);
-    return container?.state === 'running' || container?.state === 'paused';
+    return isShownWhenHidingStopped(container);
   }).length;
 });
 

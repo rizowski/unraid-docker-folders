@@ -5,6 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/utils/csrf';
+import { formatTimestamp } from '@/utils/format';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
@@ -292,6 +293,11 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  /** Render a unix timestamp in the server zone when it is known. */
+  function formatServerTime(unixSeconds: number): string {
+    return formatTimestamp(unixSeconds, serverTimezone.value);
+  }
+
   return {
     distinguishHealthy,
     showStats,
@@ -309,6 +315,7 @@ export const useSettingsStore = defineStore('settings', () => {
     backupDestination,
     defaultRetentionCount,
     serverTimezone,
+    formatServerTime,
     loaded,
     fetchSettings,
     setDistinguishHealthy,

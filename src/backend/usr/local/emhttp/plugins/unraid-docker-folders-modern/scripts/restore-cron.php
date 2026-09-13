@@ -3,9 +3,11 @@
 /**
  * Unraid Docker Folders - Restore Cron Schedule
  *
- * Called during plugin install/boot to restore the cron file from the
- * saved update_check_schedule setting. Unraid's /etc/cron.d/ is in RAM
- * and wiped on every reboot, so this must run each time the plugin loads.
+ * Called during plugin install/boot. Recomputes schedule next-run times for
+ * the current server timezone, restores the schedule runner cron, and
+ * restores the update-check cron from the saved setting. Unraid's
+ * /etc/cron.d/ is in RAM and wiped on every reboot, so this must run each
+ * time the plugin loads.
  *
  * Usage: php restore-cron.php
  *
@@ -25,38 +27,29 @@ if (!file_exists($dbPath)) {
 
 $db = Database::getInstance();
 
-// Recompute next_run_at for enabled schedules — the server timezone may
-// differ across an install/boot (e.g. after config.php started resolving it
-// from ident.cfg instead of always using UTC), which would otherwise leave
-// stale next_run_at values around until each schedule fires or is edited.
-// Deliberately unconditional and ahead of the update-checks guard below:
-// container/stack schedules have nothing to do with image update checks, and
-// gating this on that setting would mean it never runs for most installs.
-// Failure here must not break cron restore itself.
+// Container/stack schedules have nothing to do with image update checks, so
+// both steps below run regardless of that setting. A failure here must not
+// break the rest of the restore.
 try {
-  $scheduleManager = new ScheduleManager();
-  $recomputed = $scheduleManager->recomputeAllNextRuns();
-  echo "Recomputed next run for {$recomputed} schedule(s)\n";
+  $recomputed = (new ScheduleManager())->recomputeAllNextRuns();
+  echo "Recomputed next run for {$recomputed} schedule(s)
+";
 } catch (Exception $e) {
   error_log('restore-cron: failed to recompute next_run_at: ' . $e->getMessage());
 }
 
-// Check if update checks are enabled
-$enabledRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'enable_update_checks'");
-if (!$enabledRow || $enabledRow['value'] !== '1') {
-  exit(0);
-}
-
-// Read the saved schedule
-$scheduleRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'update_check_schedule'");
-$schedule = $scheduleRow ? $scheduleRow['value'] : 'disabled';
-
-CronManager::updateSchedule($schedule);
-
-if ($schedule !== 'disabled') {
-  echo "Cron schedule restored: {$schedule}\n";
-}
-
-// Restore scheduler cron if any enabled schedules exist
 CronManager::ensureSchedulerCron($db);
-echo "Schedule runner cron checked\n";
+echo "Schedule runner cron checked
+";
+
+// The image update-check cron line is only restored when that feature is on.
+$enabledRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'enable_update_checks'");
+if ($enabledRow && $enabledRow['value'] === '1') {
+  $scheduleRow = $db->fetchOne("SELECT value FROM settings WHERE key = 'update_check_schedule'");
+  $schedule = $scheduleRow ? $scheduleRow['value'] : 'disabled';
+  CronManager::updateSchedule($schedule);
+  if ($schedule !== 'disabled') {
+    echo "Cron schedule restored: {$schedule}
+";
+  }
+}
