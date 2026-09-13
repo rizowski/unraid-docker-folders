@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.13
+- fix(dashboard): run the tile page as PHP instead of showing its source
 - feat(dashboard): add a Docker Folders tile to the Unraid dashboard
 - refactor(sort): share the folder sort decision and extract sort fields once
 - feat(header): show the container and folder counts inside the search field
