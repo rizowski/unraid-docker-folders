@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import FolderContainer from '../FolderContainer.vue';
 import type { Folder } from '@/types/folder';
 import { useDockerStore } from '@/stores/docker';
+import { useSettingsStore } from '@/stores/settings';
 import { makeContainer } from '@/test/fixtures';
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
@@ -227,5 +228,91 @@ describe('FolderContainer concurrent action loading', () => {
     expect(names).not.toContain('exited-one');
 
     localStorage.removeItem('docker-folders-hide-stopped-1');
+  });
+});
+
+describe('FolderContainer hidden-stopped count', () => {
+  let pinia: ReturnType<typeof createPinia>;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    localStorage.setItem('docker-folders-hide-stopped-1', '1');
+  });
+
+  afterEach(() => {
+    localStorage.removeItem('docker-folders-hide-stopped-1');
+  });
+
+  function hiddenCountFor(containerStates: Record<string, string>, memberNames: string[]): number {
+    const dockerStore = useDockerStore();
+    dockerStore.containers = Object.entries(containerStates).map(([name, state], i) =>
+      makeContainer({ id: `c${i}`, name, state })
+    );
+    const folder = makeFolder({
+      containers: memberNames.map((name, i) => ({ id: i + 1, folder_id: 1, container_name: name, container_id: `x${i}`, position: i })),
+    });
+    const wrapper = mount(FolderContainer, {
+      props: { folder },
+      global: { plugins: [pinia], stubs: { Teleport: true } },
+    });
+    return wrapper.findComponent({ name: 'FolderHeader' }).props('hiddenCount');
+  }
+
+  it('does not count a member whose container was removed from Docker', () => {
+    expect(hiddenCountFor({ web: 'running', db: 'running' }, ['web', 'db', 'removed'])).toBe(0);
+  });
+
+  it('counts a stopped container that still exists', () => {
+    expect(hiddenCountFor({ web: 'running', db: 'exited' }, ['web', 'db', 'removed'])).toBe(1);
+  });
+});
+
+describe('FolderContainer sort order', () => {
+  let pinia: ReturnType<typeof createPinia>;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+  });
+
+  // Stored order, status order, name order, and newest-first order all differ.
+  function cardNames(folderMode: Folder['sort_mode'], toolbarMode: Folder['sort_mode']): string[] {
+    useDockerStore().containers = [
+      makeContainer({ id: 'c1', name: 'zeta-stopped', state: 'exited', created: 200 }),
+      makeContainer({ id: 'c2', name: 'alpha-running', state: 'running', created: 100 }),
+      makeContainer({ id: 'c3', name: 'mid-running', state: 'running', created: 300 }),
+    ];
+    useSettingsStore().sortMode = toolbarMode;
+    const folder = makeFolder({
+      sort_mode: folderMode,
+      containers: [
+        { id: 1, folder_id: 1, container_name: 'zeta-stopped', container_id: 'c1', position: 0 },
+        { id: 2, folder_id: 1, container_name: 'mid-running', container_id: 'c3', position: 1 },
+        { id: 3, folder_id: 1, container_name: 'alpha-running', container_id: 'c2', position: 2 },
+      ],
+    });
+    const wrapper = mount(FolderContainer, {
+      props: { folder },
+      global: { plugins: [pinia], stubs: { Teleport: true } },
+    });
+    return wrapper.findAllComponents({ name: 'ContainerCard' }).map((c) => c.props('container').name);
+  }
+
+  it('keeps stored order when both the folder and the toolbar are manual', () => {
+    expect(cardNames('manual', 'manual')).toEqual(['zeta-stopped', 'mid-running', 'alpha-running']);
+  });
+
+  it('a manual folder follows the toolbar status sort', () => {
+    expect(cardNames('manual', 'status')).toEqual(['alpha-running', 'mid-running', 'zeta-stopped']);
+  });
+
+  it('a manual folder follows the toolbar newest-first sort', () => {
+    expect(cardNames('manual', 'created-desc')).toEqual(['mid-running', 'zeta-stopped', 'alpha-running']);
+  });
+
+  it("a folder's own mode overrides the toolbar sort", () => {
+    expect(cardNames('name-asc', 'status')).toEqual(['alpha-running', 'mid-running', 'zeta-stopped']);
+    expect(cardNames('name-desc', 'status')).toEqual(['zeta-stopped', 'mid-running', 'alpha-running']);
   });
 });

@@ -191,6 +191,19 @@ if (file_exists($changelogPath)) {
   gap: 8px;
 }
 
+.settings-group + .settings-group {
+  margin-top: 15px;
+}
+
+.settings-group h4 {
+  margin: 0 0 5px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--text-color, #333) 60%, transparent);
+}
+
 .setting-row {
   display: flex;
   align-items: center;
@@ -628,38 +641,8 @@ if (file_exists($changelogPath)) {
   <div class="settings-section">
     <h3>Display</h3>
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <label for="replace-docker-section">Replace Docker Containers section</label>
-        <div class="description">When enabled, the built-in Docker Containers section on the Docker tab is replaced with the Docker Folders UI. <strong>Default: Off</strong></div>
-      </div>
-      <div class="setting-control">
-        <input type="checkbox" id="replace-docker-section" <?= $replaceDockerSection ? 'checked' : '' ?> onchange="saveSetting('replace_docker_section', this.checked ? '1' : '0')" />
-        <span id="save-status-replace-docker-section" class="save-status">Saved</span>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label for="show-legacy-containers">Show legacy Docker containers</label>
-        <div class="description">When the Docker Containers section is replaced, show the native (legacy) container list in a collapsed "Native Docker Containers" accordion below the Folders UI. When disabled, the legacy list is hidden entirely. Only applies while the section is replaced. <strong>Default: Off</strong></div>
-      </div>
-      <div class="setting-control">
-        <input type="checkbox" id="show-legacy-containers" <?= $showLegacyContainers ? 'checked' : '' ?> onchange="saveSetting('show_legacy_containers', this.checked ? '1' : '0')" />
-        <span id="save-status-show-legacy-containers" class="save-status">Saved</span>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label for="show-legacy-buttons">Show legacy Docker buttons</label>
-        <div class="description">When the Docker Containers section is replaced, keep the native Docker page action buttons (Add Container, Check for Updates, etc.) visible. When disabled, they are hidden. Only applies while the section is replaced. <strong>Default: Off</strong></div>
-      </div>
-      <div class="setting-control">
-        <input type="checkbox" id="show-legacy-buttons" <?= $showLegacyButtons ? 'checked' : '' ?> onchange="saveSetting('show_legacy_buttons', this.checked ? '1' : '0')" />
-        <span id="save-status-show-legacy-buttons" class="save-status">Saved</span>
-      </div>
-    </div>
+    <div class="settings-group">
+      <h4>Containers</h4>
 
     <div class="setting-row">
       <div class="setting-info">
@@ -685,34 +668,12 @@ if (file_exists($changelogPath)) {
 
     <div class="setting-row">
       <div class="setting-info">
-        <label for="show-folder-ports">Show ports on collapsed folders</label>
-        <div class="description">When enabled, collapsed folders display the public ports of all running containers inside them. <strong>Default: On</strong></div>
-      </div>
-      <div class="setting-control">
-        <input type="checkbox" id="show-folder-ports" <?= $showFolderPorts ? 'checked' : '' ?> onchange="saveSetting('show_folder_ports', this.checked ? '1' : '0')" />
-        <span id="save-status-show-folder-ports" class="save-status">Saved</span>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
         <label for="show-inline-logs">Show inline logs</label>
         <div class="description">When enabled, expanding a running container shows a live log panel alongside resource stats. <strong>Default: Off</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="show-inline-logs" <?= $showInlineLogs ? 'checked' : '' ?> onchange="saveSetting('show_inline_logs', this.checked ? '1' : '0')" />
         <span id="save-status-show-inline-logs" class="save-status">Saved</span>
-      </div>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <label for="enable-adopt">Offer to adopt manually created containers</label>
-        <div class="description">When enabled, a container that was created outside Unraid (for example with <code>docker run</code>) shows an Adopt button. Adoption hands the container to Unraid's container manager, which removes and recreates it. Compose containers are never offered. <strong>Default: On</strong></div>
-      </div>
-      <div class="setting-control">
-        <input type="checkbox" id="enable-adopt" <?= $enableAdopt ? 'checked' : '' ?> onchange="saveSetting('enable_adopt', this.checked ? '1' : '0')" />
-        <span id="save-status-enable-adopt" class="save-status">Saved</span>
       </div>
     </div>
 
@@ -732,6 +693,33 @@ if (file_exists($changelogPath)) {
         </select>
         <span id="save-status-log-refresh-interval" class="save-status">Saved</span>
       </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="enable-adopt">Offer to adopt manually created containers</label>
+        <div class="description">When enabled, a container that was created outside Unraid (for example with <code>docker run</code>) shows an Adopt button. Adoption hands the container to Unraid's container manager, which removes and recreates it. Compose containers are never offered. <strong>Default: On</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="enable-adopt" <?= $enableAdopt ? 'checked' : '' ?> onchange="saveSetting('enable_adopt', this.checked ? '1' : '0')" />
+        <span id="save-status-enable-adopt" class="save-status">Saved</span>
+      </div>
+    </div>
+    </div>
+
+    <div class="settings-group">
+      <h4>Folders</h4>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-folder-ports">Show ports on collapsed folders</label>
+        <div class="description">When enabled, collapsed folders display the public ports of all running containers inside them. <strong>Default: On</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-folder-ports" <?= $showFolderPorts ? 'checked' : '' ?> onchange="saveSetting('show_folder_ports', this.checked ? '1' : '0')" />
+        <span id="save-status-show-folder-ports" class="save-status">Saved</span>
+      </div>
+    </div>
     </div>
   </div>
 
@@ -863,6 +851,44 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <button type="button" class="btn btn-primary btn-sm" onclick="exportComposeConfigs()">Export Now</button>
         <span id="export-status" class="save-status">Exported</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Native Docker tab: replacing the built-in section, and the legacy parts kept alongside it -->
+  <div class="settings-section">
+    <h3>Native Docker Tab</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="replace-docker-section">Replace Docker Containers section</label>
+        <div class="description">When enabled, the built-in Docker Containers section on the Docker tab is replaced with the Docker Folders UI. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="replace-docker-section" <?= $replaceDockerSection ? 'checked' : '' ?> onchange="saveSetting('replace_docker_section', this.checked ? '1' : '0')" />
+        <span id="save-status-replace-docker-section" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-legacy-containers">Show legacy Docker containers</label>
+        <div class="description">When the Docker Containers section is replaced, show the native (legacy) container list in a collapsed "Native Docker Containers" accordion below the Folders UI. When disabled, the legacy list is hidden entirely. Only applies while the section is replaced. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-legacy-containers" <?= $showLegacyContainers ? 'checked' : '' ?> onchange="saveSetting('show_legacy_containers', this.checked ? '1' : '0')" />
+        <span id="save-status-show-legacy-containers" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="show-legacy-buttons">Show legacy Docker buttons</label>
+        <div class="description">When the Docker Containers section is replaced, keep the native Docker page action buttons (Add Container, Check for Updates, etc.) visible. When disabled, they are hidden. Only applies while the section is replaced. <strong>Default: Off</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="show-legacy-buttons" <?= $showLegacyButtons ? 'checked' : '' ?> onchange="saveSetting('show_legacy_buttons', this.checked ? '1' : '0')" />
+        <span id="save-status-show-legacy-buttons" class="save-status">Saved</span>
       </div>
     </div>
   </div>

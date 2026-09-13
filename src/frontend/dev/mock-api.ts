@@ -600,6 +600,7 @@ const settings: Record<string, string> = {
   show_legacy_containers: '0',
   show_legacy_buttons: '0',
   sort_mode: 'manual',
+  sort_folders: '0',
 };
 
 async function handleSettings(req: any, res: any) {

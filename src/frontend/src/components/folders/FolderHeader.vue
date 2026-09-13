@@ -128,6 +128,7 @@ import IconAutostart from '@/components/icons/IconAutostart.vue';
 import InputModal from '@/components/InputModal.vue';
 import type { Folder } from '@/types/folder';
 import { SORT_MODE_OPTIONS } from '@/types/folder';
+import { effectiveSortMode } from '@/utils/sortMode';
 
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
@@ -290,12 +291,16 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   // Sort mode for this folder's own containers. Rendered as one row per
   // option (KebabMenu has no native radio/select item type). Each row shows
   // its mode's icon; the active one is marked with the primary color and a
-  // bold label.
+  // bold label. A folder on 'manual' follows the toolbar sort (see
+  // effectiveSortMode), so when the toolbar is not manual that row says so.
   items.push({ divider: true });
+  // What a folder left on 'manual' renders as right now.
+  const manualResolvesTo = SORT_MODE_OPTIONS.find((o) => o.value === effectiveSortMode('manual', settingsStore.sortMode));
   for (const opt of SORT_MODE_OPTIONS) {
     const active = props.folder.sort_mode === opt.value;
+    const followsToolbar = opt.value === 'manual' && manualResolvesTo && manualResolvesTo.value !== 'manual';
     items.push({
-      label: opt.label,
+      label: followsToolbar ? `Toolbar sort: ${manualResolvesTo.label}` : opt.label,
       icon: opt.icon,
       action: `sort:${opt.value}`,
       class: active ? 'text-primary font-semibold' : '',

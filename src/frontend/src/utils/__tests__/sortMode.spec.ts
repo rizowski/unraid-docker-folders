@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { sortByMode, type SortableFields } from '../sortMode';
+import { bestState, effectiveSortMode, sortByMode, type SortableFields } from '../sortMode';
 
 interface Item extends SortableFields {
   id: string;
@@ -44,5 +44,24 @@ describe('sortByMode', () => {
     const before = items.map((i) => i.id);
     sortByMode(items, 'name-desc', (i) => i);
     expect(items.map((i) => i.id)).toEqual(before);
+  });
+});
+
+describe('effectiveSortMode', () => {
+  it('a manual folder follows the toolbar mode', () => {
+    expect(effectiveSortMode('manual', 'status')).toBe('status');
+    expect(effectiveSortMode('manual', 'manual')).toBe('manual');
+  });
+
+  it('a folder with its own mode overrides the toolbar mode', () => {
+    expect(effectiveSortMode('name-asc', 'status')).toBe('name-asc');
+  });
+});
+
+describe('bestState', () => {
+  it('picks the most active state and ignores missing ones', () => {
+    expect(bestState(['exited', undefined, 'paused'])).toBe('paused');
+    expect(bestState(['exited', 'running'])).toBe('running');
+    expect(bestState([])).toBeUndefined();
   });
 });

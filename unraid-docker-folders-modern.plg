@@ -107,10 +107,30 @@
 
 
 
-###2026.09.13-2
+
+
+
+
+
+
+
+
+
+
+
+###2026.09.13-dev3
+- refactor(sort): share the folder sort decision and extract sort fields once
+- feat(header): show the container and folder counts inside the search field
+- feat(settings): group the settings page by what each setting affects
+- feat(sort): add a "Sort folders too" toggle to the sort menu
+- fix(folders): apply the toolbar sort to folder contents
+- build: use content-hashed asset filenames
+- fix(folders): do not count removed containers as hidden
+###2026.09.13-dev2
+- docs: add a contributing guide and require dev as the PR base
 - fix(folders): repair the #9 merge and add the sort menu
 - Add auto-sort options for folders and folder contents (#9)
-###2026.09.13
+###2026.09.13-dev1
 - chore: update docs
 - refactor: share the paused-start rule and tidy the issue fixes
 - feat(updates): add Force Update to the container menu (#11)
@@ -139,12 +159,13 @@
 - fix(ui): stop the unfoldered section clipping open kebab menus
 ###2026.08.19-dev1
 - fix(folders): only add/remove containers that changed when saving a folder
-###2026.08.17-3
+###2026.08.17-dev4
 - feat(settings): add a "Buy me a coffee" Ko-fi link
-###2026.08.17
-- feat(settings): add a "Buy me a coffee" Ko-fi link
+###2026.08.17-dev3
 - feat(ui): collapse the create buttons into one menu, widen the search
+###2026.08.17-dev2
 - feat: rename to "Docker Folders" and shorten the page URLs
+###2026.08.17-dev1
 - feat(ui): one update button, and a re-check inside the confirm modal
 - feat(ui): collapse the three create buttons to "+" plus an icon
 ###2026.08.16-dev2

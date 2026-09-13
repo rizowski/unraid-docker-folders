@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026.09.13
+- refactor(sort): share the folder sort decision and extract sort fields once
+- feat(header): show the container and folder counts inside the search field
+- feat(settings): group the settings page by what each setting affects
+- feat(sort): add a "Sort folders too" toggle to the sort menu
+- fix(folders): apply the toolbar sort to folder contents
+- build: use content-hashed asset filenames
+- fix(folders): do not count removed containers as hidden
+- docs: add a contributing guide and require dev as the PR base
+- fix(folders): repair the #9 merge and add the sort menu
+- Add auto-sort options for folders and folder contents (#9)
+- chore: update docs
+- refactor: share the paused-start rule and tidy the issue fixes
+- feat(updates): add Force Update to the container menu (#11)
+- feat(schedules): add a Resume action and let Start resume a paused container (#7)
+- fix(docker): resume a paused container from the card and the API (#7)
+- fix(schedules): evaluate and show schedule times in the server timezone (#7)
+- fix(folders): persist the manual order of unfoldered containers (#12)
+
 ## 2026.09.12
 - refactor: share the move-to-folder action and the select modal
 - feat(updates): name the containers in the update notification

@@ -12,14 +12,14 @@ describe('SortMenu', () => {
   it('clicking the button opens one row per sort mode', async () => {
     const wrapper = mount(SortMenu, { props: { modelValue: 'manual' } });
     await wrapper.find('button').trigger('click');
-    const rows = wrapper.findAll('.kebab-menu-item');
+    const rows = wrapper.findAll('[role="menuitemradio"]');
     expect(rows.map((r) => r.text().trim())).toEqual(SORT_MODE_OPTIONS.map((o) => o.label));
   });
 
   it('marks only the active mode as checked', async () => {
     const wrapper = mount(SortMenu, { props: { modelValue: 'name-desc' } });
     await wrapper.find('button').trigger('click');
-    const checked = wrapper.findAll('[aria-checked="true"]');
+    const checked = wrapper.findAll('[role="menuitemradio"][aria-checked="true"]');
     expect(checked.length).toBe(1);
     expect(checked[0].text()).toBe('Name (Z → A)');
   });
@@ -27,7 +27,7 @@ describe('SortMenu', () => {
   it('selecting a row emits update:modelValue and closes the menu', async () => {
     const wrapper = mount(SortMenu, { props: { modelValue: 'manual' } });
     await wrapper.find('button').trigger('click');
-    const row = wrapper.findAll('.kebab-menu-item').find((r) => r.text() === 'Newest first')!;
+    const row = wrapper.findAll('[role="menuitemradio"]').find((r) => r.text() === 'Newest first')!;
     await row.trigger('click');
     expect(wrapper.emitted('update:modelValue')).toEqual([['created-desc']]);
     expect(wrapper.find('[role="menu"]').exists()).toBe(false);
@@ -62,9 +62,19 @@ describe('SortMenu', () => {
   it('each row shows its own mode icon', async () => {
     const wrapper = mount(SortMenu, { props: { modelValue: 'manual' } });
     await wrapper.find('button').trigger('click');
-    const rows = wrapper.findAll('.kebab-menu-item');
+    const rows = wrapper.findAll('[role="menuitemradio"]');
     rows.forEach((row, i) => {
       expect(row.findAll('svg')[0].findAll('path').map((p) => p.attributes('d'))).toEqual(SORT_MODE_OPTIONS[i].icon.split('|'));
     });
+  });
+
+  it('the folder toggle emits update:sortFolders and keeps the menu open', async () => {
+    const wrapper = mount(SortMenu, { props: { modelValue: 'status', sortFolders: false } });
+    await wrapper.find('button').trigger('click');
+    const toggle = wrapper.find('[role="menuitemcheckbox"]');
+    expect(toggle.attributes('aria-checked')).toBe('false');
+    await toggle.trigger('click');
+    expect(wrapper.emitted('update:sortFolders')).toEqual([[true]]);
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true);
   });
 });

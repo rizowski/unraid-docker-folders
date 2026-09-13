@@ -17,8 +17,12 @@
           <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
           <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
         </button>
-        <SortMenu :model-value="settingsStore.sortMode" @update:model-value="settingsStore.setSortMode" />
-        <span class="text-xs sm:text-sm text-text-secondary truncate">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
+        <SortMenu
+          :model-value="settingsStore.sortMode"
+          :sort-folders="settingsStore.sortFolders"
+          @update:model-value="settingsStore.setSortMode"
+          @update:sort-folders="settingsStore.setSortFolders"
+        />
       </div>
       <!-- Its own header child rather than part of the button cluster so
            `flex-1` can eat the whole gap between the two groups. `.form-input`
@@ -26,19 +30,25 @@
            `w-full`/`border`/`py-*` on a bare <input>, so the old `w-52` was
            already dead and the field had no box at all. -->
       <div class="relative order-last w-full min-w-0 sm:order-none sm:flex-1">
+        <!-- Inline padding, not `.has-clear` or a `pr-*` utility: the reset owns
+             input padding (DESIGN.md §11), and the reserved room has to track
+             the width of the overlay, which holds the counts and the clear ×. -->
         <input
           v-model="dockerStore.searchQuery"
           type="text"
           placeholder="Search containers..."
           class="form-input subtle"
-          :class="{ 'has-clear': dockerStore.searchQuery }"
+          :style="{ paddingRight: `${searchOverlayWidth + 16}px` }"
         />
-        <button
-          v-if="dockerStore.searchQuery"
-          @click="dockerStore.searchQuery = ''"
-          class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
-          title="Clear search"
-        >&times;</button>
+        <div ref="searchOverlayEl" class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <span class="text-xs text-text-secondary whitespace-nowrap pointer-events-none">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
+          <button
+            v-if="dockerStore.searchQuery"
+            @click="dockerStore.searchQuery = ''"
+            class="text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
+            title="Clear search"
+          >&times;</button>
+        </div>
       </div>
       <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
         <div class="view-mode-toggle">
@@ -283,6 +293,7 @@ import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
+import { effectiveSortMode } from '@/utils/sortMode';
 import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
@@ -425,6 +436,19 @@ const error = computed(() => dockerStore.error || folderStore.error);
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
+// Width of the counts and clear button drawn over the right end of the search field.
+const searchOverlayEl = ref<HTMLElement | null>(null);
+const searchOverlayWidth = ref(0);
+let searchOverlayObserver: ResizeObserver | null = null;
+onMounted(() => {
+  if (!searchOverlayEl.value || typeof ResizeObserver === 'undefined') return;
+  searchOverlayObserver = new ResizeObserver(() => {
+    searchOverlayWidth.value = searchOverlayEl.value?.offsetWidth ?? 0;
+  });
+  searchOverlayObserver.observe(searchOverlayEl.value);
+});
+onUnmounted(() => searchOverlayObserver?.disconnect());
+
 function containerMatchesSearch(name: string, image?: string): boolean {
   const q = dockerStore.searchQuery.trim().toLowerCase();
   if (!q) return true;
@@ -458,7 +482,7 @@ onMounted(async () => {
 
 // Re-initialize drag-and-drop whenever folders, containers, search, or sort mode change.
 watch(
-  () => [folderStore.folders, dockerStore.containers, dockerStore.searchQuery, settingsStore.sortMode],
+  () => [folderStore.folders, dockerStore.containers, dockerStore.searchQuery, settingsStore.sortMode, settingsStore.sortFolders],
   () => {
     nextTick(() => initializeDragAndDrop());
   },
@@ -503,7 +527,7 @@ function initializeDragAndDrop() {
   // (auto modes compute the folder order every render, so a drag would be
   // silently overwritten on the next re-render).
   const folderListEl = document.getElementById('folder-list');
-  if (folderListEl && settingsStore.sortMode === 'manual') {
+  if (folderListEl && folderStore.folderSortMode === 'manual') {
     sortableInstances.push(
       new Sortable(folderListEl, {
         handle: '.folder-drag-handle',
@@ -520,7 +544,8 @@ function initializeDragAndDrop() {
     );
   }
 
-  // Make each folder's container list sortable. Folders in an auto-sort mode
+  // Make each folder's container list sortable. Folders whose effective mode
+  // (own mode, or the toolbar mode when the folder is on manual) is automatic
   // get `sort: false`: containers can still be dragged INTO them (onAdd), but
   // not reordered within, since the computed order would snap them back.
   // The watcher on folderStore.folders re-runs this when a sort_mode changes.
@@ -530,7 +555,7 @@ function initializeDragAndDrop() {
     sortableInstances.push(
       new Sortable(el as HTMLElement, {
         group: 'containers',
-        sort: folderStore.getFolderById(folderId)?.sort_mode === 'manual',
+        sort: effectiveSortMode(folderStore.getFolderById(folderId)?.sort_mode ?? 'manual', settingsStore.sortMode) === 'manual',
         handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {

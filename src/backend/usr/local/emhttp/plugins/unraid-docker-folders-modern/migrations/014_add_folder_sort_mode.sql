@@ -1,4 +1,4 @@
--- Migration 013: Add per-folder sort_mode column
+-- Migration 014: Add per-folder sort_mode column
 -- Controls how each folder's own containers are ordered for display.
 -- 'manual' preserves the drag & drop order stored in container_folders.position.
 -- Values: manual | name-asc | name-desc | status | created-asc | created-desc

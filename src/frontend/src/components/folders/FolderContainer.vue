@@ -63,7 +63,7 @@ import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
-import { sortByMode } from '@/utils/sortMode';
+import { effectiveSortMode, sortByMode } from '@/utils/sortMode';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import FolderHeader from './FolderHeader.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
@@ -126,11 +126,14 @@ watch(isExpanded, (expanded) => {
 });
 onUnmounted(() => clearTimeout(settleTimer));
 
+// Associations whose container still exists in Docker. A removed container
+// (e.g. after docker compose down) keeps its row, and must not be listed or counted.
+const existingAssociations = computed(() =>
+  (props.folder.containers || []).filter((assoc) => !!getContainer(assoc.container_name))
+);
+
 const folderContainers = computed(() => {
-  let list = props.folder.containers || [];
-  // Filter out associations where the container no longer exists in Docker
-  // (e.g. after docker compose down removes containers)
-  list = list.filter((assoc) => !!getContainer(assoc.container_name));
+  let list = existingAssociations.value;
   if (isSearching.value) {
     const q = dockerStore.searchQuery.trim().toLowerCase();
     list = list.filter((assoc) => {
@@ -147,7 +150,7 @@ const folderContainers = computed(() => {
       return isShownWhenHidingStopped(container);
     });
   }
-  return sortByMode(list, props.folder.sort_mode, (assoc) => {
+  return sortByMode(list, effectiveSortMode(props.folder.sort_mode, settingsStore.sortMode), (assoc) => {
     const container = getContainer(assoc.container_name);
     return {
       position: assoc.position,
@@ -180,11 +183,7 @@ const previewAssociations = computed(() => {
 
 const hiddenCount = computed(() => {
   if (!hideStopped.value) return 0;
-  const all = props.folder.containers || [];
-  return all.length - all.filter((assoc) => {
-    const container = getContainer(assoc.container_name);
-    return isShownWhenHidingStopped(container);
-  }).length;
+  return existingAssociations.value.filter((assoc) => !isShownWhenHidingStopped(getContainer(assoc.container_name))).length;
 });
 
 function getContainer(name: string) {
