@@ -5,7 +5,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/utils/csrf';
-import type { SortMode } from '@/types/folder';
+import { SORT_MODE_OPTIONS, type SortMode } from '@/types/folder';
 import { formatTimestamp } from '@/utils/format';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -45,8 +45,8 @@ export const useSettingsStore = defineStore('settings', () => {
         distinguishHealthy.value = settings.distinguish_healthy !== '0';
       }
       if ('sort_mode' in settings) {
-        const validModes: SortMode[] = ['manual', 'name-asc', 'name-desc', 'status', 'created-asc', 'created-desc'];
-        sortMode.value = validModes.includes(settings.sort_mode as SortMode) ? (settings.sort_mode as SortMode) : 'manual';
+        const mode = settings.sort_mode as SortMode;
+        sortMode.value = SORT_MODE_OPTIONS.some((o) => o.value === mode) ? mode : 'manual';
       }
       if ('show_stats' in settings) {
         showStats.value = settings.show_stats !== '0';

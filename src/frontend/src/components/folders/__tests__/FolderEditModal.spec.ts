@@ -33,6 +33,7 @@ function makeFolder(containerNames: string[], overrides: Partial<Folder> = {}): 
     position: 0,
     collapsed: false,
     compose_project: null,
+    sort_mode: 'manual',
     created_at: 0,
     updated_at: 0,
     containers: containerNames.map((n, i) => assoc(n, i)),

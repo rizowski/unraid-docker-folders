@@ -101,11 +101,8 @@ function handlePost()
   }
 
   // Validate sort_mode against the known set of modes.
-  if ($key === 'sort_mode') {
-    $allowedSortModes = ['manual', 'name-asc', 'name-desc', 'status', 'created-asc', 'created-desc'];
-    if (!in_array($value, $allowedSortModes, true)) {
-      errorResponse('Invalid sort_mode', 400);
-    }
+  if ($key === 'sort_mode' && !in_array($value, SORT_MODES, true)) {
+    errorResponse('Invalid sort_mode', 400);
   }
 
   // Validate value length

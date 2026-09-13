@@ -288,17 +288,15 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   }
 
   // Sort mode for this folder's own containers. Rendered as one row per
-  // option (KebabMenu has no native radio/select item type) with the active
-  // choice shown via a checkmark icon (not a text glyph — DESIGN.md requires
-  // inline stroke SVG icons only, no emoji/text-as-icon), plus a bold label.
-  const CHECK_ICON = 'M20 6L9 17l-5-5';
-  const SORT_ICON = 'M3 6h13|M3 12h9|M3 18h6|M17 4v16|M13 8l4-4 4 4';
+  // option (KebabMenu has no native radio/select item type). Each row shows
+  // its mode's icon; the active one is marked with the primary color and a
+  // bold label.
   items.push({ divider: true });
   for (const opt of SORT_MODE_OPTIONS) {
     const active = props.folder.sort_mode === opt.value;
     items.push({
       label: opt.label,
-      icon: active ? CHECK_ICON : SORT_ICON,
+      icon: opt.icon,
       action: `sort:${opt.value}`,
       class: active ? 'text-primary font-semibold' : '',
     });

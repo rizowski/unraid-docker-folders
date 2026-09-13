@@ -16,6 +16,8 @@ const STATE_ORDER: Record<string, number> = {
   dead: 3,
 };
 
+const nameCollator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
+
 export interface SortableFields {
   /** Stored manual order. */
   position: number;
@@ -38,17 +40,17 @@ export function sortByMode<T>(items: T[], mode: SortMode, getFields: (item: T) =
 
   switch (mode) {
     case 'name-asc':
-      return list.sort((a, b) => getFields(a).name.localeCompare(getFields(b).name, undefined, { sensitivity: 'base', numeric: true }));
+      return list.sort((a, b) => nameCollator.compare(getFields(a).name, getFields(b).name));
 
     case 'name-desc':
-      return list.sort((a, b) => getFields(b).name.localeCompare(getFields(a).name, undefined, { sensitivity: 'base', numeric: true }));
+      return list.sort((a, b) => nameCollator.compare(getFields(b).name, getFields(a).name));
 
     case 'status':
       return list.sort((a, b) => {
         const fa = getFields(a);
         const fb = getFields(b);
         const order = (STATE_ORDER[fa.state ?? ''] ?? 4) - (STATE_ORDER[fb.state ?? ''] ?? 4);
-        return order !== 0 ? order : fa.name.localeCompare(fb.name, undefined, { sensitivity: 'base', numeric: true });
+        return order !== 0 ? order : nameCollator.compare(fa.name, fb.name);
       });
 
     case 'created-asc':

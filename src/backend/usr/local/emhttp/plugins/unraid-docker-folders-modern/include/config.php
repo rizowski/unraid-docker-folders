@@ -31,6 +31,10 @@ define('COMPOSE_ALLOWED_ROOTS', ['/mnt', COMPOSE_STACKS_DIR]);
 define('EXPORT_ALLOWED_ROOTS', ['/mnt', CONFIG_DIR]);
 define('BACKUP_ALLOWED_ROOTS', ['/mnt', '/boot/config/plugins']);
 
+// Sort modes for folders and folder contents. Must match SortMode in
+// src/frontend/src/types/folder.ts.
+define('SORT_MODES', ['manual', 'name-asc', 'name-desc', 'status', 'created-asc', 'created-desc']);
+
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
 

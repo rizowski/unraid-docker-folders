@@ -188,7 +188,7 @@ const hiddenCount = computed(() => {
 });
 
 function getContainer(name: string) {
-  return dockerStore.containers.find((c) => c.name === name);
+  return dockerStore.containersByName.get(name);
 }
 
 function toggleCollapse() {

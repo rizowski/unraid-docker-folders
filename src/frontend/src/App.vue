@@ -17,17 +17,7 @@
           <svg v-if="dragLocked" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
           <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" /></svg>
         </button>
-        <label class="flex items-center gap-1.5 shrink-0 text-xs text-text-secondary">
-          <span class="hidden sm:inline">Folder order:</span>
-          <select
-            v-model="settingsStore.sortMode"
-            @change="settingsStore.setSortMode(settingsStore.sortMode)"
-            class="form-input subtle compact auto-width"
-            title="Order in which folders themselves are listed"
-          >
-            <option v-for="opt in SORT_MODE_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
-        </label>
+        <SortMenu :model-value="settingsStore.sortMode" @update:model-value="settingsStore.setSortMode" />
         <span class="text-xs sm:text-sm text-text-secondary truncate">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
       </div>
       <!-- Its own header child rather than part of the button cluster so
@@ -285,13 +275,12 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import CreateMenu from '@/components/CreateMenu.vue';
+import SortMenu from '@/components/SortMenu.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
 import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
-import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
-import { SORT_MODE_OPTIONS } from '@/types/folder';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import Sortable from 'sortablejs';
@@ -343,7 +332,6 @@ watch(unfolderedCollapsed, (collapsed) => {
 });
 onUnmounted(() => clearTimeout(unfolderedSettleTimer));
 
-const dragLocked = ref(localStorage.getItem('docker-folders-drag-locked') === '1');
 watch(dragLocked, (v) => {
   safeLocalStorageSet('docker-folders-drag-locked', v ? '1' : '0');
   nextTick(() => initializeDragAndDrop());
@@ -532,17 +520,17 @@ function initializeDragAndDrop() {
     );
   }
 
-  // Make each folder's container list sortable. This stays active even for
-  // folders in an auto-sort mode so containers can still be dragged INTO
-  // them (onAdd) — only persisting an in-folder reorder (onUpdate) is
-  // skipped when that folder isn't in manual mode, since the auto-sorted
-  // computed order would just snap it back anyway.
+  // Make each folder's container list sortable. Folders in an auto-sort mode
+  // get `sort: false`: containers can still be dragged INTO them (onAdd), but
+  // not reordered within, since the computed order would snap them back.
+  // The watcher on folderStore.folders re-runs this when a sort_mode changes.
   document.querySelectorAll('.container-list[data-folder-id]').forEach((el) => {
     const folderId = parseInt((el as HTMLElement).dataset.folderId || '0');
 
     sortableInstances.push(
       new Sortable(el as HTMLElement, {
         group: 'containers',
+        sort: folderStore.getFolderById(folderId)?.sort_mode === 'manual',
         handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {
@@ -557,8 +545,6 @@ function initializeDragAndDrop() {
           }
         },
         onUpdate: async () => {
-          const folder = folderStore.getFolderById(folderId);
-          if (folder?.sort_mode !== 'manual') return; // auto-sorted — nothing to persist
           const containerIds = Array.from(el.children).map((child) => (child as HTMLElement).dataset.containerId || '');
           await folderStore.reorderContainers(folderId, containerIds);
         },
@@ -566,12 +552,14 @@ function initializeDragAndDrop() {
     );
   });
 
-  // Make unfoldered container list sortable
+  // Make unfoldered container list sortable. Like the folder lists, a global
+  // auto-sort mode allows drops in but not a manual reorder.
   const unfolderedEl = document.getElementById('unfoldered-containers');
   if (unfolderedEl) {
     sortableInstances.push(
       new Sortable(unfolderedEl, {
         group: 'containers',
+        sort: settingsStore.sortMode === 'manual',
         handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {

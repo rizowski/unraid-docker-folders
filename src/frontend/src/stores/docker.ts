@@ -166,38 +166,26 @@ export const useDockerStore = defineStore('docker', () => {
     // store owns the one map of it.
     const folderStore = useFolderStore();
     const settingsStore = useSettingsStore();
-    const assignedContainerNames = new Set<string>();
-
-    // Collect all assigned container names (stable across recreations)
-    folderStore.folders.forEach((folder) => {
-      folder.containers.forEach((assoc) => {
-        assignedContainerNames.add(assoc.container_name);
-      });
     const assigned = folderStore.folderByContainerName;
     const unfoldered = sortedContainers.value.filter((c) => !assigned.has(c.name));
 
-    // Saved order first; unplaced containers keep the state-first default
-    // after it. A folder member is never listed even if its name is ranked.
+    if (settingsStore.sortMode !== 'manual') {
+      return sortByMode(unfoldered, settingsStore.sortMode, (c) => ({
+        position: 0,
+        name: c.name,
+        state: c.state,
+        created: c.created,
+      }));
+    }
+
+    // Manual: saved order first; unplaced containers keep the state-first
+    // default after it. A folder member is never listed even if its name is ranked.
     const rank = new Map<string, number>();
     folderStore.unfolderedOrder.forEach((name, i) => {
       if (!rank.has(name)) rank.set(name, i);
     });
     if (rank.size === 0) return unfoldered;
 
-    const unfoldered = containers.value.filter((c) => !assignedContainerNames.has(c.name));
-
-    // Unfoldered containers have no persisted manual order, so 'manual'
-    // mode keeps the existing running-first default instead of a no-op sort.
-    if (settingsStore.sortMode === 'manual') {
-      return [...unfoldered].sort((a, b) => (stateOrder[a.state] ?? 3) - (stateOrder[b.state] ?? 3));
-    }
-
-    return sortByMode(unfoldered, settingsStore.sortMode, (c) => ({
-      position: 0,
-      name: c.name,
-      state: c.state,
-      created: c.created,
-    }));
     const ranked = unfoldered
       .filter((c) => rank.has(c.name))
       .sort((a, b) => rank.get(a.name)! - rank.get(b.name)!);
