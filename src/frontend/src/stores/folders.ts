@@ -11,6 +11,7 @@ import type {
   FolderContainerSelection,
   FolderExportConfig,
   FolderImportResult,
+  SortMode,
 } from '@/types/folder';
 import { apiFetch } from '@/utils/csrf';
 import { useSettingsStore } from '@/stores/settings';
@@ -41,17 +42,25 @@ export const useFolderStore = defineStore('folders', () => {
   // Under an automatic mode a folder ranks by its containers: its most active
   // state for "Status", and its newest container for the date modes.
   // Explicit types break the folders <-> docker store inference cycle.
-  const sortedFolders = computed<Folder[]>(() => {
+  // The mode folders themselves render in. An automatic toolbar sort reorders
+  // folders only when "Sort folders too" is on; otherwise they keep drag order.
+  const folderSortMode = computed<SortMode>(() => {
     const settingsStore = useSettingsStore();
-    const mode = settingsStore.sortFolders ? settingsStore.sortMode : 'manual';
-    if (mode === 'manual') {
-      return sortByMode(folders.value, mode, (f) => ({ position: f.position, name: f.name }));
-    }
+    return settingsStore.sortFolders ? settingsStore.sortMode : 'manual';
+  });
+
+  const sortedFolders = computed<Folder[]>(() => {
+    const mode = folderSortMode.value;
     const dockerStore = useDockerStore();
     return sortByMode(folders.value, mode, (f: Folder) => {
-      const members: Container[] = f.containers
-        .map((assoc) => dockerStore.containersByName.get(assoc.container_name))
-        .filter((c): c is Container => c !== undefined);
+      // Manual order reads no container fields, so it does not re-sort on
+      // every container state change.
+      if (mode === 'manual') return { position: f.position, name: f.name };
+      const members: Container[] = [];
+      for (const assoc of f.containers) {
+        const c = dockerStore.containersByName.get(assoc.container_name);
+        if (c) members.push(c);
+      }
       return {
         position: f.position,
         name: f.name,
@@ -461,6 +470,7 @@ export const useFolderStore = defineStore('folders', () => {
     // Getters
     folderCount,
     getFolderById,
+    folderSortMode,
     sortedFolders,
     folderByContainerName,
     getFolderForContainer,

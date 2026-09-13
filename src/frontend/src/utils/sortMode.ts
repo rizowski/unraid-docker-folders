@@ -16,6 +16,11 @@ const STATE_ORDER: Record<string, number> = {
   dead: 3,
 };
 
+/** Rank of a state, with unknown or missing states after every known one. */
+function stateRank(state: string | undefined): number {
+  return STATE_ORDER[state ?? ''] ?? 4;
+}
+
 /**
  * The highest-ranked state in a group (running before paused before exited),
  * so a folder sorts under "Status" by its most active container.
@@ -24,7 +29,7 @@ export function bestState(states: Array<string | undefined>): string | undefined
   let best: string | undefined;
   for (const state of states) {
     if (state === undefined) continue;
-    if (best === undefined || (STATE_ORDER[state] ?? 4) < (STATE_ORDER[best] ?? 4)) best = state;
+    if (best === undefined || stateRank(state) < stateRank(best)) best = state;
   }
   return best;
 }
@@ -59,31 +64,31 @@ export function effectiveSortMode(folderMode: SortMode, globalMode: SortMode): S
  * this module to either type.
  */
 export function sortByMode<T>(items: T[], mode: SortMode, getFields: (item: T) => SortableFields): T[] {
-  const list = [...items];
+  // Extract fields once per item, not once per comparison: getFields can walk
+  // a folder's members, and sort calls the comparator O(n log n) times.
+  const decorated = items.map((item) => ({ item, f: getFields(item) }));
+  let compare: (a: SortableFields, b: SortableFields) => number;
 
   switch (mode) {
     case 'name-asc':
-      return list.sort((a, b) => nameCollator.compare(getFields(a).name, getFields(b).name));
-
+      compare = (a, b) => nameCollator.compare(a.name, b.name);
+      break;
     case 'name-desc':
-      return list.sort((a, b) => nameCollator.compare(getFields(b).name, getFields(a).name));
-
+      compare = (a, b) => nameCollator.compare(b.name, a.name);
+      break;
     case 'status':
-      return list.sort((a, b) => {
-        const fa = getFields(a);
-        const fb = getFields(b);
-        const order = (STATE_ORDER[fa.state ?? ''] ?? 4) - (STATE_ORDER[fb.state ?? ''] ?? 4);
-        return order !== 0 ? order : nameCollator.compare(fa.name, fb.name);
-      });
-
+      compare = (a, b) => stateRank(a.state) - stateRank(b.state) || nameCollator.compare(a.name, b.name);
+      break;
     case 'created-asc':
-      return list.sort((a, b) => (getFields(a).created ?? 0) - (getFields(b).created ?? 0));
-
+      compare = (a, b) => (a.created ?? 0) - (b.created ?? 0);
+      break;
     case 'created-desc':
-      return list.sort((a, b) => (getFields(b).created ?? 0) - (getFields(a).created ?? 0));
-
+      compare = (a, b) => (b.created ?? 0) - (a.created ?? 0);
+      break;
     case 'manual':
     default:
-      return list.sort((a, b) => getFields(a).position - getFields(b).position);
+      compare = (a, b) => a.position - b.position;
   }
+
+  return decorated.sort((a, b) => compare(a.f, b.f)).map((d) => d.item);
 }

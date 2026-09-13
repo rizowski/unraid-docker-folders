@@ -527,7 +527,7 @@ function initializeDragAndDrop() {
   // (auto modes compute the folder order every render, so a drag would be
   // silently overwritten on the next re-render).
   const folderListEl = document.getElementById('folder-list');
-  if (folderListEl && (!settingsStore.sortFolders || settingsStore.sortMode === 'manual')) {
+  if (folderListEl && folderStore.folderSortMode === 'manual') {
     sortableInstances.push(
       new Sortable(folderListEl, {
         handle: '.folder-drag-handle',
