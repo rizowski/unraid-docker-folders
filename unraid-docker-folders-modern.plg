@@ -105,6 +105,27 @@
 
 
 
+###2026.09.12-dev1
+- refactor: share the move-to-folder action and the select modal
+- feat(updates): name the containers in the update notification
+- feat(folders): add a folder picker to the container menu
+- fix(compose): rename the Stack Details menu item to Edit Stack
+- feat(docker): show the inline log panel in card view
+###2026.08.22-dev6
+- test(docker): pin the managed-with-autostart-off branch
+###2026.08.22-dev5
+- fix(docker): correct three faults the browser check found
+- feat(docker): put Adopt on the container, not only in the kebab menu
+###2026.08.22-dev4
+- fix(docker): escape adopted values before they reach Unraid's shell
+###2026.08.22-dev3
+- feat(docker): adopt CLI-created containers into Unraid's container manager
+###2026.08.22-dev2
+- fix(ui): keep an open kebab menu inside the frame instead of scrolling
+###2026.08.22-dev1
+- fix(ui): stop the unfoldered section clipping open kebab menus
+###2026.08.19-dev1
+- fix(folders): only add/remove containers that changed when saving a folder
 ###2026.08.17-3
 - feat(settings): add a "Buy me a coffee" Ko-fi link
 ###2026.08.17

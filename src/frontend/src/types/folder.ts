@@ -10,6 +10,16 @@ export interface ContainerAssociation {
   position: number;
 }
 
+/**
+ * A container the user wants in a folder. Membership is keyed on `name`
+ * (container ids change when a container is recreated); `id` is carried only as
+ * the payload the add_container endpoint requires.
+ */
+export interface FolderContainerSelection {
+  id: string;
+  name: string;
+}
+
 export interface Folder {
   id: number;
   name: string;

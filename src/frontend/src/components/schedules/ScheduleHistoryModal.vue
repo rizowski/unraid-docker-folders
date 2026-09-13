@@ -63,7 +63,8 @@
 import { ref, onMounted } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
 import { useScheduleStore } from '@/stores/schedules';
-import { formatTimestamp, formatDuration, formatBytes } from '@/utils/format';
+import { useSettingsStore } from '@/stores/settings';
+import { formatDuration, formatBytes } from '@/utils/format';
 import type { ScheduleHistoryEntry } from '@/types/schedule';
 
 interface Props {
@@ -75,10 +76,11 @@ const props = defineProps<Props>();
 defineEmits<{ close: [] }>();
 
 const scheduleStore = useScheduleStore();
+const settingsStore = useSettingsStore();
 const history = ref<ScheduleHistoryEntry[]>([]);
 const loading = ref(true);
 
-const formatTime = formatTimestamp;
+const formatTime = settingsStore.formatServerTime;
 const duration = formatDuration;
 const formatSize = formatBytes;
 

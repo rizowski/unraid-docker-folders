@@ -63,7 +63,62 @@ if (defined('DEBUG') && DEBUG) {
 }
 
 // Timezone
-date_default_timezone_set('UTC');
+//
+// Schedules (cron expressions) are entered by the user in server-local time,
+// and ScheduleManager::computeNextRun() uses date()/mktime() under whatever
+// zone PHP is set to. If we stayed pinned to UTC, a schedule entered as
+// "15:30" would run at 15:30 UTC instead of 15:30 in the user's own Unraid
+// timezone. So adopt the Unraid-configured zone instead.
+/**
+ * Determine the timezone Unraid itself is configured for.
+ *
+ * Tries, in order:
+ *   1. The `timeZone` key Unraid writes to ident.cfg (e.g. `timeZone="America/Denver"`).
+ *   2. The target of the /etc/localtime symlink, which Unraid also maintains,
+ *      read as the path segment after "zoneinfo/".
+ *   3. UTC, if neither yields a timezone identifier PHP recognizes.
+ *
+ * @param string $identCfg  Path to ident.cfg (overridable for tests).
+ * @param string $localtime Path to the localtime symlink (overridable for tests).
+ * @return string A valid PHP timezone identifier.
+ */
+function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime = '/etc/localtime') {
+  // Memoised per path pair: config.php is loaded on every request, including
+  // the stats poll, and the answer cannot change within one process.
+  static $cache = [];
+  $key = $identCfg . '|' . $localtime;
+  if (isset($cache[$key])) {
+    return $cache[$key];
+  }
+
+  $candidates = [];
+
+  if (is_readable($identCfg)) {
+    $ident = @parse_ini_file($identCfg);
+    if (is_array($ident) && !empty($ident['timeZone'])) {
+      $candidates[] = $ident['timeZone'];
+    }
+  }
+
+  // readlink() returns false for a missing path or a non-symlink.
+  $target = @readlink($localtime);
+  if ($target !== false && preg_match('#zoneinfo/(.+)$#', $target, $matches)) {
+    $candidates[] = $matches[1];
+  }
+
+  $validZones = DateTimeZone::listIdentifiers();
+  $zone = 'UTC';
+  foreach ($candidates as $candidate) {
+    if (in_array($candidate, $validZones, true)) {
+      $zone = $candidate;
+      break;
+    }
+  }
+
+  return $cache[$key] = $zone;
+}
+
+date_default_timezone_set(detectServerTimezone());
 
 require_once __DIR__ . '/paths.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
@@ -177,13 +232,19 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     $excludePatterns = array_filter($excludePatterns, function ($p) { return $p !== ''; });
   }
 
-  // Collect unique images
+  // Collect unique images, and which containers run each one. The notification
+  // names containers, not images, so the caller needs the reverse map.
   $uniqueImages = [];
+  $containersByImage = [];
   foreach ($containers as $container) {
     $image = $container['image'] ?? '';
     $imageId = $container['imageId'] ?? '';
     if ($image && !isset($uniqueImages[$image])) {
       $uniqueImages[$image] = $imageId;
+    }
+    $name = $container['name'] ?? '';
+    if ($image && $name !== '') {
+      $containersByImage[$image][] = $name;
     }
   }
 
@@ -321,7 +382,47 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     'skipped' => $skipped,
     'errors' => $errors,
     'newUpdates' => $newUpdates,
+    'containersByImage' => $containersByImage,
   ];
+}
+
+/**
+ * Compose the Unraid notification for newly available updates.
+ *
+ * Counts containers rather than images (one image can back several
+ * containers) and names them in the description, capped so a big server does
+ * not produce a wall of text.
+ *
+ * @param string[] $newImages Images that flipped to update-available this run
+ * @param array<string, string[]> $containersByImage Image => container names
+ * @return array{subject: string, description: string}|null Null when no container uses a new image
+ */
+function buildUpdateNotification(array $newImages, array $containersByImage)
+{
+  $maxNames = 10;
+  $names = [];
+  foreach ($newImages as $image) {
+    foreach ($containersByImage[$image] ?? [] as $name) {
+      $names[$name] = true;
+    }
+  }
+  $names = array_keys($names);
+  if (empty($names)) {
+    return null;
+  }
+  sort($names, SORT_NATURAL | SORT_FLAG_CASE);
+
+  $count = count($names);
+  $subject = $count . ' container update' . ($count === 1 ? '' : 's') . ' available';
+
+  $shown = array_slice($names, 0, $maxNames);
+  $description = implode(', ', $shown);
+  $rest = $count - count($shown);
+  if ($rest > 0) {
+    $description .= ' and ' . $rest . ' more';
+  }
+
+  return ['subject' => $subject, 'description' => $description];
 }
 
 /**

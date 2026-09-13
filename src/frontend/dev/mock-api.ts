@@ -233,6 +233,17 @@ const containers = [
     networkSettings: {},
     labels: {},
   },
+  // Paused: exercises the Resume action and the warning halo.
+  {
+    id: 'stu901vwx234', name: 'transmission', image: 'linuxserver/transmission:latest', state: 'paused',
+    status: 'Up 2 days (Paused)', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:9091]/',
+    created: Date.now() / 1000 - 172800,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 9091, PublicPort: 9091, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 9091, containerPort: 9091, type: 'tcp' }],
+    mounts: [],
+    networkSettings: { bridge: { IPAddress: '172.17.0.14' } },
+    labels: {},
+  },
 ];
 
 const folders: any[] = [
@@ -367,6 +378,60 @@ function generateMockLogs(name: string, tail: number): string {
   return lines.join('\n');
 }
 
+/**
+ * What AdoptBuilder returns for a CLI-created container. Enough shape to review
+ * the modal in the dev server — the real values come from `docker inspect`.
+ */
+function mockAdoptFields(container: any) {
+  const port = container.ports?.[0];
+  const configs: any[] = [];
+
+  if (port?.PublicPort) {
+    configs.push({
+      Name: `Port ${port.PrivatePort}`, Target: String(port.PrivatePort),
+      Default: String(port.PublicPort), Mode: port.Type || 'tcp', Description: '',
+      Type: 'Port', Display: 'always', Required: 'false', Mask: 'false',
+      Value: String(port.PublicPort),
+    });
+  }
+
+  for (const [target, value, mode] of [
+    ['/config', `/mnt/user/appdata/${container.name}`, 'rw'],
+    ['/data', `/mnt/user/${container.name}-data`, 'ro'],
+  ] as const) {
+    configs.push({
+      Name: target, Target: target, Default: '', Mode: mode, Description: '',
+      Type: 'Path', Display: 'always', Required: 'false', Mask: 'false', Value: value,
+    });
+  }
+
+  for (const [target, value, mask] of [
+    ['TZ', 'America/Denver', 'false'],
+    ['API_TOKEN', 'not-shown', 'true'],
+  ] as const) {
+    configs.push({
+      Name: target, Target: target, Default: '', Mode: '', Description: '',
+      Type: 'Variable', Display: 'always', Required: 'false', Mask: mask, Value: value,
+    });
+  }
+
+  return {
+    fields: {
+      contName: container.name,
+      contRepository: container.image,
+      contNetwork: 'bridge',
+      contExtraParams: "--restart=unless-stopped --cap-add='NET_ADMIN'",
+      contPostArgs: '',
+    },
+    configs,
+    unmapped: ['--tmpfs (/run)'],
+    imageEnvKnown: true,
+    portsPublished: true,
+    networkDriver: 'bridge',
+    managed: container.managed ?? null,
+  };
+}
+
 async function handleContainers(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {
     if (params.action === 'logs') {
@@ -375,7 +440,19 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
       const tail = Math.min(500, Math.max(1, parseInt(params.tail || '50', 10) || 50));
       return json(res, { logs: generateMockLogs(name, tail) });
     }
-    const containersWithAutostart = containers.map(c => ({ ...c, autostart: c.autostart ?? (c as any).state === 'running' }));
+    if (params.action === 'adopt-fields') {
+      const container = containers.find((c) => c.id === params.id || c.name === params.id);
+      if (!container) return json(res, { error: 'Container not found' }, 404);
+      return json(res, mockAdoptFields(container));
+    }
+    // Unraid lists autostart only for containers it manages, so an unmanaged one
+    // must not claim it. Otherwise the dev server shows an autostart state that
+    // cannot exist on a real box.
+    const containersWithAutostart = containers.map(c => ({
+      ...c,
+      autostart: c.autostart ?? ((c as any).managed === 'dockerman' && (c as any).state === 'running'),
+      autostartDelay: (c as any).autostartDelay ?? 0,
+    }));
     return json(res, { containers: containersWithAutostart, count: containersWithAutostart.length, cached: false });
   }
 
@@ -386,6 +463,7 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
 
     switch (action) {
       case 'start':
+      case 'resume':
         container.state = 'running';
         container.status = 'Up 1 second';
         break;
@@ -410,9 +488,12 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
   }
 }
 
+// Manual order of the unfoldered list, by container name (mirrors unfoldered_order).
+let unfolderedOrder: string[] = [];
+
 async function handleFolders(req: any, res: any, params: Record<string, string>) {
   if (req.method === 'GET') {
-    return json(res, { folders, count: folders.length });
+    return json(res, { folders, count: folders.length, unfoldered_order: unfolderedOrder });
   }
 
   const data = await parseBody(req);
@@ -433,10 +514,17 @@ async function handleFolders(req: any, res: any, params: Record<string, string>)
     }
 
     if (action === 'remove_container') {
+      // The store sends container_name; container_id is the legacy field.
+      const name = data.container_name ?? data.container_id;
       for (const f of folders) {
-        f.containers = f.containers.filter((c: any) => c.container_id !== data.container_id);
+        f.containers = f.containers.filter((c: any) => c.container_name !== name);
       }
       return json(res, { success: true });
+    }
+
+    if (action === 'reorder_unfoldered') {
+      unfolderedOrder = data.container_names ?? [];
+      return json(res, { success: true, unfoldered_order: unfolderedOrder });
     }
 
     if (action === 'reorder_containers' && id) {

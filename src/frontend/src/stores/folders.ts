@@ -4,7 +4,14 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Folder, FolderCreateData, FolderUpdateData, FolderExportConfig, FolderImportResult } from '@/types/folder';
+import type {
+  Folder,
+  FolderCreateData,
+  FolderUpdateData,
+  FolderContainerSelection,
+  FolderExportConfig,
+  FolderImportResult,
+} from '@/types/folder';
 import { apiFetch } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -12,6 +19,8 @@ const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 export const useFolderStore = defineStore('folders', () => {
   // State
   const folders = ref<Folder[]>([]);
+  // Manual drag order of the containers that are in no folder, by name.
+  const unfolderedOrder = ref<string[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   let lastFetchTime = 0;
@@ -27,6 +36,22 @@ export const useFolderStore = defineStore('folders', () => {
 
   const sortedFolders = computed(() => {
     return [...folders.value].sort((a, b) => a.position - b.position);
+  });
+
+  // Membership is keyed on container name, the stable key across recreates.
+  // Built once per folders change, so a lookup from every card is one map get.
+  const folderByContainerName = computed(() => {
+    const map = new Map<string, Folder>();
+    for (const folder of folders.value) {
+      for (const assoc of folder.containers) {
+        map.set(assoc.container_name, folder);
+      }
+    }
+    return map;
+  });
+
+  const getFolderForContainer = computed(() => {
+    return (containerName: string) => folderByContainerName.value.get(containerName);
   });
 
   // Actions
@@ -52,6 +77,7 @@ export const useFolderStore = defineStore('folders', () => {
 
       const data = await response.json();
       folders.value = data.folders || [];
+      unfolderedOrder.value = Array.isArray(data.unfoldered_order) ? data.unfoldered_order : [];
       initialLoadDone = true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -198,6 +224,71 @@ export const useFolderStore = defineStore('folders', () => {
     }
   }
 
+  /**
+   * Put a container in `folderId`, or in no folder when null. Drag and drop and
+   * the menu picker both go through here. The forced refetch is needed because
+   * addContainerToFolder only swaps the target folder into state while the
+   * backend also drops the row from the source folder.
+   */
+  async function moveContainerToFolder(
+    folderId: number | null,
+    containerId: string,
+    containerName: string,
+  ): Promise<boolean> {
+    const ok =
+      folderId === null
+        ? await removeContainerFromFolder(containerName)
+        : await addContainerToFolder(folderId, containerId, containerName);
+    await fetchFolders(true);
+    return ok;
+  }
+
+  /**
+   * Make a folder's membership match `desired`, issuing only the add and remove
+   * calls for containers that actually changed.
+   *
+   * Re-adding a container that is already in the folder is not free: the backend
+   * deletes the row and reinserts it at MAX(position) + 1, so replacing the whole
+   * set renumbers every container into the caller's iteration order.
+   *
+   * The diff is keyed on container_name — that is the association's unique key,
+   * and container ids change whenever a container is recreated.
+   */
+  async function setFolderContainers(
+    folderId: number,
+    desired: FolderContainerSelection[],
+  ): Promise<boolean> {
+    const folder = folders.value.find((f) => f.id === folderId);
+    if (!folder) return false;
+
+    // Snapshot before mutating: removeContainerFromFolder optimistically splices
+    // folder.containers, so reading it lazily would corrupt the diff mid-loop.
+    const existingNames = new Set((folder.containers ?? []).map((c) => c.container_name));
+
+    const seen = new Set<string>();
+    const desiredList = desired.filter((c) => c.name && !seen.has(c.name) && seen.add(c.name));
+    const desiredNames = new Set(desiredList.map((c) => c.name));
+
+    const toRemove = [...existingNames].filter((n) => !desiredNames.has(n));
+    const toAdd = desiredList.filter((c) => !existingNames.has(c.name));
+
+    if (toAdd.length === 0 && toRemove.length === 0) return true;
+
+    // Sequential, removals first: each add reads MAX(position) server-side, so
+    // concurrent adds would collide on position, and removing first keeps a
+    // container moved out and back within one save off the UNIQUE constraint.
+    let ok = true;
+    for (const name of toRemove) {
+      ok = (await removeContainerFromFolder(name)) && ok;
+    }
+    for (const c of toAdd) {
+      ok = (await addContainerToFolder(folderId, c.id, c.name)) && ok;
+    }
+
+    await fetchFolders(true);
+    return ok;
+  }
+
   async function reorderContainers(folderId: number, containerIds: string[]): Promise<boolean> {
     try {
       const response = await apiFetch(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`, {
@@ -223,6 +314,33 @@ export const useFolderStore = defineStore('folders', () => {
       return true;
     } catch (e) {
       console.error('Error reordering containers:', e);
+      return false;
+    }
+  }
+
+  /**
+   * Save the manual order of the unfoldered list. The whole list is sent in
+   * display order; the backend replaces the saved order with it.
+   */
+  async function reorderUnfoldered(containerNames: string[]): Promise<boolean> {
+    try {
+      const response = await apiFetch(`${API_BASE}/folders.php?action=reorder_unfoldered`, {
+        method: 'POST',
+        body: JSON.stringify({
+          container_names: containerNames,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to reorder unfoldered containers`);
+      }
+
+      const result = await response.json();
+      unfolderedOrder.value = Array.isArray(result.unfoldered_order) ? result.unfoldered_order : containerNames;
+
+      return true;
+    } catch (e) {
+      console.error('Error reordering unfoldered containers:', e);
       return false;
     }
   }
@@ -313,6 +431,7 @@ export const useFolderStore = defineStore('folders', () => {
   return {
     // State
     folders,
+    unfolderedOrder,
     loading,
     error,
 
@@ -320,6 +439,8 @@ export const useFolderStore = defineStore('folders', () => {
     folderCount,
     getFolderById,
     sortedFolders,
+    folderByContainerName,
+    getFolderForContainer,
 
     // Actions
     fetchFolders,
@@ -328,7 +449,10 @@ export const useFolderStore = defineStore('folders', () => {
     deleteFolder,
     addContainerToFolder,
     removeContainerFromFolder,
+    moveContainerToFolder,
+    setFolderContainers,
     reorderContainers,
+    reorderUnfoldered,
     reorderFolders,
     exportConfiguration,
     importConfiguration,

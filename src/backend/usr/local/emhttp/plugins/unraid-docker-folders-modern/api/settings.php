@@ -50,6 +50,11 @@ function handleGet()
     $settings[$row['key']] = $row['value'];
   }
 
+  // Synthetic, read-only: the zone PHP is actually running in (see
+  // detectServerTimezone() in config.php). Not in the POST allowlist, so it
+  // cannot be overwritten by a client.
+  $settings['server_timezone'] = date_default_timezone_get();
+
   jsonResponse(['settings' => $settings]);
 }
 
@@ -80,7 +85,8 @@ function handlePost()
   $allowedKeys = [
     'distinguish_healthy', 'show_stats', 'replace_docker_section',
     'show_legacy_containers', 'show_legacy_buttons',
-    'show_folder_ports', 'show_inline_logs', 'enable_update_checks',
+    'show_folder_ports', 'show_inline_logs', 'enable_adopt',
+    'enable_update_checks',
     'update_check_schedule', 'notify_on_updates', 'update_check_exclude',
     'post_pull_action',
     'update_concurrency',
