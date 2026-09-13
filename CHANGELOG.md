@@ -1,6 +1,13 @@
 # Changelog
 
 ## 2026.09.13
+- refactor(sort): share the folder sort decision and extract sort fields once
+- feat(header): show the container and folder counts inside the search field
+- feat(settings): group the settings page by what each setting affects
+- feat(sort): add a "Sort folders too" toggle to the sort menu
+- fix(folders): apply the toolbar sort to folder contents
+- build: use content-hashed asset filenames
+- fix(folders): do not count removed containers as hidden
 - docs: add a contributing guide and require dev as the PR base
 - fix(folders): repair the #9 merge and add the sort menu
 - Add auto-sort options for folders and folder contents (#9)

@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.13-dev2">
-<!ENTITY md5 "9f88ff2f49a3c36421263281897c1b4a">
+<!ENTITY version "2026.09.13-dev3">
+<!ENTITY md5 "ce4c197ff17cef313f6d2c26bb1b4b50">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -117,6 +117,15 @@
 
 
 
+
+###2026.09.13-dev3
+- refactor(sort): share the folder sort decision and extract sort fields once
+- feat(header): show the container and folder counts inside the search field
+- feat(settings): group the settings page by what each setting affects
+- feat(sort): add a "Sort folders too" toggle to the sort menu
+- fix(folders): apply the toolbar sort to folder contents
+- build: use content-hashed asset filenames
+- fix(folders): do not count removed containers as hidden
 ###2026.09.13-dev2
 - docs: add a contributing guide and require dev as the PR base
 - fix(folders): repair the #9 merge and add the sort menu
