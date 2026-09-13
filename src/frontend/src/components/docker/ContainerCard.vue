@@ -312,7 +312,7 @@ import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
 import ContainerDetails from '@/components/docker/ContainerDetails.vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
-import { containerStatus, containerEditUrl, openContainerTerminal } from '@/utils/containerDisplay';
+import { containerStatus, containerEditUrl, containerWebuiUrl, openContainerTerminal } from '@/utils/containerDisplay';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -646,20 +646,7 @@ const status = computed(() => containerStatus(props.container, distinguishHealth
 
 const editUrl = computed(() => containerEditUrl(props.container));
 
-const resolvedWebui = computed(() => {
-  const tpl = props.container.webui;
-  if (!tpl) return null;
-  let url = tpl;
-  // Replace [IP] with current hostname
-  url = url.replace('[IP]', window.location.hostname);
-  // Replace [PORT:xxxx] with the mapped public port
-  url = url.replace(/\[PORT:(\d+)\]/g, (_match, privatePort) => {
-    const pNum = parseInt(privatePort);
-    const mapped = props.container.ports?.find((p) => p.PrivatePort === pNum);
-    return mapped?.PublicPort ? String(mapped.PublicPort) : privatePort;
-  });
-  return url;
-});
+const resolvedWebui = computed(() => containerWebuiUrl(props.container));
 
 // Same gate as the footer WebUI link, so the two can never disagree about
 // whether a container has a reachable web interface.

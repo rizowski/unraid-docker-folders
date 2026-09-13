@@ -30,6 +30,26 @@ export function containerStatus(container: Pick<Container, 'state' | 'status'>, 
   return { halo: 'status-halo-muted', tooltip: state.charAt(0).toUpperCase() + state.slice(1) };
 }
 
+/**
+ * The container's WebUI link, with Unraid's `[IP]` and `[PORT:n]` template
+ * placeholders filled in, or null when the template has no WebUI.
+ */
+export function containerWebuiUrl(container: Pick<Container, 'webui' | 'ports'>): string | null {
+  const tpl = container.webui;
+  if (!tpl) return null;
+  return tpl
+    .replace('[IP]', window.location.hostname)
+    .replace(/\[PORT:(\d+)\]/g, (_match, privatePort) => {
+      const mapped = container.ports?.find((p) => p.PrivatePort === parseInt(privatePort));
+      return mapped?.PublicPort ? String(mapped.PublicPort) : privatePort;
+    });
+}
+
+/** Running or paused. "Hide stopped" keeps these, because both are alive. */
+export function isAliveContainer(container?: Pick<Container, 'state'>): boolean {
+  return container?.state === 'running' || container?.state === 'paused';
+}
+
 /** Unraid's edit form, or null when Unraid does not manage the container. */
 export function containerEditUrl(container: Pick<Container, 'managed' | 'name'>): string | null {
   if (container.managed !== 'dockerman') return null;

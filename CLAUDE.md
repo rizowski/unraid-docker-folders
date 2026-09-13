@@ -190,7 +190,9 @@ Dashboard. It does not render HTML directly. It sets
 `DashStats.page` echoes with `customTiles()` (Unraid 6.12 and later). The tile
 body is an iframe of `assets/widget.html`, a second Vite entry
 (`src/frontend/src/widget/`) with search, folder collapse, and a
-Start/Stop/Edit/Logs kebab menu per container. Rules for this file:
+Start/Stop/Edit/Logs kebab menu per container. A cog in the tile header posts
+a message to the frame, which opens the widget settings panel. Those settings
+(`widget/widgetSettings.ts`) save in localStorage, per browser. Rules for this file:
 - The tile string is a nowdoc (`<<<'EOT'`), because a heredoc would interpolate
   `$` in the inline JavaScript.
 - The header needs `Markdown="false"`, and the PHP block must end with `?>`.

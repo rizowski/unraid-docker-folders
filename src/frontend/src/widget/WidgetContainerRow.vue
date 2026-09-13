@@ -1,13 +1,23 @@
 <template>
   <div class="widget-row flex items-center gap-2 py-1 pl-2 pr-1 min-w-0" :class="{ 'opacity-60': busy }">
     <ContainerIcon
+      v-if="showIcon"
       :src="container.icon || fallbackIcon"
       :alt="container.name"
       :halo-class="status.halo"
       :status-tooltip="status.tooltip"
       :href="null"
     />
+    <span v-else class="status-dot shrink-0" :class="status.halo" :title="status.tooltip" />
     <span class="flex-1 min-w-0 text-sm text-text truncate" :title="container.name">{{ container.name }}</span>
+    <a
+      v-if="webuiUrl"
+      :href="webuiUrl"
+      target="_blank"
+      rel="noopener"
+      class="icon-btn shrink-0 text-text-secondary hover:text-text"
+      :title="`Open WebUI for ${container.name}`"
+    ><IconGlobe :size="14" /></a>
     <svg
       v-if="busy"
       class="animate-spin h-3.5 w-3.5 shrink-0 text-text-secondary"
@@ -34,13 +44,16 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
+import IconGlobe from '@/components/icons/IconGlobe.vue';
 import KebabMenu, { type KebabMenuItem } from '@/components/KebabMenu.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
-import { containerEditUrl, containerStatus, openContainerTerminal } from '@/utils/containerDisplay';
+import { containerEditUrl, containerStatus, containerWebuiUrl, openContainerTerminal } from '@/utils/containerDisplay';
 
 const props = defineProps<{
   container: Container;
   distinguishHealthy: boolean;
+  showIcon: boolean;
+  showWebui: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -57,6 +70,8 @@ const isRunning = computed(() => props.container.state === 'running');
 const isPaused = computed(() => props.container.state === 'paused');
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 const editUrl = computed(() => containerEditUrl(props.container));
+// Only while running, the same rule as the Folders page card: a stopped container serves no page.
+const webuiUrl = computed(() => (props.showWebui && isRunning.value ? containerWebuiUrl(props.container) : null));
 
 const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: !isRunning.value && !isPaused.value, disabled: busy.value },

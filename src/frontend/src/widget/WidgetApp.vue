@@ -1,5 +1,7 @@
 <template>
   <div id="unraid-docker-folders-modern" ref="rootEl" class="unapi font-sans text-text">
+    <WidgetSettingsPanel v-if="settingsOpen" :settings="prefs" @change="(key, value) => (prefs = { ...prefs, [key]: value })" @close="settingsOpen = false" />
+
     <div class="relative mb-2">
       <input
         v-model="query"
@@ -20,7 +22,7 @@
     <p v-if="isLoading" class="text-xs text-text-secondary py-1">Loading...</p>
     <p v-else-if="error" class="text-xs text-error py-1">Error: {{ error }}</p>
     <p v-else-if="groups.length === 0" class="text-xs text-text-secondary py-1">
-      {{ query ? 'No containers match.' : 'No containers.' }}
+      {{ query ? 'No containers match.' : prefs.hideStopped ? 'No running containers.' : 'No containers.' }}
     </p>
 
     <div v-else class="flex flex-col">
@@ -48,6 +50,8 @@
             :key="container.id"
             :container="container"
             :distinguish-healthy="settingsStore.distinguishHealthy"
+            :show-icon="prefs.showIcons"
+            :show-webui="prefs.showWebui"
             @menu-open-change="onMenuOpenChange"
           />
         </div>
@@ -57,14 +61,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import WidgetContainerRow from './WidgetContainerRow.vue';
+import WidgetSettingsPanel from './WidgetSettings.vue';
+import { loadWidgetSettings, saveWidgetSettings } from './widgetSettings';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { initWebSocket } from '@/composables/useWebSocket';
 import { containerMatchesSearch } from '@/utils/search';
+import { isAliveContainer } from '@/utils/containerDisplay';
 import { effectiveSortMode, sortByMode } from '@/utils/sortMode';
 import { reportHeightToParent } from '@/utils/iframeHost';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
@@ -78,8 +85,6 @@ interface Group {
   key: string;
   name: string;
   color: string;
-  /** Saved state from the Folders page, used until the widget has its own. */
-  defaultCollapsed: boolean;
   containers: Container[];
   running: number;
   total: number;
@@ -106,28 +111,44 @@ const allGroups = computed<Group[]>(() => {
       return { position: assoc.position, name: c?.name ?? assoc.container_name, state: c?.state, created: c?.created };
     });
     const members = assocs.map((assoc) => byName.get(assoc.container_name)).filter((c): c is Container => !!c);
-    result.push(makeGroup(`folder-${folder.id}`, folder.name, folder.color || 'var(--border-color)', folder.collapsed, members));
+    result.push(makeGroup(`folder-${folder.id}`, folder.name, folder.color || 'var(--border-color)', members));
   }
-  result.push(makeGroup(OTHER_KEY, 'Other', 'var(--border-color)', false, dockerStore.unfolderedContainers));
+  result.push(makeGroup(OTHER_KEY, 'Other', 'var(--border-color)', dockerStore.unfolderedContainers));
   return result;
 });
 
-function makeGroup(key: string, name: string, color: string, defaultCollapsed: boolean, members: Container[]): Group {
+function makeGroup(key: string, name: string, color: string, members: Container[]): Group {
   const running = members.filter((c) => c.state === 'running').length;
-  return { key, name, color, defaultCollapsed, containers: members, running, total: members.length };
+  return { key, name, color, containers: members, running, total: members.length };
 }
 
+const prefs = ref(loadWidgetSettings());
+watch(prefs, saveWidgetSettings);
+const settingsOpen = ref(false);
+
+// The cog in the tile header lives in the dashboard page, outside this frame,
+// so it asks for the panel with a message.
+function onParentMessage(e: MessageEvent) {
+  if (e.source !== window.parent || e.origin !== window.location.origin) return;
+  if (e.data?.type === 'docker-folders-widget-settings') settingsOpen.value = !settingsOpen.value;
+}
+
+// The count in each header stays running/total over every member, so a folder
+// keeps showing how much of it is stopped while those rows are hidden.
 const groups = computed<Group[]>(() => {
   const q = query.value;
-  const matched = isSearching.value
-    ? allGroups.value.map((g) => ({ ...g, containers: g.containers.filter((c) => containerMatchesSearch(q, c.name, c.image)) }))
-    : allGroups.value;
-  return matched.filter((g) => g.containers.length > 0);
+  const searching = isSearching.value;
+  const hide = prefs.value.hideStopped;
+  if (!searching && !hide) return allGroups.value.filter((g) => g.containers.length > 0);
+  const shown = (c: Container) => (!hide || isAliveContainer(c)) && (!searching || containerMatchesSearch(q, c.name, c.image));
+  return allGroups.value
+    .map((g) => ({ ...g, containers: g.containers.filter(shown) }))
+    .filter((g) => g.containers.length > 0);
 });
 
 // Collapse state is the widget's own, so folding a folder on the dashboard does
-// not fold it on the Folders page. Keys the user never touched fall back to the
-// folder's saved state.
+// not fold it on the Folders page. A group the user never touched follows the
+// "Start folders collapsed" setting.
 function loadCollapsed(): Record<string, boolean> {
   try {
     const parsed = JSON.parse(safeLocalStorageGet(COLLAPSE_KEY) || '{}');
@@ -141,7 +162,7 @@ watch(collapsed, (v) => safeLocalStorageSet(COLLAPSE_KEY, JSON.stringify(v)), { 
 
 function isExpanded(group: Group): boolean {
   if (isSearching.value) return true;
-  return !(collapsed.value[group.key] ?? group.defaultCollapsed);
+  return !(collapsed.value[group.key] ?? prefs.value.startCollapsed);
 }
 
 function toggle(key: string) {
@@ -162,8 +183,11 @@ function onMenuOpenChange(_open: boolean, bottom: number) {
 }
 
 onMounted(async () => {
+  window.addEventListener('message', onParentMessage);
   if (rootEl.value) resendHeight = reportHeightToParent(rootEl.value, () => menuBottom);
   await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
   initWebSocket({ pollInterval: WIDGET_POLL_INTERVAL });
 });
+
+onUnmounted(() => window.removeEventListener('message', onParentMessage));
 </script>

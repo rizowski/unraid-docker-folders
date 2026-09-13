@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { containerStatus, containerEditUrl, openContainerTerminal } from '../containerDisplay';
+import { containerStatus, containerEditUrl, containerWebuiUrl, isAliveContainer, openContainerTerminal } from '../containerDisplay';
 
 describe('containerStatus', () => {
   it('marks a healthy running container as success', () => {
@@ -39,6 +39,38 @@ describe('containerEditUrl', () => {
 
   it('returns null for an unmanaged container', () => {
     expect(containerEditUrl({ managed: null, name: 'plex' })).toBeNull();
+  });
+});
+
+describe('containerWebuiUrl', () => {
+  it('fills in the host and the mapped public port', () => {
+    const ports = [{ PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }];
+    expect(containerWebuiUrl({ webui: 'http://[IP]:[PORT:80]/web', ports } as never)).toBe(
+      `http://${window.location.hostname}:8080/web`,
+    );
+  });
+
+  it('keeps the private port when nothing maps it', () => {
+    expect(containerWebuiUrl({ webui: 'http://[IP]:[PORT:32400]/', ports: [] })).toBe(`http://${window.location.hostname}:32400/`);
+  });
+
+  it('returns null without a WebUI template', () => {
+    expect(containerWebuiUrl({ webui: null, ports: [] })).toBeNull();
+  });
+});
+
+describe('isAliveContainer', () => {
+  it.each([
+    ['running', true],
+    ['paused', true],
+    ['exited', false],
+    ['created', false],
+  ])('%s is %s', (state, alive) => {
+    expect(isAliveContainer({ state })).toBe(alive);
+  });
+
+  it('treats a missing container as not alive', () => {
+    expect(isAliveContainer(undefined)).toBe(false);
   });
 });
 

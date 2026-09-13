@@ -31,6 +31,7 @@ $mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
     <span class="tile-header-right">
       <span class="tile-header-right-controls">
         <a href="/Docker/Folders" title="Go to Docker Folders"><i class="fa fa-fw fa-folder-open control"></i></a>
+        <a href="#" id="docker-folders-widget-settings" title="Widget settings"><i class="fa fa-fw fa-cog control"></i></a>
       </span>
     </span>
   </span>
@@ -48,6 +49,12 @@ $mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
     if (legacy && legacy.parentNode) legacy.parentNode.removeChild(legacy);
 
     var frame = document.getElementById('docker-folders-widget-frame');
+
+    // The settings panel lives inside the frame, so the cog asks for it with a message.
+    document.getElementById('docker-folders-widget-settings').addEventListener('click', function(e) {
+      e.preventDefault();
+      if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'docker-folders-widget-settings' }, location.origin);
+    });
 
     window.addEventListener('message', function(e) {
       if (!e.data || typeof e.data !== 'object') return;
