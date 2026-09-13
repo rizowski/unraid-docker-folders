@@ -161,7 +161,7 @@ describe('WidgetApp', () => {
     saveSettings({ startCollapsed: false, showIcons: false });
     const { wrapper } = await mountWidget(containers, []);
     expect(wrapper.findAll('.widget-row img')).toHaveLength(0);
-    expect(wrapper.findAll('.widget-row .status-dot')).toHaveLength(3);
+    expect(wrapper.findAll('.widget-row span.rounded-full')).toHaveLength(3);
   });
 
   it('offers Stop, Edit and Logs for a running managed container', async () => {

@@ -3,7 +3,7 @@
  * because they only change how the dashboard tile looks.
  */
 
-import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
+import { safeLocalStorageGetJson, safeLocalStorageSet } from '@/utils/safeStorage';
 
 export interface WidgetSettings {
   /** Show only running and paused containers. */
@@ -28,13 +28,10 @@ export const DEFAULT_WIDGET_SETTINGS: Readonly<WidgetSettings> = {
 /** Saved settings over the defaults. A missing or malformed value keeps its default. */
 export function loadWidgetSettings(): WidgetSettings {
   const settings = { ...DEFAULT_WIDGET_SETTINGS };
-  try {
-    const saved = JSON.parse(safeLocalStorageGet(WIDGET_SETTINGS_KEY) || '{}');
-    for (const key of Object.keys(settings) as Array<keyof WidgetSettings>) {
-      if (typeof saved?.[key] === 'boolean') settings[key] = saved[key];
-    }
-  } catch {
-    // Unparseable JSON: keep the defaults.
+  const saved = safeLocalStorageGetJson(WIDGET_SETTINGS_KEY) as Partial<Record<keyof WidgetSettings, unknown>> | null;
+  for (const key of Object.keys(settings) as Array<keyof WidgetSettings>) {
+    const value = saved?.[key];
+    if (typeof value === 'boolean') settings[key] = value;
   }
   return settings;
 }

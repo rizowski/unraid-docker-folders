@@ -385,17 +385,6 @@
 #unraid-docker-folders-modern .status-halo-muted   { --halo-color: var(--color-muted); }
 #unraid-docker-folders-modern .status-halo-warning { --halo-color: var(--color-warning); }
 
-/* Status without an icon: the halo color as a solid dot. Pair with a
-   status-halo-* class, which sets --halo-color. Used by the dashboard widget
-   when container icons are off. */
-#unraid-docker-folders-modern .status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 9999px;
-  background: var(--halo-color);
-}
-
 /* Shared expand/collapse — CSS Grid height transition */
 #unraid-docker-folders-modern .expand-grid {
   display: grid;

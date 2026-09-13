@@ -8,7 +8,7 @@
       :status-tooltip="status.tooltip"
       :href="null"
     />
-    <span v-else class="status-dot shrink-0" :class="status.halo" :title="status.tooltip" />
+    <span v-else class="inline-block size-2 rounded-full shrink-0 bg-(--halo-color)" :class="status.halo" :title="status.tooltip" />
     <span class="flex-1 min-w-0 text-sm text-text truncate" :title="container.name">{{ container.name }}</span>
     <a
       v-if="webuiUrl"

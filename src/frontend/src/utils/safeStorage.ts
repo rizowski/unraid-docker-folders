@@ -15,6 +15,15 @@ export function safeLocalStorageGet(key: string): string | null {
   }
 }
 
+/** The stored value parsed as JSON, or null when it is missing or not valid JSON. */
+export function safeLocalStorageGetJson(key: string): unknown {
+  try {
+    return JSON.parse(safeLocalStorageGet(key) ?? 'null');
+  } catch {
+    return null;
+  }
+}
+
 export function safeLocalStorageSet(key: string, value: string): void {
   try {
     window.localStorage?.setItem(key, value);

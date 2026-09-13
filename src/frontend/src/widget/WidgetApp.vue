@@ -74,7 +74,7 @@ import { containerMatchesSearch } from '@/utils/search';
 import { isAliveContainer } from '@/utils/containerDisplay';
 import { effectiveSortMode, sortByMode } from '@/utils/sortMode';
 import { reportHeightToParent } from '@/utils/iframeHost';
-import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
+import { safeLocalStorageGetJson, safeLocalStorageSet } from '@/utils/safeStorage';
 
 /** Slower than the Folders page: the dashboard is often left open for hours. */
 const WIDGET_POLL_INTERVAL = 60000;
@@ -125,6 +125,8 @@ function makeGroup(key: string, name: string, color: string, members: Container[
 const prefs = ref(loadWidgetSettings());
 watch(prefs, saveWidgetSettings);
 const settingsOpen = ref(false);
+// Its own computed, so changing another setting does not rerun the group filter.
+const hideStopped = computed(() => prefs.value.hideStopped);
 
 // The cog in the tile header lives in the dashboard page, outside this frame,
 // so it asks for the panel with a message.
@@ -138,7 +140,7 @@ function onParentMessage(e: MessageEvent) {
 const groups = computed<Group[]>(() => {
   const q = query.value;
   const searching = isSearching.value;
-  const hide = prefs.value.hideStopped;
+  const hide = hideStopped.value;
   if (!searching && !hide) return allGroups.value.filter((g) => g.containers.length > 0);
   const shown = (c: Container) => (!hide || isAliveContainer(c)) && (!searching || containerMatchesSearch(q, c.name, c.image));
   return allGroups.value
@@ -149,15 +151,10 @@ const groups = computed<Group[]>(() => {
 // Collapse state is the widget's own, so folding a folder on the dashboard does
 // not fold it on the Folders page. A group the user never touched follows the
 // "Start folders collapsed" setting.
-function loadCollapsed(): Record<string, boolean> {
-  try {
-    const parsed = JSON.parse(safeLocalStorageGet(COLLAPSE_KEY) || '{}');
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-const collapsed = ref<Record<string, boolean>>(loadCollapsed());
+const savedCollapsed = safeLocalStorageGetJson(COLLAPSE_KEY);
+const collapsed = ref<Record<string, boolean>>(
+  savedCollapsed && typeof savedCollapsed === 'object' ? (savedCollapsed as Record<string, boolean>) : {},
+);
 watch(collapsed, (v) => safeLocalStorageSet(COLLAPSE_KEY, JSON.stringify(v)), { deep: true });
 
 function isExpanded(group: Group): boolean {
