@@ -55,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue';
 
 export interface KebabMenuItem {
   label?: string;
@@ -86,6 +86,11 @@ interface Props {
   buttonTitle?: string;
   buttonClass?: string;
   iconSize?: number;
+  /**
+   * Flip and clamp the menu to fit the viewport. Turn off when the host grows
+   * the iframe to hold the menu instead (the dashboard widget does).
+   */
+  fitViewport?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -93,10 +98,13 @@ const props = withDefaults(defineProps<Props>(), {
   buttonTitle: 'More actions',
   buttonClass: 'p-1.5 rounded cursor-pointer text-text-secondary hover:text-text transition',
   iconSize: 16,
+  fitViewport: true,
 });
 
 const emit = defineEmits<{
   select: [action: string];
+  /** `bottom` is the page y of the open menu's lower edge plus EDGE_GAP, or 0 when closed. */
+  'open-change': [open: boolean, bottom: number];
 }>();
 
 const menuOpen = ref(false);
@@ -125,7 +133,7 @@ async function toggleMenu() {
   maxHeight.value = null;
   menuOpen.value = true;
   await nextTick();
-  fitToViewport();
+  if (props.fitViewport) fitToViewport();
 }
 
 /**
@@ -174,6 +182,13 @@ function onSelect(item: KebabMenuItem) {
   menuOpen.value = false;
   emit('select', item.action!);
 }
+
+// Post-flush so the dropdown is laid out by the time an open is reported.
+watch(menuOpen, (open) => {
+  const dropdown = open ? dropdownRef.value : null;
+  const bottom = dropdown ? Math.ceil(dropdown.getBoundingClientRect().bottom + window.scrollY + EDGE_GAP) : 0;
+  emit('open-change', open, bottom);
+}, { flush: 'post' });
 
 const visibleItems = computed(() => {
   const shown = props.items.filter((item) => item.show !== false);

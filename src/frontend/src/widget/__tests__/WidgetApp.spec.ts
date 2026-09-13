@@ -1,0 +1,132 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
+import { createPinia, setActivePinia } from 'pinia';
+import WidgetApp from '../WidgetApp.vue';
+import { useDockerStore } from '@/stores/docker';
+import { useFolderStore } from '@/stores/folders';
+import { useSettingsStore } from '@/stores/settings';
+import { makeContainer, makeFolder } from '@/test/fixtures';
+import type { Container } from '@/stores/docker';
+import type { Folder } from '@/types/folder';
+
+vi.mock('@/composables/useWebSocket', () => ({ initWebSocket: vi.fn() }));
+
+const COLLAPSE_KEY = 'docker-folders-widget-collapsed';
+
+function setup(containers: Container[], folders: Folder[]) {
+  const pinia = createPinia();
+  setActivePinia(pinia);
+  const dockerStore = useDockerStore();
+  const folderStore = useFolderStore();
+  const settingsStore = useSettingsStore();
+  dockerStore.fetchContainers = vi.fn(async () => {});
+  folderStore.fetchFolders = vi.fn(async () => {});
+  settingsStore.fetchSettings = vi.fn(async () => {});
+  dockerStore.stopContainer = vi.fn(async () => true);
+  dockerStore.startContainer = vi.fn(async () => true);
+  dockerStore.containers = containers;
+  folderStore.folders = folders;
+  return { pinia, dockerStore };
+}
+
+async function mountWidget(containers: Container[], folders: Folder[]) {
+  const { pinia, dockerStore } = setup(containers, folders);
+  const wrapper = mount(WidgetApp, { global: { plugins: [pinia] }, attachTo: document.body });
+  await flushPromises();
+  return { wrapper, dockerStore };
+}
+
+const groupNames = (w: VueWrapper) => w.findAll('section [role="button"] .font-semibold').map((e) => e.text());
+const rowNames = (w: VueWrapper) => w.findAll('.widget-row span.truncate').map((e) => e.text());
+
+async function openMenu(w: VueWrapper, name: string) {
+  await w.find(`button[title="Actions for ${name}"]`).trigger('click');
+  await flushPromises();
+  return w.findAll('.kebab-menu-item');
+}
+
+describe('WidgetApp', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.body.innerHTML = '';
+  });
+
+  const containers = [
+    makeContainer({ id: 'c1', name: 'plex', image: 'linuxserver/plex' }),
+    makeContainer({ id: 'c2', name: 'sonarr', image: 'linuxserver/sonarr', state: 'exited' }),
+    makeContainer({ id: 'c3', name: 'redis', image: 'redis:7' }),
+  ];
+
+  it('lists folders in order with their members, then an Other group', async () => {
+    const { wrapper } = await mountWidget(containers, [makeFolder(['sonarr', 'plex'])]);
+    expect(groupNames(wrapper)).toEqual(['Media', 'Other']);
+    expect(rowNames(wrapper)).toEqual(['sonarr', 'plex', 'redis']);
+    expect(wrapper.text()).toContain('1/2');
+  });
+
+  it('hides the Other group when every container is in a folder', async () => {
+    const { wrapper } = await mountWidget(containers, [makeFolder(['plex', 'sonarr', 'redis'])]);
+    expect(groupNames(wrapper)).toEqual(['Media']);
+  });
+
+  it('filters rows by name or image and drops groups with no match', async () => {
+    const { wrapper } = await mountWidget(containers, [makeFolder(['plex', 'sonarr'])]);
+    await wrapper.find('input').setValue('redis:');
+    expect(groupNames(wrapper)).toEqual(['Other']);
+    expect(rowNames(wrapper)).toEqual(['redis']);
+
+    await wrapper.find('input').setValue('zzz');
+    expect(wrapper.text()).toContain('No containers match.');
+  });
+
+  it('expands a collapsed folder while searching', async () => {
+    const { wrapper } = await mountWidget(containers, [makeFolder(['plex'], { collapsed: true })]);
+    expect(rowNames(wrapper)).toEqual(['sonarr', 'redis']);
+    await wrapper.find('input').setValue('plex');
+    expect(rowNames(wrapper)).toEqual(['plex']);
+  });
+
+  it('starts from the folder saved state and keeps its own collapse state', async () => {
+    const folder = makeFolder(['plex'], { collapsed: true });
+    const { wrapper } = await mountWidget(containers, [folder]);
+    expect(rowNames(wrapper)).not.toContain('plex');
+
+    await wrapper.find('section [role="button"]').trigger('click');
+    expect(rowNames(wrapper)).toContain('plex');
+    expect(JSON.parse(window.localStorage.getItem(COLLAPSE_KEY)!)).toEqual({ 'folder-1': false });
+    // The folder's own saved state is untouched.
+    expect(folder.collapsed).toBe(true);
+  });
+
+  it('offers Stop, Edit and Logs for a running managed container', async () => {
+    const { wrapper, dockerStore } = await mountWidget(containers, []);
+    const items = await openMenu(wrapper, 'plex');
+    expect(items.map((i) => i.text())).toEqual(['Stop', 'Edit', 'Logs']);
+
+    await items[0].trigger('click');
+    await flushPromises();
+    expect(dockerStore.stopContainer).toHaveBeenCalledWith('c1');
+  });
+
+  it('offers Start for a stopped container', async () => {
+    const { wrapper, dockerStore } = await mountWidget(containers, []);
+    const items = await openMenu(wrapper, 'sonarr');
+    expect(items[0].text()).toBe('Start');
+    await items[0].trigger('click');
+    await flushPromises();
+    expect(dockerStore.startContainer).toHaveBeenCalledWith('c2');
+  });
+
+  it('disables Edit for unmanaged containers and hides Logs for compose ones', async () => {
+    const compose = makeContainer({
+      id: 'c9',
+      name: 'app',
+      managed: null,
+      labels: { 'com.docker.compose.project': 'stack' },
+    });
+    const { wrapper } = await mountWidget([compose], []);
+    const items = await openMenu(wrapper, 'app');
+    expect(items.map((i) => i.text())).toEqual(['Stop', 'Edit']);
+    expect(items[1].attributes('disabled')).toBeDefined();
+  });
+});

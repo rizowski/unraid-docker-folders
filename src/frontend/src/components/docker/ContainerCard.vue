@@ -312,6 +312,7 @@ import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
 import ContainerDetails from '@/components/docker/ContainerDetails.vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
+import { containerStatus, containerEditUrl, openContainerTerminal } from '@/utils/containerDisplay';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -640,31 +641,10 @@ onUnmounted(() => {
 const distinguishHealthy = inject<Ref<boolean>>('distinguishHealthy', ref(true));
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
-const isHealthy = computed(() => props.container.status?.toLowerCase().includes('(healthy)'));
+// Halo and tooltip resolve together in containerStatus; see utils/containerDisplay.ts.
+const status = computed(() => containerStatus(props.container, distinguishHealthy.value));
 
-// Health/state is carried by a feathered halo around the container icon in both
-// views (see .status-halo in main.css), replacing the old dot and bar. Halo and
-// tooltip resolve together so a newly handled state can't land in one and be
-// forgotten in the other — they were previously two parallel branch chains.
-const status = computed(() => {
-  const state = props.container.state;
-  if (state === 'running') {
-    if (!distinguishHealthy.value) return { halo: 'status-halo-success', tooltip: 'Running' };
-    return isHealthy.value
-      ? { halo: 'status-halo-success', tooltip: 'Running (healthy)' }
-      : { halo: 'status-halo-info', tooltip: 'Running (no health check)' };
-  }
-  if (state === 'paused') return { halo: 'status-halo-warning', tooltip: 'Paused' };
-  if (state === 'exited') return { halo: 'status-halo-error', tooltip: 'Exited' };
-  if (state === 'stopped') return { halo: 'status-halo-error', tooltip: 'Stopped' };
-  if (state === 'created') return { halo: 'status-halo-muted', tooltip: 'Created' };
-  return { halo: 'status-halo-muted', tooltip: state.charAt(0).toUpperCase() + state.slice(1) };
-});
-
-const editUrl = computed(() => {
-  if (props.container.managed !== 'dockerman') return null;
-  return `/Docker/UpdateContainer?xmlTemplate=edit:/boot/config/plugins/dockerMan/templates-user/my-${props.container.name}.xml`;
-});
+const editUrl = computed(() => containerEditUrl(props.container));
 
 const resolvedWebui = computed(() => {
   const tpl = props.container.webui;
@@ -684,19 +664,6 @@ const resolvedWebui = computed(() => {
 // Same gate as the footer WebUI link, so the two can never disagree about
 // whether a container has a reachable web interface.
 const iconWebui = computed(() => (isRunning.value ? resolvedWebui.value : null));
-
-function openContainerTerminal(mode: 'console' | 'logs') {
-  const name = props.container.name;
-  const more = mode === 'logs' ? '.log' : 'sh';
-  const parentWindow = window.parent as typeof window & { openTerminal?: (tag: string, name: string, more: string) => void };
-  if (parentWindow?.openTerminal) {
-    parentWindow.openTerminal('docker', name, more);
-  } else {
-    // Fallback: open directly (dev mode or not in iframe)
-    const suffix = mode === 'logs' ? `${encodeURIComponent(name)}.log` : encodeURIComponent(name);
-    window.open(`/logterminal/${suffix}/`, '_blank');
-  }
-}
 
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 
@@ -791,9 +758,9 @@ async function handleMenuAction(action: string) {
   } else if (action === 'pick-folder') {
     showFolderPicker.value = true;
   } else if (action === 'console') {
-    openContainerTerminal('console');
+    openContainerTerminal(props.container.name, 'console');
   } else if (action === 'logs') {
-    openContainerTerminal('logs');
+    openContainerTerminal(props.container.name, 'logs');
   }
 }
 

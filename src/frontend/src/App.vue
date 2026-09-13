@@ -292,6 +292,7 @@ import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
 import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
+import { containerMatchesSearch } from '@/utils/search';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import { effectiveSortMode } from '@/utils/sortMode';
 import Sortable from 'sortablejs';
@@ -449,15 +450,13 @@ onMounted(() => {
 });
 onUnmounted(() => searchOverlayObserver?.disconnect());
 
-function containerMatchesSearch(name: string, image?: string): boolean {
-  const q = dockerStore.searchQuery.trim().toLowerCase();
-  if (!q) return true;
-  return name.toLowerCase().includes(q) || (image ? image.toLowerCase().includes(q) : false);
+function matchesQuery(name: string, image?: string): boolean {
+  return containerMatchesSearch(dockerStore.searchQuery, name, image);
 }
 
 const filteredUnfolderedContainers = computed(() => {
   if (!isSearching.value) return dockerStore.unfolderedContainers;
-  return dockerStore.unfolderedContainers.filter((c) => containerMatchesSearch(c.name, c.image));
+  return dockerStore.unfolderedContainers.filter((c) => matchesQuery(c.name, c.image));
 });
 
 const filteredFolders = computed(() => {
@@ -466,7 +465,7 @@ const filteredFolders = computed(() => {
   return folderStore.sortedFolders.filter((folder) =>
     (folder.containers || []).some((assoc) => {
       const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
-      return container ? containerMatchesSearch(container.name, container.image) : assoc.container_name.toLowerCase().includes(q);
+      return container ? matchesQuery(container.name, container.image) : assoc.container_name.toLowerCase().includes(q);
     })
   );
 });

@@ -1,0 +1,70 @@
+Menu="Dashboard:0"
+Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>') && is_file('/var/run/dockerd.pid')"
+---
+<?php
+/*
+ * Dashboard tile: a light folder view of the Docker containers.
+ *
+ * Unraid's dashboard (dynamix DashStats.page) echoes every $mytiles[<plugin>][columnN]
+ * string into its column tables. The tile body is an iframe so the Vue widget keeps
+ * its own CSS, away from Unraid's 62.5% root font size and global element styles.
+ */
+require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/config.php';
+
+if (!file_exists(DB_PATH)) return;
+
+// A nowdoc, not a heredoc: nothing below is dynamic in PHP, and a heredoc would
+// interpolate every `$` in the inline JavaScript.
+// The title attribute is required. The dashboard md5-hashes it to key the saved
+// tile position and collapse state, so renaming it resets both.
+$mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
+<tbody id="docker_folders_view" title="Docker Folders">
+<tr><td>
+  <span class="tile-header">
+    <span class="tile-header-left">
+      <i class="icon-docker f32"></i>
+      <div class="section">
+        <h3 class="tile-header-main">Docker Folders</h3>
+      </div>
+    </span>
+    <span class="tile-header-right">
+      <span class="tile-header-right-controls">
+        <a href="/Docker/Folders" title="Go to Docker Folders"><i class="fa fa-fw fa-folder-open control"></i></a>
+      </span>
+    </span>
+  </span>
+</td></tr>
+<tr><td>
+  <iframe id="docker-folders-widget-frame" scrolling="no" style="display:block;width:100%;height:40px;border:none;"></iframe>
+  <script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js"></script>
+  <script>
+  (function() {
+    // This tile replaces Unraid's own Docker tile. Remove it now, while the page
+    // is still parsing: the dashboard's sortTables() and addProperties() run on
+    // ready, so the tile never gets a sort slot or a spacer row. loadlist() then
+    // appends to an empty jQuery set, which does nothing.
+    var legacy = document.getElementById('docker_view');
+    if (legacy && legacy.parentNode) legacy.parentNode.removeChild(legacy);
+
+    var frame = document.getElementById('docker-folders-widget-frame');
+
+    window.addEventListener('message', function(e) {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.source !== frame.contentWindow) return;
+      if (e.data.type === 'docker-folders-resize') {
+        frame.style.height = e.data.height + 'px';
+      }
+    });
+
+    // Set src only after the dashboard sorts its tiles. sortTables() moves each
+    // tile with appendTo, and moving an iframe reloads it, so an earlier src
+    // would load the widget twice. The dashboard's own ready handler registers
+    // later in the page than this one, so the timeout queues after it.
+    $(function() { setTimeout(function() {
+      frame.src = window.dockerFoldersFrameSrc('widget.html');
+    }, 0); });
+  })();
+  </script>
+</td></tr>
+</tbody>
+EOT;

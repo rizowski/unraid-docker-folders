@@ -300,3 +300,37 @@ describe('KebabMenu – fitting the viewport', () => {
     expect(dropdownOf(wrapper).classes()).toContain('top-full');
   });
 });
+
+describe('KebabMenu open-change', () => {
+  it('reports open with the menu bottom, then close with 0', async () => {
+    const wrapper = mountMenu(buttonItems);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    // jsdom lays nothing out, so the bottom is the edge gap alone.
+    expect(wrapper.emitted('open-change')![0]).toEqual([true, 8]);
+
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('open-change')![1]).toEqual([false, 0]);
+  });
+
+  // Taller than jsdom's 768px viewport, so a fitting menu would clamp itself.
+  async function openTallMenu(props: Record<string, unknown>) {
+    const wrapper = mountMenu(buttonItems, props);
+    const dropdownHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(2000);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    dropdownHeight.mockRestore();
+    return wrapper.find('.kebab-menu-item').element.parentElement!;
+  }
+
+  it('clamps a tall menu by default', async () => {
+    expect((await openTallMenu({})).getAttribute('style')).toContain('max-height');
+  });
+
+  it('leaves placement alone when fitViewport is false', async () => {
+    const dropdown = await openTallMenu({ fitViewport: false });
+    expect(dropdown.className).toContain('top-full');
+    expect(dropdown.getAttribute('style')).toBeNull();
+  });
+});
