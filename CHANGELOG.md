@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026.09.13
+- docs: add a contributing guide and require dev as the PR base
+- fix(folders): repair the #9 merge and add the sort menu
+- Add auto-sort options for folders and folder contents (#9)
 - chore: update docs
 - refactor: share the paused-start rule and tidy the issue fixes
 - feat(updates): add Force Update to the container menu (#11)
