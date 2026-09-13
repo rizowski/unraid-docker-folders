@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026.09.13
+- chore: update docs
+- refactor: share the paused-start rule and tidy the issue fixes
+- feat(updates): add Force Update to the container menu (#11)
+- feat(schedules): add a Resume action and let Start resume a paused container (#7)
+- fix(docker): resume a paused container from the card and the API (#7)
+- fix(schedules): evaluate and show schedule times in the server timezone (#7)
+- fix(folders): persist the manual order of unfoldered containers (#12)
+
 ## 2026.09.12
 - refactor: share the move-to-folder action and the select modal
 - feat(updates): name the containers in the update notification
