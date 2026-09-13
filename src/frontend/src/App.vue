@@ -283,6 +283,7 @@ import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
+import { effectiveSortMode } from '@/utils/sortMode';
 import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
@@ -520,7 +521,8 @@ function initializeDragAndDrop() {
     );
   }
 
-  // Make each folder's container list sortable. Folders in an auto-sort mode
+  // Make each folder's container list sortable. Folders whose effective mode
+  // (own mode, or the toolbar mode when the folder is on manual) is automatic
   // get `sort: false`: containers can still be dragged INTO them (onAdd), but
   // not reordered within, since the computed order would snap them back.
   // The watcher on folderStore.folders re-runs this when a sort_mode changes.
@@ -530,7 +532,7 @@ function initializeDragAndDrop() {
     sortableInstances.push(
       new Sortable(el as HTMLElement, {
         group: 'containers',
-        sort: folderStore.getFolderById(folderId)?.sort_mode === 'manual',
+        sort: effectiveSortMode(folderStore.getFolderById(folderId)?.sort_mode ?? 'manual', settingsStore.sortMode) === 'manual',
         handle: '.drag-handle',
         animation: 150,
         onAdd: async (evt) => {

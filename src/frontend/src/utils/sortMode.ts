@@ -30,6 +30,16 @@ export interface SortableFields {
 }
 
 /**
+ * The mode a folder's contents actually render in. A folder left on `manual`
+ * follows the toolbar (global) sort; any other folder mode is an explicit
+ * override. So picking "Status" in the toolbar also orders every folder that
+ * the user did not set to its own mode.
+ */
+export function effectiveSortMode(folderMode: SortMode, globalMode: SortMode): SortMode {
+  return folderMode !== 'manual' ? folderMode : globalMode;
+}
+
+/**
  * Sorts a copy of `items` according to `mode`. `getFields` extracts the
  * comparable fields from each item so this works for both Folder and
  * ContainerAssociation-resolved-to-Container inputs without coupling

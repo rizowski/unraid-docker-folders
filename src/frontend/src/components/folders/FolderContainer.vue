@@ -63,7 +63,7 @@ import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
 import { useSettingsStore } from '@/stores/settings';
 import type { Folder } from '@/types/folder';
-import { sortByMode } from '@/utils/sortMode';
+import { effectiveSortMode, sortByMode } from '@/utils/sortMode';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import FolderHeader from './FolderHeader.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
@@ -150,7 +150,7 @@ const folderContainers = computed(() => {
       return isShownWhenHidingStopped(container);
     });
   }
-  return sortByMode(list, props.folder.sort_mode, (assoc) => {
+  return sortByMode(list, effectiveSortMode(props.folder.sort_mode, settingsStore.sortMode), (assoc) => {
     const container = getContainer(assoc.container_name);
     return {
       position: assoc.position,
