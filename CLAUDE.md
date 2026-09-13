@@ -193,6 +193,9 @@ body is an iframe of `assets/widget.html`, a second Vite entry
 Start/Stop/Edit/Logs kebab menu per container. Rules for this file:
 - The tile string is a nowdoc (`<<<'EOT'`), because a heredoc would interpolate
   `$` in the inline JavaScript.
+- The header needs `Markdown="false"`, and the PHP block must end with `?>`.
+  Unraid runs page text through Markdown by default, and Markdown escapes an
+  unclosed `<?php` block, so the PHP source shows on the dashboard as text.
 - The `<tbody title=...>` is required. The dashboard md5-hashes it to key the
   saved tile position and collapse state, so renaming it resets both.
 - It removes Unraid's own `#docker_view` tile during parsing, before the

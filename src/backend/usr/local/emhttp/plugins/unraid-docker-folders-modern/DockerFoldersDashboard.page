@@ -1,4 +1,5 @@
 Menu="Dashboard:0"
+Markdown="false"
 Cond="version_compare(parse_ini_file('/etc/unraid-version')['version'],'6.11.9','>') && is_file('/var/run/dockerd.pid')"
 ---
 <?php
@@ -68,3 +69,4 @@ $mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
 </td></tr>
 </tbody>
 EOT;
+?>
