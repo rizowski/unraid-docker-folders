@@ -112,6 +112,7 @@
 <script setup lang="ts">
 import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
+import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
@@ -126,6 +127,7 @@ import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import IconAutostart from '@/components/icons/IconAutostart.vue';
 import InputModal from '@/components/InputModal.vue';
 import type { Folder } from '@/types/folder';
+import { SORT_MODE_OPTIONS } from '@/types/folder';
 
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
@@ -285,8 +287,26 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
     );
   }
 
+  // Sort mode for this folder's own containers. Rendered as one row per
+  // option (KebabMenu has no native radio/select item type) with the active
+  // choice shown via a checkmark icon (not a text glyph — DESIGN.md requires
+  // inline stroke SVG icons only, no emoji/text-as-icon), plus a bold label.
+  const CHECK_ICON = 'M20 6L9 17l-5-5';
+  const SORT_ICON = 'M3 6h13|M3 12h9|M3 18h6|M17 4v16|M13 8l4-4 4 4';
+  items.push({ divider: true });
+  for (const opt of SORT_MODE_OPTIONS) {
+    const active = props.folder.sort_mode === opt.value;
+    items.push({
+      label: opt.label,
+      icon: active ? CHECK_ICON : SORT_ICON,
+      action: `sort:${opt.value}`,
+      class: active ? 'text-primary font-semibold' : '',
+    });
+  }
+
   // Folder options — metadata only
   items.push(
+    { divider: true },
     { label: 'Folder Options', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'edit' },
     { label: 'Delete Folder', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'delete', class: 'hover:text-error' },
   );
@@ -298,6 +318,10 @@ async function handleMenuSelect(action: string) {
   if (action === 'edit') emit('edit');
   else if (action === 'delete') emit('delete');
   else if (action === 'update-folder') emit('update-folder');
+  else if (action.startsWith('sort:')) {
+    const mode = action.slice('sort:'.length) as Folder['sort_mode'];
+    await folderStore.updateFolder(props.folder.id, { sort_mode: mode });
+  }
   else if (action === 'check-updates') {
     if (!folderUpdateCheckRunning.value) {
       await updatesStore.checkImagesForUpdates(folderImages.value);
@@ -340,6 +364,7 @@ async function handleFolderDelayConfirm(value: string) {
 }
 
 const dockerStore = useDockerStore();
+const folderStore = useFolderStore();
 const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
 

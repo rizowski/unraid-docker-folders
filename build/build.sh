@@ -126,7 +126,7 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "Running Vite build..."
-yarn build
+APP_VERSION="$VERSION" yarn build
 
 if [ ! -d "../backend/usr/local/emhttp/plugins/${PLUGIN_NAME}/assets" ]; then
     echo -e "${RED}✗${NC} Frontend build failed - assets directory not found"

@@ -1,0 +1,24 @@
+diff --git a/src/frontend/src/components/folders/FolderHeader.vue b/src/frontend/src/components/folders/FolderHeader.vue
+index 5eaa521..0f23f08 100644
+--- a/src/frontend/src/components/folders/FolderHeader.vue
++++ b/src/frontend/src/components/folders/FolderHeader.vue
+@@ -289,13 +289,16 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
+ 
+   // Sort mode for this folder's own containers. Rendered as one row per
+   // option (KebabMenu has no native radio/select item type) with the active
+-  // choice checked off, so the label doubles as the current-state readout.
++  // choice shown via a checkmark icon (not a text glyph — DESIGN.md requires
++  // inline stroke SVG icons only, no emoji/text-as-icon), plus a bold label.
++  const CHECK_ICON = 'M20 6L9 17l-5-5';
++  const SORT_ICON = 'M3 6h13|M3 12h9|M3 18h6|M17 4v16|M13 8l4-4 4 4';
+   items.push({ divider: true });
+   for (const opt of SORT_MODE_OPTIONS) {
+     const active = props.folder.sort_mode === opt.value;
+     items.push({
+-      label: (active ? '✓ ' : '') + opt.label,
+-      icon: 'M3 6h13|M3 12h9|M3 18h6|M17 4v16|M13 8l4-4 4 4',
++      label: opt.label,
++      icon: active ? CHECK_ICON : SORT_ICON,
+       action: `sort:${opt.value}`,
+       class: active ? 'text-primary font-semibold' : '',
+     });
