@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import FolderContainer from '../FolderContainer.vue';
@@ -227,5 +227,42 @@ describe('FolderContainer concurrent action loading', () => {
     expect(names).not.toContain('exited-one');
 
     localStorage.removeItem('docker-folders-hide-stopped-1');
+  });
+});
+
+describe('FolderContainer hidden-stopped count', () => {
+  let pinia: ReturnType<typeof createPinia>;
+
+  beforeEach(() => {
+    pinia = createPinia();
+    setActivePinia(pinia);
+    localStorage.setItem('docker-folders-hide-stopped-1', '1');
+  });
+
+  afterEach(() => {
+    localStorage.removeItem('docker-folders-hide-stopped-1');
+  });
+
+  function hiddenCountFor(containerStates: Record<string, string>, memberNames: string[]): number {
+    const dockerStore = useDockerStore();
+    dockerStore.containers = Object.entries(containerStates).map(([name, state], i) =>
+      makeContainer({ id: `c${i}`, name, state })
+    );
+    const folder = makeFolder({
+      containers: memberNames.map((name, i) => ({ id: i + 1, folder_id: 1, container_name: name, container_id: `x${i}`, position: i })),
+    });
+    const wrapper = mount(FolderContainer, {
+      props: { folder },
+      global: { plugins: [pinia], stubs: { Teleport: true } },
+    });
+    return wrapper.findComponent({ name: 'FolderHeader' }).props('hiddenCount');
+  }
+
+  it('does not count a member whose container was removed from Docker', () => {
+    expect(hiddenCountFor({ web: 'running', db: 'running' }, ['web', 'db', 'removed'])).toBe(0);
+  });
+
+  it('counts a stopped container that still exists', () => {
+    expect(hiddenCountFor({ web: 'running', db: 'exited' }, ['web', 'db', 'removed'])).toBe(1);
   });
 });
