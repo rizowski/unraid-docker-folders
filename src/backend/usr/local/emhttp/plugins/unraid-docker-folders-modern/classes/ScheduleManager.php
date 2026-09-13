@@ -382,6 +382,38 @@ class ScheduleManager
     return $this->executeStackAction($schedule['target_id'], $schedule['action']);
   }
 
+  /**
+   * Maps a schedule action + current container state to the DockerClient
+   * method that carries it out. Public static so it is unit-testable without
+   * constructing ScheduleManager, which requires a live Database::getInstance().
+   *
+   * 'start' resumes a paused container instead of asking Docker to start an
+   * already-running one (which is a no-op start would otherwise attempt).
+   * 'resume' always unpauses, regardless of state — see executeContainerAction
+   * for the no-op-when-not-paused special case.
+   *
+   * Returns the pre-existing DockerClient::unpauseContainer method name for
+   * both 'start'-while-paused and 'resume' — that method itself is not
+   * renamed, only the action identifiers that select it.
+   */
+  public static function resolveContainerMethod($action, $state)
+  {
+    switch ($action) {
+      case 'start':
+        return $state === 'paused' ? 'unpauseContainer' : 'startContainer';
+      case 'resume':
+        return 'unpauseContainer';
+      case 'stop':
+        return 'stopContainer';
+      case 'pause':
+        return 'pauseContainer';
+      case 'restart':
+        return 'restartContainer';
+      default:
+        return null;
+    }
+  }
+
   private function executeContainerAction($containerName, $action)
   {
     $docker = new DockerClient();
@@ -399,25 +431,22 @@ class ScheduleManager
       return ['success' => false, 'message' => "Container '{$containerName}' not found"];
     }
 
-    $id = $container['id'];
-    switch ($action) {
-      case 'start':
-        $ok = $docker->startContainer($id);
-        break;
-      case 'stop':
-        $ok = $docker->stopContainer($id);
-        break;
-      case 'pause':
-        $ok = $docker->pauseContainer($id);
-        break;
-      case 'restart':
-        $ok = $docker->restartContainer($id);
-        break;
-      default:
-        return ['success' => false, 'message' => "Unknown action: {$action}"];
+    $state = $container['state'] ?? '';
+    $method = self::resolveContainerMethod($action, $state);
+    if ($method === null) {
+      return ['success' => false, 'message' => "Unknown action: {$action}"];
     }
 
-    $msg = $ok ? ucfirst($action) . " succeeded for {$containerName}" : ucfirst($action) . " failed for {$containerName}: " . $docker->getLastError();
+    // A resume schedule firing against an already-running container is not an
+    // error; there's simply nothing to do.
+    if ($action === 'resume' && $state !== 'paused') {
+      return ['success' => true, 'message' => "{$containerName} is not paused; nothing to do"];
+    }
+
+    $id = $container['id'];
+    $ok = $docker->$method($id);
+    $verb = $method === 'unpauseContainer' ? 'Resume' : ucfirst($action);
+    $msg = $ok ? "{$verb} succeeded for {$containerName}" : "{$verb} failed for {$containerName}: " . $docker->getLastError();
     return ['success' => $ok, 'message' => $msg];
   }
 
@@ -435,6 +464,8 @@ class ScheduleManager
         break;
       case 'pause':
         return ['success' => false, 'message' => 'Pause is not supported for compose stacks'];
+      case 'resume':
+        return ['success' => false, 'message' => 'Resume is not supported for compose stacks'];
       case 'restart':
         $result = $compose->stackRestart($projectName);
         break;

@@ -178,7 +178,7 @@ function handlePost()
     errorResponse('Invalid target_type', 400);
   }
 
-  $validActions = ['start', 'stop', 'pause', 'restart', 'backup'];
+  $validActions = ['start', 'stop', 'pause', 'resume', 'restart', 'backup'];
   if (!in_array($data['action'], $validActions, true)) {
     errorResponse('Invalid action', 400);
   }

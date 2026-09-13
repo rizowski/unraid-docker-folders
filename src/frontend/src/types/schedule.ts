@@ -1,6 +1,10 @@
-export type ScheduleAction = 'start' | 'stop' | 'pause' | 'restart' | 'backup';
+export type ScheduleAction = 'start' | 'stop' | 'pause' | 'resume' | 'restart' | 'backup';
 export type TargetType = 'container' | 'stack';
 export type RunStatus = 'success' | 'error' | 'skipped';
+
+export const SCHEDULE_ACTION_LABELS: Record<ScheduleAction, string> = {
+  start: 'Start', stop: 'Stop', pause: 'Pause', resume: 'Resume', restart: 'Restart', backup: 'Backup',
+};
 
 export interface BackupServiceConfig {
   service: string;

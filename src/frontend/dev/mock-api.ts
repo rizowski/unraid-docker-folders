@@ -233,6 +233,17 @@ const containers = [
     networkSettings: {},
     labels: {},
   },
+  // Paused: exercises the Resume action and the warning halo.
+  {
+    id: 'stu901vwx234', name: 'transmission', image: 'linuxserver/transmission:latest', state: 'paused',
+    status: 'Up 2 days (Paused)', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:9091]/',
+    created: Date.now() / 1000 - 172800,
+    ports: [{ IP: '0.0.0.0', PrivatePort: 9091, PublicPort: 9091, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 9091, containerPort: 9091, type: 'tcp' }],
+    mounts: [],
+    networkSettings: { bridge: { IPAddress: '172.17.0.14' } },
+    labels: {},
+  },
 ];
 
 const folders: any[] = [
@@ -452,6 +463,10 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
 
     switch (action) {
       case 'start':
+        container.state = 'running';
+        container.status = 'Up 1 second';
+        break;
+      case 'resume':
         container.state = 'running';
         container.status = 'Up 1 second';
         break;

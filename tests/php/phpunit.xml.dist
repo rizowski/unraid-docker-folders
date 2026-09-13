@@ -29,5 +29,8 @@
     <testsuite name="ScheduleManager">
       <file>ScheduleManagerTest.php</file>
     </testsuite>
+    <testsuite name="ScheduleAction">
+      <file>ScheduleActionTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>
