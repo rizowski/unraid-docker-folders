@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.13
+- refactor(dashboard): simplify the widget settings code
 - feat(dashboard): add a settings panel to the Docker Folders tile
 - fix(dashboard): run the tile page as PHP instead of showing its source
 - feat(dashboard): add a Docker Folders tile to the Unraid dashboard
