@@ -23,7 +23,6 @@
           @update:model-value="settingsStore.setSortMode"
           @update:sort-folders="settingsStore.setSortFolders"
         />
-        <span class="text-xs sm:text-sm text-text-secondary truncate">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
       </div>
       <!-- Its own header child rather than part of the button cluster so
            `flex-1` can eat the whole gap between the two groups. `.form-input`
@@ -31,19 +30,25 @@
            `w-full`/`border`/`py-*` on a bare <input>, so the old `w-52` was
            already dead and the field had no box at all. -->
       <div class="relative order-last w-full min-w-0 sm:order-none sm:flex-1">
+        <!-- Inline padding, not `.has-clear` or a `pr-*` utility: the reset owns
+             input padding (DESIGN.md §11), and the reserved room has to track
+             the width of the overlay, which holds the counts and the clear ×. -->
         <input
           v-model="dockerStore.searchQuery"
           type="text"
           placeholder="Search containers..."
           class="form-input subtle"
-          :class="{ 'has-clear': dockerStore.searchQuery }"
+          :style="{ paddingRight: `${searchOverlayWidth + 16}px` }"
         />
-        <button
-          v-if="dockerStore.searchQuery"
-          @click="dockerStore.searchQuery = ''"
-          class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
-          title="Clear search"
-        >&times;</button>
+        <div ref="searchOverlayEl" class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <span class="text-xs text-text-secondary whitespace-nowrap pointer-events-none">{{ dockerStore.containerCount }} containers, {{ folderStore.folderCount }} folders</span>
+          <button
+            v-if="dockerStore.searchQuery"
+            @click="dockerStore.searchQuery = ''"
+            class="text-text-secondary hover:text-text cursor-pointer bg-transparent border-none p-0 leading-none text-base"
+            title="Clear search"
+          >&times;</button>
+        </div>
       </div>
       <div class="flex flex-wrap gap-2 sm:gap-3 items-center">
         <div class="view-mode-toggle">
@@ -430,6 +435,19 @@ const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
+
+// Width of the counts and clear button drawn over the right end of the search field.
+const searchOverlayEl = ref<HTMLElement | null>(null);
+const searchOverlayWidth = ref(0);
+let searchOverlayObserver: ResizeObserver | null = null;
+onMounted(() => {
+  if (!searchOverlayEl.value || typeof ResizeObserver === 'undefined') return;
+  searchOverlayObserver = new ResizeObserver(() => {
+    searchOverlayWidth.value = searchOverlayEl.value?.offsetWidth ?? 0;
+  });
+  searchOverlayObserver.observe(searchOverlayEl.value);
+});
+onUnmounted(() => searchOverlayObserver?.disconnect());
 
 function containerMatchesSearch(name: string, image?: string): boolean {
   const q = dockerStore.searchQuery.trim().toLowerCase();
