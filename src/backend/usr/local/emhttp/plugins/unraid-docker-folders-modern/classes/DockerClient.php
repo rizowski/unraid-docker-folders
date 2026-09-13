@@ -198,6 +198,13 @@ class DockerClient
    */
   public function startContainer($id)
   {
+    // Docker answers a start on a paused container with 304 and leaves it
+    // paused, so a paused container is resumed instead. Every caller (the
+    // API, schedules) gets that for free.
+    $info = $this->inspectContainerRaw($id);
+    if (!empty($info['State']['Paused'])) {
+      return $this->unpauseContainer($id);
+    }
     $response = $this->request('POST', "/containers/{$id}/start");
     return $response !== false;
   }
@@ -436,6 +443,25 @@ class DockerClient
   {
     $response = $this->request('GET', "/images/{$imageId}/json");
     return $response ?: null;
+  }
+
+  /**
+   * Get a network's driver (bridge, macvlan, ipvlan, host, null).
+   *
+   * Unraid publishes ports with -p only on bridge networks; on the others it
+   * converts them to TCP_PORT_n variables instead. Adoption needs the driver to
+   * describe that accurately before the user commits.
+   *
+   * @param string $name Network name, e.g. 'bridge' or 'br0'
+   * @return string Driver name, or '' when it cannot be determined
+   */
+  public function getNetworkDriver($name)
+  {
+    if ($name === '' || strpos($name, 'container:') === 0) {
+      return '';
+    }
+    $response = $this->request('GET', '/networks/' . urlencode($name));
+    return is_array($response) ? (string)($response['Driver'] ?? '') : '';
   }
 
   /**

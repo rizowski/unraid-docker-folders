@@ -41,6 +41,14 @@ export interface ConflictInfo {
   conflicts: ConflictDetail[];
 }
 
+export interface PullRequest {
+  image: string;
+  name: string;
+  managed: string | null;
+  id: string;
+  force?: boolean;
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -154,6 +162,8 @@ export const useDockerStore = defineStore('docker', () => {
   });
 
   const unfolderedContainers = computed(() => {
+    // Membership is keyed on name (stable across recreations); the folder
+    // store owns the one map of it.
     const folderStore = useFolderStore();
     const settingsStore = useSettingsStore();
     const assignedContainerNames = new Set<string>();
@@ -163,7 +173,16 @@ export const useDockerStore = defineStore('docker', () => {
       folder.containers.forEach((assoc) => {
         assignedContainerNames.add(assoc.container_name);
       });
+    const assigned = folderStore.folderByContainerName;
+    const unfoldered = sortedContainers.value.filter((c) => !assigned.has(c.name));
+
+    // Saved order first; unplaced containers keep the state-first default
+    // after it. A folder member is never listed even if its name is ranked.
+    const rank = new Map<string, number>();
+    folderStore.unfolderedOrder.forEach((name, i) => {
+      if (!rank.has(name)) rank.set(name, i);
     });
+    if (rank.size === 0) return unfoldered;
 
     const unfoldered = containers.value.filter((c) => !assignedContainerNames.has(c.name));
 
@@ -179,6 +198,11 @@ export const useDockerStore = defineStore('docker', () => {
       state: c.state,
       created: c.created,
     }));
+    const ranked = unfoldered
+      .filter((c) => rank.has(c.name))
+      .sort((a, b) => rank.get(a.name)! - rank.get(b.name)!);
+    const unranked = unfoldered.filter((c) => !rank.has(c.name));
+    return [...ranked, ...unranked];
   });
 
   // Actions
@@ -229,6 +253,26 @@ export const useDockerStore = defineStore('docker', () => {
       return true;
     } catch (e) {
       console.error('Error starting container:', e);
+      return false;
+    }
+  }
+
+  async function resumeContainer(id: string): Promise<boolean> {
+    try {
+      const response = await apiFetch(`${API_BASE}/containers.php?action=resume&id=${id}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to resume container`);
+      }
+
+      // Refresh container list
+      await fetchContainers();
+
+      return true;
+    } catch (e) {
+      console.error('Error resuming container:', e);
       return false;
     }
   }
@@ -338,6 +382,7 @@ export const useDockerStore = defineStore('docker', () => {
     // Actions
     fetchContainers,
     startContainer,
+    resumeContainer,
     stopContainer,
     restartContainer,
     removeContainer,

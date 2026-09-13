@@ -1,5 +1,6 @@
 import type { Container } from '@/stores/docker';
 import type { ImageUpdateStatus } from '@/stores/updates';
+import type { Folder } from '@/types/folder';
 
 /**
  * A minimal running container, with every field of the `Container` type
@@ -84,4 +85,31 @@ export function makeReleaseStatus(
     },
     ...overrides,
   });
+}
+
+/**
+ * A folder holding the named containers, each association positioned in the
+ * order given. Shared for the same reason as `makeContainer`.
+ */
+export function makeFolder(containerNames: string[] = [], overrides: Partial<Folder> = {}): Folder {
+  const id = overrides.id ?? 1;
+  return {
+    id,
+    name: 'Media',
+    icon: null,
+    color: '#ff8c2f',
+    position: 0,
+    collapsed: false,
+    compose_project: null,
+    created_at: 0,
+    updated_at: 0,
+    containers: containerNames.map((n, i) => ({
+      id: i + 1,
+      container_id: `id-${n}`,
+      container_name: n,
+      folder_id: id,
+      position: i,
+    })),
+    ...overrides,
+  };
 }

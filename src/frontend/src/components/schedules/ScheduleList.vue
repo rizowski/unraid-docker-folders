@@ -51,7 +51,7 @@
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
               <span class="text-sm font-medium text-text truncate">{{ schedule.name }}</span>
-              <span class="text-xs px-1.5 py-0.5 rounded bg-bg-card text-text-secondary shrink-0">{{ schedule.action }}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-bg-card text-text-secondary shrink-0">{{ SCHEDULE_ACTION_LABELS[schedule.action] }}</span>
             </div>
             <div class="text-xs text-text-secondary mt-0.5">
               <span v-if="schedule.next_run_at">Next: {{ formatTime(schedule.next_run_at) }}</span>
@@ -130,8 +130,10 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 import ScheduleForm from './ScheduleForm.vue';
 import ScheduleHistoryModal from './ScheduleHistoryModal.vue';
 import { useScheduleStore } from '@/stores/schedules';
-import { formatTimestamp, scheduleStatusClass } from '@/utils/format';
+import { useSettingsStore } from '@/stores/settings';
+import { scheduleStatusClass } from '@/utils/format';
 import type { TargetType } from '@/types/schedule';
+import { SCHEDULE_ACTION_LABELS } from '@/types/schedule';
 
 interface Props {
   isOpen: boolean;
@@ -143,6 +145,7 @@ const props = defineProps<Props>();
 defineEmits<{ close: [] }>();
 
 const scheduleStore = useScheduleStore();
+const settingsStore = useSettingsStore();
 const loading = computed(() => scheduleStore.loading);
 
 const formOpen = ref(false);
@@ -154,7 +157,7 @@ const targetSchedules = computed(() =>
   scheduleStore.schedulesForTarget(props.targetType, props.targetId),
 );
 
-const formatTime = formatTimestamp;
+const formatTime = settingsStore.formatServerTime;
 const statusClass = scheduleStatusClass;
 
 // This modal stays mounted between openings, so drop any open form on close.

@@ -259,35 +259,24 @@ import ConfirmModal from '@/components/ConfirmModal.vue';
 import ScheduleModal from '@/components/schedules/ScheduleModal.vue';
 import ScheduleHistoryModal from '@/components/schedules/ScheduleHistoryModal.vue';
 
-const props = withDefaults(
-  defineProps<{
-    container: Container;
-    containerStats: ContainerStats | null;
-    showStats: boolean;
-    isRunning: boolean;
-    imageLink: string | null;
-    /**
-     * Inline logs. Fetching lives in the parent: during a collapse this
-     * component is mid-leave-transition and stops receiving prop updates, so it
-     * cannot be trusted to know when to stop polling.
-     *
-     * The four log props below are optional because grid view passes
-     * `show-logs="false"` and never has log state to give.
-     */
-    showLogs: boolean;
-    logLines?: string[];
-    /** Why the logs couldn't be read, if Docker told us. Empty when fine. */
-    logError?: string;
-    logsLoading?: boolean;
-    newLineCount?: number;
-  }>(),
-  {
-    logLines: () => [],
-    logError: '',
-    logsLoading: false,
-    newLineCount: 0,
-  },
-);
+const props = defineProps<{
+  container: Container;
+  containerStats: ContainerStats | null;
+  showStats: boolean;
+  isRunning: boolean;
+  imageLink: string | null;
+  /**
+   * Inline logs. Fetching lives in the parent: during a collapse this
+   * component is mid-leave-transition and stops receiving prop updates, so it
+   * cannot be trusted to know when to stop polling.
+   */
+  showLogs: boolean;
+  logLines: string[];
+  /** Why the logs couldn't be read, if Docker told us. Empty when fine. */
+  logError: string;
+  logsLoading: boolean;
+  newLineCount: number;
+}>();
 
 const emit = defineEmits<{ (e: 'refresh-logs'): void }>();
 

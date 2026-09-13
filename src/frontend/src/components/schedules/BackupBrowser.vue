@@ -64,7 +64,8 @@ import { ref, onMounted } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import { useScheduleStore } from '@/stores/schedules';
-import { formatTimestamp, formatBytes } from '@/utils/format';
+import { useSettingsStore } from '@/stores/settings';
+import { formatBytes } from '@/utils/format';
 import type { BackupEntry } from '@/types/schedule';
 
 interface Props {
@@ -77,11 +78,12 @@ const props = defineProps<Props>();
 defineEmits<{ close: [] }>();
 
 const scheduleStore = useScheduleStore();
+const settingsStore = useSettingsStore();
 const backups = ref<BackupEntry[]>([]);
 const loading = ref(true);
 const confirmDeletePath = ref('');
 
-const formatTime = formatTimestamp;
+const formatTime = settingsStore.formatServerTime;
 const formatSize = formatBytes;
 
 async function loadBackups() {

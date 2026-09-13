@@ -158,7 +158,7 @@ describe('FolderHeader', () => {
       const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
       expect(labels).toContain('Stack Up');
       expect(labels).toContain('Pull Latest Images');
-      expect(labels).toContain('Stack Details');
+      expect(labels).toContain('Edit Stack');
     });
 
     it('disables them until compose availability is known', async () => {
@@ -181,7 +181,7 @@ describe('FolderHeader', () => {
 
       const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
       expect(labels).not.toContain('Stack Up');
-      expect(labels).not.toContain('Stack Details');
+      expect(labels).not.toContain('Edit Stack');
     });
   });
 

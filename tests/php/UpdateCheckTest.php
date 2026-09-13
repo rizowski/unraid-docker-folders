@@ -762,4 +762,70 @@ final class UpdateCheckTest extends TestCase
             $this->assertStringContainsString('source_repo', $sql);
         }
     }
+
+    // --- Update notification -------------------------------------------
+
+    #[Test]
+    public function notificationNamesTheOneContainerForASingleImage(): void
+    {
+        $n = buildUpdateNotification(['nginx:latest'], ['nginx:latest' => ['web']]);
+
+        $this->assertSame('1 container update available', $n['subject']);
+        $this->assertSame('web', $n['description']);
+    }
+
+    #[Test]
+    public function notificationCountsContainersNotImagesAndSortsNames(): void
+    {
+        $n = buildUpdateNotification(
+            ['redis:7', 'nginx:latest'],
+            [
+                'nginx:latest' => ['web-b', 'Web-a', 'web-c'],
+                'redis:7' => ['cache'],
+                'postgres:16' => ['db'],
+            ]
+        );
+
+        $this->assertSame('4 container updates available', $n['subject']);
+        $this->assertSame('cache, Web-a, web-b, web-c', $n['description']);
+    }
+
+    #[Test]
+    public function notificationCapsTheNameListAndCountsTheRest(): void
+    {
+        $names = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $names[] = sprintf('svc-%02d', $i);
+        }
+        $n = buildUpdateNotification(['app:1'], ['app:1' => $names]);
+
+        $this->assertSame('12 container updates available', $n['subject']);
+        $this->assertSame(implode(', ', array_slice($names, 0, 10)) . ' and 2 more', $n['description']);
+    }
+
+    #[Test]
+    public function notificationIsNullWhenNoContainerUsesTheNewImages(): void
+    {
+        $this->assertNull(buildUpdateNotification(['ghost:1'], ['nginx:latest' => ['web']]));
+        $this->assertNull(buildUpdateNotification([], ['nginx:latest' => ['web']]));
+    }
+
+    #[Test]
+    public function checkResultMapsEachImageToItsContainerNames(): void
+    {
+        $a = $this->makeContainer('nginx:latest');
+        $a['name'] = 'zeta';
+        $b = $this->makeContainer('nginx:latest');
+        $b['name'] = 'alpha';
+        $c = $this->makeContainer('redis:7');
+        $c['name'] = 'cache';
+        $this->docker->containers = [$a, $b, $c];
+
+        $result = checkAllImageUpdates($this->docker, $this->db, $this->log());
+
+        $this->assertSame(
+            ['nginx:latest' => ['zeta', 'alpha'], 'redis:7' => ['cache']],
+            $result['containersByImage']
+        );
+    }
 }

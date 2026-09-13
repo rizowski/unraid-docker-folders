@@ -6,6 +6,7 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiFetch } from '@/utils/csrf';
 import type { SortMode } from '@/types/folder';
+import { formatTimestamp } from '@/utils/format';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
@@ -16,6 +17,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const replaceDockerSection = ref(false);
   const showFolderPorts = ref(true);
   const showInlineLogs = ref(false);
+  /** Offer to hand a CLI-created container over to Unraid's container manager. */
+  const enableAdopt = ref(true);
   const logRefreshInterval = ref(10);
   const enableUpdateChecks = ref(false);
   const updateCheckSchedule = ref('disabled');
@@ -26,6 +29,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const updateConcurrency = ref(3);
   const backupDestination = ref('/mnt/user/backups/docker-folders');
   const defaultRetentionCount = ref(7);
+  /** Read-only: the timezone the backend PHP process is actually running in. */
+  const serverTimezone = ref<string | null>(null);
   const loaded = ref(false);
 
   async function fetchSettings() {
@@ -54,6 +59,9 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('show_inline_logs' in settings) {
         showInlineLogs.value = settings.show_inline_logs === '1';
+      }
+      if ('enable_adopt' in settings) {
+        enableAdopt.value = settings.enable_adopt !== '0';
       }
       if ('log_refresh_interval' in settings) {
         const parsed = parseInt(settings.log_refresh_interval, 10);
@@ -84,6 +92,9 @@ export const useSettingsStore = defineStore('settings', () => {
       if ('default_retention_count' in settings) {
         const parsed = parseInt(settings.default_retention_count, 10);
         defaultRetentionCount.value = Number.isNaN(parsed) ? 7 : parsed;
+      }
+      if ('server_timezone' in settings) {
+        serverTimezone.value = settings.server_timezone || null;
       }
 
       loaded.value = true;
@@ -151,6 +162,19 @@ export const useSettingsStore = defineStore('settings', () => {
       await apiFetch(`${API_BASE}/settings.php`, {
         method: 'POST',
         body: JSON.stringify({ key: 'show_inline_logs', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setEnableAdopt(value: boolean) {
+    enableAdopt.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'enable_adopt', value: value ? '1' : '0' }),
       });
     } catch (e) {
       console.error('Error saving setting:', e);
@@ -288,6 +312,11 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  /** Render a unix timestamp in the server zone when it is known. */
+  function formatServerTime(unixSeconds: number): string {
+    return formatTimestamp(unixSeconds, serverTimezone.value);
+  }
+
   return {
     distinguishHealthy,
     sortMode,
@@ -295,6 +324,7 @@ export const useSettingsStore = defineStore('settings', () => {
     replaceDockerSection,
     showFolderPorts,
     showInlineLogs,
+    enableAdopt,
     logRefreshInterval,
     enableUpdateChecks,
     updateCheckSchedule,
@@ -304,6 +334,8 @@ export const useSettingsStore = defineStore('settings', () => {
     updateConcurrency,
     backupDestination,
     defaultRetentionCount,
+    serverTimezone,
+    formatServerTime,
     loaded,
     fetchSettings,
     setDistinguishHealthy,
@@ -311,6 +343,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setShowStats,
     setShowFolderPorts,
     setShowInlineLogs,
+    setEnableAdopt,
     setLogRefreshInterval,
     setEnableUpdateChecks,
     setUpdateCheckSchedule,

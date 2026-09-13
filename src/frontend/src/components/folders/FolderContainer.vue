@@ -19,6 +19,7 @@
             :action-in-progress="actionsInProgress.get(getContainer(assoc.container_name)?.id ?? '') ?? null"
             :view="view"
             @start="handleStart"
+            @resume="handleResume"
             @stop="handleStop"
             @restart="handleRestart"
             @remove="handleRemove"
@@ -56,7 +57,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useDockerStore } from '@/stores/docker';
+import { useDockerStore, type PullRequest } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useComposeStore } from '@/stores/compose';
 import { useStatsStore } from '@/stores/stats';
@@ -80,7 +81,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   edit: [folder: Folder];
   delete: [id: number];
-  pull: [data: { image: string; name: string; managed: string | null }];
+  pull: [data: PullRequest];
   'update-folder': [folder: Folder];
   'edit-compose': [project: string];
   'compose-up': [project: string];
@@ -99,6 +100,9 @@ const actionsInProgress = ref<Map<string, string>>(new Map());
 const storageKey = computed(() => `docker-folders-hide-stopped-${props.folder.id}`);
 const hideStopped = ref(safeLocalStorageGet(`docker-folders-hide-stopped-${props.folder.id}`) === '1');
 watch(hideStopped, (v) => safeLocalStorageSet(storageKey.value, v ? '1' : '0'));
+
+// "Hide stopped" keeps running and paused containers; both are alive.
+const isShownWhenHidingStopped = (c?: { state: string }) => c?.state === 'running' || c?.state === 'paused';
 
 const isSearching = computed(() => dockerStore.searchQuery.trim().length > 0);
 
@@ -140,7 +144,7 @@ const folderContainers = computed(() => {
   if (hideStopped.value) {
     list = list.filter((assoc) => {
       const container = getContainer(assoc.container_name);
-      return container?.state === 'running';
+      return isShownWhenHidingStopped(container);
     });
   }
   return sortByMode(list, props.folder.sort_mode, (assoc) => {
@@ -179,7 +183,7 @@ const hiddenCount = computed(() => {
   const all = props.folder.containers || [];
   return all.length - all.filter((assoc) => {
     const container = getContainer(assoc.container_name);
-    return container?.state === 'running';
+    return isShownWhenHidingStopped(container);
   }).length;
 });
 
@@ -244,6 +248,15 @@ async function handleStart(id: string) {
   actionsInProgress.value.set(id, 'start');
   try {
     await dockerStore.startContainer(id);
+  } finally {
+    actionsInProgress.value.delete(id);
+  }
+}
+
+async function handleResume(id: string) {
+  actionsInProgress.value.set(id, 'resume');
+  try {
+    await dockerStore.resumeContainer(id);
   } finally {
     actionsInProgress.value.delete(id);
   }

@@ -159,7 +159,7 @@
             }}</span>
           </div>
 
-          <div class="expand-grid" :class="{ 'expand-expanded': !unfolderedCollapsed }">
+          <div class="expand-grid" :class="{ 'expand-expanded': !unfolderedCollapsed, 'expand-settled': unfolderedSettled }">
             <div class="expand-inner">
               <div
                 class="container-list"
@@ -174,6 +174,7 @@
                   :view="viewMode"
 
                   @start="handleStart"
+                  @resume="handleResume"
                   @stop="handleStop"
                   @restart="handleRestart"
                   @remove="handleRemove"
@@ -229,6 +230,8 @@
       :image="pullingContainer?.image ?? ''"
       :container-name="pullingContainer?.name ?? ''"
       :managed="pullingContainer?.managed ?? null"
+      :container-id="pullingContainer?.id ?? ''"
+      :force="pullingContainer?.force ?? false"
       @close="pullingContainer = null"
       @complete="handlePullComplete"
     />
@@ -264,8 +267,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch, nextTick, provide, toRef } from 'vue';
-import { useDockerStore, type Container } from '@/stores/docker';
+import { ref, onMounted, onUnmounted, computed, watch, nextTick, provide, toRef } from 'vue';
+import { useDockerStore, type Container, type PullRequest } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
@@ -290,6 +293,7 @@ import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import type { Folder, FolderCreateData, FolderUpdateData } from '@/types/folder';
 import { SORT_MODE_OPTIONS } from '@/types/folder';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
+import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import Sortable from 'sortablejs';
 
 const dockerStore = useDockerStore();
@@ -301,7 +305,7 @@ const updatesStore = useUpdatesStore();
 const composeStore = useComposeStore();
 
 const actionsInProgress = ref<Map<string, string>>(new Map());
-const pullingContainer = ref<{ image: string; name: string; managed: string | null } | null>(null);
+const pullingContainer = ref<PullRequest | null>(null);
 const batchPullUnits = ref<UpdateUnit[]>([]);
 const showBatchConfirm = ref(false);
 const pendingUnits = ref<UpdateUnit[]>([]);
@@ -319,6 +323,27 @@ const unfolderedCollapsed = ref(safeLocalStorageGet('docker-folders-unfoldered-c
 watch(unfolderedCollapsed, (v) => safeLocalStorageSet('docker-folders-unfoldered-collapsed', v ? '1' : '0'));
 
 const dragLocked = ref(safeLocalStorageGet('docker-folders-drag-locked') === '1');
+// `.expand-inner` is overflow:hidden so the collapse transition can animate, and
+// that clips a kebab menu opening off the bottom of the section — visible as
+// soon as the last row is near the edge, e.g. when a search matches one
+// container. `.expand-settled` restores overflow:visible, but only once the
+// 200ms transition has finished; flipping it early changes the grid row's
+// minimum track size and breaks the animation. Mirrors FolderContainer.vue.
+const unfolderedSettled = ref(!unfolderedCollapsed.value);
+let unfolderedSettleTimer: ReturnType<typeof setTimeout> | undefined;
+watch(unfolderedCollapsed, (collapsed) => {
+  clearTimeout(unfolderedSettleTimer);
+  if (collapsed) {
+    unfolderedSettled.value = false;
+  } else {
+    unfolderedSettleTimer = setTimeout(() => {
+      unfolderedSettled.value = true;
+    }, 220);
+  }
+});
+onUnmounted(() => clearTimeout(unfolderedSettleTimer));
+
+const dragLocked = ref(localStorage.getItem('docker-folders-drag-locked') === '1');
 watch(dragLocked, (v) => {
   safeLocalStorageSet('docker-folders-drag-locked', v ? '1' : '0');
   nextTick(() => initializeDragAndDrop());
@@ -528,8 +553,7 @@ function initializeDragAndDrop() {
           const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 
           if (containerId) {
-            await folderStore.addContainerToFolder(folderId, containerId, containerName);
-            await folderStore.fetchFolders(true);
+            await folderStore.moveContainerToFolder(folderId, containerId, containerName);
           }
         },
         onUpdate: async () => {
@@ -558,9 +582,14 @@ function initializeDragAndDrop() {
           const containerName = dockerStore.getContainerById(containerId!)?.name || '';
 
           if (containerName) {
-            await folderStore.removeContainerFromFolder(containerName);
-            await folderStore.fetchFolders(true);
+            await folderStore.moveContainerToFolder(null, containerId ?? '', containerName);
           }
+        },
+        onUpdate: async () => {
+          const names = Array.from(unfolderedEl.children)
+            .map((child) => dockerStore.getContainerById((child as HTMLElement).dataset.containerId || '')?.name)
+            .filter((n): n is string => !!n);
+          await folderStore.reorderUnfoldered(names);
         },
       })
     );
@@ -577,6 +606,15 @@ async function handleStart(id: string) {
   actionsInProgress.value.set(id, 'start');
   try {
     await dockerStore.startContainer(id);
+  } finally {
+    actionsInProgress.value.delete(id);
+  }
+}
+
+async function handleResume(id: string) {
+  actionsInProgress.value.set(id, 'resume');
+  try {
+    await dockerStore.resumeContainer(id);
   } finally {
     actionsInProgress.value.delete(id);
   }
@@ -609,7 +647,14 @@ async function handleRemove(id: string, removeImage = false) {
   }
 }
 
-function handlePull(data: { image: string; name: string; managed: string | null }) {
+function handlePull(data: PullRequest) {
+  // A forced update targets exactly the chosen container by id, so it must
+  // never fall into the sibling-batch-confirm path below (which recreates
+  // every container sharing the image).
+  if (data.force) {
+    pullingContainer.value = data;
+    return;
+  }
   // Pulling an image recreates *every* container using it. When this container
   // is the only one, go straight to the pull; when it has siblings, show them
   // first so nothing gets recreated invisibly.
@@ -764,7 +809,10 @@ function closeModal() {
   editingFolder.value = null;
 }
 
-async function saveFolder(data: FolderCreateData | FolderUpdateData, containerIds: string[] = []) {
+async function saveFolder(
+  data: FolderCreateData | FolderUpdateData,
+  containers: FolderContainerSelection[] | null = null,
+) {
   let folderId: number | null = null;
 
   if (editingFolder.value) {
@@ -775,12 +823,9 @@ async function saveFolder(data: FolderCreateData | FolderUpdateData, containerId
     folderId = folder?.id ?? null;
   }
 
-  if (folderId != null && containerIds.length > 0) {
-    for (const cid of containerIds) {
-      const name = dockerStore.getContainerById(cid)?.name || '';
-      await folderStore.addContainerToFolder(folderId, cid, name);
-    }
-    await folderStore.fetchFolders(true);
+  // `null` means the modal never showed the picker — leave associations alone.
+  if (folderId != null && containers) {
+    await folderStore.setFolderContainers(folderId, containers);
   }
 
   closeModal();

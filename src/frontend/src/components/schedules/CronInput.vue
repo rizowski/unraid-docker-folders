@@ -51,12 +51,13 @@
       <span class="text-xs text-text-secondary">Format: minute hour day-of-month month day-of-week</span>
     </div>
 
-    <p class="text-xs text-text-secondary">{{ description }} (server timezone)</p>
+    <p class="text-xs text-text-secondary">{{ description }} ({{ settingsStore.serverTimezone ?? 'server timezone' }})</p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, useId } from 'vue';
+import { useSettingsStore } from '@/stores/settings';
 import { CRON_PRESETS, type CronPreset } from '@/types/schedule';
 
 const props = defineProps<{
@@ -66,6 +67,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string];
 }>();
+
+const settingsStore = useSettingsStore();
 
 // Unique per instance: the panel modal and the inline list form can both be
 // mounted, and duplicate ids would bind <label for> to the wrong field.

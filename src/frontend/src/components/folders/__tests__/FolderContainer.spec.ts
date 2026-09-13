@@ -158,4 +158,74 @@ describe('FolderContainer concurrent action loading', () => {
 
     expect(wrapper.findAll('.animate-spin').length).toBe(0);
   });
+
+  it('resuming a paused container calls dockerStore.resumeContainer and clears the spinner on completion', async () => {
+    const containers = [makeContainer({ id: 'c1', name: 'container-1', state: 'paused', status: 'Up 1 hour (Paused)' })];
+
+    const dockerStore = useDockerStore();
+    dockerStore.containers = containers;
+
+    const folder = makeFolder({
+      containers: [
+        { id: 1, folder_id: 1, container_name: 'container-1', container_id: 'c1', position: 0 },
+      ],
+    });
+
+    let resolveResume: () => void;
+    dockerStore.resumeContainer = (_id: string) =>
+      new Promise<boolean>((resolve) => {
+        resolveResume = () => resolve(true);
+      });
+
+    const wrapper = mount(FolderContainer, {
+      props: { folder },
+      global: { plugins: [pinia], stubs: { Teleport: true } },
+    });
+
+    const card = wrapper.findComponent({ name: 'ContainerCard' });
+    card.vm.$emit('resume', 'c1');
+    await wrapper.vm.$nextTick();
+
+    expect(card.text()).toContain('Resuming...');
+    expect(wrapper.find('.animate-spin').exists()).toBe(true);
+
+    resolveResume!();
+    await new Promise((r) => setTimeout(r, 10));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('.animate-spin').exists()).toBe(false);
+  });
+
+  it('keeps a paused container visible when "hide stopped" is on', () => {
+    const containers = [
+      makeContainer({ id: 'c1', name: 'running-one', state: 'running' }),
+      makeContainer({ id: 'c2', name: 'paused-one', state: 'paused' }),
+      makeContainer({ id: 'c3', name: 'exited-one', state: 'exited' }),
+    ];
+    const dockerStore = useDockerStore();
+    dockerStore.containers = containers;
+
+    localStorage.setItem('docker-folders-hide-stopped-1', '1');
+
+    const folder = makeFolder({
+      containers: [
+        { id: 1, folder_id: 1, container_name: 'running-one', container_id: 'c1', position: 0 },
+        { id: 2, folder_id: 1, container_name: 'paused-one', container_id: 'c2', position: 1 },
+        { id: 3, folder_id: 1, container_name: 'exited-one', container_id: 'c3', position: 2 },
+      ],
+    });
+
+    const wrapper = mount(FolderContainer, {
+      props: { folder },
+      global: { plugins: [pinia], stubs: { Teleport: true } },
+    });
+
+    const cards = wrapper.findAllComponents({ name: 'ContainerCard' });
+    const names = cards.map((c) => c.props('container').name);
+    expect(names).toContain('running-one');
+    expect(names).toContain('paused-one');
+    expect(names).not.toContain('exited-one');
+
+    localStorage.removeItem('docker-folders-hide-stopped-1');
+  });
 });

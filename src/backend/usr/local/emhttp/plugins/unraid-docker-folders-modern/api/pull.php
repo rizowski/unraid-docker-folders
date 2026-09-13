@@ -66,6 +66,15 @@ if (is_string($rawContainers) && $rawContainers !== '') {
   $onlyContainerIds = array_flip($ids);
 }
 
+// Force update: recreate the listed container(s) even when no update was
+// detected. Requires containers= so a force can never widen to every
+// container sharing the image.
+$forceRecreate = (($_POST['recreate'] ?? '') === '1');
+if ($forceRecreate && $onlyContainerIds === null) {
+  header('Content-Type: application/json');
+  errorResponse('recreate=1 requires containers=', 400);
+}
+
 // Allow unlimited execution time — image pulls can take minutes
 set_time_limit(0);
 ignore_user_abort(true);
@@ -156,7 +165,7 @@ try {
 
     logUpdate("PULL post_pull_action={$postPullAction} for {$image}");
 
-    if ($postPullAction === 'pull_and_auto_recreate') {
+    if ($postPullAction === 'pull_and_auto_recreate' || $forceRecreate) {
       try {
         $containers = $dockerClient->listContainers(true);
         $matchingContainers = [];

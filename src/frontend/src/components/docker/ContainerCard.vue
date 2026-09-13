@@ -79,12 +79,8 @@
       <div v-if="expanded" class="overflow-hidden">
         <ContainerDetails
           class="block px-4 sm:px-6 pb-2 pt-3 border-t border-border"
-          :container="container"
-          :container-stats="containerStats"
-          :show-stats="showStats"
-          :is-running="isRunning"
-          :image-link="imageLink"
-          :show-logs="false"
+          v-bind="detailsProps"
+          @refresh-logs="fetchLogs"
         />
       </div>
     </Transition>
@@ -100,15 +96,18 @@
         </div>
       </template>
       <template v-else>
-      <button v-if="container.state === 'running'" @click="confirmAction = 'stop'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="20" /></button>
+      <button v-if="isPaused" @click="emit('resume', container.id)" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Resume"><IconPlay :size="20" /></button>
+      <button v-else-if="isRunning" @click="confirmAction = 'stop'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="20" /></button>
       <button v-else @click="emit('start', container.id)" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Start"><IconPlay :size="20" /></button>
       <button v-if="isRunning" @click="confirmAction = 'restart'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="20" /></button>
-      <button v-if="!isRunning" @click="confirmAction = 'remove'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="20" /></button>
-      <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="20" /></button>
+      <button v-if="isStopped" @click="confirmAction = 'remove'" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="20" /></button>
+      <button v-if="hasUpdate" @click="emit('pull', pullPayload())" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="20" /></button>
+      <!-- Adopt: only for a container Unraid does not manage yet -->
+      <button v-if="canAdopt" @click.stop="openAdopt" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text" title="Adopt into Unraid — let Unraid manage this container"><IconAdopt :size="20" /></button>
       </template>
       <!-- Autostart toggle -->
-      <button v-if="container.managed === 'dockerman'" @click.stop="handleToggleAutostart" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="20" /></button>
-      <span v-else class="flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="Autostart not available (not managed by Unraid Docker Manager)"><IconAutostart :size="20" /></span>
+      <button v-if="isManaged" @click.stop="handleToggleAutostart" class="flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="20" /></button>
+      <span v-else class="flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" :title="`Autostart: ${manageHint}`"><IconAutostart :size="20" /></span>
       <!-- WebUI (always shown, disabled when no webui) -->
       <a v-if="resolvedWebui && isRunning" :href="resolvedWebui" target="_blank" rel="noopener" class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary hover:text-primary transition" title="Open WebUI" @click.stop><IconGlobe :size="20" /></a>
       <span v-else class="flex items-center justify-center w-8 h-8 ml-auto rounded text-text-secondary opacity-30" title="No WebUI configured. Set the WebUI field in the container's Unraid template to enable this."><IconGlobe :size="20" /></span>
@@ -207,13 +206,16 @@
         <!-- WebUI (always shown, disabled when no webui) -->
         <a v-if="resolvedWebui && isRunning" :href="resolvedWebui" target="_blank" rel="noopener" class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary hover:text-primary transition" title="Open WebUI" @click.stop><IconGlobe :size="18" /></a>
         <span v-else class="hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="No WebUI configured. Set the WebUI field in the container's Unraid template to enable this."><IconGlobe :size="18" /></span>
-        <button v-if="container.state === 'running'" @click="confirmAction = 'stop'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="18" /></button>
+        <button v-if="isPaused" @click="emit('resume', container.id)" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Resume"><IconPlay :size="18" /></button>
+        <button v-else-if="isRunning" @click="confirmAction = 'stop'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-error hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Stop"><IconStop :size="18" /></button>
         <button v-else @click="emit('start', container.id)" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-success hover:bg-success hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Start"><IconPlay :size="18" /></button>
         <button v-if="isRunning" @click="confirmAction = 'restart'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Restart"><IconRestart :size="18" /></button>
-        <button v-if="!isRunning" @click="confirmAction = 'remove'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="18" /></button>
-        <button v-if="hasUpdate" @click="emit('pull', { image: container.image, name: container.name, managed: container.managed })" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="18" /></button>
-        <button v-if="container.managed === 'dockerman'" @click.stop="handleToggleAutostart" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="18" /></button>
-        <span v-else class="action-btn hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" title="Autostart not available (not managed by Unraid Docker Manager)"><IconAutostart :size="18" /></span>
+        <button v-if="isStopped" @click="confirmAction = 'remove'" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-muted hover:bg-error hover:text-white disabled:opacity-50 disabled:cursor-not-allowed" :disabled="isActionInProgress" title="Remove"><IconTrash :size="18" /></button>
+        <button v-if="hasUpdate" @click="emit('pull', pullPayload())" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-warning hover:bg-warning hover:text-white" title="Pull Update"><IconDownload :size="18" /></button>
+        <!-- Adopt: only for a container Unraid does not manage yet -->
+        <button v-if="canAdopt" @click.stop="openAdopt" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition text-primary hover:bg-primary hover:text-primary-text" title="Adopt into Unraid — let Unraid manage this container"><IconAdopt :size="18" /></button>
+        <button v-if="isManaged" @click.stop="handleToggleAutostart" class="action-btn hidden sm:flex items-center justify-center w-8 h-8 border-none rounded cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed" :class="container.autostart ? 'text-success' : 'text-text-secondary hover:text-success'" :title="container.autostart ? 'Autostart: ON (click to disable)' : 'Autostart: OFF (click to enable)'"><IconAutostart :size="18" /></button>
+        <span v-else class="action-btn hidden sm:flex items-center justify-center w-8 h-8 rounded text-text-secondary opacity-30" :title="`Autostart: ${manageHint}`"><IconAutostart :size="18" /></span>
         </template>
         <!-- Kebab menu -->
         <KebabMenu
@@ -231,16 +233,7 @@
       <div v-if="expanded" class="overflow-hidden">
         <ContainerDetails
           class="block px-2 sm:px-4 pb-4 pt-2 border-t border-border"
-          :container="container"
-          :container-stats="containerStats"
-          :show-stats="showStats"
-          :is-running="isRunning"
-          :image-link="imageLink"
-          :show-logs="shouldShowInlineLogs"
-          :log-lines="logLines"
-          :log-error="logError"
-          :logs-loading="logsLoading"
-          :new-line-count="newLineCount"
+          v-bind="detailsProps"
           @refresh-logs="fetchLogs"
         />
       </div>
@@ -274,20 +267,43 @@
       @confirm="handleDelayConfirm"
       @cancel="showDelayModal = false"
     />
+    <SelectModal
+      :is-open="showFolderPicker"
+      :title="`${folderVerb} to Folder`"
+      :description="`Choose a folder for ${container.name}.`"
+      :options="folderTargets"
+      :confirm-label="folderVerb"
+      @confirm="handleFolderPicked"
+      @cancel="showFolderPicker = false"
+    />
+    <AdoptModal
+      :is-open="adoptOpen"
+      :container-name="container.name"
+      :data="adoptData"
+      :error="adoptError"
+      :is-running="isRunning"
+      @adopt="runAdopt(false)"
+      @dry-run="runAdopt(true)"
+      @cancel="adoptOpen = false"
+    />
   </Teleport>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
-import { useDockerStore, type Container } from '@/stores/docker';
+import { useDockerStore, type Container, type PullRequest } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
+import { useFolderStore } from '@/stores/folders';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { apiFetch } from '@/utils/csrf';
 import { releaseIndexUrl } from '@/utils/updateUnits';
+import { submitAdopt, type AdoptFields } from '@/utils/unraidHandoff';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
+import SelectModal from '@/components/SelectModal.vue';
+import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
@@ -303,6 +319,7 @@ import IconTrash from '@/components/icons/IconTrash.vue';
 import IconDownload from '@/components/icons/IconDownload.vue';
 import IconGlobe from '@/components/icons/IconGlobe.vue';
 import IconAutostart from '@/components/icons/IconAutostart.vue';
+import IconAdopt from '@/components/icons/IconAdopt.vue';
 // Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
 const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
@@ -323,10 +340,11 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   start: [id: string];
+  resume: [id: string];
   stop: [id: string];
   restart: [id: string];
   remove: [id: string, removeImage: boolean];
-  pull: [data: { image: string; name: string; managed: string | null }];
+  pull: [data: PullRequest];
   schedules: [targetType: string, targetId: string];
 }>();
 
@@ -335,6 +353,7 @@ const isActionInProgress = computed(() => !!props.actionInProgress);
 const actionStatusText = computed(() => {
   switch (props.actionInProgress) {
     case 'start': return 'Starting...';
+    case 'resume': return 'Resuming...';
     case 'stop': return 'Stopping...';
     case 'restart': return 'Restarting...';
     case 'remove': return 'Removing...';
@@ -347,9 +366,65 @@ async function handleToggleAutostart() {
   await dockerStore.toggleAutostart(props.container.name, !props.container.autostart);
 }
 
-const confirmAction = ref<'stop' | 'restart' | 'remove' | null>(null);
+const confirmAction = ref<'stop' | 'restart' | 'remove' | 'force-update' | null>(null);
 const removeImageToo = ref(false);
 const showDelayModal = ref(false);
+
+// Folder picker: the menu-driven twin of drag and drop, through the same store
+// action. An empty value means "no folder".
+const folderStore = useFolderStore();
+const showFolderPicker = ref(false);
+const currentFolder = computed(() => folderStore.getFolderForContainer(props.container.name));
+const folderVerb = computed(() => (currentFolder.value ? 'Move' : 'Add'));
+const folderTargets = computed(() => {
+  const targets = folderStore.sortedFolders
+    .filter((f) => f.id !== currentFolder.value?.id)
+    .map((f) => ({ value: String(f.id), label: f.name }));
+  if (currentFolder.value) {
+    targets.push({ value: '', label: 'No folder' });
+  }
+  return targets;
+});
+
+async function handleFolderPicked(value: string) {
+  showFolderPicker.value = false;
+  await folderStore.moveContainerToFolder(value === '' ? null : Number(value), props.container.id, props.container.name);
+}
+
+// Handing a CLI-created container to Unraid's container manager. The modal opens
+// straight away and fills in when the field set lands, so the click has a
+// visible result even on a slow inspect.
+const adoptOpen = ref(false);
+const adoptData = ref<AdoptFields | null>(null);
+const adoptError = ref<string | null>(null);
+
+async function openAdopt() {
+  adoptData.value = null;
+  adoptError.value = null;
+  adoptOpen.value = true;
+  try {
+    const res = await apiFetch(
+      `${API_BASE}/containers.php?action=adopt-fields&id=${encodeURIComponent(props.container.name)}`,
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.message || 'Failed to read the container');
+    adoptData.value = data as AdoptFields;
+  } catch (e) {
+    adoptError.value = e instanceof Error ? e.message : 'Failed to read the container';
+  }
+}
+
+/**
+ * Hand off to Unraid. This navigates the whole Unraid page, so the modal is
+ * closed first — coming back to a stale open modal would be worse than losing it.
+ */
+function runAdopt(dryRun: boolean) {
+  const data = adoptData.value;
+  if (!data) return;
+  adoptOpen.value = false;
+  submitAdopt(data, dryRun);
+}
 
 async function handleDelayConfirm(value: string) {
   const delay = Math.max(0, parseInt(value) || 0);
@@ -365,10 +440,17 @@ const confirmModalConfig = computed(() => {
       return { title: 'Restart Container', message: `Restart "${props.container.name}"?`, label: 'Restart', variant: 'default' as const };
     case 'remove':
       return { title: 'Remove Container', message: `Remove "${props.container.name}"? This cannot be undone.`, label: 'Remove', variant: 'danger' as const };
+    case 'force-update':
+      return { title: 'Force Update', message: `Pull "${props.container.image}" and recreate "${props.container.name}" even if no update is available?`, label: 'Force Update', variant: 'default' as const };
     default:
       return { title: '', message: '', label: '', variant: 'default' as const };
   }
 });
+
+function pullPayload(force = false): PullRequest {
+  const { image, name, managed, id } = props.container;
+  return force ? { image, name, managed, id, force } : { image, name, managed, id };
+}
 
 function handleConfirm() {
   const action = confirmAction.value;
@@ -376,6 +458,7 @@ function handleConfirm() {
   if (action === 'stop') emit('stop', props.container.id);
   else if (action === 'restart') emit('restart', props.container.id);
   else if (action === 'remove') emit('remove', props.container.id, removeImageToo.value);
+  else if (action === 'force-update') emit('pull', pullPayload(true));
   removeImageToo.value = false;
 }
 
@@ -422,6 +505,8 @@ function expandAfterLeave(el: Element) {
 }
 
 const isRunning = computed(() => props.container.state === 'running');
+const isPaused = computed(() => props.container.state === 'paused');
+const isStopped = computed(() => !isRunning.value && !isPaused.value);
 
 const { showStats, containerStats } = useContainerStats({
   containerId: () => props.container.id,
@@ -449,7 +534,7 @@ const releaseNotesUrl = computed<string | null>(() =>
   releaseIndexUrl(updatesStore.updates[props.container.image]),
 );
 
-// Inline logs panel (list view only). Ownership stays here rather than in
+// Inline logs panel, shown in both grid and list view. Ownership stays here rather than in
 // ContainerDetails: that child is mid-leave-transition during a collapse and
 // stops receiving prop updates, so it cannot tell when to stop polling.
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -462,8 +547,22 @@ const logError = ref('');
 const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
 
 const shouldShowInlineLogs = computed(
-  () => settingsStore.showInlineLogs && props.view === 'list' && expanded.value && isRunning.value,
+  () => settingsStore.showInlineLogs && expanded.value && isRunning.value,
 );
+
+// Both view branches render the same details; only the padding differs.
+const detailsProps = computed(() => ({
+  container: props.container,
+  containerStats: containerStats.value,
+  showStats: showStats.value,
+  isRunning: isRunning.value,
+  imageLink: imageLink.value,
+  showLogs: shouldShowInlineLogs.value,
+  logLines: logLines.value,
+  logError: logError.value,
+  logsLoading: logsLoading.value,
+  newLineCount: newLineCount.value,
+}));
 
 async function fetchLogs() {
   logsLoading.value = true;
@@ -555,6 +654,7 @@ const status = computed(() => {
       ? { halo: 'status-halo-success', tooltip: 'Running (healthy)' }
       : { halo: 'status-halo-info', tooltip: 'Running (no health check)' };
   }
+  if (state === 'paused') return { halo: 'status-halo-warning', tooltip: 'Paused' };
   if (state === 'exited') return { halo: 'status-halo-error', tooltip: 'Exited' };
   if (state === 'stopped') return { halo: 'status-halo-error', tooltip: 'Stopped' };
   if (state === 'created') return { halo: 'status-halo-muted', tooltip: 'Created' };
@@ -600,6 +700,31 @@ function openContainerTerminal(mode: 'console' | 'logs') {
 
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 
+const isManaged = computed(() => props.container.managed === 'dockerman');
+
+/**
+ * Compose containers are excluded on purpose: adopting one detaches it from its
+ * stack, and `docker compose up` would then fight Unraid over it.
+ *
+ * The setting defaults to on, so treat "not loaded yet" as on. Otherwise the
+ * action row reflows a moment after the page settles.
+ */
+const canAdopt = computed(
+  () => !isManaged.value && !isCompose.value && (!settingsStore.loaded || settingsStore.enableAdopt),
+);
+
+/** Why an Unraid-only action is inert. Three different reasons, three answers. */
+const manageHint = computed(() => {
+  if (isManaged.value) return undefined;
+  if (isCompose.value) {
+    return 'Unraid does not manage Compose containers. Edit the stack instead.';
+  }
+  if (!canAdopt.value) {
+    return 'Only available for containers that Unraid manages. Turn on adoption in Settings > Docker Folders.';
+  }
+  return 'Only available for containers that Unraid manages. Use Adopt into Unraid first.';
+});
+
 const supportUrl = computed(() => {
   return props.container.labels?.['net.unraid.docker.support'] || null;
 });
@@ -609,25 +734,31 @@ const projectUrl = computed(() => {
 });
 
 const menuItems = computed<KebabMenuItem[]>(() => [
-  { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: props.view === 'list' && isMobile.value && !isRunning.value },
+  { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: props.view === 'list' && isMobile.value && isStopped.value },
+  { label: 'Resume', icon: 'M6 4l14 8-14 8z', action: 'resume', class: 'text-success', show: props.view === 'list' && isMobile.value && isPaused.value },
   { label: 'Restart', icon: 'M1 4v6h6|M3.51 15a9 9 0 1 0 2.13-9.36L1 10', action: 'restart', class: 'text-primary', show: props.view === 'list' && isMobile.value && isRunning.value },
   { label: 'Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning', show: hasUpdate.value },
+  { label: 'Force Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'force-update', class: 'text-warning', show: !hasUpdate.value && !isCompose.value },
   // Shown before settings land so the menu doesn't grow an entry a moment
   // after it opens; disabled until we know update checks are actually on.
   { label: updatesStore.isCheckingImage(props.container.image) ? 'Checking for Updates…' : 'Check for Updates', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'check-updates', show: !settingsStore.loaded || settingsStore.enableUpdateChecks, disabled: !settingsStore.loaded, title: settingsStore.loaded ? undefined : 'Loading settings…' },
-  { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', show: !!editUrl.value },
+  // `href` is empty for an unmanaged container, so KebabMenu falls through to
+  // its button branch, which is the only one that honours disabled/title.
+  { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
   { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
   { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
   { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
   { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
   { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
-  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', show: props.container.managed === 'dockerman' },
-  { label: `Autostart Delay: ${props.container.autostartDelay}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: props.container.managed === 'dockerman' && props.container.autostart },
+  { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: canAdopt.value },
+  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
+  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   { divider: true },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
+  { label: `${folderVerb.value} to Folder…`, icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: folderTargets.value.length > 0 },
   { divider: true },
   { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
-  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && !isRunning.value },
+  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && isStopped.value },
 ]);
 
 async function handleMenuAction(action: string) {
@@ -635,22 +766,30 @@ async function handleMenuAction(action: string) {
     confirmAction.value = 'stop';
   } else if (action === 'start') {
     emit('start', props.container.id);
+  } else if (action === 'resume') {
+    emit('resume', props.container.id);
   } else if (action === 'restart') {
     confirmAction.value = 'restart';
   } else if (action === 'remove') {
     confirmAction.value = 'remove';
   } else if (action === 'update') {
-    emit('pull', { image: props.container.image, name: props.container.name, managed: props.container.managed });
+    emit('pull', pullPayload());
+  } else if (action === 'force-update') {
+    confirmAction.value = 'force-update';
   } else if (action === 'check-updates') {
     if (!updatesStore.isCheckingImage(props.container.image)) {
       await updatesStore.checkImagesForUpdates([props.container.image]);
     }
   } else if (action === 'toggle-autostart') {
     handleToggleAutostart();
+  } else if (action === 'adopt') {
+    void openAdopt();
   } else if (action === 'set-autostart-delay') {
     showDelayModal.value = true;
   } else if (action === 'schedules') {
     emit('schedules', 'container', props.container.name);
+  } else if (action === 'pick-folder') {
+    showFolderPicker.value = true;
   } else if (action === 'console') {
     openContainerTerminal('console');
   } else if (action === 'logs') {

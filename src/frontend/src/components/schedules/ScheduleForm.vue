@@ -18,6 +18,7 @@
         <option value="start">Start</option>
         <option value="stop">Stop</option>
         <option value="pause">Pause</option>
+        <option value="resume">Resume</option>
         <option value="restart">Restart</option>
         <option value="backup">Backup</option>
       </select>
@@ -151,6 +152,7 @@ import { useScheduleStore } from '@/stores/schedules';
 import { useSettingsStore } from '@/stores/settings';
 import { useDockerStore } from '@/stores/docker';
 import type { ScheduleAction, BackupServiceConfig, TargetType } from '@/types/schedule';
+import { SCHEDULE_ACTION_LABELS } from '@/types/schedule';
 import type { ContainerMount } from '@/stores/docker';
 
 interface Props {
@@ -218,7 +220,7 @@ async function save() {
   formError.value = '';
 
   if (!form.name.trim()) {
-    const actionLabel = form.action.charAt(0).toUpperCase() + form.action.slice(1);
+    const actionLabel = SCHEDULE_ACTION_LABELS[form.action];
     form.name = `${actionLabel} ${props.targetId}`;
   }
 

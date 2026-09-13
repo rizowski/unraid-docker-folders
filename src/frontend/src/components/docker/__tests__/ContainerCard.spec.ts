@@ -5,8 +5,11 @@ import { createPinia, setActivePinia } from 'pinia';
 import ContainerCard from '../ContainerCard.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
+import { useUpdatesStore } from '@/stores/updates';
 import { useStatsStore } from '@/stores/stats';
-import { makeContainer as baseContainer } from '@/test/fixtures';
+import { useFolderStore } from '@/stores/folders';
+import type { Folder } from '@/types/folder';
+import { makeContainer as baseContainer, makeFolder } from '@/test/fixtures';
 
 // This suite's default container publishes a port — several tests assert on the
 // rendered port summary — so it layers that onto the shared fixture.
@@ -15,6 +18,11 @@ function makeContainer(overrides: Partial<Container> = {}): Container {
     ports: [{ IP: '0.0.0.0', PrivatePort: 80, PublicPort: 8080, Type: 'tcp' }],
     ...overrides,
   });
+}
+
+/** Every URL a fetch spy was called with, whether given as a string or a Request. */
+function fetchedUrls(spy: { mock: { calls: unknown[][] } }): string[] {
+  return spy.mock.calls.map((c) => (typeof c[0] === 'string' ? c[0] : (c[0] as Request).url));
 }
 
 function mountCard(container?: Partial<Container>, props: Record<string, unknown> = {}) {
@@ -197,6 +205,96 @@ describe('ContainerCard', () => {
     expect(wrapper.findAll('.kebab-menu-item').length).toBe(0);
   });
 
+  describe('folder picker in the kebab menu', () => {
+    function folder(id: number, name: string, containerNames: string[] = []): Folder {
+      return makeFolder(containerNames, { id, name, position: id });
+    }
+
+    function mountWithFolders(folders: Folder[], container: Partial<Container> = {}) {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      useFolderStore().folders = folders;
+      return mount(ContainerCard, {
+        props: { container: makeContainer(container), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+    }
+
+    async function openMenu(wrapper: ReturnType<typeof mountWithFolders>) {
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+    }
+
+    function menuLabels(wrapper: ReturnType<typeof mountWithFolders>) {
+      return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    }
+
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+        new Response(JSON.stringify({ success: true, folder: folder(2, 'Web'), folders: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    it('offers Add to Folder when the container is unfoldered and folders exist', async () => {
+      const wrapper = mountWithFolders([folder(1, 'Media'), folder(2, 'Web')]);
+      await openMenu(wrapper);
+      const labels = menuLabels(wrapper);
+      expect(labels).toContain('Add to Folder…');
+      expect(labels).not.toContain('Move to Folder…');
+    });
+
+    it('hides the item when there is no folder to pick', async () => {
+      const wrapper = mountWithFolders([]);
+      await openMenu(wrapper);
+      const labels = menuLabels(wrapper);
+      expect(labels).not.toContain('Add to Folder…');
+      expect(labels).not.toContain('Move to Folder…');
+    });
+
+    it('moves the container to the chosen folder through the same endpoint as drag and drop', async () => {
+      const wrapper = mountWithFolders([folder(1, 'Media', ['web']), folder(2, 'Web')], { name: 'web' });
+      await openMenu(wrapper);
+      const labels = menuLabels(wrapper);
+      expect(labels).toContain('Move to Folder…');
+
+      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Move to Folder…')!;
+      await item.trigger('click');
+      await flushPromises();
+
+      // Current folder is excluded; the remaining real folder is first, "No folder" last.
+      const select = wrapper.find('select');
+      expect(select.findAll('option').map((o) => o.text())).toEqual(['Web', 'No folder']);
+
+      await select.setValue('2');
+      const confirm = wrapper.findAll('button').find((b) => b.text() === 'Move')!;
+      await confirm.trigger('click');
+      await flushPromises();
+
+      expect(fetchedUrls(fetchSpy).some((u) => u.includes('folders.php?id=2&action=add_container'))).toBe(true);
+    });
+
+    it('removes the container from its folder when No folder is picked', async () => {
+      const wrapper = mountWithFolders([folder(1, 'Media', ['web'])], { name: 'web' });
+      await openMenu(wrapper);
+      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Move to Folder…')!;
+      await item.trigger('click');
+      await flushPromises();
+
+      await wrapper.find('select').setValue('');
+      await wrapper.findAll('button').find((b) => b.text() === 'Move')!.trigger('click');
+      await flushPromises();
+
+      expect(fetchedUrls(fetchSpy).some((u) => u.includes('action=remove_container'))).toBe(true);
+    });
+  });
+
   describe('z-index stacking', () => {
     it('grid view card does not have z-50 when menu is closed', () => {
       const wrapper = mountCard({}, { view: 'grid' });
@@ -303,6 +401,7 @@ describe('ContainerCard', () => {
     it('displays correct text for each action type', () => {
       const actions = [
         { action: 'start', text: 'Starting...' },
+        { action: 'resume', text: 'Resuming...' },
         { action: 'stop', text: 'Stopping...' },
         { action: 'restart', text: 'Restarting...' },
         { action: 'remove', text: 'Removing...' },
@@ -392,13 +491,7 @@ describe('ContainerCard', () => {
 
     /** Count how many fetch calls targeted the logs endpoint */
     function logsCallCount() {
-      return fetchSpy.mock.calls.filter(
-        (call: unknown[]) => {
-          const input = call[0];
-          const url = typeof input === 'string' ? input : (input as Request).url;
-          return url.includes('action=logs');
-        },
-      ).length;
+      return fetchedUrls(fetchSpy).filter((u) => u.includes('action=logs')).length;
     }
 
     /** Find the first fetch call targeting the logs endpoint */
@@ -443,19 +536,31 @@ describe('ContainerCard', () => {
       expect(logsHeaders.length).toBe(0);
     });
 
-    it('does not show log panel in grid view even when setting is on', async () => {
+    /** Mount a grid-view card and expand it, optionally enabling inline logs */
+    async function mountExpandedGridCard(enableLogs: boolean) {
       const wrapper = mountCardWithSharedPinia(
         { state: 'running' },
         { view: 'grid' },
-        { enableLogs: true, seedStatsId: 'abc123' },
+        { enableLogs, seedStatsId: 'abc123' },
       );
-
-      // Expand grid card
-      const summary = wrapper.find('.cursor-pointer');
-      await summary.trigger('click');
+      await wrapper.find('.cursor-pointer').trigger('click');
       await flushPromises();
+      return wrapper;
+    }
 
-      // Should not have the inline log panel
+    it('shows the log panel in grid view when the setting is on', async () => {
+      const wrapper = await mountExpandedGridCard(true);
+
+      expect(logsCallCount()).toBeGreaterThan(0);
+      expect(wrapper.text()).toContain('server started');
+      const refreshBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Refresh logs');
+      expect(refreshBtn).toBeDefined();
+    });
+
+    it('does not show the log panel in grid view when the setting is off', async () => {
+      const wrapper = await mountExpandedGridCard(false);
+
+      expect(logsCallCount()).toBe(0);
       const refreshBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Refresh logs');
       expect(refreshBtn).toBeUndefined();
     });
@@ -844,4 +949,271 @@ describe('ContainerCard', () => {
       });
     });
   });
+
+  /**
+   * Adopting hands the container to Unraid's own container manager, which
+   * removes and recreates it. The entry must therefore appear on exactly the
+   * containers that need it and on no others.
+   */
+  describe('Adopt into Unraid', () => {
+    async function menuLabels(container: Partial<Container>) {
+      const wrapper = mountCard(container);
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    }
+
+    it('offers it for a container Unraid does not manage', async () => {
+      expect(await menuLabels({ managed: null })).toContain('Adopt into Unraid');
+    });
+
+    it('hides it once the container is managed', async () => {
+      expect(await menuLabels({ managed: 'dockerman' })).not.toContain('Adopt into Unraid');
+    });
+
+    it('hides it for a compose container', async () => {
+      // Adopting one would detach it from its stack, and `docker compose up`
+      // would then fight Unraid over the same container.
+      const labels = await menuLabels({
+        managed: null,
+        labels: { 'com.docker.compose.project': 'db-stack' },
+      });
+      expect(labels).not.toContain('Adopt into Unraid');
+    });
+
+    it('offers it for a container managed by something else', async () => {
+      expect(await menuLabels({ managed: 'portainer' })).toContain('Adopt into Unraid');
+    });
+
+    /**
+     * The kebab entry alone was invisible in practice: on a typical box almost
+     * every container is already managed, so the entry never appeared and read
+     * as broken. The action row carries a button of its own.
+     */
+    describe('action row button', () => {
+      function mountWithSettings(
+        container: Partial<Container>,
+        settings: { loaded?: boolean; enableAdopt?: boolean } = {},
+        view: 'grid' | 'list' = 'grid',
+      ) {
+        const pinia = createPinia();
+        setActivePinia(pinia);
+
+        const settingsStore = useSettingsStore();
+        if (settings.enableAdopt !== undefined) settingsStore.enableAdopt = settings.enableAdopt;
+        if (settings.loaded !== undefined) settingsStore.loaded = settings.loaded;
+
+        return mount(ContainerCard, {
+          props: { container: makeContainer(container), view },
+          global: { plugins: [pinia], stubs: { Teleport: true } },
+        });
+      }
+
+      function adoptButton(wrapper: ReturnType<typeof mount>) {
+        return wrapper
+          .findAll('button')
+          .find((b) => (b.attributes('title') ?? '').startsWith('Adopt into Unraid'));
+      }
+
+      for (const view of ['grid', 'list'] as const) {
+        it(`shows the button for an unmanaged container (${view})`, () => {
+          expect(adoptButton(mountWithSettings({ managed: null }, {}, view))).toBeTruthy();
+        });
+
+        it(`hides the button once Unraid manages the container (${view})`, () => {
+          expect(adoptButton(mountWithSettings({ managed: 'dockerman' }, {}, view))).toBeFalsy();
+        });
+      }
+
+      it('hides the button for a compose container', () => {
+        const wrapper = mountWithSettings({
+          managed: null,
+          labels: { 'com.docker.compose.project': 'db-stack' },
+        });
+        expect(adoptButton(wrapper)).toBeFalsy();
+      });
+
+      it('hides the button when adoption is turned off in settings', () => {
+        const wrapper = mountWithSettings({ managed: null }, { loaded: true, enableAdopt: false });
+        expect(adoptButton(wrapper)).toBeFalsy();
+      });
+
+      it('shows the button before settings arrive, because the setting defaults on', () => {
+        // Otherwise the action row reflows a moment after the page settles.
+        const wrapper = mountWithSettings({ managed: null }, { loaded: false, enableAdopt: false });
+        expect(adoptButton(wrapper)).toBeTruthy();
+      });
+
+      it('drops the kebab entry when adoption is turned off', async () => {
+        const wrapper = mountWithSettings({ managed: null }, { loaded: true, enableAdopt: false });
+        const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+        await kebab.trigger('click');
+
+        const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+        expect(labels).not.toContain('Adopt into Unraid');
+      });
+    });
+  });
+
+  /**
+   * Hiding an Unraid-only action made an unadopted container look identical to
+   * a broken one. The entries stay, greyed out, and say why.
+   */
+  describe('Unraid-only actions on an unadopted container', () => {
+    async function menuEntry(container: Partial<Container>, label: string, enableAdopt = true) {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+
+      const settingsStore = useSettingsStore();
+      settingsStore.enableAdopt = enableAdopt;
+      settingsStore.loaded = true;
+
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer(container), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+
+      return wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim().startsWith(label));
+    }
+
+    for (const label of ['Edit', 'Enable Autostart', 'Autostart Delay']) {
+      it(`keeps ${label} visible but disabled, and points at adoption`, async () => {
+        const entry = await menuEntry({ managed: null }, label);
+
+        expect(entry).toBeTruthy();
+        expect(entry!.attributes('disabled')).toBeDefined();
+        expect(entry!.attributes('title')).toContain('Adopt into Unraid');
+      });
+    }
+
+    it('names the stack instead of adoption for a compose container', async () => {
+      const entry = await menuEntry(
+        { managed: null, labels: { 'com.docker.compose.project': 'db-stack' } },
+        'Edit',
+      );
+
+      expect(entry!.attributes('disabled')).toBeDefined();
+      expect(entry!.attributes('title')).toContain('Compose');
+      expect(entry!.attributes('title')).not.toContain('Adopt into Unraid');
+    });
+
+    it('points at the settings page when adoption is turned off', async () => {
+      const entry = await menuEntry({ managed: null }, 'Edit', false);
+
+      expect(entry!.attributes('title')).toContain('Settings > Docker Folders');
+    });
+
+    it('still hides Autostart Delay on a managed container that has autostart off', async () => {
+      // The entry is `!isManaged || autostart`. This is the branch a future edit
+      // to that expression would break without any other test noticing.
+      const entry = await menuEntry({ managed: 'dockerman', autostart: false }, 'Autostart Delay');
+
+      expect(entry).toBeFalsy();
+    });
+
+    it('leaves Edit live for a managed container', async () => {
+      const entry = await menuEntry({ managed: 'dockerman', name: 'jellyfin' }, 'Edit');
+
+      expect(entry!.attributes('disabled')).toBeUndefined();
+      expect(entry!.attributes('href')).toContain('my-jellyfin.xml');
+    });
+  });
+
+  describe('paused container', () => {
+    it.each(['grid', 'list'] as const)('shows a single Resume action and hides Start/Stop/Restart/Remove (%s)', (view) => {
+      const wrapper = mountCard({ state: 'paused' }, { view });
+      const titles = wrapper.findAll('button').map((b) => b.attributes('title'));
+      expect(titles).toContain('Resume');
+      expect(titles).not.toContain('Start');
+      expect(titles).not.toContain('Stop');
+      expect(titles).not.toContain('Restart');
+      expect(titles).not.toContain('Remove');
+    });
+
+    it('emits resume when the Resume button is clicked', async () => {
+      const wrapper = mountCard({ state: 'paused', id: 'paused-1' });
+      const resumeBtn = wrapper.findAll('button').find((b) => b.attributes('title') === 'Resume')!;
+      await resumeBtn.trigger('click');
+      expect(wrapper.emitted('resume')).toEqual([['paused-1']]);
+    });
+
+    it('gives the icon a warning halo with a Paused tooltip', () => {
+      const wrapper = mountCard({ state: 'paused' });
+      const icon = wrapper.find('img').element.parentElement!;
+      expect(icon.className.split(' ')).toContain('status-halo-warning');
+      expect(icon.getAttribute('title')).toBe('Paused');
+    });
+  });
+
+  describe('Force Update', () => {
+    it('shows Force Update in the kebab menu when there is no update available', async () => {
+      const wrapper = mountCard();
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).toContain('Force Update');
+    });
+
+    it('hides Force Update when an update is already available', async () => {
+      // Configure the stores on a shared pinia BEFORE mounting, mirroring the
+      // pattern in the "inline logs panel" tests above — mutating a store
+      // fetched after mountCard() would touch a different pinia instance.
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      const settingsStore = useSettingsStore();
+      settingsStore.enableUpdateChecks = true;
+      const updatesStore = useUpdatesStore();
+      updatesStore.updates = {
+        'nginx:latest': {
+          image: 'nginx:latest',
+          local_digest: 'a',
+          remote_digest: 'b',
+          update_available: true,
+          checked_at: 0,
+          error: null,
+          source_url: null,
+          source_repo: null,
+          release: null,
+        },
+      };
+
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer({ image: 'nginx:latest' }), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Force Update');
+    });
+
+    it('hides Force Update for a compose-labelled container', async () => {
+      const wrapper = mountCard({ labels: { 'com.docker.compose.project': 'db-stack' } });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).not.toContain('Force Update');
+    });
+
+    it('confirming Force Update emits pull with force: true and the container id', async () => {
+      const wrapper = mountCard({ id: 'force-1', name: 'my-app', image: 'nginx:latest', managed: 'dockerman' });
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+      await kebab.trigger('click');
+      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Force Update')!;
+      await item.trigger('click');
+      await wrapper.vm.$nextTick();
+
+      const confirmBtn = wrapper.findAll('button').find((b) => b.text() === 'Force Update')!;
+      await confirmBtn.trigger('click');
+
+      expect(wrapper.emitted('pull')).toEqual([
+        [{ image: 'nginx:latest', name: 'my-app', managed: 'dockerman', id: 'force-1', force: true }],
+      ]);
+    });
+  });
+
 });

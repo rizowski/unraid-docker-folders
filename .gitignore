@@ -54,3 +54,6 @@ composer.lock
 
 # Claude Code
 .claude/
+
+# graphify knowledge graph (rebuilt from source; graph.json is ~2 MB)
+graphify-out/

@@ -268,7 +268,7 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
       { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Pull Latest Images', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'compose-pull', disabled: composeDisabled, title: composeReason },
       { label: 'Recompose', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-recompose', show: isRunning.value, disabled: composeDisabled, title: composeReason },
-      { label: 'Stack Details', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 16v-4|M12 8h.01', action: 'compose-edit' },
+      { label: composeStore.composePluginInstalled ? 'View Stack' : 'Edit Stack', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'compose-edit' },
       { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', disabled: composeDisabled, title: composeReason },
       { divider: true },
     );

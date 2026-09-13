@@ -14,9 +14,12 @@ class FolderManager
 {
   private $db;
 
-  public function __construct()
+  /**
+   * @param Database|null $db Injected for tests; defaults to the singleton.
+   */
+  public function __construct($db = null)
   {
-    $this->db = Database::getInstance();
+    $this->db = $db ?? Database::getInstance();
   }
 
   /**
@@ -166,6 +169,16 @@ class FolderManager
       return false;
     }
 
+    // Already in this folder? Keep the row — deleting and reinserting would move
+    // it to the end and renumber the folder. Refresh container_id rather than
+    // returning early: reorderContainers() matches on container_id, so a stale
+    // id would make drag-reorder silently skip this row.
+    $existing = $this->db->fetchOne('SELECT folder_id FROM container_folders WHERE container_name = ?', [$containerName]);
+    if ($existing && (int) $existing['folder_id'] === (int) $folderId) {
+      $this->db->update('container_folders', ['container_id' => $containerId], 'container_name = ?', [$containerName]);
+      return true;
+    }
+
     // Get max position in this folder
     $sql = 'SELECT MAX(position) FROM container_folders WHERE folder_id = ?';
     $maxPosition = $this->db->fetchValue($sql, [$folderId]) ?? -1;
@@ -288,6 +301,63 @@ class FolderManager
       error_log('Error reordering folders: ' . $e->getMessage());
       return false;
     }
+  }
+
+  /**
+   * Replace the manual order of the containers that are in no folder.
+   *
+   * Full-replace semantics: the client sends the whole unfoldered list in
+   * display order, so any name absent from $containerNames loses its row and
+   * falls back to the state-first default. Non-strings, empty strings, and
+   * duplicates are skipped; positions stay contiguous from 0.
+   *
+   * @param array $containerNames Container names in new order
+   * @return bool Success
+   */
+  public function setUnfolderedOrder(array $containerNames)
+  {
+    $this->db->beginTransaction();
+
+    try {
+      $this->db->delete('unfoldered_order', '1 = 1');
+
+      $position = 0;
+      $seen = [];
+      foreach ($containerNames as $name) {
+        // folders.php already rejects non-strings; dedupe matters because
+        // container_name is the primary key.
+        if ($name === '' || isset($seen[$name])) {
+          continue;
+        }
+        $seen[$name] = true;
+
+        $this->db->insert('unfoldered_order', [
+          'container_name' => $name,
+          'position' => $position,
+        ]);
+        $position++;
+      }
+
+      $this->db->commit();
+      return true;
+    } catch (Exception $e) {
+      $this->db->rollback();
+      error_log('Error reordering unfoldered containers: ' . $e->getMessage());
+      return false;
+    }
+  }
+
+  /**
+   * Get the saved manual order of unfoldered containers.
+   *
+   * @return string[] Container names, first to last
+   */
+  public function getUnfolderedOrder()
+  {
+    $rows = $this->db->fetchAll('SELECT container_name FROM unfoldered_order ORDER BY position ASC');
+    return array_map(function ($row) {
+      return (string) $row['container_name'];
+    }, $rows);
   }
 
   /**
@@ -490,10 +560,8 @@ class FolderManager
    */
   public function removeContainerByName($containerName)
   {
-    return $this->db->execute(
-      'DELETE FROM container_folders WHERE container_name = ?',
-      [$containerName]
-    );
+    $this->db->delete('container_folders', 'container_name = ?', [$containerName]);
+    $this->db->delete('unfoldered_order', 'container_name = ?', [$containerName]);
   }
 
   /**
