@@ -46,7 +46,7 @@
         :value="modelValue"
         placeholder="* * * * *"
         class="form-input mono"
-        @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
+        @input="onCustomInput(($event.target as HTMLInputElement).value)"
       />
       <span class="text-xs text-text-secondary">Format: minute hour day-of-month month day-of-week</span>
     </div>
@@ -111,9 +111,20 @@ function detectPreset(expr: string) {
   preset.value = 'custom';
 }
 
+// The last value typed into the custom field. Re-detecting the preset on those
+// keystrokes would switch away from 'custom' mid-edit: typing "45 6 * * 1-5"
+// passes through "45 6 * * 1", which matches weekly_custom and unmounts the input.
+let lastCustomValue: string | null = null;
+
 watch(() => props.modelValue, (val) => {
+  if (preset.value === 'custom' && val === lastCustomValue) return;
   if (val) detectPreset(val);
 }, { immediate: true });
+
+function onCustomInput(value: string) {
+  lastCustomValue = value;
+  emit('update:modelValue', value);
+}
 
 function onPresetChange(p: CronPreset) {
   preset.value = p;

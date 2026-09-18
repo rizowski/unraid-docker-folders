@@ -421,9 +421,6 @@ Documented so they are not mistaken for intentional design:
   `reconcileContainerIds()` and `syncComposeStacks()` on the list path, so it
   writes to `container_folders`, `folders`, and `compose_stacks` with no CSRF
   gate at any layer.
-- **`schedules.php` PUT skips the `target_type`/`action` allowlists** that POST
-  enforces (`:176-184` vs `ScheduleManager.php:100-105`). Not code execution —
-  `dispatchAction` defaults to "Unknown action".
 - **No CORS, CSP, `X-Frame-Options`, or `X-Content-Type-Options` headers** are set
   anywhere. The `case 'OPTIONS'` branches are labelled "CORS preflight" but emit
   no `Access-Control-*` headers, so they are inert.

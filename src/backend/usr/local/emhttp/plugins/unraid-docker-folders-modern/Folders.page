@@ -1144,10 +1144,9 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     if (currentId && ev.key === 'Enter' && ev.ctrlKey) submitDefaultAction();
   });
 
-  // Legacy support: older useModalElevation composable sends
-  // { type: 'docker-folders-modal', open: true/false, minHeight }
-  // without a modal descriptor. Ignore those — the new parent modal handles
-  // its own lifecycle.
+  // A 'docker-folders-modal' message without a modal descriptor came from
+  // older builds of useModalElevation. Ignore those. An in-frame BaseModal now
+  // keeps the frame tall enough through the docker-folders-resize height.
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
 
