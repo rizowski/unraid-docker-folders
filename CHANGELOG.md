@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.18
+- fix(schedules): allow Resume, keep the custom cron field, and stop clipping modals (#7)
+
 ## 2026.09.13
 - refactor(dashboard): simplify the widget settings code
 - feat(dashboard): add a settings panel to the Docker Folders tile
