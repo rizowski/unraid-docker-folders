@@ -30,6 +30,15 @@ export const useFolderStore = defineStore('folders', () => {
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
   let initialLoadDone = false;
+  // Collapse writes still in flight, by folder id. A folder row that arrives
+  // from the server before its PUT lands still has the old value, so the
+  // local value wins until the write ends.
+  const pendingCollapse = new Map<number, boolean>();
+
+  function withPendingCollapse(folder: Folder): Folder {
+    const collapsed = pendingCollapse.get(folder.id);
+    return collapsed === undefined ? folder : { ...folder, collapsed };
+  }
 
   // Getters
   const folderCount = computed(() => folders.value.length);
@@ -108,7 +117,7 @@ export const useFolderStore = defineStore('folders', () => {
       }
 
       const data = await response.json();
-      folders.value = data.folders || [];
+      folders.value = (data.folders || []).map(withPendingCollapse);
       unfolderedOrder.value = Array.isArray(data.unfoldered_order) ? data.unfoldered_order : [];
       initialLoadDone = true;
     } catch (e) {
@@ -165,7 +174,7 @@ export const useFolderStore = defineStore('folders', () => {
       // Update local state
       const index = folders.value.findIndex((f) => f.id === id);
       if (index !== -1) {
-        folders.value[index] = updatedFolder;
+        folders.value[index] = withPendingCollapse(updatedFolder);
       }
 
       return true;
@@ -219,7 +228,7 @@ export const useFolderStore = defineStore('folders', () => {
       // Update local state
       const index = folders.value.findIndex((f) => f.id === folderId);
       if (index !== -1) {
-        folders.value[index] = updatedFolder;
+        folders.value[index] = withPendingCollapse(updatedFolder);
       }
 
       return true;
@@ -360,7 +369,7 @@ export const useFolderStore = defineStore('folders', () => {
       // Update local state
       const index = folders.value.findIndex((f) => f.id === folderId);
       if (index !== -1) {
-        folders.value[index] = updatedFolder;
+        folders.value[index] = withPendingCollapse(updatedFolder);
       }
 
       return true;
@@ -468,15 +477,27 @@ export const useFolderStore = defineStore('folders', () => {
     const folder = folders.value.find((f) => f.id === id);
     if (folder) {
       // Update local state immediately (optimistic)
-      folder.collapsed = !folder.collapsed;
+      const collapsed = !folder.collapsed;
+      folder.collapsed = collapsed;
+      pendingCollapse.set(id, collapsed);
 
       // Persist to backend silently — don't touch loading/error state
       apiFetch(`${API_BASE}/folders.php?id=${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ collapsed: folder.collapsed }),
-      }).catch((e) => {
-        console.error('Error persisting folder collapse:', e);
-      });
+        body: JSON.stringify({ collapsed }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        })
+        .catch((e) => {
+          console.error('Error persisting folder collapse:', e);
+          // Undo, unless a later click already changed it again.
+          const current = folders.value.find((f) => f.id === id);
+          if (current && pendingCollapse.get(id) === collapsed) current.collapsed = !collapsed;
+        })
+        .finally(() => {
+          if (pendingCollapse.get(id) === collapsed) pendingCollapse.delete(id);
+        });
     }
   }
 
