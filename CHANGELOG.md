@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026.09.19
+- fix(widget): span the folder color across the header row
+- fix(widget): keep the WebUI icon column on every row
+- fix(assets): stamp unhashed plugin assets with their mtime
 - feat(widget): show CPU, memory, and status tags on the dashboard
 - feat(settings): replace the Docker Containers section by default
 - refactor(schedules): return the schedule details from executeSchedule

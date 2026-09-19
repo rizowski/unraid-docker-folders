@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.19-dev1">
-<!ENTITY md5 "68fa50bd5f8524753d7ffed1b9beefb0">
+<!ENTITY version "2026.09.19-dev2">
+<!ENTITY md5 "57f67d5e0d0e15ce1945773b1df757db">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -124,6 +124,11 @@
 
 
 
+
+###2026.09.19-dev2
+- fix(widget): span the folder color across the header row
+- fix(widget): keep the WebUI icon column on every row
+- fix(assets): stamp unhashed plugin assets with their mtime
 ###2026.09.19-dev1
 - feat(widget): show CPU, memory, and status tags on the dashboard
 - feat(settings): replace the Docker Containers section by default
