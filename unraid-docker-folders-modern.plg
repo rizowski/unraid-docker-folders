@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.18-dev1">
-<!ENTITY md5 "54eb88554b28b1b76b25cf49819d38cb">
+<!ENTITY version "2026.09.19-dev1">
+<!ENTITY md5 "68fa50bd5f8524753d7ffed1b9beefb0">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -123,6 +123,29 @@
 
 
 
+
+###2026.09.19-dev1
+- feat(widget): show CPU, memory, and status tags on the dashboard
+- feat(settings): replace the Docker Containers section by default
+- refactor(schedules): return the schedule details from executeSchedule
+- perf(menus): listen for scroll only while a submenu is open
+- refactor(folders): read the Compose action status in one place
+- refactor(menus): share kebab menu icon paths between containers and folders
+- feat(schedules): post an Unraid notification when an automatic run fails
+- fix(folders): keep an unticked container out of its folder
+- fix(folders): scroll the page while a container is dragged near its edge
+- fix(folders): keep a folder collapsed when a refetch lands before its save
+- fix(folders): remove a dragged container from its old folder at once
+- feat(menus): mark disabled menu items that explain why with an info icon
+- fix(containers): give autostart its own submenu
+- fix(menus): use a stopwatch icon for Autostart Delay
+- feat(containers): group the container menu into hover submenus
+- fix(folders): alphabetize the folder menu submenus
+- fix(folders): move Edit Stack into the Actions submenu
+- feat(folders): group the folder menu into hover submenus
+- fix(schedules): run "N/S" steps from N instead of at N only
+- fix(schedules): describe every field of a cron expression
+- fix(folders): stack collapsed folder CPU and MEM like a container row
 ###2026.09.18-dev1
 - fix(schedules): allow Resume, keep the custom cron field, and stop clipping modals (#7)
 ###2026.09.13-dev7
