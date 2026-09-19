@@ -348,7 +348,8 @@
 }
 
 /* Kebab menu hover: lighter than border/50 for dark themes */
-#unraid-docker-folders-modern .kebab-menu-item:hover {
+#unraid-docker-folders-modern .kebab-menu-item:hover,
+#unraid-docker-folders-modern button.kebab-menu-item-open {
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
 }
 

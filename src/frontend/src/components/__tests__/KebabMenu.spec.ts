@@ -333,4 +333,102 @@ describe('KebabMenu open-change', () => {
     expect(dropdown.className).toContain('top-full');
     expect(dropdown.getAttribute('style')).toBeNull();
   });
+  describe('submenus', () => {
+    const nestedItems: KebabMenuItem[] = [
+      { label: 'Top', icon: 'M0 0', action: 'top' },
+      {
+        label: 'Sort',
+        icon: 'M0 0',
+        children: [
+          { divider: true },
+          { label: 'Name', icon: 'M0 0', action: 'sort:name' },
+          { label: 'Hidden', icon: 'M0 0', action: 'sort:hidden', show: false },
+          { divider: true },
+          { label: 'Status', icon: 'M0 0', action: 'sort:status' },
+          { divider: true },
+        ],
+      },
+      { label: 'Empty', icon: 'M0 0', children: [{ label: 'Gone', action: 'gone', show: false }, { divider: true }] },
+    ];
+
+    const parent = (wrapper: ReturnType<typeof mountMenu>, label: string) =>
+      wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === label);
+    const labels = (wrapper: ReturnType<typeof mountMenu>) =>
+      wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+
+    afterEach(() => vi.useRealTimers());
+
+    it('shows parents with children closed, and hides a parent with nothing to show', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      expect(labels(wrapper)).toEqual(['Top', 'Sort']);
+      expect(parent(wrapper, 'Sort')!.attributes('aria-expanded')).toBe('false');
+    });
+
+    it('opens on mouse hover, with stray dividers and hidden children removed', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'mouse' });
+
+      expect(parent(wrapper, 'Sort')!.attributes('aria-expanded')).toBe('true');
+      const flyout = wrapper.find('[role="menu"]');
+      expect(flyout.findAll('.kebab-menu-item').map((el) => el.text().trim())).toEqual(['Name', 'Status']);
+      expect(flyout.findAll('hr').length).toBe(1);
+    });
+
+    it('ignores touch hover so the following click can open it', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'touch' });
+      expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+
+      await parent(wrapper, 'Sort')!.trigger('click');
+      expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+
+      await parent(wrapper, 'Sort')!.trigger('click');
+      expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    });
+
+    it('closes after a short delay when the pointer moves to another item', async () => {
+      vi.useFakeTimers();
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'mouse' });
+
+      const top = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Top')!;
+      await top.trigger('pointerenter', { pointerType: 'mouse' });
+      expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+
+      vi.advanceTimersByTime(200);
+      await nextTick();
+      expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    });
+
+    it('stays open when the pointer reaches the flyout in time', async () => {
+      vi.useFakeTimers();
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'mouse' });
+
+      const top = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Top')!;
+      await top.trigger('pointerenter', { pointerType: 'mouse' });
+      await wrapper.find('[role="menu"]').trigger('pointerenter', { pointerType: 'mouse' });
+
+      vi.advanceTimersByTime(200);
+      await nextTick();
+      expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+    });
+
+    it('emits the child action and closes the whole menu', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('click');
+
+      const status = wrapper.find('[role="menu"]').findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Status')!;
+      await status.trigger('click');
+
+      expect(wrapper.emitted('select')).toEqual([['sort:status']]);
+      expect(wrapper.find('.kebab-menu-item').exists()).toBe(false);
+    });
+  });
 });
