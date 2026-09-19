@@ -28,8 +28,7 @@
     <div v-else class="flex flex-col">
       <section v-for="group in groups" :key="group.key" class="border-b border-border last:border-b-0">
         <div
-          class="flex items-center gap-2 py-1.5 pr-2 cursor-pointer select-none hover:bg-bg-card"
-          :style="{ borderLeft: `3px solid ${group.color}`, paddingLeft: '6px' }"
+          class="relative flex items-center px-2 py-1.5 cursor-pointer select-none hover:bg-bg-card"
           role="button"
           :aria-expanded="isExpanded(group)"
           tabindex="0"
@@ -37,24 +36,37 @@
           @keydown.enter.prevent="toggle(group.key)"
           @keydown.space.prevent="toggle(group.key)"
         >
-          <ChevronIcon :expanded="isExpanded(group)" :size="12" />
-          <span class="flex-1 min-w-0 text-sm font-semibold truncate">{{ group.name }}</span>
-          <template v-if="prefs.showTags">
+          <!-- The same folder-color tint the Folders page header uses (the
+               sanctioned gradient in DESIGN.md §2), not a second gradient: full
+               strength expanded, faint collapsed. It spans the row rather than
+               sitting in a left border, so the two surfaces read alike. The
+               content sits in a `relative` wrapper below, because a positioned
+               overlay paints over static siblings whatever the DOM order. -->
+          <div
+            class="absolute inset-0 pointer-events-none transition-opacity duration-200"
+            :class="isExpanded(group) ? 'opacity-100' : 'opacity-40'"
+            :style="{ background: `linear-gradient(to right, ${groupTint(group)}, transparent)` }"
+          ></div>
+          <div class="relative flex items-center gap-2 w-full min-w-0">
+            <ChevronIcon :expanded="isExpanded(group)" :size="12" />
+            <span class="flex-1 min-w-0 text-sm font-semibold truncate">{{ group.name }}</span>
+            <template v-if="prefs.showTags">
+              <span
+                v-if="group.updates > 0"
+                class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+                :title="`${group.updates} update${group.updates > 1 ? 's' : ''} available`"
+              >{{ group.updates }} update{{ group.updates > 1 ? 's' : '' }}</span>
+              <span
+                v-if="group.failed > 0"
+                class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+                :title="`${group.failed} container${group.failed > 1 ? 's' : ''} with a failed scheduled run`"
+              >{{ group.failed }} failed</span>
+            </template>
             <span
-              v-if="group.updates > 0"
-              class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
-              :title="`${group.updates} update${group.updates > 1 ? 's' : ''} available`"
-            >{{ group.updates }} update{{ group.updates > 1 ? 's' : '' }}</span>
-            <span
-              v-if="group.failed > 0"
-              class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
-              :title="`${group.failed} container${group.failed > 1 ? 's' : ''} with a failed scheduled run`"
-            >{{ group.failed }} failed</span>
-          </template>
-          <span
-            class="shrink-0 text-xs text-text-secondary"
-            :title="`${group.running} running / ${group.total} total`"
-          >{{ group.running }}/{{ group.total }}</span>
+              class="shrink-0 text-xs text-text-secondary"
+              :title="`${group.running} running / ${group.total} total`"
+            >{{ group.running }}/{{ group.total }}</span>
+          </div>
         </div>
         <div v-if="isExpanded(group)" class="pb-1">
           <WidgetContainerRow
@@ -103,6 +115,8 @@ const WIDGET_STATS_INTERVAL = 15000;
 const NO_SCHEDULES: Schedule[] = [];
 const COLLAPSE_KEY = 'docker-folders-widget-collapsed';
 const OTHER_KEY = 'other';
+/** A group that is not a folder and so carries no color tint. */
+const NO_TINT = 'transparent';
 
 interface Group {
   key: string;
@@ -159,11 +173,25 @@ const allGroups = computed<Group[]>(() => {
       return { position: assoc.position, name: c?.name ?? assoc.container_name, state: c?.state, created: c?.created };
     });
     const members = assocs.map((assoc) => byName.get(assoc.container_name)).filter((c): c is Container => !!c);
-    result.push(makeGroup(`folder-${folder.id}`, folder.name, folder.color || 'var(--border-color)', members));
+    // Same fallback as FolderHeader.vue, so an uncolored folder tints the same
+    // on both surfaces. Other is not a folder and carries no tint at all, which
+    // is how the Folders page treats unfoldered containers.
+    result.push(makeGroup(`folder-${folder.id}`, folder.name, folder.color || 'var(--header-background, #ff8c2f)', members));
   }
-  result.push(makeGroup(OTHER_KEY, 'Other', 'var(--border-color)', dockerStore.unfolderedContainers));
+  result.push(makeGroup(OTHER_KEY, 'Other', NO_TINT, dockerStore.unfolderedContainers));
   return result;
 });
+
+/**
+ * The folder tint from FolderHeader.vue: the folder's own color at 12%.
+ *
+ * An untinted group returns `transparent` on its own rather than a mix of it.
+ * `transparent` is zero-alpha black, so mixing it bets on how srgb handles
+ * premultiplied alpha, and a wrong bet paints a dark smudge on a light theme.
+ */
+function groupTint(group: Group): string {
+  return group.color === NO_TINT ? NO_TINT : `color-mix(in srgb, ${group.color} 12%, transparent)`;
+}
 
 function makeGroup(key: string, name: string, color: string, members: Container[]): Group {
   const running = members.filter((c) => c.state === 'running').length;

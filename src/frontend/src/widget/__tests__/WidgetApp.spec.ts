@@ -138,6 +138,21 @@ describe('WidgetApp', () => {
     expect(folder.collapsed).toBe(false);
   });
 
+  it('tints the whole folder header with the folder color, not a left border', async () => {
+    window.localStorage.clear();
+    const { wrapper } = await mountWidget(containers, [makeFolder(['plex'])]);
+    const header = wrapper.find('section [role="button"]');
+    expect(header.attributes('style') ?? '').not.toContain('border-left');
+
+    const tint = header.find('div.absolute.inset-0');
+    // jsdom normalizes the fixture's #ff8c2f to rgb().
+    expect(tint.attributes('style')).toContain('linear-gradient(to right, color-mix(in srgb, rgb(255, 140, 47) 12%, transparent), transparent)');
+    // Faint while collapsed, full strength once expanded.
+    expect(tint.classes()).toContain('opacity-40');
+    await header.trigger('click');
+    expect(header.find('div.absolute.inset-0').classes()).toContain('opacity-100');
+  });
+
   it('opens the settings panel on a message from the dashboard page', async () => {
     const { wrapper } = await mountWidget(containers, []);
     expect(wrapper.text()).not.toContain('Widget settings');
