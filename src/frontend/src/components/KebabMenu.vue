@@ -302,9 +302,15 @@ function placeSub() {
 
 // The flyout is placed once, so close it rather than let it drift from its
 // parent row when the dropdown scrolls under it.
+// Listen only while a flyout is open, because every row on the page has a menu.
 function onScroll(e: Event) {
-  if (openSub.value !== null && !subRef.value?.contains(e.target as Node)) void showSub(null);
+  if (!subRef.value?.contains(e.target as Node)) void showSub(null);
 }
+
+watch(openSub, (idx) => {
+  if (idx !== null) document.addEventListener('scroll', onScroll, true);
+  else document.removeEventListener('scroll', onScroll, true);
+});
 
 watch(menuOpen, (open) => {
   if (!open) void showSub(null);
@@ -343,7 +349,6 @@ function onClickOutside(e: MouseEvent) {
 
 onMounted(() => {
   document.addEventListener('click', onClickOutside, true);
-  document.addEventListener('scroll', onScroll, true);
 });
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside, true);
