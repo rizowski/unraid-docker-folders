@@ -59,6 +59,7 @@
 import { ref, computed, watch, useId } from 'vue';
 import { useSettingsStore } from '@/stores/settings';
 import { CRON_PRESETS, type CronPreset } from '@/types/schedule';
+import { describeCron, DAY_NAMES } from '@/utils/cron';
 
 const props = defineProps<{
   modelValue: string;
@@ -74,7 +75,7 @@ const settingsStore = useSettingsStore();
 // mounted, and duplicate ids would bind <label for> to the wrong field.
 const uid = useId();
 
-const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const dayNames = DAY_NAMES;
 
 const preset = ref<CronPreset>('daily_3am');
 const customTime = ref('03:00');
@@ -158,25 +159,5 @@ function emitWeekly() {
   emit('update:modelValue', `${m} ${h} * * ${customDay.value}`);
 }
 
-const description = computed(() => {
-  const expr = props.modelValue;
-  if (!expr) return '';
-  const parts = expr.split(/\s+/);
-  if (parts.length !== 5) return 'Invalid expression';
-
-  const [min, hour, dom, mon, dow] = parts;
-
-  if (expr === '* * * * *') return 'Runs every minute';
-  if (min === '0' && hour === '*' && dom === '*' && mon === '*' && dow === '*') return 'Runs every hour';
-  if (dom === '*' && mon === '*' && dow === '*' && /^\d+$/.test(min) && /^\d+$/.test(hour)) {
-    return `Runs daily at ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
-  }
-  if (dom === '*' && mon === '*' && /^\d+$/.test(dow) && /^\d+$/.test(min) && /^\d+$/.test(hour)) {
-    return `Runs ${dayNames[Number(dow)]}s at ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
-  }
-  if (min.includes('/')) return `Runs every ${min.split('/')[1]} minutes`;
-  if (hour.includes('/')) return `Runs every ${hour.split('/')[1]} hours`;
-
-  return `Cron: ${expr}`;
-});
+const description = computed(() => (props.modelValue ? describeCron(props.modelValue) : ''));
 </script>
