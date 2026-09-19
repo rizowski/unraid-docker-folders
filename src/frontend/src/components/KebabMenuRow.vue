@@ -25,6 +25,11 @@
       <path v-for="(d, i) in (item.icon ?? '').split('|')" :key="i" :d="d" />
     </svg>
     {{ item.label }}
+    <!-- A disabled item that says why gets an info mark, so people know the
+         button's tooltip is there. -->
+    <svg v-if="item.disabled && item.title" class="kebab-info-icon ml-auto shrink-0 text-text-secondary" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
+    </svg>
   </button>
 </template>
 

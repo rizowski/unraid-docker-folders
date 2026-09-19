@@ -333,6 +333,20 @@ describe('KebabMenu open-change', () => {
     expect(dropdown.className).toContain('top-full');
     expect(dropdown.getAttribute('style')).toBeNull();
   });
+  it('marks a disabled item that has a reason with an info icon', async () => {
+    const wrapper = mountMenu([
+      { label: 'Edit', icon: 'M0 0', action: 'edit', disabled: true, title: 'Not managed by Unraid' },
+      { label: 'Loading', icon: 'M0 0', action: 'x', disabled: true },
+      { label: 'Logs', icon: 'M0 0', action: 'logs', title: 'Open logs' },
+    ]);
+    await wrapper.find('button').trigger('click');
+    const rows = wrapper.findAll('.kebab-menu-item');
+    expect(rows[0].find('.kebab-info-icon').exists()).toBe(true);
+    expect(rows[0].attributes('title')).toBe('Not managed by Unraid');
+    expect(rows[1].find('.kebab-info-icon').exists()).toBe(false);
+    expect(rows[2].find('.kebab-info-icon').exists()).toBe(false);
+  });
+
   describe('submenus', () => {
     const nestedItems: KebabMenuItem[] = [
       { label: 'Top', icon: 'M0 0', action: 'top' },
