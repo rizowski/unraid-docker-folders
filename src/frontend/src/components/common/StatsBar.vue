@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { formatPercent } from '@/utils/format';
+import { formatPercent, loadLevel, LOAD_BAR_CLASSES } from '@/utils/format';
 
 interface Props {
   label: string;
@@ -81,10 +81,5 @@ const props = withDefaults(defineProps<Props>(), {
   size: 'compact',
 });
 
-const barColor = computed(() => {
-  const pct = props.percent ?? 0;
-  if (pct > 80) return 'bg-error';
-  if (pct > 50) return 'bg-warning';
-  return 'bg-success';
-});
+const barColor = computed(() => LOAD_BAR_CLASSES[loadLevel(props.percent ?? 0)]);
 </script>

@@ -16,6 +16,16 @@ export function formatPercent(value: number): string {
   return `${value.toFixed(1)}%`;
 }
 
+/** How loaded a CPU or memory percent is, for the stats bar and widget colors. */
+export function loadLevel(percent: number): 'high' | 'medium' | 'low' {
+  if (percent > 80) return 'high';
+  if (percent > 50) return 'medium';
+  return 'low';
+}
+
+/** Bar fill for each load level. Shared so the Folders page and the widget bars stay the same color. */
+export const LOAD_BAR_CLASSES = { high: 'bg-error', medium: 'bg-warning', low: 'bg-success' } as const;
+
 /**
  * Format a unix timestamp for display.
  *

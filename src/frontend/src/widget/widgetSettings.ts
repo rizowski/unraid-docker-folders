@@ -14,6 +14,10 @@ export interface WidgetSettings {
   showWebui: boolean;
   /** Container images. Off shows a small status dot instead. */
   showIcons: boolean;
+  /** CPU and memory percent on running containers. Off by default: it polls stats.php. */
+  showStats: boolean;
+  /** Update, restart, and failed-schedule tags on rows and folder headers. */
+  showTags: boolean;
 }
 
 export const WIDGET_SETTINGS_KEY = 'docker-folders-widget-settings';
@@ -23,6 +27,8 @@ export const DEFAULT_WIDGET_SETTINGS: Readonly<WidgetSettings> = {
   startCollapsed: true,
   showWebui: true,
   showIcons: true,
+  showStats: false,
+  showTags: true,
 };
 
 /** Saved settings over the defaults. A missing or malformed value keeps its default. */

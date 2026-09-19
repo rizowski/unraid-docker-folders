@@ -39,6 +39,18 @@
         >
           <ChevronIcon :expanded="isExpanded(group)" :size="12" />
           <span class="flex-1 min-w-0 text-sm font-semibold truncate">{{ group.name }}</span>
+          <template v-if="prefs.showTags">
+            <span
+              v-if="group.updates > 0"
+              class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-warning/20 text-warning"
+              :title="`${group.updates} update${group.updates > 1 ? 's' : ''} available`"
+            >{{ group.updates }} update{{ group.updates > 1 ? 's' : '' }}</span>
+            <span
+              v-if="group.failed > 0"
+              class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
+              :title="`${group.failed} container${group.failed > 1 ? 's' : ''} with a failed scheduled run`"
+            >{{ group.failed }} failed</span>
+          </template>
           <span
             class="shrink-0 text-xs text-text-secondary"
             :title="`${group.running} running / ${group.total} total`"
@@ -52,6 +64,9 @@
             :distinguish-healthy="settingsStore.distinguishHealthy"
             :show-icon="prefs.showIcons"
             :show-webui="prefs.showWebui"
+            :show-stats="prefs.showStats"
+            :show-tags="prefs.showTags"
+            :failed-schedules="failedSchedules.get(container.name) ?? NO_SCHEDULES"
             @menu-open-change="onMenuOpenChange"
           />
         </div>
@@ -69,15 +84,23 @@ import { loadWidgetSettings, saveWidgetSettings } from './widgetSettings';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
+import { useStatsStore } from '@/stores/stats';
+import { useUpdatesStore } from '@/stores/updates';
+import { useScheduleStore } from '@/stores/schedules';
+import type { Schedule } from '@/types/schedule';
 import { initWebSocket } from '@/composables/useWebSocket';
 import { containerMatchesSearch } from '@/utils/search';
 import { isAliveContainer } from '@/utils/containerDisplay';
+import { composeProjectOf } from '@/utils/updateUnits';
 import { effectiveSortMode, sortByMode } from '@/utils/sortMode';
 import { reportHeightToParent } from '@/utils/iframeHost';
 import { safeLocalStorageGetJson, safeLocalStorageSet } from '@/utils/safeStorage';
 
 /** Slower than the Folders page: the dashboard is often left open for hours. */
 const WIDGET_POLL_INTERVAL = 60000;
+/** Stats poll slower than the Folders page (5s) for the same reason. */
+const WIDGET_STATS_INTERVAL = 15000;
+const NO_SCHEDULES: Schedule[] = [];
 const COLLAPSE_KEY = 'docker-folders-widget-collapsed';
 const OTHER_KEY = 'other';
 
@@ -88,16 +111,41 @@ interface Group {
   containers: Container[];
   running: number;
   total: number;
+  /** Members whose image has an update. */
+  updates: number;
+  /** Members with a failed scheduled run. */
+  failed: number;
 }
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
 const settingsStore = useSettingsStore();
+const statsStore = useStatsStore();
+const updatesStore = useUpdatesStore();
+const scheduleStore = useScheduleStore();
+statsStore.setPollInterval(WIDGET_STATS_INTERVAL);
 
 const query = ref('');
 const isSearching = computed(() => query.value.trim().length > 0);
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
 const error = computed(() => dockerStore.error || folderStore.error);
+
+// Enabled schedules whose last run failed, by container name. A stack schedule
+// counts for every container in that Compose project. One pass here, so rows
+// do not each scan the schedule list.
+const failedSchedules = computed(() => {
+  const map = new Map<string, Schedule[]>();
+  const failed = scheduleStore.schedules.filter((s) => s.enabled && s.last_run_status === 'error');
+  if (failed.length === 0) return map;
+  for (const c of dockerStore.containers) {
+    const project = composeProjectOf(c);
+    const mine = failed.filter(
+      (s) => (s.target_type === 'container' && s.target_id === c.name) || (s.target_type === 'stack' && !!project && s.target_id === project),
+    );
+    if (mine.length) map.set(c.name, mine);
+  }
+  return map;
+});
 
 // Folder membership, order, and counts do not depend on the search text, so
 // they live in their own computed and a keystroke only reruns the filter below.
@@ -119,7 +167,10 @@ const allGroups = computed<Group[]>(() => {
 
 function makeGroup(key: string, name: string, color: string, members: Container[]): Group {
   const running = members.filter((c) => c.state === 'running').length;
-  return { key, name, color, containers: members, running, total: members.length };
+  const checkUpdates = settingsStore.enableUpdateChecks;
+  const updates = checkUpdates ? members.filter((c) => updatesStore.hasUpdate(c.image)).length : 0;
+  const failed = members.filter((c) => failedSchedules.value.has(c.name)).length;
+  return { key, name, color, containers: members, running, total: members.length, updates, failed };
 }
 
 const prefs = ref(loadWidgetSettings());
@@ -182,9 +233,28 @@ function onMenuOpenChange(_open: boolean, bottom: number) {
 onMounted(async () => {
   window.addEventListener('message', onParentMessage);
   if (rootEl.value) resendHeight = reportHeightToParent(rootEl.value, () => menuBottom);
+  // Tag data loads after the rows, and only when tags are on. Turning tags on
+  // later loads it then (watch below).
+  if (prefs.value.showTags) void scheduleStore.fetchSchedules();
   await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
+  loadUpdates();
   initWebSocket({ pollInterval: WIDGET_POLL_INTERVAL });
 });
+
+// Same rule as the Folders page: no update tags unless update checks are on.
+// `loaded` stays false when the settings fetch fails, so a failed fetch shows
+// no update tags rather than tags based on the default setting.
+function loadUpdates() {
+  if (settingsStore.loaded && prefs.value.showTags && settingsStore.enableUpdateChecks) void updatesStore.fetchCachedUpdates();
+}
+watch(
+  () => prefs.value.showTags,
+  (on) => {
+    if (!on) return;
+    void scheduleStore.fetchSchedules();
+    loadUpdates();
+  },
+);
 
 onUnmounted(() => window.removeEventListener('message', onParentMessage));
 </script>

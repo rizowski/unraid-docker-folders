@@ -38,5 +38,7 @@ const OPTIONS: Array<{ key: keyof WidgetSettings; label: string }> = [
   { key: 'startCollapsed', label: 'Start folders collapsed' },
   { key: 'showWebui', label: 'Show WebUI icons' },
   { key: 'showIcons', label: 'Show container icons' },
+  { key: 'showStats', label: 'Show CPU and memory' },
+  { key: 'showTags', label: 'Show status tags' },
 ];
 </script>

@@ -9,7 +9,7 @@ describe('widgetSettings', () => {
   });
 
   it('round-trips saved settings', () => {
-    const settings = { hideStopped: true, startCollapsed: false, showWebui: false, showIcons: false };
+    const settings = { hideStopped: true, startCollapsed: false, showWebui: false, showIcons: false, showStats: true, showTags: false };
     saveWidgetSettings(settings);
     expect(loadWidgetSettings()).toEqual(settings);
   });
