@@ -255,6 +255,10 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   return items;
 });
 
+function composeAvailability() {
+  return { composeDisabled: composeStore.composeActionsDisabled, composeReason: composeStore.composeDisabledReason ?? undefined };
+}
+
 /** Things that act on the folder's containers or images right now. */
 const actionItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [];
@@ -283,8 +287,7 @@ const actionItems = computed<KebabMenuItem[]>(() => {
   // `show` is still used for genuinely state-dependent entries (up vs stop),
   // which depend on container state we already have, not on the status check.
   if (props.folder.compose_project) {
-    const composeDisabled = composeStore.composeActionsDisabled;
-    const composeReason = composeStore.composeDisabledReason ?? undefined;
+    const { composeDisabled, composeReason } = composeAvailability();
     items.push(
       { label: 'Stack Up', icon: PLAY_ICON, action: 'compose-up', show: !isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: isRunning.value, disabled: composeDisabled, title: composeReason },
@@ -322,8 +325,7 @@ const optionItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [{ label: 'Edit Folder', icon: EDIT_ICON, action: 'edit' }];
 
   if (props.folder.compose_project) {
-    const composeDisabled = composeStore.composeActionsDisabled;
-    const composeReason = composeStore.composeDisabledReason ?? undefined;
+    const { composeDisabled, composeReason } = composeAvailability();
     items.push(
       { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: REFRESH_ICON, action: 'compose-toggle-autostart', disabled: composeDisabled, title: composeReason },
     );
