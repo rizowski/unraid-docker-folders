@@ -14,11 +14,19 @@ require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/con
 
 if (!file_exists(DB_PATH)) return;
 
-// A nowdoc, not a heredoc: nothing below is dynamic in PHP, and a heredoc would
-// interpolate every `$` in the inline JavaScript.
+// Cache-busting stamps for the tile below. widget.html and frameSrc.js carry no
+// content hash, so a plugin update does not reach the browser without them.
+// They are computed here because a nowdoc cannot hold a PHP expression, and are
+// substituted by str_replace after the string is built.
+$frameSrcVersion = dfmAssetVersion(PLUGIN_DIR . '/include/frameSrc.js');
+$widgetVersion = dfmAssetVersion(PLUGIN_DIR . '/assets/widget.html');
+
+// A nowdoc, not a heredoc: the inline JavaScript below uses jQuery's `$`, and a
+// heredoc would interpolate it. The two dynamic values arrive as __DFM_*__
+// placeholders and are replaced after this string, not interpolated into it.
 // The title attribute is required. The dashboard md5-hashes it to key the saved
 // tile position and collapse state, so renaming it resets both.
-$mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
+$tile = <<<'EOT'
 <tbody id="docker_folders_view" title="Docker Folders">
 <tr><td>
   <span class="tile-header">
@@ -38,7 +46,8 @@ $mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
 </td></tr>
 <tr><td>
   <iframe id="docker-folders-widget-frame" scrolling="no" style="display:block;width:100%;height:40px;border:none;"></iframe>
-  <script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js"></script>
+  <script>window.dockerFoldersAssetVersion = '__DFM_WIDGET_V__';</script>
+  <script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js?v=__DFM_FRAMESRC_V__"></script>
   <script>
   (function() {
     // This tile replaces Unraid's own Docker tile. Remove it now, while the page
@@ -76,4 +85,10 @@ $mytiles['unraid-docker-folders-modern']['column2'] = <<<'EOT'
 </td></tr>
 </tbody>
 EOT;
+
+$mytiles['unraid-docker-folders-modern']['column2'] = str_replace(
+  ['__DFM_WIDGET_V__', '__DFM_FRAMESRC_V__'],
+  [$widgetVersion, $frameSrcVersion],
+  $tile
+);
 ?>

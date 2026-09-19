@@ -22,12 +22,14 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         scrolling="no"
         allowfullscreen></iframe>
 
-<!-- CodeMirror 5 (bundled) for YAML syntax highlighting in compose editor -->
-<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/codemirror.css">
-<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/theme/material-darker.css">
-<script src="/plugins/unraid-docker-folders-modern/codemirror/codemirror.js"></script>
-<script src="/plugins/unraid-docker-folders-modern/codemirror/mode/yaml/yaml.js"></script>
-<script src="/plugins/unraid-docker-folders-modern/codemirror/addon/edit/matchbrackets.js"></script>
+<!-- CodeMirror 5 (bundled) for YAML syntax highlighting in compose editor.
+     ?v= is each file's own mtime, so a plugin update changes only the URLs
+     of the files it actually replaced. See dfmAssetVersion() in config.php. -->
+<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/codemirror.css?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/codemirror.css') ?>">
+<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/theme/material-darker.css?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/theme/material-darker.css') ?>">
+<script src="/plugins/unraid-docker-folders-modern/codemirror/codemirror.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/codemirror.js') ?>"></script>
+<script src="/plugins/unraid-docker-folders-modern/codemirror/mode/yaml/yaml.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/mode/yaml/yaml.js') ?>"></script>
+<script src="/plugins/unraid-docker-folders-modern/codemirror/addon/edit/matchbrackets.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/addon/edit/matchbrackets.js') ?>"></script>
 
 <!-- Generic parent-page modal overlay (rendered outside iframe to avoid clipping) -->
 <style>
@@ -129,7 +131,11 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   </div>
 </div>
 
-<script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js"></script>
+<!-- frameSrc.js appends this to the iframe URL. index.html carries no content
+     hash, so without it the browser serves the previous build's copy, which
+     names chunk files the update already deleted. -->
+<script>window.dockerFoldersAssetVersion = <?= json_encode(dfmAssetVersion(PLUGIN_DIR . '/assets/index.html')) ?>;</script>
+<script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/include/frameSrc.js') ?>"></script>
 <script>
 (function() {
   var frame = document.getElementById('docker-folders-frame');

@@ -623,6 +623,30 @@ function refreshReleaseNotes(array &$results, $db, callable $log, $full, $now = 
   }
 }
 
+/**
+ * Cache-busting query value for a plugin file served under a fixed URL: the
+ * CodeMirror vendor files, frameSrc.js, and the iframe entry documents
+ * assets/index.html and assets/widget.html. Vite content-hashes the chunks
+ * those documents reference, but not the documents themselves, so a cached
+ * index.html keeps pointing at chunk names emptyOutDir already deleted.
+ *
+ * Unraid's nginx serves these files directly and the plugin ships no nginx
+ * config, so PHP cannot set cache headers on them. The query string is the
+ * only part of the URL a page file can move.
+ *
+ * filemtime() rather than a version constant: build.sh copies the backend
+ * tree with `cp -r`, so every packaged file gets a fresh mtime, and this
+ * also busts after an in-place SSH edit during debugging.
+ *
+ * @param string $absolutePath Absolute path to the asset.
+ * @return string The file's mtime, or PLUGIN_VERSION when it is unreadable.
+ */
+function dfmAssetVersion($absolutePath)
+{
+  $mtime = @filemtime($absolutePath);
+  return $mtime !== false ? (string) $mtime : PLUGIN_VERSION;
+}
+
 // JSON response helper
 function jsonResponse($data, $statusCode = 200)
 {

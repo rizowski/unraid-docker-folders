@@ -194,7 +194,11 @@ Start/Stop/Edit/Logs kebab menu per container. A cog in the tile header posts
 a message to the frame, which opens the widget settings panel. Those settings
 (`widget/widgetSettings.ts`) save in localStorage, per browser. Rules for this file:
 - The tile string is a nowdoc (`<<<'EOT'`), because a heredoc would interpolate
-  `$` in the inline JavaScript.
+  `$` in the inline JavaScript. It is assigned to `$tile`, and the two
+  cache-busting stamps reach it as `__DFM_WIDGET_V__` and `__DFM_FRAMESRC_V__`
+  placeholders that `str_replace` substitutes afterwards. A nowdoc holds no PHP
+  expression, so `<?= ?>` inside it does not work. That substitution is the
+  only way a value gets in. See `dfmAssetVersion()` below.
 - The header needs `Markdown="false"`, and the PHP block must end with `?>`.
   Unraid runs page text through Markdown by default, and Markdown escapes an
   unclosed `<?php` block, so the PHP source shows on the dashboard as text.
@@ -218,6 +222,28 @@ Key="Value"
 <?php // PHP code ?>
 <!-- HTML content (fragment, not full document) -->
 ```
+
+### Asset cache busting
+
+Vite content-hashes the chunks under `assets/assets/`, so those are safe. The
+files that reference them are not hashed: `assets/index.html`,
+`assets/widget.html`, `include/frameSrc.js`, and the bundled CodeMirror files.
+Unraid's nginx serves them directly and the plugin ships no nginx config, so PHP
+cannot set cache headers on them. The query string is the only lever.
+
+`dfmAssetVersion($absolutePath)` in `include/config.php` returns the file's
+`filemtime()`. `build.sh` copies the backend tree with `cp -r`, so every packaged
+file gets a fresh mtime, and `tar` preserves it. `filemtime()` rather than a
+version constant, because it also busts after an in-place SSH edit.
+
+`frameSrc.js` is static JavaScript and cannot call `filemtime()`, so each page
+file sets `window.dockerFoldersAssetVersion` to the iframe document's stamp
+first. Read that global inside the function, never at file scope: `Folders.page`
+sets it before the script tag and the dashboard tile sets it after.
+
+**If you add a `<script src>` or `<link href>` to a page file, stamp it.**
+Nothing enforces this. `DockerFolders.page` and `DockerFoldersInject.page` need
+no stamps today because they load no external files.
 
 ### Build System Details
 
@@ -325,7 +351,8 @@ Nothing enforces this.
 
 1. `include/frameSrc.js` (loaded by `Folders.page` and `DockerFoldersDashboard.page`)
    reads Unraid's global `csrf_token` and puts it in the **iframe URL query string**,
-   next to the theme variables.
+   next to the theme variables and the `v` cache-busting stamp. Both readers use
+   `URLSearchParams`, so parameter order does not matter.
 2. Inside the iframe `window.csrf_token` does not exist, so
    `utils/csrf.ts:31-33` falls back to reading it from `window.location.search`.
 3. `apiFetch()` (`csrf.ts:44-72`) sends it as a **form-encoded body field**
