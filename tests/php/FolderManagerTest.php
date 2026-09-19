@@ -33,6 +33,37 @@ final class FolderManagerTest extends TestCase
     {
         $this->db = self::memoryDatabase();
         $this->manager = new FolderManager($this->db);
+        // syncComposeStacks builds its own ComposeManager, which reads the
+        // singleton, so point the singleton at the test database.
+        self::setSingleton($this->db);
+    }
+
+    protected function tearDown(): void
+    {
+        self::setSingleton(null);
+    }
+
+    private static function setSingleton(?Database $database): void
+    {
+        $prop = (new ReflectionClass(Database::class))->getProperty('instance');
+        $prop->setAccessible(true);
+        $prop->setValue(null, $database);
+    }
+
+    /** A container as DockerClient lists it, in Compose project `$project`. */
+    private static function composeContainer(string $name, string $project): array
+    {
+        return [
+            'id' => "id-$name",
+            'name' => "/$name",
+            'labels' => ['com.docker.compose.project' => $project],
+        ];
+    }
+
+    /** @return string[] */
+    private function folderMembers(int $folderId): array
+    {
+        return array_column($this->manager->getFolder($folderId)['containers'], 'container_name');
     }
 
     private static function memoryDatabase(): Database
@@ -161,6 +192,65 @@ final class FolderManagerTest extends TestCase
         );
         self::assertSame(1, $this->db->getRowCount('container_folders'));
         self::assertSame(['radarr'], $this->manager->getUnfolderedOrder());
+    }
+
+    #[Test]
+    public function addContainerToFolderMovesTheContainerOutOfItsOldFolder(): void
+    {
+        $media = $this->manager->createFolder(['name' => 'Media']);
+        $web = $this->manager->createFolder(['name' => 'Web']);
+        $this->manager->addContainerToFolder($media['id'], 'id-plex', 'plex');
+        $this->manager->addContainerToFolder($web['id'], 'id-nginx', 'nginx');
+
+        self::assertTrue($this->manager->addContainerToFolder($web['id'], 'id-plex', 'plex'));
+
+        self::assertSame(
+            [['folder_id' => $web['id'], 'position' => 1]],
+            array_map(
+                fn ($row) => ['folder_id' => (int) $row['folder_id'], 'position' => (int) $row['position']],
+                $this->db->fetchAll('SELECT folder_id, position FROM container_folders WHERE container_name = ?', ['plex'])
+            )
+        );
+        self::assertSame([], $this->manager->getFolder($media['id'])['containers']);
+    }
+
+    #[Test]
+    public function composeSyncAssignsANewStackContainerToItsFolder(): void
+    {
+        $this->manager->syncComposeStacks([self::composeContainer('db', 'app')]);
+
+        $folder = $this->db->fetchOne('SELECT id FROM folders WHERE compose_project = ?', ['app']);
+        self::assertSame(['db'], $this->folderMembers((int) $folder['id']));
+    }
+
+    #[Test]
+    public function composeSyncLeavesOutAContainerTheUserRemoved(): void
+    {
+        $containers = [self::composeContainer('db', 'app'), self::composeContainer('web', 'app')];
+        $this->manager->syncComposeStacks($containers);
+        $folderId = (int) $this->db->fetchValue('SELECT id FROM folders WHERE compose_project = ?', ['app']);
+
+        $this->manager->removeContainerFromFolder('db');
+        $this->manager->excludeFromComposeSync('db');
+        $this->manager->syncComposeStacks($containers);
+
+        self::assertSame(['web'], $this->folderMembers($folderId));
+    }
+
+    #[Test]
+    public function addingTheContainerBackLetsComposeSyncManageItAgain(): void
+    {
+        $containers = [self::composeContainer('db', 'app')];
+        $this->manager->syncComposeStacks($containers);
+        $folderId = (int) $this->db->fetchValue('SELECT id FROM folders WHERE compose_project = ?', ['app']);
+        $this->manager->removeContainerFromFolder('db');
+        $this->manager->excludeFromComposeSync('db');
+
+        $this->manager->clearComposeSyncExclusion('db');
+        $this->manager->syncComposeStacks($containers);
+
+        self::assertSame(['db'], $this->folderMembers($folderId));
+        self::assertSame(0, $this->db->getRowCount('compose_sync_exclusions'));
     }
 
     #[Test]

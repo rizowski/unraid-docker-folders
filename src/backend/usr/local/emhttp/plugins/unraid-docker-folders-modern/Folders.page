@@ -22,12 +22,14 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
         scrolling="no"
         allowfullscreen></iframe>
 
-<!-- CodeMirror 5 (bundled) for YAML syntax highlighting in compose editor -->
-<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/codemirror.css">
-<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/theme/material-darker.css">
-<script src="/plugins/unraid-docker-folders-modern/codemirror/codemirror.js"></script>
-<script src="/plugins/unraid-docker-folders-modern/codemirror/mode/yaml/yaml.js"></script>
-<script src="/plugins/unraid-docker-folders-modern/codemirror/addon/edit/matchbrackets.js"></script>
+<!-- CodeMirror 5 (bundled) for YAML syntax highlighting in compose editor.
+     ?v= is each file's own mtime, so a plugin update changes only the URLs
+     of the files it actually replaced. See dfmAssetVersion() in config.php. -->
+<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/codemirror.css?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/codemirror.css') ?>">
+<link rel="stylesheet" href="/plugins/unraid-docker-folders-modern/codemirror/theme/material-darker.css?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/theme/material-darker.css') ?>">
+<script src="/plugins/unraid-docker-folders-modern/codemirror/codemirror.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/codemirror.js') ?>"></script>
+<script src="/plugins/unraid-docker-folders-modern/codemirror/mode/yaml/yaml.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/mode/yaml/yaml.js') ?>"></script>
+<script src="/plugins/unraid-docker-folders-modern/codemirror/addon/edit/matchbrackets.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/codemirror/addon/edit/matchbrackets.js') ?>"></script>
 
 <!-- Generic parent-page modal overlay (rendered outside iframe to avoid clipping) -->
 <style>
@@ -129,29 +131,15 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
   </div>
 </div>
 
+<!-- frameSrc.js appends this to the iframe URL. index.html carries no content
+     hash, so without it the browser serves the previous build's copy, which
+     names chunk files the update already deleted. -->
+<script>window.dockerFoldersAssetVersion = <?= json_encode(dfmAssetVersion(PLUGIN_DIR . '/assets/index.html')) ?>;</script>
+<script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/include/frameSrc.js') ?>"></script>
 <script>
 (function() {
   var frame = document.getElementById('docker-folders-frame');
-  var token = (typeof csrf_token === 'string') ? csrf_token : '';
-
-  // Read Unraid CSS variables from parent document so the iframe can match the theme
-  var vars = [
-    '--text-color', '--background-color', '--border-color',
-    '--header-background', '--header-text-color',
-    '--button-background', '--button-hover', '--button-text-color',
-    '--input-background', '--input-border'
-  ];
-  var cs = getComputedStyle(document.documentElement);
-  var theme = {};
-  vars.forEach(function(v) {
-    var val = cs.getPropertyValue(v).trim();
-    if (val) theme[v] = val;
-  });
-  var themeParam = Object.keys(theme).length > 0
-    ? '&theme=' + encodeURIComponent(JSON.stringify(theme))
-    : '';
-
-  frame.src = '/plugins/unraid-docker-folders-modern/assets/index.html?csrf_token=' + encodeURIComponent(token) + themeParam;
+  frame.src = window.dockerFoldersFrameSrc('index.html');
 
   // ============================================================
   // Generic parent-page modal shell
@@ -1162,10 +1150,9 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     if (currentId && ev.key === 'Enter' && ev.ctrlKey) submitDefaultAction();
   });
 
-  // Legacy support: older useModalElevation composable sends
-  // { type: 'docker-folders-modal', open: true/false, minHeight }
-  // without a modal descriptor. Ignore those — the new parent modal handles
-  // its own lifecycle.
+  // A 'docker-folders-modal' message without a modal descriptor came from
+  // older builds of useModalElevation. Ignore those. An in-frame BaseModal now
+  // keeps the frame tall enough through the docker-folders-resize height.
   window.addEventListener('message', function(e) {
     if (!e.data || typeof e.data !== 'object') return;
 

@@ -306,12 +306,15 @@ import SelectModal from '@/components/SelectModal.vue';
 import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
+import { byLabel } from '@/utils/menu';
+import { AUTOSTART_ICON, DOWNLOAD_ICON, EDIT_ICON, GEAR_ICON, PLAY_ICON, REFRESH_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
 import ContainerDetails from '@/components/docker/ContainerDetails.vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
+import { containerStatus, containerEditUrl, containerWebuiUrl, openContainerTerminal } from '@/utils/containerDisplay';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -640,63 +643,16 @@ onUnmounted(() => {
 const distinguishHealthy = inject<Ref<boolean>>('distinguishHealthy', ref(true));
 const dragLocked = inject<Ref<boolean>>('dragLocked', ref(false));
 
-const isHealthy = computed(() => props.container.status?.toLowerCase().includes('(healthy)'));
+// Halo and tooltip resolve together in containerStatus; see utils/containerDisplay.ts.
+const status = computed(() => containerStatus(props.container, distinguishHealthy.value));
 
-// Health/state is carried by a feathered halo around the container icon in both
-// views (see .status-halo in main.css), replacing the old dot and bar. Halo and
-// tooltip resolve together so a newly handled state can't land in one and be
-// forgotten in the other — they were previously two parallel branch chains.
-const status = computed(() => {
-  const state = props.container.state;
-  if (state === 'running') {
-    if (!distinguishHealthy.value) return { halo: 'status-halo-success', tooltip: 'Running' };
-    return isHealthy.value
-      ? { halo: 'status-halo-success', tooltip: 'Running (healthy)' }
-      : { halo: 'status-halo-info', tooltip: 'Running (no health check)' };
-  }
-  if (state === 'paused') return { halo: 'status-halo-warning', tooltip: 'Paused' };
-  if (state === 'exited') return { halo: 'status-halo-error', tooltip: 'Exited' };
-  if (state === 'stopped') return { halo: 'status-halo-error', tooltip: 'Stopped' };
-  if (state === 'created') return { halo: 'status-halo-muted', tooltip: 'Created' };
-  return { halo: 'status-halo-muted', tooltip: state.charAt(0).toUpperCase() + state.slice(1) };
-});
+const editUrl = computed(() => containerEditUrl(props.container));
 
-const editUrl = computed(() => {
-  if (props.container.managed !== 'dockerman') return null;
-  return `/Docker/UpdateContainer?xmlTemplate=edit:/boot/config/plugins/dockerMan/templates-user/my-${props.container.name}.xml`;
-});
-
-const resolvedWebui = computed(() => {
-  const tpl = props.container.webui;
-  if (!tpl) return null;
-  let url = tpl;
-  // Replace [IP] with current hostname
-  url = url.replace('[IP]', window.location.hostname);
-  // Replace [PORT:xxxx] with the mapped public port
-  url = url.replace(/\[PORT:(\d+)\]/g, (_match, privatePort) => {
-    const pNum = parseInt(privatePort);
-    const mapped = props.container.ports?.find((p) => p.PrivatePort === pNum);
-    return mapped?.PublicPort ? String(mapped.PublicPort) : privatePort;
-  });
-  return url;
-});
+const resolvedWebui = computed(() => containerWebuiUrl(props.container));
 
 // Same gate as the footer WebUI link, so the two can never disagree about
 // whether a container has a reachable web interface.
 const iconWebui = computed(() => (isRunning.value ? resolvedWebui.value : null));
-
-function openContainerTerminal(mode: 'console' | 'logs') {
-  const name = props.container.name;
-  const more = mode === 'logs' ? '.log' : 'sh';
-  const parentWindow = window.parent as typeof window & { openTerminal?: (tag: string, name: string, more: string) => void };
-  if (parentWindow?.openTerminal) {
-    parentWindow.openTerminal('docker', name, more);
-  } else {
-    // Fallback: open directly (dev mode or not in iframe)
-    const suffix = mode === 'logs' ? `${encodeURIComponent(name)}.log` : encodeURIComponent(name);
-    window.open(`/logterminal/${suffix}/`, '_blank');
-  }
-}
 
 const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
 
@@ -733,33 +689,69 @@ const projectUrl = computed(() => {
   return props.container.labels?.['net.unraid.docker.project'] || null;
 });
 
+const onMobileList = computed(() => props.view === 'list' && isMobile.value);
+
+/**
+ * The container kebab: a pending-update alert at the top level, then four
+ * submenus in alphabetical order. Actions work on the container, Autostart
+ * sets whether and when it starts on boot, Links open other pages, and Options
+ * change where it lives and runs from. A submenu with nothing to show hides
+ * itself (KebabMenu).
+ */
 const menuItems = computed<KebabMenuItem[]>(() => [
-  { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: props.view === 'list' && isMobile.value && isStopped.value },
-  { label: 'Resume', icon: 'M6 4l14 8-14 8z', action: 'resume', class: 'text-success', show: props.view === 'list' && isMobile.value && isPaused.value },
-  { label: 'Restart', icon: 'M1 4v6h6|M3.51 15a9 9 0 1 0 2.13-9.36L1 10', action: 'restart', class: 'text-primary', show: props.view === 'list' && isMobile.value && isRunning.value },
-  { label: 'Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning', show: hasUpdate.value },
-  { label: 'Force Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'force-update', class: 'text-warning', show: !hasUpdate.value && !isCompose.value },
-  // Shown before settings land so the menu doesn't grow an entry a moment
-  // after it opens; disabled until we know update checks are actually on.
-  { label: updatesStore.isCheckingImage(props.container.image) ? 'Checking for Updates…' : 'Check for Updates', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'check-updates', show: !settingsStore.loaded || settingsStore.enableUpdateChecks, disabled: !settingsStore.loaded, title: settingsStore.loaded ? undefined : 'Loading settings…' },
-  // `href` is empty for an unmanaged container, so KebabMenu falls through to
-  // its button branch, which is the only one that honours disabled/title.
-  { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
-  { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
-  { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
-  { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
-  { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
-  { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
-  { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: canAdopt.value },
-  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
-  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
+  { label: 'Apply Update', icon: DOWNLOAD_ICON, action: 'update', class: 'text-warning', show: hasUpdate.value },
   { divider: true },
+  { label: 'Actions', icon: PLAY_ICON, children: actionMenuItems.value },
+  { label: 'Autostart', icon: AUTOSTART_ICON, children: autostartMenuItems.value },
+  { label: 'Links', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', children: linkMenuItems.value },
+  { label: 'Options', icon: GEAR_ICON, children: optionMenuItems.value },
+]);
+
+/**
+ * Things that act on the container, including editing it.
+ * The start/stop entries only show on a phone in list view, where the row
+ * hides its action buttons. Remove stays last under its own divider, wherever
+ * the rest sorts to.
+ */
+const actionMenuItems = computed<KebabMenuItem[]>(() => [
+  ...byLabel([
+    { label: 'Start', icon: 'M6 4l14 8-14 8z', action: 'start', class: 'text-success', show: onMobileList.value && isStopped.value },
+    { label: 'Resume', icon: 'M6 4l14 8-14 8z', action: 'resume', class: 'text-success', show: onMobileList.value && isPaused.value },
+    { label: 'Restart', icon: 'M1 4v6h6|M3.51 15a9 9 0 1 0 2.13-9.36L1 10', action: 'restart', class: 'text-primary', show: onMobileList.value && isRunning.value },
+    { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: onMobileList.value && isRunning.value },
+    { label: 'Force Update', icon: DOWNLOAD_ICON, action: 'force-update', class: 'text-warning', show: !hasUpdate.value && !isCompose.value },
+    // Shown before settings land so the menu doesn't grow an entry a moment
+    // after it opens; disabled until we know update checks are actually on.
+    { label: updatesStore.isCheckingImage(props.container.image) ? 'Checking for Updates…' : 'Check for Updates', icon: REFRESH_ICON, action: 'check-updates', show: !settingsStore.loaded || settingsStore.enableUpdateChecks, disabled: !settingsStore.loaded, title: settingsStore.loaded ? undefined : 'Loading settings…' },
+    { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
+    { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
+    // `href` is empty for an unmanaged container, so KebabMenu falls through to
+    // its button branch, which is the only one that honours disabled/title.
+    { label: 'Edit', icon: EDIT_ICON, href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
+  ]),
+  { divider: true },
+  { label: 'Remove', icon: TRASH_ICON, action: 'remove', class: 'text-error', show: onMobileList.value && isStopped.value },
+]);
+
+/** Whether the container starts with the array, and how long it waits. */
+const autostartMenuItems = computed<KebabMenuItem[]>(() => [
+  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: AUTOSTART_ICON, action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
+  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: STOPWATCH_ICON, action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
+]);
+
+/** Where the container lives and runs from: adoption, schedules, folder. */
+const optionMenuItems = computed<KebabMenuItem[]>(() => byLabel([
+  { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: canAdopt.value },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
   { label: `${folderVerb.value} to Folder…`, icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: folderTargets.value.length > 0 },
-  { divider: true },
-  { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: props.view === 'list' && isMobile.value && isRunning.value },
-  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: props.view === 'list' && isMobile.value && isStopped.value },
-]);
+]));
+
+/** Pages outside this plugin. */
+const linkMenuItems = computed<KebabMenuItem[]>(() => byLabel([
+  { label: 'WebUI', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M2 12h20|M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z', href: resolvedWebui.value || '', target: '_blank', show: !!resolvedWebui.value && isRunning.value },
+  { label: 'Project', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', href: projectUrl.value || imageLink.value || '', target: '_blank', show: !!(projectUrl.value || imageLink.value) },
+  { label: 'Support', icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z', href: supportUrl.value || '', target: '_blank', show: !!supportUrl.value },
+]));
 
 async function handleMenuAction(action: string) {
   if (action === 'stop') {
@@ -791,9 +783,9 @@ async function handleMenuAction(action: string) {
   } else if (action === 'pick-folder') {
     showFolderPicker.value = true;
   } else if (action === 'console') {
-    openContainerTerminal('console');
+    openContainerTerminal(props.container.name, 'console');
   } else if (action === 'logs') {
-    openContainerTerminal('logs');
+    openContainerTerminal(props.container.name, 'logs');
   }
 }
 

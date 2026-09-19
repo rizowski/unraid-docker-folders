@@ -58,12 +58,12 @@
       </span>
       <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
-      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0">
+      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5">
         <StatsBar label="CPU" :percent="null" size="inline" />
         <StatsBar label="MEM" :percent="null" size="inline" />
       </div>
       <!-- Folder average stats -->
-      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
+      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5" @click.stop>
         <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
         <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
       </div>
@@ -120,6 +120,8 @@ import { useComposeStore } from '@/stores/compose';
 import { useFolderRunningState } from '@/composables/useFolderRunningState';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
+import { byLabel } from '@/utils/menu';
+import { AUTOSTART_ICON, DOWNLOAD_ICON, EDIT_ICON, GEAR_ICON, PLAY_ICON, REFRESH_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
 import ComposeControls from '@/components/compose/ComposeControls.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
@@ -222,18 +224,44 @@ const folderAutostartDelay = computed(() => {
   return delays.every((d) => d === delays[0]) ? delays[0] : 0;
 });
 
+
+/**
+ * The folder kebab: a pending-update alert at the top level, then three
+ * submenus in alphabetical order. Actions work on the containers and the
+ * stack, Folder Options changes how the folder behaves, and Sort orders its
+ * containers. A submenu with nothing to show hides itself (KebabMenu).
+ */
 const folderMenuItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [];
 
   if (folderUpdateCount.value > 0) {
-    items.push({
-      label: `Update (${folderUpdateCount.value})`,
-      icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3',
-      action: 'update-folder',
-      class: 'text-warning hover:text-warning',
-    });
-    items.push({ divider: true });
+    items.push(
+      {
+        label: `Apply Update (${folderUpdateCount.value})`,
+        icon: DOWNLOAD_ICON,
+        action: 'update-folder',
+        class: 'text-warning hover:text-warning',
+      },
+      { divider: true },
+    );
   }
+
+  items.push(
+    { label: 'Actions', icon: PLAY_ICON, children: actionItems.value },
+    { label: 'Folder Options', icon: GEAR_ICON, children: optionItems.value },
+    { label: 'Sort', icon: 'M3 16l4 4 4-4|M7 20V4|M11 4h10|M11 8h7|M11 12h4', children: sortItems.value },
+  );
+
+  return items;
+});
+
+function composeAvailability() {
+  return { composeDisabled: composeStore.composeActionsDisabled, composeReason: composeStore.composeDisabledReason ?? undefined };
+}
+
+/** Things that act on the folder's containers or images right now. */
+const actionItems = computed<KebabMenuItem[]>(() => {
+  const items: KebabMenuItem[] = [];
 
   // The `loaded` half mirrors the header button: until settings land we don't
   // know whether update checks are on, so show the entry disabled instead of
@@ -241,19 +269,16 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   // data about this folder, not a capability, so it still hides the entry.
   const updateChecksUnknownOrOn = !settingsStore.loaded || settingsStore.enableUpdateChecks;
   if (updateChecksUnknownOrOn && folderImages.value.length > 0) {
-    items.push(
-      {
-        label: folderUpdateCheckRunning.value ? 'Checking for Updates…' : 'Check for Updates',
-        icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15',
-        action: 'check-updates',
-        disabled: !settingsStore.loaded,
-        title: settingsStore.loaded ? undefined : 'Loading settings…',
-      },
-      { divider: true },
-    );
+    items.push({
+      label: folderUpdateCheckRunning.value ? 'Checking for Updates…' : 'Check for Updates',
+      icon: REFRESH_ICON,
+      action: 'check-updates',
+      disabled: !settingsStore.loaded,
+      title: settingsStore.loaded ? undefined : 'Loading settings…',
+    });
   }
 
-  // Compose section — actions that affect the stack itself.
+  // Compose stack actions.
   //
   // Gated only on the folder actually being a compose project. Compose
   // availability is an async check, so these are disabled rather than hidden;
@@ -262,16 +287,47 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   // `show` is still used for genuinely state-dependent entries (up vs stop),
   // which depend on container state we already have, not on the status check.
   if (props.folder.compose_project) {
-    const composeDisabled = composeStore.composeActionsDisabled;
-    const composeReason = composeStore.composeDisabledReason ?? undefined;
+    const { composeDisabled, composeReason } = composeAvailability();
     items.push(
-      { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: !isRunning.value, disabled: composeDisabled, title: composeReason },
+      { label: 'Stack Up', icon: PLAY_ICON, action: 'compose-up', show: !isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: isRunning.value, disabled: composeDisabled, title: composeReason },
-      { label: 'Pull Latest Images', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'compose-pull', disabled: composeDisabled, title: composeReason },
-      { label: 'Recompose', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-recompose', show: isRunning.value, disabled: composeDisabled, title: composeReason },
-      { label: composeStore.composePluginInstalled ? 'View Stack' : 'Edit Stack', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'compose-edit' },
-      { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'compose-toggle-autostart', disabled: composeDisabled, title: composeReason },
-      { divider: true },
+      { label: 'Pull Latest Images', icon: DOWNLOAD_ICON, action: 'compose-pull', disabled: composeDisabled, title: composeReason },
+      { label: 'Recompose', icon: REFRESH_ICON, action: 'compose-recompose', show: isRunning.value, disabled: composeDisabled, title: composeReason },
+      { label: composeStore.composePluginInstalled ? 'View Stack' : 'Edit Stack', icon: EDIT_ICON, action: 'compose-edit' },
+    );
+  }
+
+  return byLabel(items);
+});
+
+/**
+ * One row per sort mode (KebabMenu has no native radio/select item type).
+ * The active one is marked with the primary color and a bold label. A folder
+ * on 'manual' follows the toolbar sort (see effectiveSortMode), so when the
+ * toolbar is not manual that row says so.
+ */
+const sortItems = computed<KebabMenuItem[]>(() => {
+  // What a folder left on 'manual' renders as right now.
+  const manualResolvesTo = SORT_MODE_OPTIONS.find((o) => o.value === effectiveSortMode('manual', settingsStore.sortMode));
+  return SORT_MODE_OPTIONS.map((opt) => {
+    const followsToolbar = opt.value === 'manual' && manualResolvesTo && manualResolvesTo.value !== 'manual';
+    return {
+      label: followsToolbar ? `Toolbar sort: ${manualResolvesTo.label}` : opt.label,
+      icon: opt.icon,
+      action: `sort:${opt.value}`,
+      class: props.folder.sort_mode === opt.value ? 'text-primary font-semibold' : '',
+    };
+  });
+});
+
+/** Settings for the folder and its stack's autostart, and deleting it. */
+const optionItems = computed<KebabMenuItem[]>(() => {
+  const items: KebabMenuItem[] = [{ label: 'Edit Folder', icon: EDIT_ICON, action: 'edit' }];
+
+  if (props.folder.compose_project) {
+    const { composeDisabled, composeReason } = composeAvailability();
+    items.push(
+      { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: REFRESH_ICON, action: 'compose-toggle-autostart', disabled: composeDisabled, title: composeReason },
     );
   }
 
@@ -282,39 +338,17 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
   });
   if (hasDockermanContainers && !props.folder.compose_project) {
     items.push(
-      { label: allAutostart.value ? 'Disable Autostart (all)' : 'Enable Autostart (all)', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-folder-autostart', class: allAutostart.value ? 'text-success' : '' },
-      { label: `Autostart Delay: ${folderAutostartDelay.value}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-folder-autostart-delay', show: allAutostart.value },
-      { divider: true },
+      { label: allAutostart.value ? 'Disable Autostart (all)' : 'Enable Autostart (all)', icon: AUTOSTART_ICON, action: 'toggle-folder-autostart', class: allAutostart.value ? 'text-success' : '' },
+      { label: `Autostart Delay: ${folderAutostartDelay.value}s`, icon: STOPWATCH_ICON, action: 'set-folder-autostart-delay', show: allAutostart.value },
     );
   }
 
-  // Sort mode for this folder's own containers. Rendered as one row per
-  // option (KebabMenu has no native radio/select item type). Each row shows
-  // its mode's icon; the active one is marked with the primary color and a
-  // bold label. A folder on 'manual' follows the toolbar sort (see
-  // effectiveSortMode), so when the toolbar is not manual that row says so.
-  items.push({ divider: true });
-  // What a folder left on 'manual' renders as right now.
-  const manualResolvesTo = SORT_MODE_OPTIONS.find((o) => o.value === effectiveSortMode('manual', settingsStore.sortMode));
-  for (const opt of SORT_MODE_OPTIONS) {
-    const active = props.folder.sort_mode === opt.value;
-    const followsToolbar = opt.value === 'manual' && manualResolvesTo && manualResolvesTo.value !== 'manual';
-    items.push({
-      label: followsToolbar ? `Toolbar sort: ${manualResolvesTo.label}` : opt.label,
-      icon: opt.icon,
-      action: `sort:${opt.value}`,
-      class: active ? 'text-primary font-semibold' : '',
-    });
-  }
-
-  // Folder options — metadata only
-  items.push(
+  // Delete stays last, under its own divider, wherever the rest sorts to.
+  return [
+    ...byLabel(items),
     { divider: true },
-    { label: 'Folder Options', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', action: 'edit' },
-    { label: 'Delete Folder', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'delete', class: 'hover:text-error' },
-  );
-
-  return items;
+    { label: 'Delete Folder', icon: TRASH_ICON, action: 'delete', class: 'hover:text-error' },
+  ];
 });
 
 async function handleMenuSelect(action: string) {

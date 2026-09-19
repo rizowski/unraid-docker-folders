@@ -300,8 +300,16 @@ class ScheduleManager
   {
     $schedule = $this->db->fetchOne('SELECT * FROM schedules WHERE id = ?', [$id]);
     if (!$schedule) {
-      return ['success' => false, 'error' => 'Schedule not found'];
+      return ['success' => false, 'message' => 'Schedule not found'];
     }
+
+    // The runner names the schedule and its target in a failure notification.
+    $about = [
+      'name' => $schedule['name'],
+      'target_type' => $schedule['target_type'],
+      'target_id' => $schedule['target_id'],
+      'action' => $schedule['action'],
+    ];
 
     $startedAt = time();
     $historyId = $this->db->insert('schedule_history', [
@@ -337,7 +345,7 @@ class ScheduleManager
 
       $this->pruneHistory($id);
 
-      return ['success' => $result['success'], 'schedule_id' => $id, 'status' => $status, 'message' => $message];
+      return ['success' => $result['success'], 'schedule_id' => $id, 'status' => $status, 'message' => $message] + $about;
     } catch (Exception $e) {
       $this->db->update('schedule_history', [
         'finished_at' => time(),
@@ -353,7 +361,7 @@ class ScheduleManager
         'updated_at' => time(),
       ], 'id = ?', [$id]);
 
-      return ['success' => false, 'schedule_id' => $id, 'status' => 'error', 'message' => $e->getMessage()];
+      return ['success' => false, 'schedule_id' => $id, 'status' => 'error', 'message' => $e->getMessage()] + $about;
     }
   }
 
@@ -679,6 +687,12 @@ class ScheduleManager
     // 7 = Sunday in some cron implementations
     if ($isDow && $target === 7) {
       $target = 0;
+    }
+    // N/S is shorthand for N-<field max>/S: "0/3" in the minute field means
+    // 0, 3, 6, ... 57, not minute 0 only. $value never exceeds the field max,
+    // so the upper bound needs no check.
+    if ($step !== 1) {
+      return $value >= $target && ($value - $target) % $step === 0;
     }
     return $value === $target;
   }

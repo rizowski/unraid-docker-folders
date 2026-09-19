@@ -31,6 +31,13 @@ export default defineConfig(async () => {
     build: {
       outDir: '../backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/assets',
       emptyOutDir: true,
+      rollupOptions: {
+        // Two pages share one chunk graph: the Folders app and the dashboard widget.
+        input: {
+          index: path.resolve(__dirname, 'index.html'),
+          widget: path.resolve(__dirname, 'widget.html'),
+        },
+      },
     },
     server: {
       proxy: !useMock && unraidHost

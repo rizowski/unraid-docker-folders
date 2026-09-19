@@ -292,9 +292,11 @@ import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
 import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
+import { containerMatchesSearch } from '@/utils/search';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import { effectiveSortMode } from '@/utils/sortMode';
 import Sortable from 'sortablejs';
+import { useDragAutoScroll } from '@/composables/useDragAutoScroll';
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
@@ -449,15 +451,13 @@ onMounted(() => {
 });
 onUnmounted(() => searchOverlayObserver?.disconnect());
 
-function containerMatchesSearch(name: string, image?: string): boolean {
-  const q = dockerStore.searchQuery.trim().toLowerCase();
-  if (!q) return true;
-  return name.toLowerCase().includes(q) || (image ? image.toLowerCase().includes(q) : false);
+function matchesQuery(name: string, image?: string): boolean {
+  return containerMatchesSearch(dockerStore.searchQuery, name, image);
 }
 
 const filteredUnfolderedContainers = computed(() => {
   if (!isSearching.value) return dockerStore.unfolderedContainers;
-  return dockerStore.unfolderedContainers.filter((c) => containerMatchesSearch(c.name, c.image));
+  return dockerStore.unfolderedContainers.filter((c) => matchesQuery(c.name, c.image));
 });
 
 const filteredFolders = computed(() => {
@@ -466,13 +466,15 @@ const filteredFolders = computed(() => {
   return folderStore.sortedFolders.filter((folder) =>
     (folder.containers || []).some((assoc) => {
       const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
-      return container ? containerMatchesSearch(container.name, container.image) : assoc.container_name.toLowerCase().includes(q);
+      return container ? matchesQuery(container.name, container.image) : assoc.container_name.toLowerCase().includes(q);
     })
   );
 });
 
 // Track Sortable instances so we can destroy them before re-creating
 let sortableInstances: Sortable[] = [];
+// Scrolls the parent page during a drag, which SortableJS cannot do from the iframe.
+const dragAutoScroll = useDragAutoScroll();
 
 onMounted(async () => {
   await loadData();
@@ -512,6 +514,7 @@ async function loadData() {
 }
 
 function destroyDragAndDrop() {
+  dragAutoScroll.stop();
   for (const instance of sortableInstances) {
     instance.destroy();
   }
@@ -532,7 +535,9 @@ function initializeDragAndDrop() {
       new Sortable(folderListEl, {
         handle: '.folder-drag-handle',
         animation: 150,
+        onStart: dragAutoScroll.start,
         onEnd: async () => {
+          dragAutoScroll.stop();
           const folderIds = Array.from(folderListEl.children)
             .map((child) => parseInt((child as HTMLElement).dataset.folderSortId || '0'))
             .filter((id) => id > 0);
@@ -558,6 +563,8 @@ function initializeDragAndDrop() {
         sort: effectiveSortMode(folderStore.getFolderById(folderId)?.sort_mode ?? 'manual', settingsStore.sortMode) === 'manual',
         handle: '.drag-handle',
         animation: 150,
+        onStart: dragAutoScroll.start,
+        onEnd: dragAutoScroll.stop,
         onAdd: async (evt) => {
           // Revert SortableJS DOM move — let Vue reactivity handle rendering
           evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] || null);
@@ -587,6 +594,8 @@ function initializeDragAndDrop() {
         sort: settingsStore.sortMode === 'manual',
         handle: '.drag-handle',
         animation: 150,
+        onStart: dragAutoScroll.start,
+        onEnd: dragAutoScroll.stop,
         onAdd: async (evt) => {
           // Revert SortableJS DOM move — let Vue reactivity handle rendering
           evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] || null);

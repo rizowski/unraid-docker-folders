@@ -430,6 +430,54 @@ function buildUpdateNotification(array $newImages, array $containersByImage)
 }
 
 /**
+ * Compose the Unraid notification for a failed automatic schedule run.
+ *
+ * @param array $schedule A schedule row, or a run result carrying name,
+ *   target_type, target_id and action
+ * @param string $message The error the run reported
+ * @return array{subject: string, description: string}
+ */
+function buildScheduleFailureNotification(array $schedule, $message)
+{
+  $name = trim((string) ($schedule['name'] ?? ''));
+  $reason = trim((string) $message);
+  if ($reason === '') {
+    $reason = 'Unknown error';
+  }
+
+  $action = (string) ($schedule['action'] ?? '');
+  if ($action === 'backup') {
+    $description = 'Backup failed: ' . $reason;
+  } else {
+    $kind = ($schedule['target_type'] ?? '') === 'stack' ? 'stack' : 'container';
+    $target = (string) ($schedule['target_id'] ?? '');
+    $description = "Could not {$action} {$kind} {$target}: {$reason}";
+  }
+
+  return [
+    'subject' => 'Schedule failed: ' . ($name !== '' ? $name : 'unnamed schedule'),
+    'description' => $description,
+  ];
+}
+
+/**
+ * Post a notification through Unraid's notify script. Every value goes
+ * through escapeshellarg().
+ *
+ * @param string $importance normal, warning, or alert
+ */
+function sendUnraidNotification($subject, $description, $importance = 'normal')
+{
+  $cmd = '/usr/local/emhttp/webGui/scripts/notify'
+    . ' -e ' . escapeshellarg('Docker Folders')
+    . ' -s ' . escapeshellarg($subject)
+    . ' -d ' . escapeshellarg($description)
+    . ' -i ' . escapeshellarg($importance)
+    . ' -l ' . escapeshellarg('/Docker/Folders');
+  exec($cmd);
+}
+
+/**
  * Refresh and attach cached GitHub release notes for the checked images.
  *
  * Fetching is gated on update_available (no point spending a request on an
@@ -573,6 +621,30 @@ function refreshReleaseNotes(array &$results, $db, callable $log, $full, $now = 
         WHERE repo NOT IN (SELECT source_repo FROM image_update_checks WHERE source_repo IS NOT NULL)'
     );
   }
+}
+
+/**
+ * Cache-busting query value for a plugin file served under a fixed URL: the
+ * CodeMirror vendor files, frameSrc.js, and the iframe entry documents
+ * assets/index.html and assets/widget.html. Vite content-hashes the chunks
+ * those documents reference, but not the documents themselves, so a cached
+ * index.html keeps pointing at chunk names emptyOutDir already deleted.
+ *
+ * Unraid's nginx serves these files directly and the plugin ships no nginx
+ * config, so PHP cannot set cache headers on them. The query string is the
+ * only part of the URL a page file can move.
+ *
+ * filemtime() rather than a version constant: build.sh copies the backend
+ * tree with `cp -r`, so every packaged file gets a fresh mtime, and this
+ * also busts after an in-place SSH edit during debugging.
+ *
+ * @param string $absolutePath Absolute path to the asset.
+ * @return string The file's mtime, or PLUGIN_VERSION when it is unreadable.
+ */
+function dfmAssetVersion($absolutePath)
+{
+  $mtime = @filemtime($absolutePath);
+  return $mtime !== false ? (string) $mtime : PLUGIN_VERSION;
 }
 
 // JSON response helper

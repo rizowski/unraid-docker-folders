@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { safeLocalStorageGet, safeLocalStorageSet } from '../safeStorage';
+import { safeLocalStorageGet, safeLocalStorageGetJson, safeLocalStorageSet } from '../safeStorage';
 
 describe('safeStorage', () => {
   afterEach(() => {
@@ -28,5 +28,13 @@ describe('safeStorage', () => {
       throw new Error('QuotaExceededError');
     });
     expect(() => safeLocalStorageSet('safe-storage-test', 'value')).not.toThrow();
+  });
+
+  it('parses stored JSON, and returns null when it is missing or malformed', () => {
+    safeLocalStorageSet('safe-storage-json', '{"a":1}');
+    expect(safeLocalStorageGetJson('safe-storage-json')).toEqual({ a: 1 });
+    safeLocalStorageSet('safe-storage-json', '{not json');
+    expect(safeLocalStorageGetJson('safe-storage-json')).toBeNull();
+    expect(safeLocalStorageGetJson('safe-storage-missing')).toBeNull();
   });
 });

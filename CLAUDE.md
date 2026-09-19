@@ -63,6 +63,7 @@ yarn lint
 yarn test:run
 
 # Build for production (outputs to ../backend/.../assets/)
+# Two entries: index.html (Folders app) and widget.html (dashboard tile)
 yarn build
 ```
 
@@ -128,6 +129,7 @@ src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/
   ├── Folders.page         # Menu="Docker:0" - Folders tab (/Docker/Folders)
   ├── DockerFolders.page   # Menu="Utilities" - Settings (/Settings/DockerFolders)
   ├── DockerFoldersInject.page  # Menu="Docker" - optional Docker-section replacement
+  ├── DockerFoldersDashboard.page  # Menu="Dashboard:0" - dashboard tile (widget.html)
   └── assets/              # ← Frontend build output goes here
 ```
 
@@ -182,6 +184,31 @@ Tag="folder"
 Markdown="false"
 ```
 
+`DockerFoldersDashboard.page` — adds the "Docker Folders" tile to the Unraid
+Dashboard. It does not render HTML directly. It sets
+`$mytiles['unraid-docker-folders-modern']['column2']`, which the dashboard's
+`DashStats.page` echoes with `customTiles()` (Unraid 6.12 and later). The tile
+body is an iframe of `assets/widget.html`, a second Vite entry
+(`src/frontend/src/widget/`) with search, folder collapse, and a
+Start/Stop/Edit/Logs kebab menu per container. A cog in the tile header posts
+a message to the frame, which opens the widget settings panel. Those settings
+(`widget/widgetSettings.ts`) save in localStorage, per browser. Rules for this file:
+- The tile string is a nowdoc (`<<<'EOT'`), because a heredoc would interpolate
+  `$` in the inline JavaScript. It is assigned to `$tile`, and the two
+  cache-busting stamps reach it as `__DFM_WIDGET_V__` and `__DFM_FRAMESRC_V__`
+  placeholders that `str_replace` substitutes afterwards. A nowdoc holds no PHP
+  expression, so `<?= ?>` inside it does not work. That substitution is the
+  only way a value gets in. See `dfmAssetVersion()` below.
+- The header needs `Markdown="false"`, and the PHP block must end with `?>`.
+  Unraid runs page text through Markdown by default, and Markdown escapes an
+  unclosed `<?php` block, so the PHP source shows on the dashboard as text.
+- The `<tbody title=...>` is required. The dashboard md5-hashes it to key the
+  saved tile position and collapse state, so renaming it resets both.
+- It removes Unraid's own `#docker_view` tile during parsing, before the
+  dashboard's `sortTables()` runs, and sets the iframe `src` in a `setTimeout` inside
+  its ready handler, so it runs after `sortTables()` moves the tiles. Moving an
+  iframe reloads it.
+
 **The two names are not interchangeable.** `Folders.page` is the app;
 `DockerFolders.page` is the settings screen. `Folders` is also a deliberately
 generic key in the global `$site` map — see the filename warning above.
@@ -195,6 +222,28 @@ Key="Value"
 <?php // PHP code ?>
 <!-- HTML content (fragment, not full document) -->
 ```
+
+### Asset cache busting
+
+Vite content-hashes the chunks under `assets/assets/`, so those are safe. The
+files that reference them are not hashed: `assets/index.html`,
+`assets/widget.html`, `include/frameSrc.js`, and the bundled CodeMirror files.
+Unraid's nginx serves them directly and the plugin ships no nginx config, so PHP
+cannot set cache headers on them. The query string is the only lever.
+
+`dfmAssetVersion($absolutePath)` in `include/config.php` returns the file's
+`filemtime()`. `build.sh` copies the backend tree with `cp -r`, so every packaged
+file gets a fresh mtime, and `tar` preserves it. `filemtime()` rather than a
+version constant, because it also busts after an in-place SSH edit.
+
+`frameSrc.js` is static JavaScript and cannot call `filemtime()`, so each page
+file sets `window.dockerFoldersAssetVersion` to the iframe document's stamp
+first. Read that global inside the function, never at file scope: `Folders.page`
+sets it before the script tag and the dashboard tile sets it after.
+
+**If you add a `<script src>` or `<link href>` to a page file, stamp it.**
+Nothing enforces this. `DockerFolders.page` and `DockerFoldersInject.page` need
+no stamps today because they load no external files.
 
 ### Build System Details
 
@@ -300,8 +349,10 @@ Nothing enforces this.
 
 ### Token transport (two hops, neither is a query param at the server)
 
-1. `Folders.page:135,154` reads Unraid's global `csrf_token` and puts
-   it in the **iframe URL query string**.
+1. `include/frameSrc.js` (loaded by `Folders.page` and `DockerFoldersDashboard.page`)
+   reads Unraid's global `csrf_token` and puts it in the **iframe URL query string**,
+   next to the theme variables and the `v` cache-busting stamp. Both readers use
+   `URLSearchParams`, so parameter order does not matter.
 2. Inside the iframe `window.csrf_token` does not exist, so
    `utils/csrf.ts:31-33` falls back to reading it from `window.location.search`.
 3. `apiFetch()` (`csrf.ts:44-72`) sends it as a **form-encoded body field**
@@ -397,9 +448,6 @@ Documented so they are not mistaken for intentional design:
   `reconcileContainerIds()` and `syncComposeStacks()` on the list path, so it
   writes to `container_folders`, `folders`, and `compose_stacks` with no CSRF
   gate at any layer.
-- **`schedules.php` PUT skips the `target_type`/`action` allowlists** that POST
-  enforces (`:176-184` vs `ScheduleManager.php:100-105`). Not code execution —
-  `dispatchAction` defaults to "Unknown action".
 - **No CORS, CSP, `X-Frame-Options`, or `X-Content-Type-Options` headers** are set
   anywhere. The `case 'OPTIONS'` branches are labelled "CORS preflight" but emit
   no `Access-Control-*` headers, so they are inert.
@@ -446,7 +494,7 @@ acceptable.
 3. Frontend connects to `ws://<host>/sub/docker-modern` via `useWebSocket.ts` composable
 4. On event received, stores call `fetchContainers()` or `fetchFolders()` (full refetch, not patching)
 5. Exponential backoff reconnection (1s base, 30s max)
-6. 30s polling fallback catches external changes (CLI, Portainer, etc.)
+6. 30s polling fallback (60s in the dashboard widget) catches external changes (CLI, Portainer, etc.). It pauses while the tab is hidden and refetches once the tab is visible again.
 7. Fetch debounce (500ms) prevents redundant calls when UI action already refreshed
 8. `ConnectionStatus.vue` shows live/connecting/offline/error state in header
 

@@ -37,6 +37,23 @@ function mountHeader(folder?: Partial<Folder>) {
   });
 }
 
+const openKebab = async (wrapper: ReturnType<typeof mountHeader>) => {
+  const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+  await kebab.trigger('click');
+};
+
+/** Open the kebab, then the named submenu. Returns false if it is not shown. */
+const openSubmenu = async (wrapper: ReturnType<typeof mountHeader>, label: string) => {
+  await openKebab(wrapper);
+  const parent = wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === label);
+  if (!parent) return false;
+  await parent.trigger('click');
+  return true;
+};
+
+const menuLabels = (wrapper: ReturnType<typeof mountHeader>) =>
+  wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+
 describe('FolderHeader', () => {
   beforeEach(() => {
     pinia = createPinia();
@@ -62,23 +79,35 @@ describe('FolderHeader', () => {
     expect(wrapper.findAll('.kebab-menu-item').length).toBeGreaterThanOrEqual(2);
   });
 
-  it('menu contains folder options and delete buttons', async () => {
+  it('groups the menu into Sort and Folder Options submenus', async () => {
     const wrapper = mountHeader();
-    const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
-    await kebab.trigger('click');
+    await openKebab(wrapper);
 
-    const items = wrapper.findAll('.kebab-menu-item');
-    const labels = items.map((el) => el.text().trim());
-    expect(labels).toContain('Folder Options');
-    expect(labels).toContain('Delete Folder');
+    // No images and no compose project, so Actions has nothing and hides.
+    expect(menuLabels(wrapper)).toEqual(['Folder Options', 'Sort']);
   });
 
-  it('clicking Folder Options emits edit event and closes menu', async () => {
+  it('lists every sort mode under Sort', async () => {
     const wrapper = mountHeader();
-    const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
-    await kebab.trigger('click');
+    await openSubmenu(wrapper, 'Sort');
 
-    const editBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Folder Options')!;
+    expect(menuLabels(wrapper)).toContain('Name (A → Z)');
+    expect(menuLabels(wrapper)).toContain('Oldest first');
+  });
+
+  it('Folder Options contains edit and delete', async () => {
+    const wrapper = mountHeader();
+    await openSubmenu(wrapper, 'Folder Options');
+
+    expect(menuLabels(wrapper)).toContain('Edit Folder');
+    expect(menuLabels(wrapper)).toContain('Delete Folder');
+  });
+
+  it('clicking Edit Folder emits edit event and closes menu', async () => {
+    const wrapper = mountHeader();
+    await openSubmenu(wrapper, 'Folder Options');
+
+    const editBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Edit Folder')!;
     await editBtn.trigger('click');
 
     expect(wrapper.emitted('edit')).toBeTruthy();
@@ -88,8 +117,7 @@ describe('FolderHeader', () => {
 
   it('clicking Delete Folder emits delete event and closes menu', async () => {
     const wrapper = mountHeader();
-    const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
-    await kebab.trigger('click');
+    await openSubmenu(wrapper, 'Folder Options');
 
     const deleteBtn = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Delete Folder')!;
     await deleteBtn.trigger('click');
@@ -152,19 +180,33 @@ describe('FolderHeader', () => {
      */
     it('shows compose actions immediately for a compose folder', async () => {
       const wrapper = mountHeader({ compose_project: 'blog' });
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
-      await kebab.trigger('click');
+      await openSubmenu(wrapper, 'Actions');
+      expect(menuLabels(wrapper)).toContain('Stack Up');
+      expect(menuLabels(wrapper)).toContain('Pull Latest Images');
+      expect(menuLabels(wrapper)).toContain('Edit Stack');
+    });
 
-      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
-      expect(labels).toContain('Stack Up');
-      expect(labels).toContain('Pull Latest Images');
-      expect(labels).toContain('Edit Stack');
+    it('lists Actions and Folder Options alphabetically, with Delete Folder last', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'db', image: 'postgres:16' } as never];
+      const settings = useSettingsStore();
+      settings.loaded = true;
+      settings.enableUpdateChecks = true;
+      const containers = [{ container_name: 'db' } as unknown as Folder['containers'][number]];
+
+      const wrapper = mountHeader({ compose_project: 'blog', containers });
+      await openSubmenu(wrapper, 'Actions');
+      expect(menuLabels(wrapper).slice(3)).toEqual(['Check for Updates', 'Edit Stack', 'Pull Latest Images', 'Stack Up']);
+
+      await wrapper.find('button[aria-expanded="true"]').trigger('click');
+      const options = wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === 'Folder Options')!;
+      await options.trigger('click');
+      expect(menuLabels(wrapper).slice(3)).toEqual(['Edit Folder', 'Enable Stack Autostart', 'Delete Folder']);
     });
 
     it('disables them until compose availability is known', async () => {
       const wrapper = mountHeader({ compose_project: 'blog' });
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
-      await kebab.trigger('click');
+      await openSubmenu(wrapper, 'Actions');
 
       const stackUp = wrapper
         .findAll('button.kebab-menu-item')
@@ -176,12 +218,8 @@ describe('FolderHeader', () => {
 
     it('omits compose actions entirely for a non-compose folder', async () => {
       const wrapper = mountHeader();
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
-      await kebab.trigger('click');
-
-      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
-      expect(labels).not.toContain('Stack Up');
-      expect(labels).not.toContain('Edit Stack');
+      expect(await openSubmenu(wrapper, 'Actions')).toBe(false);
+      expect(menuLabels(wrapper)).not.toContain('Edit Stack');
     });
   });
 
@@ -192,12 +230,7 @@ describe('FolderHeader', () => {
      * are on is a capability, not folder data, so the entry must render
      * straight away and disable itself instead of appearing a moment later.
      */
-    const openMenu = async (wrapper: ReturnType<typeof mountHeader>) => {
-      const kebab = wrapper
-        .findAll('button')
-        .find((b) => b.attributes('title') === 'Folder actions')!;
-      await kebab.trigger('click');
-    };
+    const openMenu = (wrapper: ReturnType<typeof mountHeader>) => openSubmenu(wrapper, 'Actions');
 
     const folderWithImage = {
       containers: [{ container_name: 'nginx' } as unknown as Folder['containers'][number]],
@@ -227,10 +260,9 @@ describe('FolderHeader', () => {
       settings.enableUpdateChecks = false;
 
       const wrapper = mountHeader(folderWithImage);
-      await openMenu(wrapper);
-
-      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
-      expect(labels).not.toContain('Check for Updates');
+      // Update checks were the only action, so the submenu hides with it.
+      expect(await openMenu(wrapper)).toBe(false);
+      expect(menuLabels(wrapper)).not.toContain('Check for Updates');
     });
 
     it('enables the entry once settings report update checks are on', async () => {

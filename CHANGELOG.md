@@ -1,6 +1,39 @@
 # Changelog
 
+## 2026.09.19
+- fix(widget): span the folder color across the header row
+- fix(widget): keep the WebUI icon column on every row
+- fix(assets): stamp unhashed plugin assets with their mtime
+- feat(widget): show CPU, memory, and status tags on the dashboard
+- feat(settings): replace the Docker Containers section by default
+- refactor(schedules): return the schedule details from executeSchedule
+- perf(menus): listen for scroll only while a submenu is open
+- refactor(folders): read the Compose action status in one place
+- refactor(menus): share kebab menu icon paths between containers and folders
+- feat(schedules): post an Unraid notification when an automatic run fails
+- fix(folders): keep an unticked container out of its folder
+- fix(folders): scroll the page while a container is dragged near its edge
+- fix(folders): keep a folder collapsed when a refetch lands before its save
+- fix(folders): remove a dragged container from its old folder at once
+- feat(menus): mark disabled menu items that explain why with an info icon
+- fix(containers): give autostart its own submenu
+- fix(menus): use a stopwatch icon for Autostart Delay
+- feat(containers): group the container menu into hover submenus
+- fix(folders): alphabetize the folder menu submenus
+- fix(folders): move Edit Stack into the Actions submenu
+- feat(folders): group the folder menu into hover submenus
+- fix(schedules): run "N/S" steps from N instead of at N only
+- fix(schedules): describe every field of a cron expression
+- fix(folders): stack collapsed folder CPU and MEM like a container row
+
+## 2026.09.18
+- fix(schedules): allow Resume, keep the custom cron field, and stop clipping modals (#7)
+
 ## 2026.09.13
+- refactor(dashboard): simplify the widget settings code
+- feat(dashboard): add a settings panel to the Docker Folders tile
+- fix(dashboard): run the tile page as PHP instead of showing its source
+- feat(dashboard): add a Docker Folders tile to the Unraid dashboard
 - refactor(sort): share the folder sort decision and extract sort fields once
 - feat(header): show the container and folder counts inside the search field
 - feat(settings): group the settings page by what each setting affects

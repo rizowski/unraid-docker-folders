@@ -32,5 +32,8 @@
     <testsuite name="ScheduleAction">
       <file>ScheduleActionTest.php</file>
     </testsuite>
+    <testsuite name="ScheduleMigration">
+      <file>ScheduleMigrationTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>

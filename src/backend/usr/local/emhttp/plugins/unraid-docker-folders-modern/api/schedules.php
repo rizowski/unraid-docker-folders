@@ -173,15 +173,7 @@ function handlePost()
     }
   }
 
-  $validTargetTypes = ['container', 'stack'];
-  if (!in_array($data['target_type'], $validTargetTypes, true)) {
-    errorResponse('Invalid target_type', 400);
-  }
-
-  $validActions = ['start', 'stop', 'pause', 'resume', 'restart', 'backup'];
-  if (!in_array($data['action'], $validActions, true)) {
-    errorResponse('Invalid action', 400);
-  }
+  validateScheduleFields($data);
 
   if ($data['action'] === 'backup' && empty($data['backup_config'])) {
     errorResponse('backup_config required for backup action', 400);
@@ -191,6 +183,23 @@ function handlePost()
 
   WebSocketPublisher::publish('schedules', 'created', ['id' => $id]);
   jsonResponse(['success' => true, 'id' => $id], 201);
+}
+
+/**
+ * Reject a target_type or action outside the allowlist with a 400. Checks only
+ * the fields that are present, so POST (all required) and a partial PUT share it.
+ * Must match the CHECK constraints on the schedules table (migration 015).
+ */
+function validateScheduleFields($data)
+{
+  if (isset($data['target_type']) && !in_array($data['target_type'], ['container', 'stack'], true)) {
+    errorResponse('Invalid target_type', 400);
+  }
+
+  $validActions = ['start', 'stop', 'pause', 'resume', 'restart', 'backup'];
+  if (isset($data['action']) && !in_array($data['action'], $validActions, true)) {
+    errorResponse('Invalid action', 400);
+  }
 }
 
 function handlePut()
@@ -204,6 +213,8 @@ function handlePut()
   if (!$data) {
     errorResponse('Invalid request data', 400);
   }
+
+  validateScheduleFields($data);
 
   $manager = new ScheduleManager();
   $ok = $manager->updateSchedule($id, $data);

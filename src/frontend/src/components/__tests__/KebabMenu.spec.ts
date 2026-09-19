@@ -300,3 +300,149 @@ describe('KebabMenu – fitting the viewport', () => {
     expect(dropdownOf(wrapper).classes()).toContain('top-full');
   });
 });
+
+describe('KebabMenu open-change', () => {
+  it('reports open with the menu bottom, then close with 0', async () => {
+    const wrapper = mountMenu(buttonItems);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    // jsdom lays nothing out, so the bottom is the edge gap alone.
+    expect(wrapper.emitted('open-change')![0]).toEqual([true, 8]);
+
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.emitted('open-change')![1]).toEqual([false, 0]);
+  });
+
+  // Taller than jsdom's 768px viewport, so a fitting menu would clamp itself.
+  async function openTallMenu(props: Record<string, unknown>) {
+    const wrapper = mountMenu(buttonItems, props);
+    const dropdownHeight = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(2000);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    dropdownHeight.mockRestore();
+    return wrapper.find('.kebab-menu-item').element.parentElement!;
+  }
+
+  it('clamps a tall menu by default', async () => {
+    expect((await openTallMenu({})).getAttribute('style')).toContain('max-height');
+  });
+
+  it('leaves placement alone when fitViewport is false', async () => {
+    const dropdown = await openTallMenu({ fitViewport: false });
+    expect(dropdown.className).toContain('top-full');
+    expect(dropdown.getAttribute('style')).toBeNull();
+  });
+  it('marks a disabled item that has a reason with an info icon', async () => {
+    const wrapper = mountMenu([
+      { label: 'Edit', icon: 'M0 0', action: 'edit', disabled: true, title: 'Not managed by Unraid' },
+      { label: 'Loading', icon: 'M0 0', action: 'x', disabled: true },
+      { label: 'Logs', icon: 'M0 0', action: 'logs', title: 'Open logs' },
+    ]);
+    await wrapper.find('button').trigger('click');
+    const rows = wrapper.findAll('.kebab-menu-item');
+    expect(rows[0].find('.kebab-info-icon').exists()).toBe(true);
+    expect(rows[0].attributes('title')).toBe('Not managed by Unraid');
+    expect(rows[1].find('.kebab-info-icon').exists()).toBe(false);
+    expect(rows[2].find('.kebab-info-icon').exists()).toBe(false);
+  });
+
+  describe('submenus', () => {
+    const nestedItems: KebabMenuItem[] = [
+      { label: 'Top', icon: 'M0 0', action: 'top' },
+      {
+        label: 'Sort',
+        icon: 'M0 0',
+        children: [
+          { divider: true },
+          { label: 'Name', icon: 'M0 0', action: 'sort:name' },
+          { label: 'Hidden', icon: 'M0 0', action: 'sort:hidden', show: false },
+          { divider: true },
+          { label: 'Status', icon: 'M0 0', action: 'sort:status' },
+          { divider: true },
+        ],
+      },
+      { label: 'Empty', icon: 'M0 0', children: [{ label: 'Gone', action: 'gone', show: false }, { divider: true }] },
+    ];
+
+    const parent = (wrapper: ReturnType<typeof mountMenu>, label: string) =>
+      wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === label);
+    const labels = (wrapper: ReturnType<typeof mountMenu>) =>
+      wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+
+    afterEach(() => vi.useRealTimers());
+
+    it('shows parents with children closed, and hides a parent with nothing to show', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      expect(labels(wrapper)).toEqual(['Top', 'Sort']);
+      expect(parent(wrapper, 'Sort')!.attributes('aria-expanded')).toBe('false');
+    });
+
+    it('opens on mouse hover, with stray dividers and hidden children removed', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'mouse' });
+
+      expect(parent(wrapper, 'Sort')!.attributes('aria-expanded')).toBe('true');
+      const flyout = wrapper.find('[role="menu"]');
+      expect(flyout.findAll('.kebab-menu-item').map((el) => el.text().trim())).toEqual(['Name', 'Status']);
+      expect(flyout.findAll('hr').length).toBe(1);
+    });
+
+    it('ignores touch hover so the following click can open it', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'touch' });
+      expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+
+      await parent(wrapper, 'Sort')!.trigger('click');
+      expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+
+      await parent(wrapper, 'Sort')!.trigger('click');
+      expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    });
+
+    it('closes after a short delay when the pointer moves to another item', async () => {
+      vi.useFakeTimers();
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'mouse' });
+
+      const top = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Top')!;
+      await top.trigger('pointerenter', { pointerType: 'mouse' });
+      expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+
+      vi.advanceTimersByTime(200);
+      await nextTick();
+      expect(wrapper.find('[role="menu"]').exists()).toBe(false);
+    });
+
+    it('stays open when the pointer reaches the flyout in time', async () => {
+      vi.useFakeTimers();
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('pointerenter', { pointerType: 'mouse' });
+
+      const top = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Top')!;
+      await top.trigger('pointerenter', { pointerType: 'mouse' });
+      await wrapper.find('[role="menu"]').trigger('pointerenter', { pointerType: 'mouse' });
+
+      vi.advanceTimersByTime(200);
+      await nextTick();
+      expect(wrapper.find('[role="menu"]').exists()).toBe(true);
+    });
+
+    it('emits the child action and closes the whole menu', async () => {
+      const wrapper = mountMenu(nestedItems);
+      await wrapper.find('button').trigger('click');
+      await parent(wrapper, 'Sort')!.trigger('click');
+
+      const status = wrapper.find('[role="menu"]').findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Status')!;
+      await status.trigger('click');
+
+      expect(wrapper.emitted('select')).toEqual([['sort:status']]);
+      expect(wrapper.find('.kebab-menu-item').exists()).toBe(false);
+    });
+  });
+});

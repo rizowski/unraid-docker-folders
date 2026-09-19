@@ -16,7 +16,7 @@ export const useSettingsStore = defineStore('settings', () => {
   /** Whether an automatic sort mode also reorders folders. Off keeps the folder drag order. */
   const sortFolders = ref(false);
   const showStats = ref(true);
-  const replaceDockerSection = ref(false);
+  const replaceDockerSection = ref(true);
   const showFolderPorts = ref(true);
   const showInlineLogs = ref(false);
   /** Offer to hand a CLI-created container over to Unraid's container manager. */

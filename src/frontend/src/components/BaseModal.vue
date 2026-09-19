@@ -45,8 +45,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<{ close: [] }>();
 
-useModalElevation(() => props.isOpen);
 const { visibleTop, visibleHeight } = useParentViewport();
+useModalElevation(() => props.isOpen, () => visibleTop.value + visibleHeight.value);
 
 const totalHeight = computed(() =>
   Math.max(document.documentElement.scrollHeight, visibleTop.value + visibleHeight.value)

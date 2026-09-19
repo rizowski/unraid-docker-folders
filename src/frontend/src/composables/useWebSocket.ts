@@ -3,7 +3,7 @@
  *
  * Singleton — call initWebSocket() once from App.vue.
  * Reconnects with exponential backoff. Includes 30s polling fallback
- * to catch external changes (CLI, Portainer, etc.).
+ * to catch external changes (CLI, Portainer, etc.), paused while the tab is hidden.
  */
 
 import { ref } from 'vue';
@@ -22,10 +22,11 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let reconnectAttempt = 0;
 let initialized = false;
+const DEFAULT_POLL_INTERVAL = 30000;
+let pollInterval = DEFAULT_POLL_INTERVAL;
 
 const BASE_DELAY = 1000;
 const MAX_DELAY = 30000;
-const POLL_INTERVAL = 30000;
 
 function getWebSocketUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -115,11 +116,13 @@ function scheduleReconnect() {
 
 function startPolling() {
   stopPolling();
+  // A hidden tab needs no fallback poll. onVisibilityChange restarts it.
+  if (document.hidden) return;
 
   pollTimer = setInterval(() => {
     const dockerStore = useDockerStore();
     dockerStore.fetchContainers();
-  }, POLL_INTERVAL);
+  }, pollInterval);
 }
 
 function stopPolling() {
@@ -129,18 +132,37 @@ function stopPolling() {
   }
 }
 
+// The poll GET also writes to the database, so skip it while nobody can see the
+// page, and catch up once the page is visible again.
+function onVisibilityChange() {
+  if (document.hidden) {
+    stopPolling();
+  } else if (connectionStatus.value === 'connected') {
+    useDockerStore().fetchContainers();
+    startPolling();
+  }
+}
+
 export function useWebSocket() {
   return { connectionStatus };
 }
 
-export function initWebSocket() {
+/**
+ * @param options.pollInterval How often the fallback poll refetches containers,
+ *   in ms. The fetch also reconciles the database (containers.php list path), so
+ *   a page that is left open for hours can ask for a slower poll.
+ */
+export function initWebSocket(options: { pollInterval?: number } = {}) {
   if (initialized) return;
   initialized = true;
+  pollInterval = options.pollInterval ?? DEFAULT_POLL_INTERVAL;
+  document.addEventListener('visibilitychange', onVisibilityChange);
   connect();
 }
 
 export function destroyWebSocket() {
   initialized = false;
+  document.removeEventListener('visibilitychange', onVisibilityChange);
   stopPolling();
 
   if (reconnectTimer) {

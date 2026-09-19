@@ -253,9 +253,11 @@ function openParent() {
   });
 }
 
-// Reset form when modal opens/closes or folder changes
+// Reset form when modal opens/closes or another folder is edited. Watch the id,
+// not the object: every folder refetch replaces the object, and a reset then
+// would drop the user's unsaved ticks and reopen the parent dialog.
 watch(
-  () => [props.isOpen, props.folder],
+  [() => props.isOpen, () => props.folder?.id],
   () => {
     selectedContainerIds.value = null;
     if (props.isOpen && props.folder) {

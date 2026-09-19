@@ -30,6 +30,15 @@ export const useFolderStore = defineStore('folders', () => {
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
   let initialLoadDone = false;
+  // Collapse writes still in flight, by folder id. A folder row that arrives
+  // from the server before its PUT lands still has the old value, so the
+  // local value wins until the write ends.
+  const pendingCollapse = new Map<number, boolean>();
+
+  function withPendingCollapse(folder: Folder): Folder {
+    const collapsed = pendingCollapse.get(folder.id);
+    return collapsed === undefined ? folder : { ...folder, collapsed };
+  }
 
   // Getters
   const folderCount = computed(() => folders.value.length);
@@ -108,7 +117,7 @@ export const useFolderStore = defineStore('folders', () => {
       }
 
       const data = await response.json();
-      folders.value = data.folders || [];
+      folders.value = (data.folders || []).map(withPendingCollapse);
       unfolderedOrder.value = Array.isArray(data.unfoldered_order) ? data.unfoldered_order : [];
       initialLoadDone = true;
     } catch (e) {
@@ -165,7 +174,7 @@ export const useFolderStore = defineStore('folders', () => {
       // Update local state
       const index = folders.value.findIndex((f) => f.id === id);
       if (index !== -1) {
-        folders.value[index] = updatedFolder;
+        folders.value[index] = withPendingCollapse(updatedFolder);
       }
 
       return true;
@@ -219,7 +228,7 @@ export const useFolderStore = defineStore('folders', () => {
       // Update local state
       const index = folders.value.findIndex((f) => f.id === folderId);
       if (index !== -1) {
-        folders.value[index] = updatedFolder;
+        folders.value[index] = withPendingCollapse(updatedFolder);
       }
 
       return true;
@@ -258,19 +267,39 @@ export const useFolderStore = defineStore('folders', () => {
 
   /**
    * Put a container in `folderId`, or in no folder when null. Drag and drop and
-   * the menu picker both go through here. The forced refetch is needed because
-   * addContainerToFolder only swaps the target folder into state while the
-   * backend also drops the row from the source folder.
+   * the menu picker both go through here.
+   *
+   * addContainerToFolder only swaps the target folder into state, while the
+   * backend also drops the row from the source folder. So the source is cleared
+   * here first. Without that, the container shows in both folders until the
+   * refetch lands, or until a reload if the refetch fails.
    */
   async function moveContainerToFolder(
     folderId: number | null,
     containerId: string,
     containerName: string,
   ): Promise<boolean> {
-    const ok =
-      folderId === null
-        ? await removeContainerFromFolder(containerName)
-        : await addContainerToFolder(folderId, containerId, containerName);
+    if (folderId === null) {
+      const ok = await removeContainerFromFolder(containerName);
+      await fetchFolders(true);
+      return ok;
+    }
+
+    const snapshot = new Map<number, Folder['containers']>();
+    for (const folder of folders.value) {
+      if (folder.id === folderId) continue;
+      if (!folder.containers.some((c) => c.container_name === containerName)) continue;
+      snapshot.set(folder.id, folder.containers);
+      folder.containers = folder.containers.filter((c) => c.container_name !== containerName);
+    }
+
+    const ok = await addContainerToFolder(folderId, containerId, containerName);
+    if (!ok) {
+      for (const folder of folders.value) {
+        const containers = snapshot.get(folder.id);
+        if (containers) folder.containers = containers;
+      }
+    }
     await fetchFolders(true);
     return ok;
   }
@@ -340,7 +369,7 @@ export const useFolderStore = defineStore('folders', () => {
       // Update local state
       const index = folders.value.findIndex((f) => f.id === folderId);
       if (index !== -1) {
-        folders.value[index] = updatedFolder;
+        folders.value[index] = withPendingCollapse(updatedFolder);
       }
 
       return true;
@@ -448,15 +477,27 @@ export const useFolderStore = defineStore('folders', () => {
     const folder = folders.value.find((f) => f.id === id);
     if (folder) {
       // Update local state immediately (optimistic)
-      folder.collapsed = !folder.collapsed;
+      const collapsed = !folder.collapsed;
+      folder.collapsed = collapsed;
+      pendingCollapse.set(id, collapsed);
 
       // Persist to backend silently — don't touch loading/error state
       apiFetch(`${API_BASE}/folders.php?id=${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ collapsed: folder.collapsed }),
-      }).catch((e) => {
-        console.error('Error persisting folder collapse:', e);
-      });
+        body: JSON.stringify({ collapsed }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        })
+        .catch((e) => {
+          console.error('Error persisting folder collapse:', e);
+          // Undo, unless a later click already changed it again.
+          const current = folders.value.find((f) => f.id === id);
+          if (current && pendingCollapse.get(id) === collapsed) current.collapsed = !collapsed;
+        })
+        .finally(() => {
+          if (pendingCollapse.get(id) === collapsed) pendingCollapse.delete(id);
+        });
     }
   }
 

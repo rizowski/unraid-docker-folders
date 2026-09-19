@@ -62,13 +62,7 @@ WebSocketPublisher::publish('updates', 'checked');
 // container count, the description names them, and the link opens the tab.
 $notification = $notifyEnabled ? buildUpdateNotification($newImages, $result['containersByImage']) : null;
 if ($notification !== null) {
-  $cmd = '/usr/local/emhttp/webGui/scripts/notify'
-    . ' -e ' . escapeshellarg('Docker Folders')
-    . ' -s ' . escapeshellarg($notification['subject'])
-    . ' -d ' . escapeshellarg($notification['description'])
-    . ' -i normal'
-    . ' -l ' . escapeshellarg('/Docker/Folders');
-  exec($cmd);
+  sendUnraidNotification($notification['subject'], $notification['description']);
   logUpdate('NOTIFY Sent notification: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
 }
 

@@ -29,7 +29,7 @@ export interface ContainerStats {
 }
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
-const POLL_INTERVAL_MS = 5000;
+const DEFAULT_POLL_INTERVAL_MS = 5000;
 
 export const useStatsStore = defineStore('stats', () => {
   const visibleIds = ref(new Set<string>());
@@ -39,6 +39,7 @@ export const useStatsStore = defineStore('stats', () => {
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let kickTimer: ReturnType<typeof setTimeout> | null = null;
   let visibilityBound = false;
+  let pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
 
   const getStats = computed(() => {
     return (id: string): ContainerStats | null => stats.value[id] ?? null;
@@ -88,7 +89,13 @@ export const useStatsStore = defineStore('stats', () => {
     // Debounce the initial fetch so all registrations from the same
     // render cycle are batched into a single request.
     scheduleKick();
-    pollTimer = setInterval(fetchStats, POLL_INTERVAL_MS);
+    restartTimer();
+  }
+
+  /** Start the poll timer at the current rate, replacing any timer already running. */
+  function restartTimer() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(fetchStats, pollIntervalMs);
   }
 
   function scheduleKick() {
@@ -96,12 +103,15 @@ export const useStatsStore = defineStore('stats', () => {
     kickTimer = setTimeout(() => {
       kickTimer = null;
       fetchStats();
-      // Reset the interval so the next poll is a full POLL_INTERVAL_MS from now
-      if (pollTimer) {
-        clearInterval(pollTimer);
-        pollTimer = setInterval(fetchStats, POLL_INTERVAL_MS);
-      }
+      // Reset the interval so the next poll is a full interval from now
+      if (pollTimer) restartTimer();
     }, 50);
+  }
+
+  /** The dashboard widget polls slower than the Folders page. A running timer restarts at the new rate. */
+  function setPollInterval(ms: number) {
+    pollIntervalMs = ms;
+    if (pollTimer) restartTimer();
   }
 
   function stopPolling() {
@@ -167,6 +177,7 @@ export const useStatsStore = defineStore('stats', () => {
     unregisterVisible,
     registerExpanded,
     unregisterExpanded,
+    setPollInterval,
     cleanup,
   };
 });

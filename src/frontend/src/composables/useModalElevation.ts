@@ -1,33 +1,37 @@
-import { watch, type Ref } from 'vue';
+import { computed, onScopeDispose, reactive, watch, type Ref } from 'vue';
+
+/** Frame height each open modal needs, keyed per BaseModal instance. */
+const floors = reactive(new Map<symbol, number>());
 
 /**
- * When a modal opens inside the iframe, tells the parent page to:
- * 1. Elevate the iframe's z-index above sibling elements
- * 2. Expand the iframe height so the modal isn't clipped at the bottom
- * 3. Lock parent page scrolling
+ * The height the iframe must keep while modals are open, or 0 when none are.
+ * main.ts feeds it to reportHeightToParent as the frame's minimum height.
  */
-export function useModalElevation(isOpen: Ref<boolean> | (() => boolean)) {
-  const inIframe = window.parent !== window;
-  if (!inIframe) return;
+export const modalFrameFloor = computed(() => Math.max(0, ...floors.values()));
 
-  watch(isOpen, (open) => {
-    let minHeight = 0;
-    if (open) {
-      try {
-        const iframe = window.frameElement as HTMLIFrameElement | null;
-        if (iframe) {
-          const rect = iframe.getBoundingClientRect();
-          const visibleTop = Math.max(0, -rect.top);
-          const visibleHeight = window.parent.innerHeight;
-          minHeight = visibleTop + visibleHeight;
-        }
-      } catch {
-        // Cross-origin: can't calculate, parent will use defaults
-      }
-    }
-    window.parent.postMessage(
-      { type: 'docker-folders-modal', open, minHeight },
-      '*'
-    );
-  });
+/**
+ * While a modal is open inside the iframe, hold the frame at least
+ * `requiredHeight()` tall so the modal isn't clipped at the frame's bottom.
+ *
+ * The frame is otherwise sized to the app's content. When that content is short
+ * (a search filter, few folders) and the legacy Docker table sits below the
+ * frame, a modal centred in the visible viewport would run past the frame and
+ * its lower half, including the action buttons, could not be reached.
+ */
+export function useModalElevation(
+  isOpen: Ref<boolean> | (() => boolean),
+  requiredHeight: () => number
+) {
+  if (window.parent === window) return;
+
+  const key = Symbol('modal');
+  watch(
+    [isOpen, requiredHeight],
+    ([open, height]) => {
+      if (open) floors.set(key, height);
+      else floors.delete(key);
+    },
+    { immediate: true }
+  );
+  onScopeDispose(() => floors.delete(key));
 }
