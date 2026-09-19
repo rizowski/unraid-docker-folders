@@ -120,6 +120,7 @@ import { useComposeStore } from '@/stores/compose';
 import { useFolderRunningState } from '@/composables/useFolderRunningState';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
+import { byLabel } from '@/utils/menu';
 import ComposeControls from '@/components/compose/ComposeControls.vue';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
@@ -225,11 +226,6 @@ const folderAutostartDelay = computed(() => {
 const EDIT_ICON = 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z';
 const REFRESH_ICON = 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15';
 const DOWNLOAD_ICON = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3';
-
-/** Alphabetical by the label the user sees, which can change with state. */
-function byLabel(items: KebabMenuItem[]): KebabMenuItem[] {
-  return [...items].sort((a, b) => (a.label ?? '').localeCompare(b.label ?? ''));
-}
 
 /**
  * The folder kebab: a pending-update alert at the top level, then three

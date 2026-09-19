@@ -41,6 +41,32 @@ function mountCard(container?: Partial<Container>, props: Record<string, unknown
   });
 }
 
+type CardWrapper = ReturnType<typeof mountCard>;
+
+async function openKebab(wrapper: CardWrapper) {
+  const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
+  await kebab.trigger('click');
+}
+
+/** Open the kebab, then the named submenu. */
+async function openSubmenu(wrapper: CardWrapper, label: string) {
+  if (!wrapper.find('[aria-haspopup="menu"]').exists()) await openKebab(wrapper);
+  const parent = wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === label)!;
+  if (parent.attributes('aria-expanded') !== 'true') await parent.trigger('click');
+}
+
+/** Labels in every submenu, gathered by opening each one in turn. */
+async function allMenuLabels(wrapper: CardWrapper): Promise<string[]> {
+  await openKebab(wrapper);
+  const labels: string[] = [];
+  const parents = wrapper.findAll('button[aria-haspopup="menu"]').map((el) => el.text().trim());
+  for (const parent of parents) {
+    await openSubmenu(wrapper, parent);
+    labels.push(...wrapper.find('[role="menu"]').findAll('.kebab-menu-item').map((el) => el.text().trim()));
+  }
+  return labels;
+}
+
 describe('ContainerCard', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
@@ -169,12 +195,35 @@ describe('ContainerCard', () => {
     expect(wrapper.findAll('.kebab-menu-item').length).toBeGreaterThan(0);
   });
 
+  it('groups the menu into Actions, Links, and Options', async () => {
+    const wrapper = mountCard({ state: 'running', managed: 'dockerman' });
+    await openKebab(wrapper);
+    expect(wrapper.findAll('button[aria-haspopup="menu"]').map((el) => el.text().trim()))
+      .toEqual(['Actions', 'Links', 'Options']);
+  });
+
+  it('shows Apply Update at the top level when an update is available', async () => {
+    const wrapper = mountCard({ state: 'running', managed: 'dockerman', image: 'nginx:latest' });
+    const settings = useSettingsStore();
+    settings.loaded = true;
+    settings.enableUpdateChecks = true;
+    useUpdatesStore().updates = { 'nginx:latest': { update_available: true } } as never;
+    await wrapper.vm.$nextTick();
+    await openKebab(wrapper);
+    expect(wrapper.findAll('.kebab-menu-item')[0].text().trim()).toBe('Apply Update');
+  });
+
+  it('sorts each submenu alphabetically', async () => {
+    const wrapper = mountCard({ state: 'running', managed: 'dockerman' });
+    await openSubmenu(wrapper, 'Actions');
+    const actions = wrapper.find('[role="menu"]').findAll('.kebab-menu-item').map((el) => el.text().trim());
+    expect(actions).toEqual([...actions].sort((a, b) => a.localeCompare(b)));
+    expect(actions).toContain('Console');
+  });
+
   it('shows relevant menu items for a running dockerman container', async () => {
     const wrapper = mountCard({ state: 'running', managed: 'dockerman' });
-    const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-    await kebab.trigger('click');
-
-    const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    const labels = await allMenuLabels(wrapper);
     // Running dockerman container should have Edit, Console, Logs, and Project at minimum
     expect(labels).toContain('Edit');
     expect(labels).toContain('Console');
@@ -183,10 +232,7 @@ describe('ContainerCard', () => {
 
   it('shows fewer menu items for exited container', async () => {
     const wrapper = mountCard({ state: 'exited', managed: 'dockerman' });
-    const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-    await kebab.trigger('click');
-
-    const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    const labels = await allMenuLabels(wrapper);
     // Exited container should still have Edit but not Console
     expect(labels).toContain('Edit');
     expect(labels).not.toContain('Console');
@@ -220,10 +266,7 @@ describe('ContainerCard', () => {
       });
     }
 
-    async function openMenu(wrapper: ReturnType<typeof mountWithFolders>) {
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-    }
+    const openMenu = (wrapper: ReturnType<typeof mountWithFolders>) => openSubmenu(wrapper, 'Options');
 
     function menuLabels(wrapper: ReturnType<typeof mountWithFolders>) {
       return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
@@ -958,9 +1001,7 @@ describe('ContainerCard', () => {
   describe('Adopt into Unraid', () => {
     async function menuLabels(container: Partial<Container>) {
       const wrapper = mountCard(container);
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-      return wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      return await allMenuLabels(wrapper);
     }
 
     it('offers it for a container Unraid does not manage', async () => {
@@ -1046,10 +1087,7 @@ describe('ContainerCard', () => {
 
       it('drops the kebab entry when adoption is turned off', async () => {
         const wrapper = mountWithSettings({ managed: null }, { loaded: true, enableAdopt: false });
-        const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-        await kebab.trigger('click');
-
-        const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+        const labels = await allMenuLabels(wrapper);
         expect(labels).not.toContain('Adopt into Unraid');
       });
     });
@@ -1073,9 +1111,7 @@ describe('ContainerCard', () => {
         global: { plugins: [pinia], stubs: { Teleport: true } },
       });
 
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-
+      await openSubmenu(wrapper, 'Actions');
       return wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim().startsWith(label));
     }
 
@@ -1151,9 +1187,7 @@ describe('ContainerCard', () => {
   describe('Force Update', () => {
     it('shows Force Update in the kebab menu when there is no update available', async () => {
       const wrapper = mountCard();
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      const labels = await allMenuLabels(wrapper);
       expect(labels).toContain('Force Update');
     });
 
@@ -1185,25 +1219,19 @@ describe('ContainerCard', () => {
         global: { plugins: [pinia], stubs: { Teleport: true } },
       });
 
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      const labels = await allMenuLabels(wrapper);
       expect(labels).not.toContain('Force Update');
     });
 
     it('hides Force Update for a compose-labelled container', async () => {
       const wrapper = mountCard({ labels: { 'com.docker.compose.project': 'db-stack' } });
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      const labels = await allMenuLabels(wrapper);
       expect(labels).not.toContain('Force Update');
     });
 
     it('confirming Force Update emits pull with force: true and the container id', async () => {
       const wrapper = mountCard({ id: 'force-1', name: 'my-app', image: 'nginx:latest', managed: 'dockerman' });
-      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'More actions')!;
-      await kebab.trigger('click');
-      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Force Update')!;
+      await openSubmenu(wrapper, 'Actions');      const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Force Update')!;
       await item.trigger('click');
       await wrapper.vm.$nextTick();
 
