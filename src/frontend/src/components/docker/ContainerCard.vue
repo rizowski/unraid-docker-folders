@@ -726,7 +726,7 @@ const actionMenuItems = computed<KebabMenuItem[]>(() => [
     // its button branch, which is the only one that honours disabled/title.
     { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
     { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
-    { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
+    { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M10 2h4|M12 14l3-3|M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   ]),
   { divider: true },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: onMobileList.value && isStopped.value },

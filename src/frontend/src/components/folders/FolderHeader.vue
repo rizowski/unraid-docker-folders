@@ -339,7 +339,7 @@ const optionItems = computed<KebabMenuItem[]>(() => {
   if (hasDockermanContainers && !props.folder.compose_project) {
     items.push(
       { label: allAutostart.value ? 'Disable Autostart (all)' : 'Enable Autostart (all)', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-folder-autostart', class: allAutostart.value ? 'text-success' : '' },
-      { label: `Autostart Delay: ${folderAutostartDelay.value}s`, icon: 'M12 2v10l4.5 4.5', action: 'set-folder-autostart-delay', show: allAutostart.value },
+      { label: `Autostart Delay: ${folderAutostartDelay.value}s`, icon: 'M10 2h4|M12 14l3-3|M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', action: 'set-folder-autostart-delay', show: allAutostart.value },
     );
   }
 
