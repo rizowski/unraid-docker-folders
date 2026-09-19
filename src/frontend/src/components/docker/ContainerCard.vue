@@ -307,6 +307,7 @@ import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import { byLabel } from '@/utils/menu';
+import { AUTOSTART_ICON, DOWNLOAD_ICON, EDIT_ICON, GEAR_ICON, PLAY_ICON, REFRESH_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
@@ -698,12 +699,12 @@ const onMobileList = computed(() => props.view === 'list' && isMobile.value);
  * itself (KebabMenu).
  */
 const menuItems = computed<KebabMenuItem[]>(() => [
-  { label: 'Apply Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning', show: hasUpdate.value },
+  { label: 'Apply Update', icon: DOWNLOAD_ICON, action: 'update', class: 'text-warning', show: hasUpdate.value },
   { divider: true },
-  { label: 'Actions', icon: 'M5 3l14 9-14 9V3z', children: actionMenuItems.value },
-  { label: 'Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', children: autostartMenuItems.value },
+  { label: 'Actions', icon: PLAY_ICON, children: actionMenuItems.value },
+  { label: 'Autostart', icon: AUTOSTART_ICON, children: autostartMenuItems.value },
   { label: 'Links', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', children: linkMenuItems.value },
-  { label: 'Options', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', children: optionMenuItems.value },
+  { label: 'Options', icon: GEAR_ICON, children: optionMenuItems.value },
 ]);
 
 /**
@@ -718,24 +719,24 @@ const actionMenuItems = computed<KebabMenuItem[]>(() => [
     { label: 'Resume', icon: 'M6 4l14 8-14 8z', action: 'resume', class: 'text-success', show: onMobileList.value && isPaused.value },
     { label: 'Restart', icon: 'M1 4v6h6|M3.51 15a9 9 0 1 0 2.13-9.36L1 10', action: 'restart', class: 'text-primary', show: onMobileList.value && isRunning.value },
     { label: 'Stop', icon: 'M6 6h12v12H6z', action: 'stop', class: 'text-error', show: onMobileList.value && isRunning.value },
-    { label: 'Force Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'force-update', class: 'text-warning', show: !hasUpdate.value && !isCompose.value },
+    { label: 'Force Update', icon: DOWNLOAD_ICON, action: 'force-update', class: 'text-warning', show: !hasUpdate.value && !isCompose.value },
     // Shown before settings land so the menu doesn't grow an entry a moment
     // after it opens; disabled until we know update checks are actually on.
-    { label: updatesStore.isCheckingImage(props.container.image) ? 'Checking for Updates…' : 'Check for Updates', icon: 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15', action: 'check-updates', show: !settingsStore.loaded || settingsStore.enableUpdateChecks, disabled: !settingsStore.loaded, title: settingsStore.loaded ? undefined : 'Loading settings…' },
+    { label: updatesStore.isCheckingImage(props.container.image) ? 'Checking for Updates…' : 'Check for Updates', icon: REFRESH_ICON, action: 'check-updates', show: !settingsStore.loaded || settingsStore.enableUpdateChecks, disabled: !settingsStore.loaded, title: settingsStore.loaded ? undefined : 'Loading settings…' },
     { label: 'Console', icon: 'M4 17l6-5-6-5|M12 19h8', action: 'console', show: isRunning.value && !isCompose.value },
     { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
     // `href` is empty for an unmanaged container, so KebabMenu falls through to
     // its button branch, which is the only one that honours disabled/title.
-    { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
+    { label: 'Edit', icon: EDIT_ICON, href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
   ]),
   { divider: true },
-  { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: onMobileList.value && isStopped.value },
+  { label: 'Remove', icon: TRASH_ICON, action: 'remove', class: 'text-error', show: onMobileList.value && isStopped.value },
 ]);
 
 /** Whether the container starts with the array, and how long it waits. */
 const autostartMenuItems = computed<KebabMenuItem[]>(() => [
-  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
-  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M10 2h4|M12 14l3-3|M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
+  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: AUTOSTART_ICON, action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
+  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: STOPWATCH_ICON, action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
 ]);
 
 /** Where the container lives and runs from: adoption, schedules, folder. */
