@@ -506,12 +506,23 @@ async function handleFolders(req: any, res: any, params: Record<string, string>)
     if (action === 'add_container' && id) {
       const folder = folders.find((f) => f.id === parseInt(id));
       if (!folder) return json(res, { error: true, message: 'Folder not found' }, 404);
+      // Mirrors FolderManager::addContainerToFolder: a container already in this
+      // folder keeps its row, otherwise it leaves every other folder first.
+      const existing = folder.containers.find((c: any) => c.container_name === data.container_name);
+      if (existing) {
+        existing.container_id = data.container_id;
+        return json(res, { success: true, folder });
+      }
+      for (const f of folders) {
+        f.containers = f.containers.filter((c: any) => c.container_name !== data.container_name);
+      }
+      const maxPosition = Math.max(-1, ...folder.containers.map((c: any) => c.position));
       folder.containers.push({
         id: Date.now(),
         container_id: data.container_id,
         container_name: data.container_name,
         folder_id: folder.id,
-        position: folder.containers.length,
+        position: maxPosition + 1,
       });
       return json(res, { success: true, folder });
     }

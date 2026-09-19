@@ -164,6 +164,26 @@ final class FolderManagerTest extends TestCase
     }
 
     #[Test]
+    public function addContainerToFolderMovesTheContainerOutOfItsOldFolder(): void
+    {
+        $media = $this->manager->createFolder(['name' => 'Media']);
+        $web = $this->manager->createFolder(['name' => 'Web']);
+        $this->manager->addContainerToFolder($media['id'], 'id-plex', 'plex');
+        $this->manager->addContainerToFolder($web['id'], 'id-nginx', 'nginx');
+
+        self::assertTrue($this->manager->addContainerToFolder($web['id'], 'id-plex', 'plex'));
+
+        self::assertSame(
+            [['folder_id' => $web['id'], 'position' => 1]],
+            array_map(
+                fn ($row) => ['folder_id' => (int) $row['folder_id'], 'position' => (int) $row['position']],
+                $this->db->fetchAll('SELECT folder_id, position FROM container_folders WHERE container_name = ?', ['plex'])
+            )
+        );
+        self::assertSame([], $this->manager->getFolder($media['id'])['containers']);
+    }
+
+    #[Test]
     public function removeContainerByNameIsANoOpWhenNothingMatches(): void
     {
         $this->manager->setUnfolderedOrder(['plex']);

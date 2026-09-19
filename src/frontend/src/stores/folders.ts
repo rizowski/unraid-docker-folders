@@ -258,19 +258,39 @@ export const useFolderStore = defineStore('folders', () => {
 
   /**
    * Put a container in `folderId`, or in no folder when null. Drag and drop and
-   * the menu picker both go through here. The forced refetch is needed because
-   * addContainerToFolder only swaps the target folder into state while the
-   * backend also drops the row from the source folder.
+   * the menu picker both go through here.
+   *
+   * addContainerToFolder only swaps the target folder into state, while the
+   * backend also drops the row from the source folder. So the source is cleared
+   * here first. Without that, the container shows in both folders until the
+   * refetch lands, or until a reload if the refetch fails.
    */
   async function moveContainerToFolder(
     folderId: number | null,
     containerId: string,
     containerName: string,
   ): Promise<boolean> {
-    const ok =
-      folderId === null
-        ? await removeContainerFromFolder(containerName)
-        : await addContainerToFolder(folderId, containerId, containerName);
+    if (folderId === null) {
+      const ok = await removeContainerFromFolder(containerName);
+      await fetchFolders(true);
+      return ok;
+    }
+
+    const snapshot = new Map<number, Folder['containers']>();
+    for (const folder of folders.value) {
+      if (folder.id === folderId) continue;
+      if (!folder.containers.some((c) => c.container_name === containerName)) continue;
+      snapshot.set(folder.id, folder.containers);
+      folder.containers = folder.containers.filter((c) => c.container_name !== containerName);
+    }
+
+    const ok = await addContainerToFolder(folderId, containerId, containerName);
+    if (!ok) {
+      for (const folder of folders.value) {
+        const containers = snapshot.get(folder.id);
+        if (containers) folder.containers = containers;
+      }
+    }
     await fetchFolders(true);
     return ok;
   }

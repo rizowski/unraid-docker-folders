@@ -151,6 +151,53 @@ describe('folders store – setFolderContainers', () => {
   });
 });
 
+describe('folders store – moveContainerToFolder', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('takes the container out of the source folder before the refetch', async () => {
+    const store = useFolderStore();
+    store.folders = [
+      makeFolder(['plex', 'sonarr'], { id: 1 }),
+      makeFolder(['nginx'], { id: 2, name: 'Web' }),
+    ];
+
+    let sourceDuringRefetch: string[] = [];
+    mockApiFetch.mockImplementation(async (url) => {
+      if (String(url).includes('action=add_container')) {
+        return okResponse(makeFolder(['nginx', 'plex'], { id: 2, name: 'Web' }));
+      }
+      // The refetch fails, so only the local update can clear the source.
+      sourceDuringRefetch = store.folders[0].containers.map((c) => c.container_name);
+      return { ok: false, status: 500 } as Response;
+    });
+
+    const ok = await store.moveContainerToFolder(2, 'id-plex', 'plex');
+
+    expect(ok).toBe(true);
+    expect(sourceDuringRefetch).toEqual(['sonarr']);
+    expect(store.folders[0].containers.map((c) => c.container_name)).toEqual(['sonarr']);
+    expect(store.folders[1].containers.map((c) => c.container_name)).toEqual(['nginx', 'plex']);
+  });
+
+  it('puts the container back in the source folder when the add fails', async () => {
+    const store = useFolderStore();
+    store.folders = [
+      makeFolder(['plex', 'sonarr'], { id: 1 }),
+      makeFolder(['nginx'], { id: 2, name: 'Web' }),
+    ];
+    mockApiFetch.mockImplementation(async () => ({ ok: false, status: 500 }) as Response);
+
+    const ok = await store.moveContainerToFolder(2, 'id-plex', 'plex');
+
+    expect(ok).toBe(false);
+    expect(store.folders[0].containers.map((c) => c.container_name)).toEqual(['plex', 'sonarr']);
+    expect(store.folders[1].containers.map((c) => c.container_name)).toEqual(['nginx']);
+  });
+});
+
 describe('getFolderForContainer', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
