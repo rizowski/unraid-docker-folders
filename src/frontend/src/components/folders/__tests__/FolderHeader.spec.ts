@@ -183,10 +183,6 @@ describe('FolderHeader', () => {
       await openSubmenu(wrapper, 'Actions');
       expect(menuLabels(wrapper)).toContain('Stack Up');
       expect(menuLabels(wrapper)).toContain('Pull Latest Images');
-
-      await wrapper.find('button[aria-expanded="true"]').trigger('click');
-      const options = wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === 'Folder Options')!;
-      await options.trigger('click');
       expect(menuLabels(wrapper)).toContain('Edit Stack');
     });
 
@@ -205,8 +201,6 @@ describe('FolderHeader', () => {
     it('omits compose actions entirely for a non-compose folder', async () => {
       const wrapper = mountHeader();
       expect(await openSubmenu(wrapper, 'Actions')).toBe(false);
-
-      await openSubmenu(wrapper, 'Folder Options');
       expect(menuLabels(wrapper)).not.toContain('Edit Stack');
     });
   });

@@ -228,7 +228,7 @@ const DOWNLOAD_ICON = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M
 
 /**
  * The folder kebab: a pending-update alert at the top level, then three
- * submenus. Actions do something to the containers now, Sort orders them, and
+ * submenus. Actions work on the containers and the stack, Sort orders them, and
  * Folder Options changes how the folder behaves. A submenu with nothing to
  * show hides itself (KebabMenu).
  */
@@ -292,6 +292,7 @@ const actionItems = computed<KebabMenuItem[]>(() => {
       { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Pull Latest Images', icon: DOWNLOAD_ICON, action: 'compose-pull', disabled: composeDisabled, title: composeReason },
       { label: 'Recompose', icon: REFRESH_ICON, action: 'compose-recompose', show: isRunning.value, disabled: composeDisabled, title: composeReason },
+      { label: composeStore.composePluginInstalled ? 'View Stack' : 'Edit Stack', icon: EDIT_ICON, action: 'compose-edit' },
     );
   }
 
@@ -318,7 +319,7 @@ const sortItems = computed<KebabMenuItem[]>(() => {
   });
 });
 
-/** Settings for the folder and its stack, and deleting it. */
+/** Settings for the folder and its stack's autostart, and deleting it. */
 const optionItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [
     { label: 'Edit Folder', icon: EDIT_ICON, action: 'edit' },
@@ -328,7 +329,6 @@ const optionItems = computed<KebabMenuItem[]>(() => {
     const composeDisabled = composeStore.composeActionsDisabled;
     const composeReason = composeStore.composeDisabledReason ?? undefined;
     items.push(
-      { label: composeStore.composePluginInstalled ? 'View Stack' : 'Edit Stack', icon: EDIT_ICON, action: 'compose-edit' },
       { label: composeStack.value?.autostart ? 'Disable Stack Autostart' : 'Enable Stack Autostart', icon: REFRESH_ICON, action: 'compose-toggle-autostart', disabled: composeDisabled, title: composeReason },
     );
   }
