@@ -139,6 +139,8 @@ function handlePost($folderManager)
       errorResponse('Failed to add container to folder', 500);
     }
 
+    $folderManager->clearComposeSyncExclusion($data['container_name']);
+
     $folder = $folderManager->getFolder($id);
 
     WebSocketPublisher::publish('folder', 'add_container', ['folder' => $folder]);
@@ -160,6 +162,8 @@ function handlePost($folderManager)
     }
 
     $success = $folderManager->removeContainerFromFolder($containerName);
+    // A user removal is final: the Compose sync must not put it back.
+    $folderManager->excludeFromComposeSync($containerName);
 
     WebSocketPublisher::publish('folder', 'remove_container', [
       'container_name' => $containerName,

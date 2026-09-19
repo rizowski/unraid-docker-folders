@@ -202,8 +202,26 @@ describe('FolderEditModal – container selection', () => {
     ]);
   });
 
+  it('keeps an untick when a refetch replaces the folder object', async () => {
+    const folder = makeFolder(['plex', 'sonarr']);
+    seedStores(folder, ['plex', 'sonarr']);
+    const wrapper = mountModal(folder);
+    await nextTick();
+
+    const sonarrRow = rows().find((l) => l.textContent!.includes('sonarr'))!;
+    sonarrRow.querySelector('input')!.dispatchEvent(new Event('change'));
+    await nextTick();
+
+    // A background fetchFolders swaps in a new object for the same folder.
+    await wrapper.setProps({ folder: makeFolder(['plex', 'sonarr']) });
+
+    expect(checkedNames()).toEqual(['plex']);
+    await submit();
+    expect(savedContainers(wrapper)).toEqual([{ id: 'id-plex', name: 'plex' }]);
+  });
+
   it('checks members that arrive after the modal has opened', async () => {
-    // The watch only fires on [isOpen, folder]. A selection seeded eagerly would
+    // The watch only fires on [isOpen, folder id]. A selection seeded eagerly would
     // stay empty here, and every member would then be saved as a removal.
     const folder = makeFolder(['plex', 'sonarr']);
     seedStores(folder, []);
@@ -307,6 +325,19 @@ describe('FolderEditModal – parent-window (iframe) save path', () => {
       { id: 'id-plex', name: 'plex' },
       { id: 'id-bazarr', name: 'bazarr' },
     ]);
+  });
+
+  it('does not reopen the parent dialog when a refetch replaces the folder object', async () => {
+    const folder = makeFolder(['plex']);
+    useDockerStore().containers = [makeContainer({ id: 'id-plex', name: 'plex' })];
+    useFolderStore().folders = [folder];
+    const wrapper = mountModal(folder);
+    await nextTick();
+
+    await wrapper.setProps({ folder: makeFolder(['plex']) });
+
+    const opens = parentPostMessage.mock.calls.filter((c) => c[0]?.type === 'docker-folders-modal');
+    expect(opens).toHaveLength(1);
   });
 
   it('an empty containers array means remove every container', async () => {

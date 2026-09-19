@@ -202,6 +202,32 @@ class FolderManager
   }
 
   /**
+   * Stop syncComposeStacks from putting a container back into its stack
+   * folder. Called when the user removes a container from a folder. It is not
+   * part of removeContainerFromFolder, because every move calls that too.
+   *
+   * @param string $containerName Container name
+   */
+  public function excludeFromComposeSync($containerName)
+  {
+    $this->db->query(
+      'INSERT OR REPLACE INTO compose_sync_exclusions (container_name, created_at) VALUES (?, ?)',
+      [$containerName, time()]
+    );
+  }
+
+  /**
+   * Let syncComposeStacks manage a container again. Called when the user adds a
+   * container to a folder.
+   *
+   * @param string $containerName Container name
+   */
+  public function clearComposeSyncExclusion($containerName)
+  {
+    $this->db->delete('compose_sync_exclusions', 'container_name = ?', [$containerName]);
+  }
+
+  /**
    * Remove a container from its folder
    *
    * @param string $containerName Container name
@@ -517,6 +543,12 @@ class FolderManager
       $assignmentMap[$row['container_name']] = (int) $row['folder_id'];
     }
 
+    // Containers the user took out of a folder stay out.
+    $excluded = [];
+    foreach ($this->db->fetchAll('SELECT container_name FROM compose_sync_exclusions') as $row) {
+      $excluded[$row['container_name']] = true;
+    }
+
     foreach ($projects as $projectName => $projectContainers) {
       // Create folder if it doesn't exist for this compose project
       if (!isset($foldersByProject[$projectName])) {
@@ -545,7 +577,7 @@ class FolderManager
       foreach ($projectContainers as $container) {
         $containerId = $container['id'];
         $containerName = ltrim($container['name'], '/');
-        if (!isset($assignmentMap[$containerName])) {
+        if (!isset($assignmentMap[$containerName]) && !isset($excluded[$containerName])) {
           $this->addContainerToFolder($folderId, $containerId, $containerName);
           $assignmentMap[$containerName] = $folderId;
           $changed = true;
