@@ -691,21 +691,23 @@ const projectUrl = computed(() => {
 const onMobileList = computed(() => props.view === 'list' && isMobile.value);
 
 /**
- * The container kebab: a pending-update alert at the top level, then three
- * submenus in alphabetical order. Actions work on the container, Links open
- * other pages, and Options change where it lives and runs from. A submenu with
- * nothing to show hides itself (KebabMenu).
+ * The container kebab: a pending-update alert at the top level, then four
+ * submenus in alphabetical order. Actions work on the container, Autostart
+ * sets whether and when it starts on boot, Links open other pages, and Options
+ * change where it lives and runs from. A submenu with nothing to show hides
+ * itself (KebabMenu).
  */
 const menuItems = computed<KebabMenuItem[]>(() => [
   { label: 'Apply Update', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3', action: 'update', class: 'text-warning', show: hasUpdate.value },
   { divider: true },
   { label: 'Actions', icon: 'M5 3l14 9-14 9V3z', children: actionMenuItems.value },
+  { label: 'Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', children: autostartMenuItems.value },
   { label: 'Links', icon: 'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71|M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71', children: linkMenuItems.value },
   { label: 'Options', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', children: optionMenuItems.value },
 ]);
 
 /**
- * Things that act on the container, including editing it and its autostart.
+ * Things that act on the container, including editing it.
  * The start/stop entries only show on a phone in list view, where the row
  * hides its action buttons. Remove stays last under its own divider, wherever
  * the rest sorts to.
@@ -725,11 +727,15 @@ const actionMenuItems = computed<KebabMenuItem[]>(() => [
     // `href` is empty for an unmanaged container, so KebabMenu falls through to
     // its button branch, which is the only one that honours disabled/title.
     { label: 'Edit', icon: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z', href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
-    { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
-    { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M10 2h4|M12 14l3-3|M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
   ]),
   { divider: true },
   { label: 'Remove', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'remove', class: 'text-error', show: onMobileList.value && isStopped.value },
+]);
+
+/** Whether the container starts with the array, and how long it waits. */
+const autostartMenuItems = computed<KebabMenuItem[]>(() => [
+  { label: props.container.autostart ? 'Disable Autostart' : 'Enable Autostart', icon: 'M17.65 6.35A8 8 0 1 0 19.73 15|M21 7L17.65 6.35 17 10|M8.5 17h7L12 7z|M10 14h4', action: 'toggle-autostart', class: props.container.autostart ? 'text-success' : '', disabled: !isManaged.value, title: manageHint.value },
+  { label: `Autostart Delay: ${props.container.autostartDelay ?? 0}s`, icon: 'M10 2h4|M12 14l3-3|M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z', action: 'set-autostart-delay', show: !isManaged.value || props.container.autostart, disabled: !isManaged.value, title: manageHint.value },
 ]);
 
 /** Where the container lives and runs from: adoption, schedules, folder. */

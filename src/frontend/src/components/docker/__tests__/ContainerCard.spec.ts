@@ -195,11 +195,11 @@ describe('ContainerCard', () => {
     expect(wrapper.findAll('.kebab-menu-item').length).toBeGreaterThan(0);
   });
 
-  it('groups the menu into Actions, Links, and Options', async () => {
+  it('groups the menu into Actions, Autostart, Links, and Options', async () => {
     const wrapper = mountCard({ state: 'running', managed: 'dockerman' });
     await openKebab(wrapper);
     expect(wrapper.findAll('button[aria-haspopup="menu"]').map((el) => el.text().trim()))
-      .toEqual(['Actions', 'Links', 'Options']);
+      .toEqual(['Actions', 'Autostart', 'Links', 'Options']);
   });
 
   it('shows Apply Update at the top level when an update is available', async () => {
@@ -1111,7 +1111,8 @@ describe('ContainerCard', () => {
         global: { plugins: [pinia], stubs: { Teleport: true } },
       });
 
-      await openSubmenu(wrapper, 'Actions');
+      // Edit lives under Actions; the autostart entries have their own submenu.
+      await openSubmenu(wrapper, label === 'Edit' ? 'Actions' : 'Autostart');
       return wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim().startsWith(label));
     }
 
