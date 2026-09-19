@@ -58,12 +58,12 @@
       </span>
       <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
       <!-- Folder average stats loading -->
-      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0">
+      <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5">
         <StatsBar label="CPU" :percent="null" size="inline" />
         <StatsBar label="MEM" :percent="null" size="inline" />
       </div>
       <!-- Folder average stats -->
-      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden md:flex items-center gap-3 ml-auto mr-4 shrink-0" @click.stop>
+      <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5" @click.stop>
         <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
         <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
       </div>
