@@ -680,6 +680,12 @@ class ScheduleManager
     if ($isDow && $target === 7) {
       $target = 0;
     }
+    // N/S is shorthand for N-<field max>/S: "0/3" in the minute field means
+    // 0, 3, 6, ... 57, not minute 0 only. $value never exceeds the field max,
+    // so the upper bound needs no check.
+    if ($step !== 1) {
+      return $value >= $target && ($value - $target) % $step === 0;
+    }
     return $value === $target;
   }
 }

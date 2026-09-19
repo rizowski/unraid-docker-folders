@@ -82,4 +82,23 @@ final class ScheduleManagerTest extends TestCase
         // EDT, UTC-4) rather than drifting by the one-hour jump.
         $this->assertSame('2026-03-08 03:00', date('Y-m-d H:i', $next));
     }
+    #[Test]
+    public function startStepRunsEveryStepFromTheStartValue(): void
+    {
+        // "0/3" is shorthand for "0-59/3". It used to match minute 0 only,
+        // so a schedule saved at 13:48 next ran at 14:00.
+        $after = strtotime('2026-01-10 13:48:00');
+
+        $this->assertSame('2026-01-10 13:51', date('Y-m-d H:i', ScheduleManager::computeNextRun('0/3 * * * *', $after)));
+        $this->assertSame('2026-01-10 13:55', date('Y-m-d H:i', ScheduleManager::computeNextRun('5/10 * * * *', $after)));
+    }
+
+    #[Test]
+    public function plainValuesStillMatchOnlyThemselves(): void
+    {
+        $after = strtotime('2026-01-10 13:48:00');
+
+        $this->assertSame('2026-01-10 14:00', date('Y-m-d H:i', ScheduleManager::computeNextRun('0 * * * *', $after)));
+        $this->assertSame('2026-01-10 13:51', date('Y-m-d H:i', ScheduleManager::computeNextRun('*/3 * * * *', $after)));
+    }
 }
