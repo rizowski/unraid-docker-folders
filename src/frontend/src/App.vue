@@ -296,6 +296,7 @@ import { containerMatchesSearch } from '@/utils/search';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import { effectiveSortMode } from '@/utils/sortMode';
 import Sortable from 'sortablejs';
+import { useDragAutoScroll } from '@/composables/useDragAutoScroll';
 
 const dockerStore = useDockerStore();
 const folderStore = useFolderStore();
@@ -472,6 +473,8 @@ const filteredFolders = computed(() => {
 
 // Track Sortable instances so we can destroy them before re-creating
 let sortableInstances: Sortable[] = [];
+// Scrolls the parent page during a drag, which SortableJS cannot do from the iframe.
+const dragAutoScroll = useDragAutoScroll();
 
 onMounted(async () => {
   await loadData();
@@ -511,6 +514,7 @@ async function loadData() {
 }
 
 function destroyDragAndDrop() {
+  dragAutoScroll.stop();
   for (const instance of sortableInstances) {
     instance.destroy();
   }
@@ -531,7 +535,9 @@ function initializeDragAndDrop() {
       new Sortable(folderListEl, {
         handle: '.folder-drag-handle',
         animation: 150,
+        onStart: dragAutoScroll.start,
         onEnd: async () => {
+          dragAutoScroll.stop();
           const folderIds = Array.from(folderListEl.children)
             .map((child) => parseInt((child as HTMLElement).dataset.folderSortId || '0'))
             .filter((id) => id > 0);
@@ -557,6 +563,8 @@ function initializeDragAndDrop() {
         sort: effectiveSortMode(folderStore.getFolderById(folderId)?.sort_mode ?? 'manual', settingsStore.sortMode) === 'manual',
         handle: '.drag-handle',
         animation: 150,
+        onStart: dragAutoScroll.start,
+        onEnd: dragAutoScroll.stop,
         onAdd: async (evt) => {
           // Revert SortableJS DOM move — let Vue reactivity handle rendering
           evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] || null);
@@ -586,6 +594,8 @@ function initializeDragAndDrop() {
         sort: settingsStore.sortMode === 'manual',
         handle: '.drag-handle',
         animation: 150,
+        onStart: dragAutoScroll.start,
+        onEnd: dragAutoScroll.stop,
         onAdd: async (evt) => {
           // Revert SortableJS DOM move — let Vue reactivity handle rendering
           evt.from.insertBefore(evt.item, evt.from.children[evt.oldIndex ?? 0] || null);
