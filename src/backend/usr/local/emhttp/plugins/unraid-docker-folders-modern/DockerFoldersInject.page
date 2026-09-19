@@ -10,7 +10,7 @@ require_once '/usr/local/emhttp/plugins/unraid-docker-folders-modern/classes/Dat
 
 $db = Database::getInstance();
 $row = $db->fetchOne('SELECT value FROM settings WHERE key = ?', ['replace_docker_section']);
-$replaceDockersSection = ($row && $row['value'] === '1');
+$replaceDockersSection = (!$row || $row['value'] === '1');
 
 if (!$replaceDockersSection) return;
 

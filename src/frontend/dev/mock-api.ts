@@ -607,7 +607,7 @@ const settings: Record<string, string> = {
   update_check_exclude: '',
   post_pull_action: 'pull_only',
   update_concurrency: '3',
-  replace_docker_section: '0',
+  replace_docker_section: '1',
   show_legacy_containers: '0',
   show_legacy_buttons: '0',
   sort_mode: 'manual',

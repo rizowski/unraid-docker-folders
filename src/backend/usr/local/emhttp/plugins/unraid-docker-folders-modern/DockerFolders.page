@@ -16,7 +16,7 @@ foreach ($rows as $row) {
 }
 $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
-$replaceDockerSection = ($settings['replace_docker_section'] ?? '0') === '1';
+$replaceDockerSection = ($settings['replace_docker_section'] ?? '1') === '1';
 $showLegacyContainers = ($settings['show_legacy_containers'] ?? '0') === '1';
 $showLegacyButtons = ($settings['show_legacy_buttons'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
@@ -862,7 +862,7 @@ if (file_exists($changelogPath)) {
     <div class="setting-row">
       <div class="setting-info">
         <label for="replace-docker-section">Replace Docker Containers section</label>
-        <div class="description">When enabled, the built-in Docker Containers section on the Docker tab is replaced with the Docker Folders UI. <strong>Default: Off</strong></div>
+        <div class="description">When enabled, the built-in Docker Containers section on the Docker tab is replaced with the Docker Folders UI. <strong>Default: On</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="replace-docker-section" <?= $replaceDockerSection ? 'checked' : '' ?> onchange="saveSetting('replace_docker_section', this.checked ? '1' : '0')" />
