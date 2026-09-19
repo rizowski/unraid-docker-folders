@@ -226,11 +226,16 @@ const EDIT_ICON = 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7|M1
 const REFRESH_ICON = 'M23 4v6h-6|M1 20v-6h6|M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15';
 const DOWNLOAD_ICON = 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3';
 
+/** Alphabetical by the label the user sees, which can change with state. */
+function byLabel(items: KebabMenuItem[]): KebabMenuItem[] {
+  return [...items].sort((a, b) => (a.label ?? '').localeCompare(b.label ?? ''));
+}
+
 /**
  * The folder kebab: a pending-update alert at the top level, then three
- * submenus. Actions work on the containers and the stack, Sort orders them, and
- * Folder Options changes how the folder behaves. A submenu with nothing to
- * show hides itself (KebabMenu).
+ * submenus in alphabetical order. Actions work on the containers and the
+ * stack, Folder Options changes how the folder behaves, and Sort orders its
+ * containers. A submenu with nothing to show hides itself (KebabMenu).
  */
 const folderMenuItems = computed<KebabMenuItem[]>(() => {
   const items: KebabMenuItem[] = [];
@@ -249,8 +254,8 @@ const folderMenuItems = computed<KebabMenuItem[]>(() => {
 
   items.push(
     { label: 'Actions', icon: 'M5 3l14 9-14 9V3z', children: actionItems.value },
-    { label: 'Sort', icon: 'M3 16l4 4 4-4|M7 20V4|M11 4h10|M11 8h7|M11 12h4', children: sortItems.value },
     { label: 'Folder Options', icon: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z|M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z', children: optionItems.value },
+    { label: 'Sort', icon: 'M3 16l4 4 4-4|M7 20V4|M11 4h10|M11 8h7|M11 12h4', children: sortItems.value },
   );
 
   return items;
@@ -287,7 +292,6 @@ const actionItems = computed<KebabMenuItem[]>(() => {
     const composeDisabled = composeStore.composeActionsDisabled;
     const composeReason = composeStore.composeDisabledReason ?? undefined;
     items.push(
-      { divider: true },
       { label: 'Stack Up', icon: 'M5 3l14 9-14 9V3z', action: 'compose-up', show: !isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Stop All', icon: 'M6 4h4v16H6zM14 4h4v16h-4z', action: 'compose-stop', show: isRunning.value, disabled: composeDisabled, title: composeReason },
       { label: 'Pull Latest Images', icon: DOWNLOAD_ICON, action: 'compose-pull', disabled: composeDisabled, title: composeReason },
@@ -296,7 +300,7 @@ const actionItems = computed<KebabMenuItem[]>(() => {
     );
   }
 
-  return items;
+  return byLabel(items);
 });
 
 /**
@@ -321,9 +325,7 @@ const sortItems = computed<KebabMenuItem[]>(() => {
 
 /** Settings for the folder and its stack's autostart, and deleting it. */
 const optionItems = computed<KebabMenuItem[]>(() => {
-  const items: KebabMenuItem[] = [
-    { label: 'Edit Folder', icon: EDIT_ICON, action: 'edit' },
-  ];
+  const items: KebabMenuItem[] = [{ label: 'Edit Folder', icon: EDIT_ICON, action: 'edit' }];
 
   if (props.folder.compose_project) {
     const composeDisabled = composeStore.composeActionsDisabled;
@@ -345,11 +347,12 @@ const optionItems = computed<KebabMenuItem[]>(() => {
     );
   }
 
-  items.push(
+  // Delete stays last, under its own divider, wherever the rest sorts to.
+  return [
+    ...byLabel(items),
     { divider: true },
     { label: 'Delete Folder', icon: 'M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2|M10 11v6|M14 11v6', action: 'delete', class: 'hover:text-error' },
-  );
-  return items;
+  ];
 });
 
 async function handleMenuSelect(action: string) {

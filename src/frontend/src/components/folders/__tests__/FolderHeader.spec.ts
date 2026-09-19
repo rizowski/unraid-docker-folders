@@ -84,7 +84,7 @@ describe('FolderHeader', () => {
     await openKebab(wrapper);
 
     // No images and no compose project, so Actions has nothing and hides.
-    expect(menuLabels(wrapper)).toEqual(['Sort', 'Folder Options']);
+    expect(menuLabels(wrapper)).toEqual(['Folder Options', 'Sort']);
   });
 
   it('lists every sort mode under Sort', async () => {
@@ -184,6 +184,24 @@ describe('FolderHeader', () => {
       expect(menuLabels(wrapper)).toContain('Stack Up');
       expect(menuLabels(wrapper)).toContain('Pull Latest Images');
       expect(menuLabels(wrapper)).toContain('Edit Stack');
+    });
+
+    it('lists Actions and Folder Options alphabetically, with Delete Folder last', async () => {
+      const docker = useDockerStore();
+      docker.containers = [{ name: 'db', image: 'postgres:16' } as never];
+      const settings = useSettingsStore();
+      settings.loaded = true;
+      settings.enableUpdateChecks = true;
+      const containers = [{ container_name: 'db' } as unknown as Folder['containers'][number]];
+
+      const wrapper = mountHeader({ compose_project: 'blog', containers });
+      await openSubmenu(wrapper, 'Actions');
+      expect(menuLabels(wrapper).slice(3)).toEqual(['Check for Updates', 'Edit Stack', 'Pull Latest Images', 'Stack Up']);
+
+      await wrapper.find('button[aria-expanded="true"]').trigger('click');
+      const options = wrapper.findAll('button[aria-haspopup="menu"]').find((el) => el.text().trim() === 'Folder Options')!;
+      await options.trigger('click');
+      expect(menuLabels(wrapper).slice(3)).toEqual(['Edit Folder', 'Enable Stack Autostart', 'Delete Folder']);
     });
 
     it('disables them until compose availability is known', async () => {
