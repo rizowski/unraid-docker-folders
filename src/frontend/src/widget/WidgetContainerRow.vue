@@ -48,14 +48,25 @@
         </span>
       </span>
     </span>
-    <a
-      v-if="webuiUrl"
-      :href="webuiUrl"
-      target="_blank"
-      rel="noopener"
-      class="icon-btn shrink-0 text-text-secondary hover:text-text"
-      :title="`Open WebUI for ${container.name}`"
-    ><IconGlobe :size="14" /></a>
+    <!-- Always rendered while the setting is on, disabled when there is no page
+         to open, so every row's kebab lands in the same column. The disabled
+         state is a span, not a link: `.icon-btn` only styles a and button, so
+         it repeats that box (6px padding) as utilities. -->
+    <template v-if="showWebui">
+      <a
+        v-if="webuiUrl"
+        :href="webuiUrl"
+        target="_blank"
+        rel="noopener"
+        class="icon-btn shrink-0 text-text-secondary hover:text-text"
+        :title="`Open WebUI for ${container.name}`"
+      ><IconGlobe :size="14" /></a>
+      <span
+        v-else
+        class="inline-flex items-center justify-center p-[6px] shrink-0 text-text-secondary opacity-30"
+        :title="webuiDisabledTitle"
+      ><IconGlobe :size="14" /></span>
+    </template>
     <svg
       v-if="busy"
       class="animate-spin h-3.5 w-3.5 shrink-0 text-text-secondary"
@@ -127,6 +138,13 @@ const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.
 const editUrl = computed(() => containerEditUrl(props.container));
 // Only while running, the same rule as the Folders page card: a stopped container serves no page.
 const webuiUrl = computed(() => (props.showWebui && isRunning.value ? containerWebuiUrl(props.container) : null));
+// The two reasons the icon is disabled need different wording, because "no
+// WebUI configured" is wrong for a configured container that is stopped.
+const webuiDisabledTitle = computed(() =>
+  containerWebuiUrl(props.container)
+    ? `${props.container.name} is not running, so its WebUI is unavailable.`
+    : "No WebUI configured. Set the WebUI field in the container's Unraid template to enable this.",
+);
 
 // Registered here, not through useContainerStats: that composable follows the
 // Folders page stats setting, and the widget has its own. A collapsed folder

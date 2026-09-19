@@ -178,14 +178,24 @@ describe('WidgetApp', () => {
     expect(JSON.parse(window.localStorage.getItem(SETTINGS_KEY)!).hideStopped).toBe(true);
   });
 
-  it('shows a WebUI link on running containers, unless turned off', async () => {
-    const { wrapper } = await mountWidget(containers, []);
+  it('shows a WebUI link on running containers and a disabled icon on the rest', async () => {
+    // radarr is configured but stopped, which is the second disabled reason.
+    const withStopped = [
+      ...containers,
+      makeContainer({ id: 'c4', name: 'radarr', image: 'linuxserver/radarr', state: 'exited', webui: 'http://[IP]:7878' }),
+    ];
+    const { wrapper } = await mountWidget(withStopped, []);
     expect(wrapper.find('a[title="Open WebUI for plex"]').attributes('href')).toBe(`http://${window.location.hostname}:32400/web`);
+    // Every row keeps the icon column, so the kebab menus line up down the tile.
+    expect(wrapper.findAll('.widget-row a[title^="Open WebUI"], .widget-row span[title*="WebUI"]')).toHaveLength(withStopped.length);
+    expect(wrapper.find('span[title="radarr is not running, so its WebUI is unavailable."]').exists()).toBe(true);
+    expect(wrapper.findAll('span[title^="No WebUI configured"]')).toHaveLength(2);
     wrapper.unmount();
 
     saveSettings({ startCollapsed: false, showWebui: false });
-    const second = await mountWidget(containers, []);
+    const second = await mountWidget(withStopped, []);
     expect(second.wrapper.find('a[title="Open WebUI for plex"]').exists()).toBe(false);
+    expect(second.wrapper.findAll('span[title*="WebUI"]')).toHaveLength(0);
   });
 
   it('shows a status dot in place of the icon when icons are off', async () => {
