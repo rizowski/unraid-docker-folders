@@ -290,7 +290,13 @@ class ScheduleManager
 
     $results = [];
     foreach ($due as $schedule) {
-      $results[] = $this->executeSchedule($schedule['id']);
+      // The runner names the schedule and its target in a failure notification.
+      $results[] = $this->executeSchedule($schedule['id']) + [
+        'name' => $schedule['name'],
+        'target_type' => $schedule['target_type'],
+        'target_id' => $schedule['target_id'],
+        'action' => $schedule['action'],
+      ];
     }
 
     return $results;

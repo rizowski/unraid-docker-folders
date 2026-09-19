@@ -430,6 +430,54 @@ function buildUpdateNotification(array $newImages, array $containersByImage)
 }
 
 /**
+ * Compose the Unraid notification for a failed automatic schedule run.
+ *
+ * @param array $schedule A schedule row, or a run result carrying name,
+ *   target_type, target_id and action
+ * @param string $message The error the run reported
+ * @return array{subject: string, description: string}
+ */
+function buildScheduleFailureNotification(array $schedule, $message)
+{
+  $name = trim((string) ($schedule['name'] ?? ''));
+  $reason = trim((string) $message);
+  if ($reason === '') {
+    $reason = 'Unknown error';
+  }
+
+  $action = (string) ($schedule['action'] ?? '');
+  if ($action === 'backup') {
+    $description = 'Backup failed: ' . $reason;
+  } else {
+    $kind = ($schedule['target_type'] ?? '') === 'stack' ? 'stack' : 'container';
+    $target = (string) ($schedule['target_id'] ?? '');
+    $description = "Could not {$action} {$kind} {$target}: {$reason}";
+  }
+
+  return [
+    'subject' => 'Schedule failed: ' . ($name !== '' ? $name : 'unnamed schedule'),
+    'description' => $description,
+  ];
+}
+
+/**
+ * Post a notification through Unraid's notify script. Every value goes
+ * through escapeshellarg().
+ *
+ * @param string $importance normal, warning, or alert
+ */
+function sendUnraidNotification($subject, $description, $importance = 'normal')
+{
+  $cmd = '/usr/local/emhttp/webGui/scripts/notify'
+    . ' -e ' . escapeshellarg('Docker Folders')
+    . ' -s ' . escapeshellarg($subject)
+    . ' -d ' . escapeshellarg($description)
+    . ' -i ' . escapeshellarg($importance)
+    . ' -l ' . escapeshellarg('/Docker/Folders');
+  exec($cmd);
+}
+
+/**
  * Refresh and attach cached GitHub release notes for the checked images.
  *
  * Fetching is gated on update_available (no point spending a request on an

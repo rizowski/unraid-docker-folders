@@ -31,8 +31,20 @@ try {
       'results' => $results,
     ]);
   }
+
+  // Automatic runs happen with nobody watching, so tell the user about a
+  // failure. A manual "Run now" shows its result in the UI instead.
+  foreach ($results as $result) {
+    if (!empty($result['success'])) {
+      continue;
+    }
+    $notification = buildScheduleFailureNotification($result, $result['message'] ?? '');
+    sendUnraidNotification($notification['subject'], $notification['description'], 'warning');
+    error_log('Schedule failed: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
+  }
 } catch (Exception $e) {
   error_log('Schedule runner error: ' . $e->getMessage());
+  sendUnraidNotification('Schedule runner failed', $e->getMessage(), 'warning');
 } finally {
   flock($fp, LOCK_UN);
   fclose($fp);
