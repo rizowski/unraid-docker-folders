@@ -246,3 +246,57 @@ describe('settings store – serverTimezone', () => {
     expect(store.serverTimezone).toBeNull();
   });
 });
+
+describe('settings store – enableSecurityAdvisor', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('defaults enableSecurityAdvisor to true', () => {
+    const store = useSettingsStore();
+    expect(store.enableSecurityAdvisor).toBe(true);
+  });
+
+  it('fetchSettings reads enable_security_advisor="0" as false', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: { enable_security_advisor: '0' } }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.enableSecurityAdvisor).toBe(false);
+  });
+
+  // The case that matters. Nothing writes this row until the user first
+  // touches the checkbox, so most installs never have one. Dropping the
+  // `in` guard in the store, or flipping the ref default, silently turns
+  // the advisor off for all of them.
+  it('fetchSettings leaves enableSecurityAdvisor on when the key is absent', async () => {
+    mockApiFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ settings: {} }),
+    } as Response);
+
+    const store = useSettingsStore();
+    await store.fetchSettings();
+
+    expect(store.enableSecurityAdvisor).toBe(true);
+  });
+
+  it('setEnableSecurityAdvisor posts the key the backend allowlist expects', async () => {
+    mockApiFetch.mockResolvedValueOnce({ ok: true } as Response);
+
+    const store = useSettingsStore();
+    await store.setEnableSecurityAdvisor(false);
+
+    expect(store.enableSecurityAdvisor).toBe(false);
+    const [, options] = mockApiFetch.mock.calls[0];
+    expect(JSON.parse(options!.body as string)).toEqual({
+      key: 'enable_security_advisor',
+      value: '0',
+    });
+  });
+});
