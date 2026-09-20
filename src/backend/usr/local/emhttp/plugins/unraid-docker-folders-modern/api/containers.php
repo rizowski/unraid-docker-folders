@@ -12,6 +12,7 @@ require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/DockerClient.php';
 require_once dirname(__DIR__) . '/classes/FolderManager.php';
 require_once dirname(__DIR__) . '/classes/AdoptBuilder.php';
+require_once dirname(__DIR__) . '/classes/SecurityAdvisor.php';
 require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 // Set JSON content type
@@ -40,6 +41,8 @@ try {
     default:
       errorResponse('Method not allowed', 405);
   }
+} catch (InvalidArgumentException $e) {
+  errorResponse($e->getMessage(), 400);
 } catch (Exception $e) {
   error_log('Containers API error: ' . $e->getMessage());
   errorResponse($e->getMessage(), 500);
@@ -139,10 +142,17 @@ function handleGet($dockerClient)
       WebSocketPublisher::publish('folders', 'updated');
     }
 
+    // Security findings are derived in the frontend from fields already on each
+    // container; only the dismissals live server-side. They ride along here so
+    // the advisor needs no second request, and so a dismissal made in another
+    // browser converges on the next poll.
+    $advisor = new SecurityAdvisor();
+
     jsonResponse([
       'containers' => $containers,
       'count' => count($containers),
       'cached' => false,
+      'dismissals' => $advisor->listDismissals(),
     ]);
   }
 }
@@ -231,6 +241,26 @@ function handlePost($dockerClient)
     }
 
     jsonResponse(['success' => true, 'autostart' => $enabled, 'autostartDelay' => $delay]);
+  }
+
+  // Security finding dismissals (keyed by container name, not ID: the ID
+  // changes every time a template edit or an image update recreates the
+  // container, and a dismissal has to outlive that).
+  if ($action === 'dismiss-finding' || $action === 'restore-finding') {
+    $data = getRequestData();
+    $name = $data['container_name'] ?? '';
+    $type = $data['finding_type'] ?? '';
+
+    // Both throw InvalidArgumentException on an empty name or an unknown type,
+    // which the dispatch turns into a 400.
+    $advisor = new SecurityAdvisor();
+    if ($action === 'dismiss-finding') {
+      $advisor->dismiss($name, $type);
+    } else {
+      $advisor->restore($name, $type);
+    }
+
+    jsonResponse(['success' => true, 'container_name' => $name, 'finding_type' => $type]);
   }
 
   if (!$id) {

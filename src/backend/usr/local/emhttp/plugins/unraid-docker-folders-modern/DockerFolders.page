@@ -22,6 +22,7 @@ $showLegacyButtons = ($settings['show_legacy_buttons'] ?? '0') === '1';
 $showFolderPorts = ($settings['show_folder_ports'] ?? '1') === '1';
 $showInlineLogs = ($settings['show_inline_logs'] ?? '0') === '1';
 $enableAdopt = ($settings['enable_adopt'] ?? '1') === '1';
+$enableSecurityAdvisor = ($settings['enable_security_advisor'] ?? '1') === '1';
 $logRefreshInterval = $settings['log_refresh_interval'] ?? '10';
 $enableUpdateChecks = ($settings['enable_update_checks'] ?? '0') === '1';
 $updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
@@ -703,6 +704,17 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="enable-adopt" <?= $enableAdopt ? 'checked' : '' ?> onchange="saveSetting('enable_adopt', this.checked ? '1' : '0')" />
         <span id="save-status-enable-adopt" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="enable-security-advisor">Flag risky container settings</label>
+        <div class="description">Marks running containers that use privileged mode, host networking, added capabilities, a mounted <code>/var/run/docker.sock</code>, or a writable mount of a broad host path, and suggests what to change instead. Nothing is changed for you, and a finding you accept can be dismissed. <strong>Default: On</strong></div>
+      </div>
+      <div class="setting-control">
+        <input type="checkbox" id="enable-security-advisor" <?= $enableSecurityAdvisor ? 'checked' : '' ?> onchange="saveSetting('enable_security_advisor', this.checked ? '1' : '0')" />
+        <span id="save-status-enable-security-advisor" class="save-status">Saved</span>
       </div>
     </div>
     </div>

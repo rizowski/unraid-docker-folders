@@ -25,6 +25,7 @@
             @remove="handleRemove"
             @pull="(data) => emit('pull', data)"
             @schedules="(type, id) => emit('schedules', type, id)"
+            @security="(id) => emit('security', id)"
           />
         </div>
         <!-- Compose folder: stack down — show faded service names as a preview -->
@@ -89,6 +90,7 @@ const emit = defineEmits<{
   'compose-recompose': [project: string];
   'compose-pull': [project: string];
   schedules: [targetType: string, targetId: string];
+  security: [containerId: string];
 }>();
 
 const dockerStore = useDockerStore();

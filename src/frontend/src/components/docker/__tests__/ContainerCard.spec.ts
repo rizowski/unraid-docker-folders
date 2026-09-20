@@ -1245,4 +1245,84 @@ describe('ContainerCard', () => {
     });
   });
 
+  describe('security badge', () => {
+    /** The shield button, found by the aria-label it carries. */
+    const badge = (wrapper: CardWrapper) =>
+      wrapper.findAll('button').find((b) => /security finding/.test(b.attributes('aria-label') ?? ''));
+
+    /** The pill inside it, which is where the styling lives. */
+    const pill = (wrapper: CardWrapper) => badge(wrapper)!.find('span');
+
+    it('is absent when nothing is flagged', () => {
+      expect(badge(mountCard())).toBeUndefined();
+    });
+
+    it('shows the finding count and turns red for a critical finding', () => {
+      const wrapper = mountCard({ privileged: true, capAdd: ['NET_ADMIN'] });
+      const el = badge(wrapper)!;
+      expect(el.text()).toBe('2');
+      expect(el.find('svg').exists()).toBe(true);
+      expect(pill(wrapper).classes()).toContain('text-error');
+      expect(el.attributes('title')).toContain('Runs in privileged mode');
+      expect(el.attributes('aria-label')).toBe('2 security findings on test-container');
+    });
+
+    it('stays amber when every finding is a warning', () => {
+      const wrapper = mountCard({ capAdd: ['NET_ADMIN'] });
+      expect(pill(wrapper).classes()).toContain('text-warning');
+      expect(pill(wrapper).classes()).not.toContain('text-error');
+    });
+
+    it('clicking it emits security with the container id', async () => {
+      const wrapper = mountCard({ id: 'badge-1', privileged: true });
+      await badge(wrapper)!.trigger('click');
+      expect(wrapper.emitted('security')).toEqual([['badge-1']]);
+    });
+
+    it('clicking it does not expand the card', async () => {
+      const wrapper = mountCard({ privileged: true });
+      await badge(wrapper)!.trigger('click');
+      expect(wrapper.classes()).not.toContain('col-span-full');
+    });
+
+    it('is absent on a stopped container', () => {
+      expect(badge(mountCard({ state: 'exited', privileged: true }))).toBeUndefined();
+    });
+
+    it('is absent when the setting is off', () => {
+      const pinia = createPinia();
+      setActivePinia(pinia);
+      useSettingsStore().enableSecurityAdvisor = false;
+
+      const wrapper = mount(ContainerCard, {
+        props: { container: makeContainer({ privileged: true }), view: 'grid' as const },
+        global: { plugins: [pinia], stubs: { Teleport: true } },
+      });
+      expect(badge(wrapper)).toBeUndefined();
+    });
+
+    // The grid and list branches carry their own copy of the badge markup, the
+    // way the port-conflict pill already does. Covering both keeps one from
+    // losing the badge while the other keeps it.
+    it('renders the same badge in list view', async () => {
+      const wrapper = mountCard({ id: 'badge-2', privileged: true }, { view: 'list' as const });
+      const el = badge(wrapper)!;
+      expect(el.text()).toBe('1');
+      expect(pill(wrapper).classes()).toContain('text-error');
+      await el.trigger('click');
+      expect(wrapper.emitted('security')).toEqual([['badge-2']]);
+    });
+
+    it('the kebab entry emits security with the container id', async () => {
+      const wrapper = mountCard({ id: 'sec-1', privileged: true });
+      await openSubmenu(wrapper, 'Options');
+      const item = wrapper
+        .findAll('.kebab-menu-item')
+        .find((el) => el.text().trim() === 'Security Findings (1)')!;
+      await item.trigger('click');
+
+      expect(wrapper.emitted('security')).toEqual([['sec-1']]);
+    });
+  });
+
 });

@@ -35,5 +35,11 @@
     <testsuite name="ScheduleMigration">
       <file>ScheduleMigrationTest.php</file>
     </testsuite>
+    <testsuite name="ContainerFacts">
+      <file>ContainerFactsTest.php</file>
+    </testsuite>
+    <testsuite name="SecurityAdvisor">
+      <file>SecurityAdvisorTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>

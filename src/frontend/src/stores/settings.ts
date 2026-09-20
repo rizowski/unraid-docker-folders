@@ -21,6 +21,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const showInlineLogs = ref(false);
   /** Offer to hand a CLI-created container over to Unraid's container manager. */
   const enableAdopt = ref(true);
+  const enableSecurityAdvisor = ref(true);
   const logRefreshInterval = ref(10);
   const enableUpdateChecks = ref(false);
   const updateCheckSchedule = ref('disabled');
@@ -67,6 +68,9 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('enable_adopt' in settings) {
         enableAdopt.value = settings.enable_adopt !== '0';
+      }
+      if ('enable_security_advisor' in settings) {
+        enableSecurityAdvisor.value = settings.enable_security_advisor !== '0';
       }
       if ('log_refresh_interval' in settings) {
         const parsed = parseInt(settings.log_refresh_interval, 10);
@@ -193,6 +197,19 @@ export const useSettingsStore = defineStore('settings', () => {
       await apiFetch(`${API_BASE}/settings.php`, {
         method: 'POST',
         body: JSON.stringify({ key: 'enable_adopt', value: value ? '1' : '0' }),
+      });
+    } catch (e) {
+      console.error('Error saving setting:', e);
+    }
+  }
+
+  async function setEnableSecurityAdvisor(value: boolean) {
+    enableSecurityAdvisor.value = value;
+
+    try {
+      await apiFetch(`${API_BASE}/settings.php`, {
+        method: 'POST',
+        body: JSON.stringify({ key: 'enable_security_advisor', value: value ? '1' : '0' }),
       });
     } catch (e) {
       console.error('Error saving setting:', e);
@@ -345,6 +362,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showFolderPorts,
     showInlineLogs,
     enableAdopt,
+    enableSecurityAdvisor,
     logRefreshInterval,
     enableUpdateChecks,
     updateCheckSchedule,
@@ -364,6 +382,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setShowFolderPorts,
     setShowInlineLogs,
     setEnableAdopt,
+    setEnableSecurityAdvisor,
     setLogRefreshInterval,
     setEnableUpdateChecks,
     setUpdateCheckSchedule,

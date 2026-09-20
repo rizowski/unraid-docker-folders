@@ -13,6 +13,9 @@ import type { Plugin } from 'vite';
 
 let nextFolderId = 5;
 
+/** Security findings the user accepted. Lives in memory, like everything here. */
+let securityDismissals: Array<{ container_name: string; finding_type: string }> = [];
+
 const containers = [
   {
     id: 'abc123def456', name: 'plex', image: 'linuxserver/plex:latest', state: 'running',
@@ -20,9 +23,12 @@ const containers = [
     created: Date.now() / 1000 - 259200,
     ports: [{ IP: '0.0.0.0', PrivatePort: 32400, PublicPort: 32400, Type: 'tcp' }],
     hostPorts: [{ hostIp: '0.0.0.0', hostPort: 32400, containerPort: 32400, type: 'tcp' }],
+    // Security advisor fixture: privileged (hardware transcoding is the usual
+    // excuse) plus a writable mount of the whole /mnt/user share root.
+    privileged: true,
     mounts: [
       { Source: '/mnt/user/appdata/plex', Destination: '/config', Type: 'bind', RW: true },
-      { Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true },
+      { Source: '/mnt/user', Destination: '/media', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.2' } },
     labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/40463-support-linuxserverio-plex-media-server/' },
@@ -73,6 +79,9 @@ const containers = [
       { hostIp: '0.0.0.0', hostPort: 80, containerPort: 80, type: 'tcp' },
       { hostIp: '0.0.0.0', hostPort: 443, containerPort: 443, type: 'tcp' },
     ],
+    // Security advisor fixture: the docker socket, plus SYS_ADMIN to put a
+    // container in the critical capability tier.
+    capAdd: ['SYS_ADMIN'],
     mounts: [{ Source: '/var/run/docker.sock', Destination: '/tmp/docker.sock', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.6' } },
     labels: {},
@@ -83,6 +92,10 @@ const containers = [
     created: Date.now() / 1000 - 432000,
     ports: [{ IP: '0.0.0.0', PrivatePort: 3306, PublicPort: 3306, Type: 'tcp' }],
     hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3306, containerPort: 3306, type: 'tcp' }],
+    // Security advisor fixture: one added capability, the warning tier, and a
+    // template that pins the container to root.
+    capAdd: ['NET_ADMIN'],
+    user: '0',
     mounts: [{ Source: '/mnt/user/appdata/mariadb', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.7' } },
     labels: { 'com.docker.compose.project': 'db-stack' },
@@ -112,8 +125,13 @@ const containers = [
     id: 'ijk901lmn234', name: 'homeassistant', image: 'ghcr.io/home-assistant/home-assistant:stable', state: 'running',
     status: 'Up 1 day', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8123]/',
     created: Date.now() / 1000 - 86400,
-    ports: [{ IP: '0.0.0.0', PrivatePort: 8123, PublicPort: 8123, Type: 'tcp' }],
-    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 8123, containerPort: 8123, type: 'tcp' }],
+    // Security advisor fixture: real host networking, so no port bindings at
+    // all. 8123 is free, but 3000 is held by grafana — the advisor has to
+    // suggest 3001 for that one.
+    networkMode: 'host',
+    exposedPorts: ['8123/tcp', '3000/tcp', '5353/udp'],
+    ports: [{ IP: '0.0.0.0', PrivatePort: 8123, Type: 'tcp' }],
+    hostPorts: [],
     mounts: [{ Source: '/mnt/user/appdata/homeassistant', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { host: { IPAddress: '' } },
     labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/98822-support-home-assistant/', 'net.unraid.docker.project': 'https://www.home-assistant.io/' },
@@ -451,16 +469,51 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
     // Unraid lists autostart only for containers it manages, so an unmanaged one
     // must not claim it. Otherwise the dev server shows an autostart state that
     // cannot exist on a real box.
+    // The security fields default here rather than on every literal above, the
+    // same way autostart does. Only the containers that are meant to trip a
+    // check state them.
     const containersWithAutostart = containers.map(c => ({
       ...c,
       autostart: c.autostart ?? ((c as any).managed === 'dockerman' && (c as any).state === 'running'),
       autostartDelay: (c as any).autostartDelay ?? 0,
+      networkMode: (c as any).networkMode ?? 'bridge',
+      privileged: (c as any).privileged ?? false,
+      capAdd: (c as any).capAdd ?? [],
+      exposedPorts: (c as any).exposedPorts ?? [],
+      user: (c as any).user ?? '',
     }));
-    return json(res, { containers: containersWithAutostart, count: containersWithAutostart.length, cached: false });
+    return json(res, {
+      containers: containersWithAutostart,
+      count: containersWithAutostart.length,
+      cached: false,
+      dismissals: securityDismissals,
+    });
   }
 
   if (req.method === 'POST') {
     const { action, id } = params;
+
+    // Dismissals key on container name, not id, so they run before the id
+    // lookup below.
+    if (action === 'dismiss-finding' || action === 'restore-finding') {
+      const data = await parseBody(req);
+      const name = String(data?.container_name ?? '');
+      const type = String(data?.finding_type ?? '');
+      if (!name || !type) return json(res, { error: true, message: 'container_name and finding_type are required' }, 400);
+
+      const matches = (d: { container_name: string; finding_type: string }) =>
+        d.container_name === name && d.finding_type === type;
+
+      if (action === 'dismiss-finding') {
+        if (!securityDismissals.some(matches)) {
+          securityDismissals.push({ container_name: name, finding_type: type });
+        }
+      } else {
+        securityDismissals = securityDismissals.filter((d) => !matches(d));
+      }
+      return json(res, { success: true, container_name: name, finding_type: type });
+    }
+
     const container = containers.find((c) => c.id === id);
     if (!container) return json(res, { error: true, message: 'Container not found' }, 404);
 

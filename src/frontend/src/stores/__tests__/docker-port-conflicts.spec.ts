@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useDockerStore, type Container, type HostPortBinding } from '../docker';
+import { makeContainer as baseContainer } from '@/test/fixtures';
 
 // Mock apiFetch so instantiating the store never makes real HTTP requests.
 vi.mock('@/utils/csrf', () => ({
@@ -8,30 +9,25 @@ vi.mock('@/utils/csrf', () => ({
   getCsrfToken: vi.fn(() => ''),
 }));
 
+// These specs address containers by name, so the id doubles as the name. Every
+// other field comes from the shared fixture: a private copy of the whole
+// `Container` shape drifts silently the next time the type gains a field.
 function makeContainer(
   name: string,
   state: string,
   hostPorts: HostPortBinding[],
 ): Container {
-  return {
+  return baseContainer({
     id: name,
     name,
     image: 'test:latest',
     state,
     status: state === 'running' ? 'Up' : 'Exited',
     command: '',
-    ports: [],
     hostPorts,
-    mounts: [],
-    networkSettings: {},
     created: 0,
-    icon: null,
     managed: null,
-    webui: null,
-    labels: {},
-    autostart: false,
-    autostartDelay: 0,
-  };
+  });
 }
 
 const tcp = (hostPort: number, hostIp = '0.0.0.0'): HostPortBinding => ({

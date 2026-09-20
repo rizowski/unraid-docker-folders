@@ -105,6 +105,24 @@
             <span v-if="updatesStore.updatesAvailableCount > 0" class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 bg-warning text-white rounded-full text-[10px] font-bold">{{ updatesStore.updatesAvailableCount }}</span>
           </template>
         </button>
+        <!-- Security advisor. Hidden when nothing is flagged: an always-present
+             button with a zero on it teaches people to ignore it. The count pill
+             is a tinted token, not `.nav-btn.warning` — the drag-lock toggle
+             owns that class (DESIGN.md §1). -->
+        <button
+          v-if="securityStore.enabled && securityStore.findingCount > 0"
+          @click="openSecurityPanel"
+          class="nav-btn relative"
+          :title="securityButtonTitle"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path :d="SHIELD_ICON" />
+          </svg>
+          <span
+            class="absolute -top-1 -right-1 flex items-center justify-center min-w-4 h-4 px-1 rounded-full text-[10px] font-bold"
+            :class="securityStore.hasCritical ? 'bg-error/15 text-error' : 'bg-warning/20 text-warning'"
+          >{{ securityStore.findingCount }}</span>
+        </button>
         <CreateMenu
           :stack-disabled="composeStore.composeActionsDisabled"
           :stack-disabled-reason="composeStore.composeDisabledReason"
@@ -143,6 +161,7 @@
             @compose-recompose="openComposeRecompose"
             @compose-pull="handleComposePull"
             @schedules="openSchedules"
+            @security="openSecurity"
           />
         </div>
 
@@ -180,6 +199,7 @@
                   @remove="handleRemove"
                   @pull="handlePull"
                   @schedules="openSchedules"
+                  @security="openSecurity"
                 />
               </div>
             </div>
@@ -222,6 +242,14 @@
       :force-recreate="composeProgressForceRecreate"
       @close="closeComposeProgress"
       @complete="handleComposeProgressComplete"
+    />
+
+    <!-- Security Advisor (one container from a card, or the whole box from the
+         header button) -->
+    <SecurityFindingsModal
+      :is-open="securityModalOpen"
+      :container="securityModalContainer"
+      @close="securityModalOpen = false"
     />
 
     <!-- Pull Progress Modal (single container) -->
@@ -274,6 +302,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import { useComposeStore } from '@/stores/compose';
+import { useSecurityStore } from '@/stores/security';
 import { useScheduleStore } from '@/stores/schedules';
 import { initWebSocket } from '@/composables/useWebSocket';
 import FolderContainer from '@/components/folders/FolderContainer.vue';
@@ -287,12 +316,14 @@ import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import CreateMenu from '@/components/CreateMenu.vue';
 import SortMenu from '@/components/SortMenu.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';
+import SecurityFindingsModal from '@/components/docker/SecurityFindingsModal.vue';
 import BatchPullProgressModal from '@/components/docker/BatchPullProgressModal.vue';
 import UpdateConfirmModal from '@/components/docker/UpdateConfirmModal.vue';
 import { buildUpdateUnits, type UpdateUnit } from '@/utils/updateUnits';
 import ScheduleList from '@/components/schedules/ScheduleList.vue';
 import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/safeStorage';
 import { containerMatchesSearch } from '@/utils/search';
+import { SHIELD_ICON } from '@/utils/menuIcons';
 import type { Folder, FolderCreateData, FolderUpdateData, FolderContainerSelection } from '@/types/folder';
 import { effectiveSortMode } from '@/utils/sortMode';
 import Sortable from 'sortablejs';
@@ -305,6 +336,7 @@ const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
 const updatesStore = useUpdatesStore();
 const composeStore = useComposeStore();
+const securityStore = useSecurityStore();
 
 const actionsInProgress = ref<Map<string, string>>(new Map());
 const pullingContainer = ref<PullRequest | null>(null);
@@ -318,6 +350,28 @@ const pendingUnits = ref<UpdateUnit[]>([]);
  * everything that has an update — which would silently widen that subset.
  */
 const updateRecheckable = ref(false);
+
+/**
+ * Security advisor. `securityModalContainer` null means the panel shows every
+ * flagged running container; a card badge sets it to that one container.
+ */
+const securityModalOpen = ref(false);
+const securityModalContainer = ref<Container | null>(null);
+
+const securityButtonTitle = computed(() => {
+  const n = securityStore.findingCount;
+  return `${n} security finding${n === 1 ? '' : 's'} on running containers`;
+});
+
+function openSecurity(containerId: string) {
+  securityModalContainer.value = dockerStore.getContainerById(containerId) ?? null;
+  securityModalOpen.value = true;
+}
+
+function openSecurityPanel() {
+  securityModalContainer.value = null;
+  securityModalOpen.value = true;
+}
 const viewMode = ref<'grid' | 'list'>((safeLocalStorageGet('docker-folders-view') as 'grid' | 'list') || 'grid');
 watch(viewMode, (v) => safeLocalStorageSet('docker-folders-view', v));
 

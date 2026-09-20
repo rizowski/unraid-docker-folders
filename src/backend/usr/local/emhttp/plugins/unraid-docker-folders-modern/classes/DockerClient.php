@@ -22,10 +22,16 @@ class DockerClient
   const SLOW_CACHE_PATH = '/tmp/unraid-docker-slow-stats.json';
   const CPU_SAMPLES_PATH = '/tmp/unraid-docker-stats-cpu.json';
   const SLOW_CACHE_TTL = 60;
-  // Host port bindings are immutable for a given container ID (a recreate
-  // yields a new ID), so this cache has no TTL — entries are added once on
-  // first sight and pruned when the container disappears.
-  const PORTS_CACHE_PATH = '/tmp/unraid-docker-port-bindings.json';
+  // Port bindings, privileged, CapAdd and ExposedPorts are all immutable for a
+  // given container ID (`docker update` cannot change them; a recreate yields a
+  // new ID), so this cache has no TTL — entries are added once on first sight
+  // and pruned when the container disappears.
+  //
+  // The path changed when the entry grew from a bare port-binding list into the
+  // facts array below. Same file, same shape was not an option: an old entry
+  // would be read as a facts array and every field would come back empty. /tmp
+  // is tmpfs on Unraid, so the old file is gone at the next reboot.
+  const FACTS_CACHE_PATH = '/tmp/unraid-docker-container-facts.json';
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
@@ -61,11 +67,13 @@ class DockerClient
     // Build autostart lookup from Unraid XML templates
     $autostartMap = $this->getAutostartMap();
 
-    // Build configured host port bindings lookup (used for port-conflict
-    // detection). Stopped containers don't expose PublicPort in the list
-    // response, so we source bindings from inspect data, cached by ID.
+    // Build the inspect-derived facts lookup: host port bindings (used for
+    // port-conflict detection) plus the security-relevant HostConfig fields.
+    // Stopped containers don't expose PublicPort in the list response, and the
+    // list response carries no HostConfig at all, so both come from inspect
+    // data, cached by ID.
     $ids = array_column($response, 'Id');
-    $hostPortsMap = $this->getHostPortsMap($ids);
+    $factsMap = $this->getContainerFactsMap($ids);
 
     // Transform Docker API response to our format
     $containers = [];
@@ -74,7 +82,12 @@ class DockerClient
       $autostartInfo = $autostartMap[$formatted['name']] ?? null;
       $formatted['autostart'] = $autostartInfo ? $autostartInfo['autostart'] : false;
       $formatted['autostartDelay'] = $autostartInfo ? $autostartInfo['autostartDelay'] : 0;
-      $formatted['hostPorts'] = $hostPortsMap[$formatted['id']] ?? [];
+      $facts = $factsMap[$formatted['id']] ?? [];
+      $formatted['hostPorts'] = $facts['ports'] ?? [];
+      $formatted['privileged'] = $facts['privileged'] ?? false;
+      $formatted['capAdd'] = $facts['capAdd'] ?? [];
+      $formatted['exposedPorts'] = $facts['exposedPorts'] ?? [];
+      $formatted['user'] = $facts['user'] ?? '';
       $containers[] = $formatted;
     }
 
@@ -82,20 +95,20 @@ class DockerClient
   }
 
   /**
-   * Build a map of configured host port bindings keyed by container ID.
+   * Build a map of inspect-derived container facts keyed by container ID.
    *
-   * Bindings come from each container's HostConfig.PortBindings (inspect),
-   * which is available regardless of running state — unlike the list
-   * response, which omits PublicPort for stopped containers. Results are
-   * cached permanently per ID (bindings are immutable for a given ID); only
-   * uncached IDs are inspected, and entries for vanished IDs are pruned.
+   * Everything here comes from `docker inspect`, which is available regardless
+   * of running state — unlike the list response, which omits PublicPort for
+   * stopped containers and carries no HostConfig at all. Results are cached
+   * permanently per ID (see FACTS_CACHE_PATH); only uncached IDs are
+   * inspected, and entries for vanished IDs are pruned.
    *
    * @param array $ids Container IDs from the current list
-   * @return array Map of id => [ {hostIp, hostPort, containerPort, type}, ... ]
+   * @return array Map of id => facts array (see extractFacts)
    */
-  private function getHostPortsMap(array $ids)
+  private function getContainerFactsMap(array $ids)
   {
-    $cache = $this->loadJsonCache(self::PORTS_CACHE_PATH);
+    $cache = $this->loadJsonCache(self::FACTS_CACHE_PATH);
     $changed = false;
 
     // Inspect only IDs we haven't seen before.
@@ -113,7 +126,7 @@ class DockerClient
       foreach ($missing as $id) {
         $inspect = $results[$id] ?? null;
         if ($inspect === null) continue; // transient failure — retry next list
-        $cache[$id] = $this->parsePortBindings($inspect['HostConfig']['PortBindings'] ?? []);
+        $cache[$id] = self::extractFacts($inspect);
         $changed = true;
       }
     }
@@ -128,10 +141,49 @@ class DockerClient
     }
 
     if ($changed) {
-      $this->saveJsonCache(self::PORTS_CACHE_PATH, $cache);
+      $this->saveJsonCache(self::FACTS_CACHE_PATH, $cache);
     }
 
     return $cache;
+  }
+
+  /**
+   * Pull everything the container list needs out of one inspect payload.
+   *
+   * Pure transform, like AdoptBuilder::build() — no socket, no filesystem — so
+   * it is unit testable without Docker. `exposedPorts` keeps Docker's own
+   * "<port>/<proto>" form; the frontend splits it.
+   *
+   * These fields are all immutable for a container ID: `docker update` cannot
+   * change any of them, and editing one in Unraid's template recreates the
+   * container with a new ID. That is what makes FACTS_CACHE_PATH safe to hold
+   * forever.
+   *
+   * @param array $inspect Raw /containers/{id}/json payload
+   * @return array {ports, privileged, capAdd, exposedPorts, user}
+   */
+  public static function extractFacts(array $inspect)
+  {
+    $host = isset($inspect['HostConfig']) && is_array($inspect['HostConfig'])
+      ? $inspect['HostConfig']
+      : [];
+    $config = isset($inspect['Config']) && is_array($inspect['Config'])
+      ? $inspect['Config']
+      : [];
+
+    $capAdd = $host['CapAdd'] ?? [];
+    $exposed = $config['ExposedPorts'] ?? [];
+
+    return [
+      'ports' => self::parsePortBindings($host['PortBindings'] ?? []),
+      'privileged' => !empty($host['Privileged']),
+      'capAdd' => is_array($capAdd) ? array_values(array_map('strval', $capAdd)) : [],
+      'exposedPorts' => is_array($exposed) ? array_map('strval', array_keys($exposed)) : [],
+      // Empty on almost every container, because the image picks the user. Only
+      // a value set here means somebody overrode it, which is the only case the
+      // frontend acts on.
+      'user' => (string) ($config['User'] ?? ''),
+    ];
   }
 
   /**
@@ -141,10 +193,12 @@ class DockerClient
    * An empty binding (declared but unpublished) is skipped. PHP json_decode
    * turns an empty {} into [], which yields an empty list naturally.
    *
+   * Static so extractFacts() can stay a pure transform.
+   *
    * @param mixed $portBindings
    * @return array List of {hostIp, hostPort, containerPort, type}
    */
-  private function parsePortBindings($portBindings)
+  private static function parsePortBindings($portBindings)
   {
     if (!is_array($portBindings)) {
       return [];

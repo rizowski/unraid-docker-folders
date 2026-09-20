@@ -589,6 +589,9 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
 ### API Endpoints
 - `GET /api/containers.php` - List containers (includes ports, mounts, networkSettings)
 - `POST /api/containers.php?action=start&id=<id>` - Start container
+- `POST /api/containers.php?action=dismiss-finding` - Accept a security finding
+  (body: `{container_name, finding_type}`). Keyed by container name, not id, so
+  it survives a recreate. `restore-finding` undoes it.
 - `GET /api/folders.php` - List folders
 - `POST /api/folders.php` - Create folder (body: `{name, icon, color}`)
 - `PUT /api/folders.php?id=<id>` - Update folder

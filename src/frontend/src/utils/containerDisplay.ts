@@ -5,6 +5,13 @@
 
 import type { Container } from '@/stores/docker';
 
+/**
+ * The generic Docker whale, shown when a container's template names no icon.
+ * BASE_URL differs between the dev server and the plugin path on Unraid, so the
+ * URL has to be built rather than written as a literal.
+ */
+export const FALLBACK_CONTAINER_ICON = `${import.meta.env.BASE_URL}docker.svg`;
+
 export interface ContainerStatus {
   /** Halo state class for ContainerIcon, e.g. `status-halo-success`. */
   halo: string;

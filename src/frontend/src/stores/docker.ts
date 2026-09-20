@@ -37,6 +37,11 @@ export interface ConflictDetail {
   heldBy: string[]; // names of running containers holding this port
 }
 
+export interface SecurityDismissal {
+  container_name: string;
+  finding_type: string;
+}
+
 export interface ConflictInfo {
   conflicts: ConflictDetail[];
 }
@@ -60,6 +65,14 @@ export interface Container {
   hostPorts: HostPortBinding[];
   mounts: ContainerMount[];
   networkSettings: Record<string, { IPAddress: string }>;
+  /** HostConfig.NetworkMode, e.g. 'bridge', 'host', 'container:<id>'. */
+  networkMode: string;
+  privileged: boolean;
+  capAdd: string[];
+  /** Config.ExposedPorts keys, in Docker's own "8989/tcp" form. */
+  exposedPorts: string[];
+  /** Config.User. Empty means the image chose, which is the normal case. */
+  user: string;
   created: number;
   icon: string | null;
   managed: string | null;
@@ -77,6 +90,12 @@ export const useDockerStore = defineStore('docker', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const searchQuery = ref('');
+  /**
+   * Security findings the user accepted, as sent with the container list.
+   * Held here rather than fetched separately so the security store converges
+   * on every refresh path without a second request.
+   */
+  const securityDismissals = ref<SecurityDismissal[]>([]);
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
   let initialLoadDone = false;
@@ -97,6 +116,21 @@ export const useDockerStore = defineStore('docker', () => {
   // Treat unspecified / all-interfaces bindings as a wildcard that overlaps
   // any other host IP on the same port/protocol.
   const isWildcardIp = (ip: string) => ip === '' || ip === '0.0.0.0' || ip === '::';
+
+  // Host port -> name of a container that binds it, over *every* container.
+  // Deliberately wider than the `occupied` set inside portConflicts below,
+  // which only counts running containers because that is what a conflict means.
+  // The security advisor suggests a port to move to, and a stopped container
+  // still owns its binding, so suggesting its port would collide on next start.
+  const boundHostPorts = computed<Map<number, string>>(() => {
+    const owners = new Map<number, string>();
+    for (const c of containers.value) {
+      for (const b of c.hostPorts ?? []) {
+        if (!owners.has(b.hostPort)) owners.set(b.hostPort, c.name);
+      }
+    }
+    return owners;
+  });
 
   // A non-running container has a port conflict when one of its configured
   // host port bindings collides with a binding held by a running container
@@ -216,6 +250,7 @@ export const useDockerStore = defineStore('docker', () => {
 
       const data = await response.json();
       containers.value = data.containers || [];
+      securityDismissals.value = data.dismissals || [];
       initialLoadDone = true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -366,6 +401,8 @@ export const useDockerStore = defineStore('docker', () => {
     unfolderedContainers,
     portConflicts,
     getPortConflict,
+    boundHostPorts,
+    securityDismissals,
 
     // Actions
     fetchContainers,

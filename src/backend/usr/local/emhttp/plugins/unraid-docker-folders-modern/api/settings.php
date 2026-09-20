@@ -86,6 +86,7 @@ function handlePost()
     'distinguish_healthy', 'show_stats', 'replace_docker_section',
     'show_legacy_containers', 'show_legacy_buttons',
     'show_folder_ports', 'show_inline_logs', 'enable_adopt',
+    'enable_security_advisor',
     'enable_update_checks',
     'update_check_schedule', 'notify_on_updates', 'update_check_exclude',
     'post_pull_action',

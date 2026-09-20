@@ -7,7 +7,7 @@
       <div class="flex items-center gap-2 px-4 sm:px-6 pt-4 sm:pt-6 pb-0">
         <DragHandle v-if="!dragLocked" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing" @click.stop />
         <ContainerIcon
-          :src="container.icon || fallbackIcon"
+          :src="container.icon || FALLBACK_CONTAINER_ICON"
           :alt="container.name"
           :halo-class="status.halo"
           :status-tooltip="status.tooltip"
@@ -40,8 +40,26 @@
           class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
           :title="portConflictTitle"
         >Port Conflict</span>
+        <!-- The pill lives on the inner span, not the button: the Unraid reset
+             zeroes padding/background/radius on any button without .nav-btn
+             (DESIGN.md §11), and a .nav-btn does not look like a badge. -->
+        <button
+          v-if="securityFindings.length > 0"
+          class="shrink-0"
+          :title="securityTitle"
+          :aria-label="securityAriaLabel"
+          @click.stop="emit('security', container.id)"
+        >
+          <span
+            class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded cursor-pointer"
+            :class="securityBadgeClass"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path :d="SHIELD_ICON" /></svg>
+            {{ securityFindings.length }}
+          </span>
+        </button>
       </div>
-  
+
       <!-- Summary row — carries the chevron affordance -->
       <div class="flex items-center gap-2 px-4 sm:px-6 py-2">
         <p class="flex-1 text-[11px] text-text-secondary font-mono truncate min-w-0">
@@ -129,7 +147,7 @@
       <DragHandle v-if="!dragLocked" :size="14" handle-class="drag-handle shrink-0 text-muted cursor-grab active:cursor-grabbing -mr-2" @click.stop />
       <ChevronIcon :expanded="expanded" :size="12" />
       <ContainerIcon
-        :src="container.icon || fallbackIcon"
+        :src="container.icon || FALLBACK_CONTAINER_ICON"
         :alt="container.name"
         :halo-class="status.halo"
         :status-tooltip="status.tooltip"
@@ -165,6 +183,23 @@
             class="shrink-0 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-error/15 text-error"
             :title="portConflictTitle"
           >Port Conflict</span>
+          <!-- See the grid branch: the pill has to sit on a child of the
+               button, because the reset strips it from the button itself. -->
+          <button
+            v-if="securityFindings.length > 0"
+            class="shrink-0"
+            :title="securityTitle"
+            :aria-label="securityAriaLabel"
+            @click.stop="emit('security', container.id)"
+          >
+            <span
+              class="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded cursor-pointer"
+              :class="securityBadgeClass"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path :d="SHIELD_ICON" /></svg>
+              {{ securityFindings.length }}
+            </span>
+          </button>
           <span class="hidden sm:inline text-[11px] text-text-secondary truncate">{{ container.status }}</span>
         </div>
         <span class="text-[11px] text-text-secondary font-mono truncate">
@@ -294,6 +329,7 @@ import { computed, inject, ref, watch, onUnmounted, type Ref } from 'vue';
 import { useDockerStore, type Container, type PullRequest } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import { useUpdatesStore } from '@/stores/updates';
+import { useSecurityStore } from '@/stores/security';
 import { useFolderStore } from '@/stores/folders';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
@@ -307,14 +343,14 @@ import AdoptModal from '@/components/docker/AdoptModal.vue';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import { byLabel } from '@/utils/menu';
-import { AUTOSTART_ICON, DOWNLOAD_ICON, EDIT_ICON, GEAR_ICON, PLAY_ICON, REFRESH_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
+import { AUTOSTART_ICON, DOWNLOAD_ICON, EDIT_ICON, GEAR_ICON, PLAY_ICON, REFRESH_ICON, SHIELD_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
 import StatsBar from '@/components/common/StatsBar.vue';
 import DragHandle from '@/components/common/DragHandle.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
 import ContainerDetails from '@/components/docker/ContainerDetails.vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
-import { containerStatus, containerEditUrl, containerWebuiUrl, openContainerTerminal } from '@/utils/containerDisplay';
+import { containerStatus, containerEditUrl, containerWebuiUrl, FALLBACK_CONTAINER_ICON, openContainerTerminal } from '@/utils/containerDisplay';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -323,8 +359,6 @@ import IconDownload from '@/components/icons/IconDownload.vue';
 import IconGlobe from '@/components/icons/IconGlobe.vue';
 import IconAutostart from '@/components/icons/IconAutostart.vue';
 import IconAdopt from '@/components/icons/IconAdopt.vue';
-// Vite copies public/ files to outDir root; BASE_URL ensures correct path in dev + prod
-const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
 const isMobile = useIsMobile();
 const dockerStore = useDockerStore();
@@ -349,6 +383,7 @@ const emit = defineEmits<{
   remove: [id: string, removeImage: boolean];
   pull: [data: PullRequest];
   schedules: [targetType: string, targetId: string];
+  security: [containerId: string];
 }>();
 
 const isActionInProgress = computed(() => !!props.actionInProgress);
@@ -468,6 +503,7 @@ function handleConfirm() {
 const expanded = ref(false);
 const settingsStore = useSettingsStore();
 const updatesStore = useUpdatesStore();
+const securityStore = useSecurityStore();
 
 // Height transition on the accordion. The details are only mounted while open,
 // so this rides Vue's enter/leave rather than a CSS class toggle — the element
@@ -526,6 +562,22 @@ const portConflictTitle = computed(() =>
         .join('; ')
     : ''
 );
+
+// Risky settings on this container. The store returns nothing for a stopped
+// one, so the badge and the panel share that rule rather than each spelling it.
+const securityFindings = computed(() => securityStore.findings(props.container));
+const securityBadgeClass = computed(() =>
+  securityFindings.value.some((f) => f.severity === 'critical')
+    ? 'bg-error/15 text-error'
+    : 'bg-warning/20 text-warning',
+);
+const securityTitle = computed(() =>
+  securityFindings.value.map((f) => f.title).join('; '),
+);
+const securityAriaLabel = computed(() => {
+  const n = securityFindings.value.length;
+  return `${n} security finding${n === 1 ? '' : 's'} on ${props.container.name}`;
+});
 
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
 // The kebab item that starts the check closes with the menu, so the running
@@ -743,6 +795,7 @@ const autostartMenuItems = computed<KebabMenuItem[]>(() => [
 const optionMenuItems = computed<KebabMenuItem[]>(() => byLabel([
   { label: 'Adopt into Unraid', icon: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M17 8l-5-5-5 5|M12 3v12', action: 'adopt', show: canAdopt.value },
   { label: 'Schedules', icon: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z|M12 6v6l4 2', action: 'schedules' },
+  { label: `Security Findings (${securityFindings.value.length})`, icon: SHIELD_ICON, action: 'security', show: securityFindings.value.length > 0 },
   { label: `${folderVerb.value} to Folder…`, icon: 'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z|M12 11v6|M9 14h6', action: 'pick-folder', show: folderTargets.value.length > 0 },
 ]));
 
@@ -780,6 +833,8 @@ async function handleMenuAction(action: string) {
     showDelayModal.value = true;
   } else if (action === 'schedules') {
     emit('schedules', 'container', props.container.name);
+  } else if (action === 'security') {
+    emit('security', props.container.id);
   } else if (action === 'pick-folder') {
     showFolderPicker.value = true;
   } else if (action === 'console') {

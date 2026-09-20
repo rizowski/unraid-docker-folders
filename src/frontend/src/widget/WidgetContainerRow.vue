@@ -2,7 +2,7 @@
   <div class="widget-row flex items-center gap-2 py-1 pl-2 pr-1 min-w-0" :class="{ 'opacity-60': busy }">
     <ContainerIcon
       v-if="showIcon"
-      :src="container.icon || fallbackIcon"
+      :src="container.icon || FALLBACK_CONTAINER_ICON"
       :alt="container.name"
       :halo-class="status.halo"
       :status-tooltip="status.tooltip"
@@ -100,7 +100,7 @@ import { useSettingsStore } from '@/stores/settings';
 import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import type { Schedule } from '@/types/schedule';
-import { containerEditUrl, containerStatus, containerWebuiUrl, openContainerTerminal } from '@/utils/containerDisplay';
+import { containerEditUrl, containerStatus, containerWebuiUrl, FALLBACK_CONTAINER_ICON, openContainerTerminal } from '@/utils/containerDisplay';
 import { formatBytes, formatPercent, loadLevel, LOAD_BAR_CLASSES } from '@/utils/format';
 import { releaseIndexUrl } from '@/utils/updateUnits';
 
@@ -127,7 +127,6 @@ const dockerStore = useDockerStore();
 const settingsStore = useSettingsStore();
 const statsStore = useStatsStore();
 const updatesStore = useUpdatesStore();
-const fallbackIcon = `${import.meta.env.BASE_URL}docker.svg`;
 
 const busy = ref(false);
 
