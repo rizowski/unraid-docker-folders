@@ -188,7 +188,7 @@ describe('security store', () => {
     const finding = security.findings(docker.containers[1])[0];
     expect(finding.detail).toEqual([
       { remove: 'Network Type: host', add: 'Network Type: bridge' },
-      { add: '8124:8123', note: 'homeassistant is using 8123, so this moves up to 8124.' },
+      { add: '8124:8123', addNote: 'homeassistant is using 8123, so this moves up to 8124.' },
     ]);
   });
 });

@@ -15,6 +15,7 @@ import {
   isForcedRoot,
   parseExposedPort,
   suggestHostPort,
+  type FindingDetail,
   type PortOwners,
   type SecurityFinding,
 } from '@/utils/securityFindings';
@@ -28,7 +29,9 @@ const typesOf = (container: Parameters<typeof findingsFor>[0], bound = noPorts) 
 
 /** Detail rows flattened, for assertions that do not care about the columns. */
 const detailText = (finding: SecurityFinding) =>
-  (finding.detail ?? []).map((d) => [d.remove, d.add, d.note].filter(Boolean).join(' ')).join('\n');
+  (finding.detail ?? [])
+    .map((d) => [d.remove, d.add, d.removeNote, d.addNote, d.note].filter(Boolean).join(' '))
+    .join('\n');
 
 /** The left column: what the advisor detected. */
 const removals = (finding: SecurityFinding) =>
@@ -300,17 +303,17 @@ describe('shared folder, different group', () => {
     expect(finding.severity).toBe('warning');
     // The deeper mount is the folder they genuinely share; plex reaches it
     // through its parent.
-    expect(removals(finding)).toEqual([
-      '/mnt/user/media/downloads as PUID 99, PGID 100, umask 022 by default',
-    ]);
+    expect(detailText(finding)).toContain(
+      '/mnt/user/media/downloads, written as PUID 99, PGID 100, umask 022 assumed',
+    );
     expect(detailText(finding)).toContain('under a different group');
   });
 
   it('fires on both containers, from each side', () => {
     const writers = writersOf(plex, sab);
-    expect(removals(sharedFinding(sab, writers)!)).toEqual([
-      '/mnt/user/media/downloads as PUID 1000, PGID 1000, umask 022 by default',
-    ]);
+    expect(detailText(sharedFinding(sab, writers)!)).toContain(
+      '/mnt/user/media/downloads, written as PUID 1000, PGID 1000, umask 022 assumed',
+    );
   });
 
   it('fires on an identical path', () => {
@@ -324,10 +327,21 @@ describe('shared folder, different group', () => {
     expect(sharedFinding(plex, writersOf(plex, other))).toBeDefined();
   });
 
-  it('offers a placeholder, not the other container\'s number', () => {
-    // Naming sabnzbd's 1000 here would tell each container to become the other.
+  it('reports the effect and names no setting to change', () => {
+    // Which identity the folder belongs to depends on every other folder these
+    // containers write, which this plugin cannot see. A number here would send
+    // a share of users the wrong way, so the finding states the effect only.
     const finding = sharedFinding(plex, writersOf(plex, sab))!;
-    expect(additions(finding)).toEqual(['PGID <the same on both>']);
+    expect(additions(finding)).toEqual([]);
+    expect(removals(finding)).toEqual([]);
+
+    // "PGID 100" is allowed as a detected identity, so the directives are the
+    // phrases that told the user to go and set one.
+    const words = `${finding.fix} ${detailText(finding)}`;
+    for (const directive of ['UMASK=002', 'Set UMASK', 'Give every', 'same PUID', 'one PGID']) {
+      expect(words).not.toContain(directive);
+    }
+    expect(finding.fix).toContain('fail to read or change');
   });
 
   it('reads an explicit --user as the identity', () => {
@@ -338,11 +352,9 @@ describe('shared folder, different group', () => {
       mounts: [mount('/mnt/user/media')],
     });
     const finding = sharedFinding(rooted, writersOf(rooted, sab))!;
-    // Different group, so the fix is a shared PGID rather than a umask.
-    expect(additions(finding)).toEqual(['PGID <the same on both>']);
-    expect(removals(finding)).toEqual([
-      '/mnt/user/media/downloads as --user=0:0, umask 022 by default',
-    ]);
+    expect(detailText(finding)).toContain(
+      '/mnt/user/media/downloads, written as --user=0:0, umask 022 assumed',
+    );
   });
 
   it('stays quiet when the users match, whatever the groups are', () => {
@@ -512,8 +524,10 @@ describe('shared folder, different group', () => {
     expect(rows[0].reason).toBe('group');
 
     const finding = sharedFinding(a, writersOf(a, b))!;
-    expect(additions(finding)).toEqual(['UMASK=002']);
-    expect(finding.fix).toContain('set UMASK to 002');
+    expect(detailText(finding)).toContain('leaves them read-only to the rest of that group');
+    // Same-group clashes get the same treatment: the effect, not a umask value.
+    expect(additions(finding)).toEqual([]);
+    expect(finding.fix).not.toContain('UMASK');
   });
 
   it('stays quiet when the creator makes everything writable', () => {
@@ -539,7 +553,7 @@ describe('shared folder, different group', () => {
 
   it('says when a umask was assumed rather than stated', () => {
     const finding = sharedFinding(plex, writersOf(plex, sab))!;
-    expect(removals(finding)[0]).toContain('umask 022 by default');
+    expect(detailText(finding)).toContain('umask 022 assumed');
   });
 
   it('links to the page that explains PGID, not to Docker', () => {
@@ -624,6 +638,11 @@ describe('findingsFor', () => {
   it('replaces ALL with one named capability, keeping the defaults', () => {
     const [finding] = findingsFor(makeContainer({ capAdd: ['ALL'] }), noPorts);
     expect(additions(finding)).toEqual(['--cap-add=<capability>']);
+    // ALL is the only capability row that also carries a replacement, so it is
+    // the row where a rule that guessed the side from the replacement put the
+    // note on the wrong cell. The note explains the capability that is set.
+    expect(finding.detail?.[0].removeNote).toContain('ALL grants every capability');
+    expect(finding.detail?.[0].addNote).toBeUndefined();
   });
 
   it('strips the CAP_ prefix Docker reports for an added capability', () => {
@@ -669,13 +688,17 @@ describe('findingsFor', () => {
       mounts: [{ Source: '/mnt/user', Destination: '/media', Type: 'bind', RW: true }],
     });
     const [finding] = findingsFor(container, noPorts);
-    expect(finding.fix).toContain('Narrowing Host Path is the real fix');
+    expect(finding.fix).toContain('the smallest folder the application needs');
     expect(removals(finding)).toEqual(['/mnt/user -> /media (Read/Write)']);
     // A placeholder share, not a guessed one: a /media destination wants media,
     // not appdata, and only the user knows which share that is. The right column
     // carries the Host Path alone, because the container path does not change.
     expect(additions(finding)).toEqual(['/mnt/user/<share>']);
-    expect(detailText(finding)).toContain('Name the one share');
+    // The note describes the mount that was found, so it sits on the detected
+    // cell. Beside the suggestion it would read as a complaint about the
+    // suggestion.
+    expect(finding.detail?.[0].removeNote).toContain('Covers every share on the array');
+    expect(finding.detail?.[0].addNote).toBeUndefined();
   });
 
   it('says to remove a mount that cannot be narrowed', () => {
@@ -690,7 +713,7 @@ describe('findingsFor', () => {
       mounts: [{ Source: '/', Destination: '/host', Type: 'bind', RW: true }],
     });
     expect(additions(findingsFor(root, noPorts)[0])).toEqual([]);
-    expect(detailText(findingsFor(root, noPorts)[0])).toContain('whole filesystem');
+    expect(detailText(findingsFor(root, noPorts)[0])).toContain('Covers the whole server');
   });
 
   it('advises on every offending mount in one finding', () => {
@@ -748,7 +771,7 @@ describe('findingsFor', () => {
     expect(finding.type).toBe('host-network');
     expect(finding.detail).toEqual([
       { remove: 'Network Type: host', add: 'Network Type: bridge' },
-      { add: '8989:8989', note: 'No other container is using 8989.' },
+      { add: '8989:8989', addNote: 'No other container is using 8989.' },
     ]);
   });
 
@@ -758,7 +781,7 @@ describe('findingsFor', () => {
     const [finding] = findingsFor(container, bound);
     expect(finding.detail).toEqual([
       { remove: 'Network Type: host', add: 'Network Type: bridge' },
-      { add: '3001:3000', note: 'grafana is using 3000, so this moves up to 3001.' },
+      { add: '3001:3000', addNote: 'grafana is using 3000, so this moves up to 3001.' },
     ]);
   });
 
@@ -800,5 +823,81 @@ describe('findingsFor', () => {
     expect(findings).toHaveLength(5);
     expect(findings.filter((f) => f.severity === 'critical')).toHaveLength(3);
     expect(findings.slice(0, 3).every((f) => f.severity === 'critical')).toBe(true);
+  });
+});
+
+describe('detail rows put every note on a cell', () => {
+  /**
+   * The panel draws a row either as two cells or as one plain note, never as
+   * both. A row that carries a cell and a plain `note` therefore loses the note
+   * with no error anywhere, which is the one way this shape can fail quietly.
+   * Walking every rule catches it at the rule that introduces it, rather than
+   * leaving somebody to notice a missing tooltip in the browser.
+   */
+  const everyFinding = () => {
+    const root = makeContainer({
+      name: 'everything',
+      privileged: true,
+      networkMode: 'host',
+      user: 'root',
+      capAdd: ['ALL', 'NET_ADMIN', 'AUDIT_WRITE'],
+      exposedPorts: ['80/tcp', '443/tcp', '53/udp', '8080/tcp', '9000/tcp', '9001/tcp'],
+      mounts: [
+        { Source: '/var/run/docker.sock', Destination: '/var/run/docker.sock', Type: 'bind', RW: true },
+        { Source: '/mnt/user', Destination: '/media', Type: 'bind', RW: true },
+      ],
+    });
+    // Read-only takes the socket finding's other branch, which is the only
+    // note in the set written as a ternary.
+    const readOnlySocket = makeContainer({
+      name: 'ro-socket',
+      mounts: [
+        { Source: '/var/run/docker.sock', Destination: '/var/run/docker.sock', Type: 'bind', RW: false },
+      ],
+    });
+    const plex = makeContainer({
+      name: 'plex',
+      puid: '99',
+      pgid: '100',
+      mounts: [{ Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true }],
+    });
+    const sab = makeContainer({
+      name: 'sab',
+      puid: '1000',
+      pgid: '1000',
+      mounts: [{ Source: '/mnt/user/media/dl', Destination: '/dl', Type: 'bind', RW: true }],
+    });
+    const writers = [plex, sab].flatMap(mountWritersFor);
+    return [
+      ...findingsFor(root, noPorts),
+      ...findingsFor(readOnlySocket, noPorts),
+      ...findingsFor(plex, noPorts, writers),
+    ];
+  };
+
+  it('covers every finding type', () => {
+    const seen = new Set(everyFinding().map((f) => f.type));
+    expect([...seen].sort()).toEqual([...FINDING_TYPES].sort());
+  });
+
+  // Collected rather than asserted row by row, so a failure names the rule and
+  // the note that went astray instead of pointing at a loop.
+  const offenders = (bad: (row: FindingDetail) => boolean) =>
+    everyFinding().flatMap((finding) =>
+      (finding.detail ?? [])
+        .filter(bad)
+        .map((row) => `${finding.type}: ${row.note ?? row.removeNote ?? row.addNote}`),
+    );
+
+  it('never puts a plain note on a row that has cells', () => {
+    expect(offenders((row) => Boolean((row.remove || row.add) && row.note))).toEqual([]);
+  });
+
+  it('never leaves a cell note on a row without that cell', () => {
+    // A note about the replacement, on a row with no replacement to show, would
+    // hang the icon on the word "removal".
+    expect(
+      offenders((row) => Boolean((row.removeNote && !row.remove) || (row.addNote && !row.add))),
+    ).toEqual([]);
   });
 });

@@ -42,13 +42,27 @@ export type Severity = 'critical' | 'warning';
  *
  * The note is separate from both so it renders as prose. A paragraph of
  * monospace explanation reads like command output, not like guidance.
+ *
+ * The panel hangs a note on a cell as an info icon, so each note names the cell
+ * it belongs to rather than leaving the panel to work it out. The side is not
+ * cosmetic: "Covers every share on the array" beside /mnt/user/<share> reads as
+ * a complaint about the suggestion, when it describes the mount that is there
+ * today. A row with no cells at all, such as "And 3 more exposed ports", uses
+ * the plain `note`, which renders as its own line.
+ *
+ * A row must not carry cells and a plain `note` together. The panel renders one
+ * or the other, so the note would vanish. A test walks every rule to hold that.
  */
 export interface FindingDetail {
   /** The current setting, as Unraid or `docker run` spells it. */
   remove?: string;
   /** What to put in its place. */
   add?: string;
-  /** One line on why, for this row only. */
+  /** One line on why the detected setting is a problem. */
+  removeNote?: string;
+  /** One line on why this replacement, for this row only. */
+  addNote?: string;
+  /** A summary line standing on its own, for a row with neither cell. */
   note?: string;
 }
 
@@ -109,10 +123,11 @@ export const BROAD_PATHS = ['/', '/boot', '/etc', '/var/run', '/mnt', '/mnt/user
 const CRITICAL_PATHS = ['/', '/boot'];
 
 /**
- * What to do about each broad path. Narrowing the path is the real fix, so it
- * comes first; read-only access is the fallback for a container that genuinely
- * needs to see the wider tree. The paths that cannot be narrowed sensibly say
- * so instead of pretending otherwise.
+ * What to do about each broad path. A narrower Host Path comes first, because
+ * it is the change that actually reduces what the container can reach.
+ * Read-only access is the fallback for a container that has to see the wider
+ * tree. The paths that no container should mount say to remove the mount
+ * instead of offering a narrower spelling of the same thing.
  */
 interface MountAdvice {
   /** A narrower Host Path to suggest. Absent means the mount should just go. */
@@ -129,16 +144,18 @@ interface MountAdvice {
  */
 const SHARE_ADVICE: MountAdvice = {
   path: '/mnt/user/<share>',
-  note: 'Name the one share the application reads and leave the container path alone, or keep the mount and set Access Mode to Read Only.',
+  note: 'Covers every share on the array. Name the one the application uses.',
 };
 
 const BROAD_PATH_ADVICE: Record<string, MountAdvice> = {
-  '/': { note: 'No application needs the whole filesystem.' },
+  '/': { note: 'Covers the whole server. Mount the folders the application uses instead.' },
   '/boot': {
-    note: '/boot is the flash drive holding the server configuration, and a container that writes there can stop the server from booting.',
+    note: 'The flash drive that holds the server configuration. Writing here can stop the server from booting.',
   },
-  '/etc': { note: 'Point it at the one file the application reads, or drop it.' },
-  '/var/run': { note: 'Point it at the one socket the application needs, or drop it.' },
+  '/etc': { note: 'The server configuration files. Name the one file it reads, or remove the mount.' },
+  '/var/run': {
+    note: 'The server sockets, including the Docker socket. Name the one it needs, or remove the mount.',
+  },
   '/mnt': SHARE_ADVICE,
   '/mnt/user': SHARE_ADVICE,
 };
@@ -344,7 +361,9 @@ function capabilityFinding(container: Container, capAdd: string[]): FindingRule 
       // An unknown capability gets no replacement. There is no safer spelling
       // of a capability, so the decision is remove it or accept it.
       add: advice?.add,
-      note: advice?.note,
+      // Every capability note explains the capability that is set, including
+      // ALL, which is the only row here that also has a replacement.
+      removeNote: advice?.note,
     };
   });
 
@@ -376,7 +395,7 @@ function socketMountFinding(mount: ContainerMount): FindingRule {
     detail: [
       {
         remove: `${DOCKER_SOCKET} -> ${mount.Destination} (${readOnly ? 'Read Only' : 'Read/Write'})`,
-        note: readOnly
+        removeNote: readOnly
           ? 'Read-only changes nothing here, because the socket takes commands over the same channel it answers on.'
           : undefined,
       },
@@ -404,7 +423,9 @@ function hostNetworkFinding(container: Container, bound: PortOwners): FindingRul
       const { port: hostPort, takenBy } = suggestHostPort(port, bound, container.name);
       detail.push({
         add: `${hostPort}:${port}${proto === 'tcp' ? '' : `/${proto}`}`,
-        note:
+        // This one is about the mapping being offered, not about host
+        // networking, so it belongs beside the suggestion.
+        addNote:
           takenBy === null
             ? `No other container is using ${hostPort}.`
             : `${takenBy} is using ${port}, so this moves up to ${hostPort}.`,
@@ -439,8 +460,8 @@ function broadMountFindings(container: Container): FindingRule[] {
       type: 'broad-mount',
       severity: critical ? 'critical' : 'warning',
       title: 'Writable mount of a broad host path',
-      why: 'The container can change anything under that path, which covers files no single application needs.',
-      fix: `Edit ${container.name} in Unraid and change the volume mapping. Narrowing Host Path is the real fix; Access Mode Read Only is the fallback when the container has to see the wider tree.`,
+      why: 'Host Path is a top level of the server, so the container can change every file under it. A container only needs the smallest folder it works on.',
+      fix: `Edit ${container.name} in Unraid and change the volume mapping. Point Host Path at the smallest folder the application needs, such as one share, or set Access Mode to Read Only.`,
       detail: offenders.map((m) => {
         const advice = BROAD_PATH_ADVICE[m.Source];
         return {
@@ -449,7 +470,9 @@ function broadMountFindings(container: Container): FindingRule[] {
           // repeating it on the right makes the reader diff two strings to
           // find the one field that moved.
           add: advice?.path,
-          note: advice?.note,
+          // The note says what the mount reaches today, not what the narrower
+          // path would, so it hangs on the detected cell.
+          removeNote: advice?.note,
         };
       }),
     },
@@ -586,10 +609,16 @@ export function folderConflicts(writers: MountWriter[]): FolderConflict[] {
 /** The identity line shown beside a container in the folder list. */
 export function describeWriter(writer: MountWriter): string {
   const umask = `umask ${describeUmask(writer.umask)}`;
-  return `${describeUser(writer.user)}, ${writer.umaskStated ? umask : `${umask} by default`}`;
+  return `${describeUser(writer.user)}, ${writer.umaskStated ? umask : `${umask} assumed`}`;
 }
 
-/** One sentence saying who blocks whom, and which setting fixes it. */
+/**
+ * One sentence saying who cannot change what, and nothing about how to settle
+ * it. Which identity a folder should belong to depends on every other folder
+ * those containers touch, which the plugin cannot see, so naming a PUID, a
+ * PGID, or a umask here would send a share of users the wrong way. The finding
+ * reports the effect and leaves the choice with the user.
+ */
 export function conflictReason(conflict: FolderConflict): string {
   const { creator, reason } = conflict;
   const others = conflict.writers.filter((w) => w.container !== creator.container);
@@ -599,21 +628,14 @@ export function conflictReason(conflict: FolderConflict): string {
     return (
       `${creator.container} and ${names} share group ${creator.user.gid}, but ${creator.container} ` +
       `creates files with umask ${describeUmask(creator.umask)}, which leaves them read-only to the ` +
-      `rest of that group. Set UMASK=002 on ${creator.container}, or give every container here the ` +
-      'same PUID.'
+      'rest of that group.'
     );
   }
 
   return (
     `${creator.container} writes as ${describeUser(creator.user)} and ${names} under a different ` +
-    `group, so files ${creator.container} creates are not writable by the others. Give every ` +
-    'container here one PGID. Unraid creates shares owned by nobody and users, which is PGID 100.'
+    `group, so files ${creator.container} creates are not writable by the others.`
   );
-}
-
-/** What to change, for the right-hand column of the per-container table. */
-function conflictFix(conflict: FolderConflict): string {
-  return conflict.reason === 'group' ? 'UMASK=002' : 'PGID <the same on both>';
 }
 
 function sharedMountFindings(container: Container, conflicts: FolderConflict[]): FindingRule[] {
@@ -622,12 +644,13 @@ function sharedMountFindings(container: Container, conflicts: FolderConflict[]):
 
   const shown = mine.slice(0, MAX_SHARED_PATHS);
 
+  // Note-only rows. The other findings name a setting and its replacement, but
+  // this one has no replacement to name, and the modal's empty-right-cell
+  // wording ("removal") would read as advice to drop the mount.
   const detail: FindingDetail[] = shown.map((conflict) => {
     const own = conflict.writers.find((w) => w.container === container.name)!;
     return {
-      remove: `${conflict.path} as ${describeWriter(own)}`,
-      add: conflictFix(conflict),
-      note: conflictReason(conflict),
+      note: `${conflict.path}, written as ${describeWriter(own)}. ${conflictReason(conflict)}`,
     };
   });
 
@@ -647,10 +670,8 @@ function sharedMountFindings(container: Container, conflicts: FolderConflict[]):
         : 'Shares a folder with a container in a different group',
       why: onlyUmask
         ? 'Another container writes the same folder. The files created there are read-only to the rest of the group, so the other container cannot move or change them.'
-        : 'Two containers write the same folder under different groups. Unraid shares are group-owned, so a file one container creates is one the other cannot use.',
-      fix: onlyUmask
-        ? `Edit ${container.name} in Unraid and set UMASK to 002, so the files it creates stay writable by its group.`
-        : `Edit ${container.name} in Unraid and set PGID so every container writing this folder shares one group. Which group matters less than picking one: Unraid creates shares owned by nobody and users, which is PGID 100.`,
+        : 'Two containers write the same folder under different groups. Unraid shares are group-owned, so a file one container creates is one the other cannot change.',
+      fix: 'One of these containers can fail to read or change what the other wrote in this folder. Which identity the folder should belong to depends on everything else these containers write, so the plugin does not pick one for you.',
       detail,
     },
   ];
@@ -685,7 +706,8 @@ export function findingsFor(
           // returns the container to Docker's fourteen defaults, and those
           // defaults are what an image needs to drop from root to PUID at
           // startup.
-          note: 'Only if the application documents one. Put it in Extra Parameters. Most containers need nothing here.',
+          addNote:
+            'Only if the application documents one. Put it in Extra Parameters. Most containers need nothing here.',
         },
       ],
     });
@@ -710,7 +732,8 @@ export function findingsFor(
       detail: [
         {
           remove: `--user=${container.user}`,
-          note: 'Most images pick the right user themselves, and linuxserver.io images take PUID and PGID instead, so there is usually nothing to put back.',
+          removeNote:
+            'Most images pick the right user themselves, and linuxserver.io images take PUID and PGID instead, so there is usually nothing to put back.',
         },
       ],
     });
