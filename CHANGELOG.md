@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.20
+- feat(schedules): suggest backup paths, quiet the container, watch the runner
 - test(settings): pin the security advisor default to on
 - fix(install): use installpkg so a colliding package name cannot skip the install (#16)
 - feat(docker): open the compose file from a container's Edit menu

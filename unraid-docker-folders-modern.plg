@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.20-dev6">
-<!ENTITY md5 "8b9c83b2aba7928fb6dc260f87f86f5b">
+<!ENTITY version "2026.09.20-dev7">
+<!ENTITY md5 "df3bc25e0e58b915dde30a8780076f5b">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -131,6 +131,9 @@
 
 
 
+
+###2026.09.20-dev7
+- feat(schedules): suggest backup paths, quiet the container, watch the runner
 ###2026.09.20-dev6
 - test(settings): pin the security advisor default to on
 ###2026.09.20-dev5
