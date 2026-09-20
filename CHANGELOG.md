@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.20
+- feat(security): flag risky container settings and advise on them
+
 ## 2026.09.19
 - fix(widget): span the folder color across the header row
 - fix(widget): keep the WebUI icon column on every row

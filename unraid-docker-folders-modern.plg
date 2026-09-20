@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.19">
-<!ENTITY md5 "cbe206737f99ee8cc42a42b5119f8739">
+<!ENTITY version "2026.09.20-dev1">
+<!ENTITY md5 "41329bbcf4001448da1a2a4cde5d7700">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -125,6 +125,9 @@
 
 
 
+
+###2026.09.20-dev1
+- feat(security): flag risky container settings and advise on them
 ###2026.09.19-dev2
 - fix(widget): span the folder color across the header row
 - fix(widget): keep the WebUI icon column on every row
