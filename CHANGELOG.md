@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.20
+- test(settings): pin the security advisor default to on
 - fix(install): use installpkg so a colliding package name cannot skip the install (#16)
 - feat(docker): open the compose file from a container's Edit menu
 - fix(security): compare a container's user against the image's own USER
