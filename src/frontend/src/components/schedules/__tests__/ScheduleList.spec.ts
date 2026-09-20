@@ -12,6 +12,7 @@ function freshRunner(overrides: Partial<ScheduleRunnerState> = {}): ScheduleRunn
     stale: false,
     stale_after: 300,
     cron_installed: true,
+    repaired: false,
     ...overrides,
   };
 }
@@ -71,7 +72,7 @@ describe('ScheduleList runner warning', () => {
   it('warns when the cron entry is missing outright', () => {
     const { wrapper } = mountList(freshRunner({ cron_installed: false, stale: true, last_tick: null }));
 
-    expect(rootText()).toContain('The cron entry that runs schedules is missing.');
+    expect(rootText()).toContain('The cron entry that runs schedules is missing, and it could not be reinstalled.');
     wrapper.unmount();
   });
 
@@ -84,19 +85,41 @@ describe('ScheduleList runner warning', () => {
     wrapper.unmount();
   });
 
-  it('reinstalls the cron entry and refetches', async () => {
-    const { wrapper, store } = mountList(freshRunner({ cron_installed: false, stale: true, last_tick: null }));
-    store.repairCron = vi.fn().mockResolvedValue({ success: true });
+  it('stays quiet when nothing is enabled', () => {
+    // No enabled schedule means the cron entry is correctly absent, so the
+    // stale heartbeat is expected rather than a fault.
+    const { wrapper } = mountList(
+      freshRunner({ cron_installed: false, stale: true, last_tick: null }),
+      [makeSchedule({ enabled: false })],
+    );
 
-    const button = Array.from(document.getElementById(APP_ROOT)!.querySelectorAll('button'))
-      .find((b) => (b.textContent ?? '').includes('Reinstall runner'));
-    expect(button).toBeTruthy();
-    button!.click();
-    await wrapper.vm.$nextTick();
-
-    expect(store.repairCron).toHaveBeenCalled();
-    expect(store.fetchSchedules).toHaveBeenCalledWith(true);
+    expect(rootText()).not.toContain('Scheduled actions are not running');
     wrapper.unmount();
+  });
+
+  it('offers no button, because the server repairs the entry itself', () => {
+    const { wrapper } = mountList(freshRunner({ cron_installed: false, stale: true, last_tick: null }));
+
+    const buttons = Array.from(document.getElementById(APP_ROOT)!.querySelectorAll('button'));
+    expect(buttons.some((b) => (b.textContent ?? '').includes('Reinstall'))).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('reports a repair and looks again after the next cron boundary', async () => {
+    vi.useFakeTimers();
+    const { wrapper, store } = mountList(
+      freshRunner({ cron_installed: true, repaired: true, stale: true, last_tick: null }),
+    );
+
+    expect(rootText()).toContain('Schedule runner reinstalled');
+    expect(rootText()).toContain('has been put back');
+    expect(store.fetchSchedules).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(71000);
+    expect(store.fetchSchedules).toHaveBeenCalledWith(true);
+
+    wrapper.unmount();
+    vi.useRealTimers();
   });
 });
 

@@ -76,6 +76,12 @@ export interface ScheduleRunnerState {
   stale: boolean;
   stale_after: number;
   cron_installed: boolean;
+  /**
+   * True only on the response that put a missing cron entry back. The runner
+   * is installed but has not fired yet, so `stale` is still true and will stay
+   * true until the next minute boundary.
+   */
+  repaired: boolean;
 }
 
 export interface ScheduleHistoryEntry {

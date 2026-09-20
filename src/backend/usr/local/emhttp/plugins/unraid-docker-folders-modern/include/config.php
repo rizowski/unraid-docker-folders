@@ -47,6 +47,11 @@ define('SCHEDULER_TICK_FILE', '/var/run/' . PLUGIN_NAME . '.tick');
 // Older than this and the runner counts as stale. Two missed minutes, so a
 // single slow tick does not raise a warning.
 define('SCHEDULER_TICK_STALE_SECONDS', 300);
+// Last time the plugin rewrote its cron file to repair a missing runner entry.
+// The repair writes to CONFIG_DIR, which is the USB flash device, so a box
+// where the repair cannot succeed must not write flash on every load of the
+// schedules screen. One attempt per stale window is enough.
+define('SCHEDULER_REPAIR_FILE', '/var/run/' . PLUGIN_NAME . '.repair');
 
 // Logging
 define('UPDATE_LOG_PATH', CONFIG_DIR . '/update-check.log');

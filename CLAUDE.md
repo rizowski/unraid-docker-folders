@@ -604,8 +604,9 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
 - `GET|POST /api/compose.php` - Read and apply Compose files
 - `GET /api/compose-stream.php` - Stream Compose command output
 - `GET|POST /api/schedules.php` - Container action schedules. The list GET also
-  returns `runner` (`last_tick`, `stale_after`, `cron_installed`).
-  `POST ?action=repair_cron` rewrites the cron file and rebuilds root's crontab.
+  returns `runner` (`last_tick`, `stale_after`, `cron_installed`, `repaired`).
+  A stale heartbeat makes that GET rewrite the cron file and rebuild root's
+  crontab, at most once per stale window, and `repaired` reports it.
   A backup's `backup_config.quiesce` is `none`, `pause` or `stop`, and anything
   but `none` makes a late run skip like a state change.
 - `GET /api/paths.php?scope=host|container&path=<partial>&container=<name>` -

@@ -96,14 +96,24 @@ function handleGet()
  * Health of the per-minute schedule runner, for the warning row in the UI.
  *
  * last_tick is the mtime of the heartbeat file the runner touches on every
- * cron invocation. crontab -l is only read when that heartbeat is missing or
+ * cron invocation. The crontab is only read when that heartbeat is missing or
  * stale: a fresh tick already proves the entry is installed, and this runs on
  * every load of the schedules screen.
+ *
+ * A stale heartbeat also repairs the cron entry, which makes this a GET that
+ * writes. CLAUDE.md lists GET mutation as a known gap, so this one states its
+ * case: the write is idempotent, its content comes from a class constant and
+ * never from the request, it happens at most once per stale window, and the
+ * alternative is a button that asks the user to fix a fault they did not
+ * cause. See CronManager::repairSchedulerIfMissing().
  */
 function runnerState()
 {
   $lastTick = file_exists(SCHEDULER_TICK_FILE) ? filemtime(SCHEDULER_TICK_FILE) : null;
   $fresh = $lastTick !== null && (time() - $lastTick) <= SCHEDULER_TICK_STALE_SECONDS;
+  $cron = $fresh
+    ? ['installed' => true, 'repaired' => false]
+    : CronManager::repairSchedulerIfMissing();
 
   // The staleness decision belongs here, not in the browser. last_tick is a
   // server timestamp, and the frontend holds the response until something
@@ -113,7 +123,10 @@ function runnerState()
     'last_tick' => $lastTick,
     'stale' => !$fresh,
     'stale_after' => SCHEDULER_TICK_STALE_SECONDS,
-    'cron_installed' => $fresh ? true : CronManager::isSchedulerInstalled(),
+    'cron_installed' => $cron['installed'],
+    // True only on the response that put the entry back, so the UI can say the
+    // first run is still up to a minute away rather than repeat the warning.
+    'repaired' => $cron['repaired'],
   ];
 }
 
@@ -160,14 +173,6 @@ function handlePost()
     $deleted = $manager->bulkDelete($ids);
     WebSocketPublisher::publish('schedules', 'deleted', ['count' => $deleted]);
     jsonResponse(['success' => true, 'deleted' => $deleted]);
-    return;
-  }
-
-  // Rewrite the .cron file and rebuild root's crontab. Reached from the
-  // warning row the UI shows when the runner heartbeat goes stale.
-  if ($action === 'repair_cron') {
-    CronManager::ensureSchedulerCron();
-    jsonResponse(['success' => true, 'runner' => runnerState()]);
     return;
   }
 

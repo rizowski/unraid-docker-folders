@@ -1214,17 +1214,11 @@ async function handleSchedules(req: any, res: any, params: Record<string, string
     // warning. Set last_tick to 0 to exercise that path by hand.
     return json(res, {
       schedules: filtered,
-      runner: { last_tick: Math.floor(Date.now() / 1000), stale: false, stale_after: 300, cron_installed: true },
+      runner: { last_tick: Math.floor(Date.now() / 1000), stale: false, stale_after: 300, cron_installed: true, repaired: false },
     });
   }
 
   if (req.method === 'POST') {
-    if (action === 'repair_cron') {
-      return json(res, {
-        success: true,
-        runner: { last_tick: Math.floor(Date.now() / 1000), stale: false, stale_after: 300, cron_installed: true },
-      });
-    }
     if (action === 'toggle' && id) {
       const s = mockSchedules.find(s => s.id === id);
       if (s) s.enabled = !s.enabled;

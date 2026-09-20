@@ -17,24 +17,17 @@
     <div class="p-4 sm:p-6 flex flex-col gap-3">
       <!-- Nothing else tells the user that schedules have stopped running. The
            runner is a cron entry outside this app, so a missing or dead entry
-           looks exactly like a quiet day. -->
+           looks exactly like a quiet day. The server puts a missing entry back
+           on its own, so this row reports rather than asks. -->
       <div
         v-if="scheduleStore.runnerStalled"
         class="flex items-center gap-3 p-3 rounded border border-border bg-bg"
       >
         <svg class="text-warning shrink-0" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
         <div class="flex-1 min-w-0 text-xs text-text-secondary">
-          <div class="text-sm text-text">Scheduled actions are not running</div>
+          <div class="text-sm text-text">{{ runnerTitle }}</div>
           <div class="mt-0.5">{{ runnerMessage }}</div>
         </div>
-        <button
-          class="nav-btn shrink-0"
-          :class="{ 'opacity-50 cursor-not-allowed': repairing }"
-          :disabled="repairing"
-          @click="repairRunner"
-        >
-          {{ repairing ? 'Repairing...' : 'Reinstall runner' }}
-        </button>
       </div>
 
       <!-- The add/edit form renders inline above the list rather than opening a
@@ -157,7 +150,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import BaseModal from '@/components/BaseModal.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ScheduleForm from './ScheduleForm.vue';
@@ -186,7 +179,17 @@ const editSchedule = ref<number | null>(null);
 const showHistory = ref<number | null>(null);
 const confirmDelete = ref<number | null>(null);
 const confirmRun = ref<number | null>(null);
-const repairing = ref(false);
+
+// One minute for the next cron boundary, plus a little room.
+const RECHECK_DELAY_MS = 70000;
+let recheck: ReturnType<typeof setTimeout> | null = null;
+
+function clearRecheck() {
+  if (recheck !== null) {
+    clearTimeout(recheck);
+    recheck = null;
+  }
+}
 
 const runConfirmMessage = computed(() => {
   const schedule = scheduleStore.schedules.find((s) => s.id === confirmRun.value);
@@ -195,11 +198,18 @@ const runConfirmMessage = computed(() => {
   return `Run "${schedule.name}" now? This will ${action} ${schedule.target_type} ${schedule.target_id} immediately.`;
 });
 
+const runnerTitle = computed(() =>
+  scheduleStore.runner?.repaired ? 'Schedule runner reinstalled' : 'Scheduled actions are not running',
+);
+
 const runnerMessage = computed(() => {
   const state = scheduleStore.runner;
   if (!state) return '';
+  if (state.repaired) {
+    return 'The cron entry was missing and has been put back. Its first run takes up to a minute.';
+  }
   if (!state.cron_installed) {
-    return 'The cron entry that runs schedules is missing.';
+    return 'The cron entry that runs schedules is missing, and it could not be reinstalled.';
   }
   if (state.last_tick === null) {
     return 'The schedule runner has not run since the server started.';
@@ -254,17 +264,17 @@ async function doRun() {
   }
 }
 
-async function repairRunner() {
-  repairing.value = true;
-  try {
-    await scheduleStore.repairCron();
-    // The heartbeat only updates once a minute, so the warning stays up until
-    // the runner actually fires. Refetch so the user sees it clear by itself.
-    await scheduleStore.fetchSchedules(true);
-  } finally {
-    repairing.value = false;
-  }
-}
+// A repair is only visible in the response that performed it. The heartbeat
+// lands on the next minute boundary, so look once more after that instead of
+// leaving the row claiming a fault the server has already fixed.
+watch(() => scheduleStore.runner?.repaired, (repaired) => {
+  if (!repaired) return;
+  clearRecheck();
+  recheck = setTimeout(() => {
+    recheck = null;
+    scheduleStore.fetchSchedules(true);
+  }, RECHECK_DELAY_MS);
+}, { immediate: true });
 
 async function doDelete() {
   if (confirmDelete.value !== null) {
@@ -278,4 +288,6 @@ onMounted(() => {
     scheduleStore.fetchSchedules();
   }
 });
+
+onBeforeUnmount(clearRecheck);
 </script>
