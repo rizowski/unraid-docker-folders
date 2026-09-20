@@ -506,9 +506,17 @@ echo "Pre-install cleanup complete."
 </FILE>
 
 <!--
-Download and install plugin package
+Download and install plugin package.
+
+installpkg, not upgradepkg: upgradepkg derives a package name by stripping the
+last three dash fields (Slackware's name-version-arch-build), and this package
+is named name-version.txz, so it derives to "unraid-docker". Any other installed
+package that derives to the same name (e.g. unraid-docker-template-fields-*)
+is then treated as the old version of this one, and the install is skipped
+with "newer version already installed". The pre-install script above already
+removes older versions of this plugin, so no upgrade matching is needed.
 -->
-<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="installpkg">
 <URL>https://github.com/&github;/releases/download/v&version;/&name;-&version;.txz</URL>
 <MD5>&md5;</MD5>
 </FILE>
