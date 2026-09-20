@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Schedule, ScheduleHistoryEntry, BackupEntry } from '@/types/schedule';
+import type { Schedule, ScheduleHistoryEntry, BackupEntry, ScheduleRunnerState } from '@/types/schedule';
 import { apiFetch } from '@/utils/csrf';
 
 const API_BASE = '/plugins/unraid-docker-folders-modern/api';
@@ -8,11 +8,25 @@ const FETCH_DEBOUNCE_MS = 500;
 
 export const useScheduleStore = defineStore('schedules', () => {
   const schedules = ref<Schedule[]>([]);
+  const runner = ref<ScheduleRunnerState | null>(null);
   const loading = ref(false);
   const error = ref<string | null>(null);
   let lastFetchTime = 0;
 
   const scheduleCount = computed(() => schedules.value.length);
+
+  /**
+   * True when nothing is running the schedules, so the UI must say so.
+   *
+   * The cron entry can be missing, or it can be present while the runner
+   * never fires. A stale heartbeat catches both. Stays false until the first
+   * response arrives, so the warning does not flash during load.
+   */
+  const runnerStalled = computed(() => {
+    const state = runner.value;
+    if (!state) return false;
+    return !state.cron_installed || state.stale;
+  });
 
   function schedulesForTarget(targetType: string, targetId: string) {
     return schedules.value.filter(
@@ -37,6 +51,7 @@ export const useScheduleStore = defineStore('schedules', () => {
       }
       const data = await response.json();
       schedules.value = data.schedules || [];
+      runner.value = data.runner || null;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to fetch schedules';
       console.error('Error fetching schedules:', e);
@@ -181,6 +196,30 @@ export const useScheduleStore = defineStore('schedules', () => {
     }
   }
 
+  /**
+   * Rewrite the cron file and rebuild root's crontab.
+   *
+   * The runner heartbeat only updates once a minute, so the returned state is
+   * still stale right after a repair. The warning clears the next time the
+   * schedules screen opens and refetches.
+   */
+  async function repairCron(): Promise<{ success: boolean; error?: string }> {
+    try {
+      const response = await apiFetch(`${API_BASE}/schedules.php?action=repair_cron`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        return { success: false, error: result.message || `HTTP ${response.status}` };
+      }
+      const result = await response.json();
+      runner.value = result.runner || runner.value;
+      return { success: true };
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'Failed to repair cron' };
+    }
+  }
+
   async function getHistory(id: number, limit = 50): Promise<ScheduleHistoryEntry[]> {
     try {
       const response = await apiFetch(`${API_BASE}/schedules.php?action=history&id=${id}&limit=${limit}`);
@@ -222,6 +261,9 @@ export const useScheduleStore = defineStore('schedules', () => {
 
   return {
     schedules,
+    runner,
+    runnerStalled,
+    repairCron,
     loading,
     error,
     scheduleCount,

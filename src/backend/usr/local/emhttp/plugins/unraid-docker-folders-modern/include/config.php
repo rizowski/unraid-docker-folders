@@ -38,6 +38,16 @@ define('SORT_MODES', ['manual', 'name-asc', 'name-desc', 'status', 'created-asc'
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
 
+// Schedule runner heartbeat. scripts/run-schedules.php touches this on every
+// cron invocation, and api/schedules.php reports its mtime so the UI can tell
+// the user when the runner stopped firing. /var/run is in RAM on purpose —
+// DB_PATH lives on the USB flash device, and a heartbeat row would write to it
+// every 60 seconds forever.
+define('SCHEDULER_TICK_FILE', '/var/run/' . PLUGIN_NAME . '.tick');
+// Older than this and the runner counts as stale. Two missed minutes, so a
+// single slow tick does not raise a warning.
+define('SCHEDULER_TICK_STALE_SECONDS', 300);
+
 // Logging
 define('UPDATE_LOG_PATH', CONFIG_DIR . '/update-check.log');
 define('UPDATE_LOG_MAX_BYTES', 64 * 1024); // 64 KB max
@@ -457,6 +467,57 @@ function buildScheduleFailureNotification(array $schedule, $message)
   return [
     'subject' => 'Schedule failed: ' . ($name !== '' ? $name : 'unnamed schedule'),
     'description' => $description,
+  ];
+}
+
+/**
+ * Render a lateness in whole minutes and hours, e.g. "6h 40m".
+ *
+ * Both the skipped-run history message and the notification read this, and
+ * tests assert on the exact text, so keep one formatter.
+ *
+ * @param int $seconds How late the run was
+ * @return string
+ */
+function formatRunLateness($seconds)
+{
+  $seconds = max(0, (int) $seconds);
+  $minutes = intdiv($seconds, 60);
+  $hours = intdiv($minutes, 60);
+  $minutes = $minutes % 60;
+
+  if ($hours > 0) {
+    return "{$hours}h {$minutes}m";
+  }
+  if ($minutes > 0) {
+    return "{$minutes}m";
+  }
+  return "{$seconds}s";
+}
+
+/**
+ * Build the notification for a run that was skipped because it was overdue.
+ *
+ * A skip is news, not a failure: nothing broke, an action was deliberately not
+ * taken. The runner sends this at 'normal' importance, not 'warning'.
+ *
+ * @param array $schedule Row-shaped array carrying at least name,
+ *   target_type, target_id and action
+ * @param int $lateBySeconds How far past the scheduled time the runner found it
+ * @return array{subject: string, description: string}
+ */
+function buildScheduleSkipNotification(array $schedule, $lateBySeconds)
+{
+  $name = trim((string) ($schedule['name'] ?? ''));
+  $late = formatRunLateness($lateBySeconds);
+  $action = (string) ($schedule['action'] ?? '');
+  $kind = ($schedule['target_type'] ?? '') === 'stack' ? 'stack' : 'container';
+  $target = (string) ($schedule['target_id'] ?? '');
+
+  return [
+    'subject' => 'Schedule skipped: ' . ($name !== '' ? $name : 'unnamed schedule'),
+    'description' => "Did not {$action} {$kind} {$target}: the run was {$late} past its scheduled time."
+      . ' The schedule runner was not active when it came due.',
   ];
 }
 

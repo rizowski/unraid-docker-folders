@@ -1,6 +1,7 @@
 import type { Container } from '@/stores/docker';
 import type { ImageUpdateStatus } from '@/stores/updates';
 import type { Folder } from '@/types/folder';
+import type { Schedule } from '@/types/schedule';
 
 /**
  * A minimal running container, with every field of the `Container` type
@@ -120,6 +121,33 @@ export function makeFolder(containerNames: string[] = [], overrides: Partial<Fol
       folder_id: id,
       position: i,
     })),
+    ...overrides,
+  };
+}
+
+/**
+ * One schedule row, with every field of `Schedule` populated so specs only
+ * have to state what they actually care about.
+ *
+ * Shared for the same reason as `makeContainer`: three specs build these, so a
+ * new field on `Schedule` costs one edit here rather than one per spec.
+ */
+export function makeSchedule(overrides: Partial<Schedule> = {}): Schedule {
+  return {
+    id: 1,
+    name: 'Nightly restart',
+    target_type: 'container',
+    target_id: 'plex',
+    action: 'restart',
+    cron_expression: '0 3 * * *',
+    enabled: true,
+    backup_config: null,
+    last_run_at: null,
+    last_run_status: null,
+    last_run_message: null,
+    next_run_at: null,
+    created_at: 0,
+    updated_at: 0,
     ...overrides,
   };
 }

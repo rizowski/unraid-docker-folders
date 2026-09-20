@@ -38,6 +38,9 @@
     <testsuite name="ContainerFacts">
       <file>ContainerFactsTest.php</file>
     </testsuite>
+    <testsuite name="BackupSafety">
+      <file>BackupSafetyTest.php</file>
+    </testsuite>
     <testsuite name="SecurityAdvisor">
       <file>SecurityAdvisorTest.php</file>
     </testsuite>

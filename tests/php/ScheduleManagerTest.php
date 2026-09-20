@@ -137,6 +137,103 @@ final class ScheduleManagerTest extends TestCase
     }
 
     #[Test]
+    public function aRestartFarPastItsSlotIsSkipped(): void
+    {
+        // The incident this guards: a 3 AM restart that the runner did not see
+        // until 9:40 AM, because the cron entry was not active at 3 AM.
+        $this->assertTrue(ScheduleManager::shouldSkipMissedRun('restart', 6 * 3600 + 40 * 60));
+        $this->assertTrue(ScheduleManager::shouldSkipMissedRun('stop', 3600));
+    }
+
+    #[Test]
+    public function aRunInsideTheGraceWindowStillGoesAhead(): void
+    {
+        // The runner fires every minute, so ordinary lateness is seconds. A
+        // slow tick must not turn into a skipped run.
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('restart', 0));
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('restart', 90));
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('restart', 300));
+    }
+
+    #[Test]
+    public function aReadOnlyBackupCatchesUp(): void
+    {
+        // A late backup that only reads files is still worth having, unlike a
+        // late restart. This also covers the shared lock: a long backup can
+        // starve the run behind it.
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('backup', 6 * 3600 + 40 * 60));
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('backup', 6 * 3600, 'none'));
+    }
+
+    #[Test]
+    public function aBackupThatPausesOrStopsIsSkippedWhenLate(): void
+    {
+        // Same incident as the restart, wearing a different hat. A 3 AM backup
+        // in stop mode that catches up at 9:40 AM takes the container down at
+        // 9:40 AM.
+        $this->assertTrue(ScheduleManager::shouldSkipMissedRun('backup', 6 * 3600 + 40 * 60, 'stop'));
+        $this->assertTrue(ScheduleManager::shouldSkipMissedRun('backup', 3600, 'pause'));
+
+        // Still inside the grace window, so it runs.
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('backup', 90, 'pause'));
+    }
+
+    #[Test]
+    public function quiesceModeIsReadOffTheScheduleRow(): void
+    {
+        // The raw row carries backup_config as JSON, a formatted schedule
+        // carries it already decoded, and both reach this rule.
+        $this->assertSame('stop', ScheduleManager::scheduleQuiesceMode([
+            'action' => 'backup',
+            'backup_config' => '{"paths":["/config"],"quiesce":"stop"}',
+        ]));
+
+        $this->assertSame('pause', ScheduleManager::scheduleQuiesceMode([
+            'action' => 'backup',
+            'backup_config' => ['paths' => ['/config'], 'quiesce' => 'pause'],
+        ]));
+
+        // A schedule saved before the field existed keeps the old behavior.
+        $this->assertSame('none', ScheduleManager::scheduleQuiesceMode([
+            'action' => 'backup',
+            'backup_config' => '{"paths":["/config"]}',
+        ]));
+
+        // Junk is coerced, never fatal, in the middle of a scheduled run.
+        $this->assertSame('none', ScheduleManager::scheduleQuiesceMode([
+            'action' => 'backup',
+            'backup_config' => '{"quiesce":"destroy"}',
+        ]));
+
+        $this->assertSame('none', ScheduleManager::scheduleQuiesceMode([
+            'action' => 'restart',
+            'backup_config' => null,
+        ]));
+    }
+
+    #[Test]
+    public function latenessReadsInHoursAndMinutes(): void
+    {
+        $this->assertSame('6h 40m', formatRunLateness(6 * 3600 + 40 * 60));
+        $this->assertSame('20m', formatRunLateness(20 * 60));
+        $this->assertSame('45s', formatRunLateness(45));
+        $this->assertSame('0s', formatRunLateness(-10));
+    }
+
+    #[Test]
+    public function skipNotificationNamesTheScheduleAndTheDelay(): void
+    {
+        $n = buildScheduleSkipNotification(
+            ['name' => 'Nightly restart', 'target_type' => 'container', 'target_id' => 'plex', 'action' => 'restart'],
+            6 * 3600 + 40 * 60
+        );
+
+        $this->assertSame('Schedule skipped: Nightly restart', $n['subject']);
+        $this->assertStringContainsString('Did not restart container plex', $n['description']);
+        $this->assertStringContainsString('6h 40m past its scheduled time', $n['description']);
+    }
+
+    #[Test]
     public function failureNotificationFallsBackWhenTextIsMissing(): void
     {
         $n = buildScheduleFailureNotification(

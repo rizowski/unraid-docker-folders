@@ -8,6 +8,11 @@ require_once __DIR__ . '/WebSocketPublisher.php';
 
 class ScheduleManager
 {
+  // How late a run may be and still go ahead. The runner fires every minute,
+  // so normal lateness is under 60 seconds. Anything past this means the
+  // runner was not active when the schedule came due.
+  const MISFIRE_GRACE_SECONDS = 300;
+
   private $db;
 
   public function __construct()
@@ -110,6 +115,18 @@ class ScheduleManager
       }
       $update['cron_expression'] = $data['cron_expression'];
       $update['next_run_at'] = self::computeNextRun($data['cron_expression'], time());
+    }
+
+    // Turning a schedule back on must move it forward, exactly as
+    // toggleSchedule() does. A row disabled last week still carries last
+    // week's next_run_at, which is in the past and fires on the next tick.
+    // The edit form always sends cron_expression, so only a PUT carrying just
+    // `enabled` reaches this, but the stale value is real either way.
+    if ((int) $schedule['enabled'] === 0 && !empty($update['enabled']) && !isset($update['next_run_at'])) {
+      $cronExpr = isset($update['cron_expression'])
+        ? $update['cron_expression']
+        : $schedule['cron_expression'];
+      $update['next_run_at'] = self::computeNextRun($cronExpr, time());
     }
 
     if (isset($data['backup_config'])) {
@@ -280,6 +297,59 @@ class ScheduleManager
     return $count;
   }
 
+  /**
+   * Decide whether an overdue run is too late to go ahead.
+   *
+   * A late backup that only reads files is still worth having, so it catches
+   * up. A late start/stop/pause/resume/restart is a surprise state change in
+   * the middle of the working day, so those are skipped instead.
+   *
+   * A backup that pauses or stops its container is a state change too. Without
+   * this, a 3:00 AM backup in stop mode that catches up at 9:40 AM takes the
+   * container down at 9:40 AM, which is the surprise this rule exists to stop.
+   *
+   * Pure and static on purpose: ScheduleManager's constructor needs a real
+   * database, and the tests must reach this rule without one.
+   *
+   * @param string $action The schedule's action
+   * @param int $lateBySeconds now() minus next_run_at
+   * @param string $quiesce The backup's quiesce mode, 'none' for every other action
+   * @return bool
+   */
+  public static function shouldSkipMissedRun($action, $lateBySeconds, $quiesce = BackupManager::QUIESCE_NONE)
+  {
+    if ($action === 'backup' && BackupManager::quiesceModeFor($quiesce) === BackupManager::QUIESCE_NONE) {
+      return false;
+    }
+
+    return $lateBySeconds > self::MISFIRE_GRACE_SECONDS;
+  }
+
+  /**
+   * Read the quiesce mode off a schedule row.
+   *
+   * Accepts the raw row, where backup_config is a JSON string, and a formatted
+   * schedule, where it is already an array.
+   *
+   * @param array $schedule
+   * @return string
+   */
+  public static function scheduleQuiesceMode($schedule)
+  {
+    if ((isset($schedule['action']) ? $schedule['action'] : '') !== 'backup') {
+      return BackupManager::QUIESCE_NONE;
+    }
+
+    $config = isset($schedule['backup_config']) ? $schedule['backup_config'] : null;
+    if (is_string($config)) {
+      $config = json_decode($config, true);
+    }
+
+    return BackupManager::quiesceModeFor(
+      is_array($config) && isset($config['quiesce']) ? $config['quiesce'] : null
+    );
+  }
+
   public function runDueSchedules()
   {
     $now = time();
@@ -290,10 +360,66 @@ class ScheduleManager
 
     $results = [];
     foreach ($due as $schedule) {
+      $lateBy = $now - (int) $schedule['next_run_at'];
+
+      if (self::shouldSkipMissedRun($schedule['action'], $lateBy, self::scheduleQuiesceMode($schedule))) {
+        $results[] = $this->skipSchedule($schedule, $lateBy);
+        continue;
+      }
+
       $results[] = $this->executeSchedule($schedule['id']);
     }
 
     return $results;
+  }
+
+  /**
+   * Record an overdue run as skipped and move it to its next slot.
+   *
+   * Mirrors the bookkeeping tail of executeSchedule(), minus the action.
+   *
+   * @param array $schedule The full schedules row
+   * @param int $lateBySeconds How far past next_run_at the runner found it
+   * @return array Result shaped like executeSchedule()'s, with status 'skipped'
+   */
+  private function skipSchedule(array $schedule, $lateBySeconds)
+  {
+    $id = (int) $schedule['id'];
+    $now = time();
+    $message = 'Skipped: ' . formatRunLateness($lateBySeconds) . ' past scheduled time';
+
+    $this->db->insert('schedule_history', [
+      'schedule_id' => $id,
+      'started_at' => $now,
+      'finished_at' => $now,
+      'status' => 'skipped',
+      'message' => $message,
+    ]);
+
+    // Computed from now(), never from the stale next_run_at. Advancing from
+    // the missed slot would land on another past time, which would be skipped
+    // again on the next tick, writing a history row every minute forever.
+    $this->db->update('schedules', [
+      'last_run_at' => $now,
+      'last_run_status' => 'skipped',
+      'last_run_message' => $message,
+      'next_run_at' => self::computeNextRun($schedule['cron_expression'], $now),
+      'updated_at' => $now,
+    ], 'id = ?', [$id]);
+
+    $this->pruneHistory($id);
+
+    return [
+      'success' => true,
+      'schedule_id' => $id,
+      'status' => 'skipped',
+      'message' => $message,
+      'late_by' => $lateBySeconds,
+      'name' => $schedule['name'],
+      'target_type' => $schedule['target_type'],
+      'target_id' => $schedule['target_id'],
+      'action' => $schedule['action'],
+    ];
   }
 
   public function executeSchedule($id)
@@ -507,11 +633,16 @@ class ScheduleManager
     $destination = !empty($config['destination']) ? $config['destination'] : null;
     $retention = !empty($config['retention_count']) ? (int) $config['retention_count'] : null;
 
+    // Coerced to one of three known strings. It never reaches a shell, but an
+    // unknown value must mean "leave the container alone", not a fatal error
+    // in the middle of a scheduled run.
+    $quiesce = BackupManager::quiesceModeFor(isset($config['quiesce']) ? $config['quiesce'] : null);
+
     if ($schedule['target_type'] === 'container') {
-      return $backup->backupContainer($schedule['target_id'], $config['paths'], $destination, $retention);
+      return $backup->backupContainer($schedule['target_id'], $config['paths'], $destination, $retention, $quiesce);
     }
 
-    return $backup->backupStack($schedule['target_id'], $config['paths'], $destination, $retention);
+    return $backup->backupStack($schedule['target_id'], $config['paths'], $destination, $retention, $quiesce);
   }
 
   private function formatSchedule($row)

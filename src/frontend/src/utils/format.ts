@@ -82,6 +82,9 @@ export function scheduleStatusClass(status: string): string {
   switch (status) {
     case 'success': return 'text-success';
     case 'error': return 'text-error';
+    // A skipped run is not a failure. It means the runner found the schedule
+    // too long after its slot and deliberately did not act.
+    case 'skipped': return 'text-warning';
     default: return 'text-text-secondary';
   }
 }

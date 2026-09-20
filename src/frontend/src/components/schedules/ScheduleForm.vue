@@ -37,12 +37,16 @@
             <div v-if="containerMounts.length" class="text-xs text-text-secondary">
               Available mounts: {{ containerMounts.map(m => m.Destination).join(', ') }}
             </div>
-            <div v-for="(path, idx) in backupPaths" :key="idx" class="flex items-center gap-2">
-              <input
-                :value="path"
-                class="form-input compact mono"
+            <div v-for="(path, idx) in backupPaths" :key="idx" class="flex items-start gap-2">
+              <PathSuggestInput
+                class="flex-1 min-w-0"
+                :model-value="path"
+                scope="container"
+                :container="targetId"
+                :seed="mountPaths"
                 placeholder="/config"
-                @input="backupPaths[idx] = ($event.target as HTMLInputElement).value"
+                @update:model-value="backupPaths[idx] = $event"
+                @sqlite="onSqlite"
               />
               <button
                 class="icon-btn shrink-0 text-text-secondary hover:text-error"
@@ -72,12 +76,20 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
-            <div v-for="(p, pi) in svc.patterns" :key="pi" class="flex items-center gap-2 ml-4">
-              <input
-                :value="p"
-                class="form-input compact mono"
+            <div v-for="(p, pi) in svc.patterns" :key="pi" class="flex items-start gap-2 ml-4">
+              <!-- The frontend holds no mount data for a stack, so there is no
+                   seed here. The endpoint reads the service's own mounts, and
+                   it needs the project because a compose container is named
+                   "<project>-<service>-1". -->
+              <PathSuggestInput
+                class="flex-1 min-w-0"
+                :model-value="p"
+                scope="container"
+                :container="svc.service"
+                :project="targetId"
                 placeholder="/data"
-                @input="svc.patterns[pi] = ($event.target as HTMLInputElement).value"
+                @update:model-value="svc.patterns[pi] = $event"
+                @sqlite="onSqlite"
               />
               <button
                 class="icon-btn shrink-0 text-text-secondary hover:text-error"
@@ -99,13 +111,34 @@
           </div>
         </template>
 
+        <div class="flex flex-col gap-1">
+          <label :for="`${uid}-quiesce`" class="text-xs text-text-secondary">While the backup runs</label>
+          <select
+            :id="`${uid}-quiesce`"
+            v-model="backupQuiesce"
+            class="form-input compact"
+            @change="quiesceTouched = true"
+          >
+            <option v-for="mode in QUIESCE_MODES" :key="mode" :value="mode">{{ QUIESCE_LABELS[mode] }}</option>
+          </select>
+          <div class="text-xs text-text-secondary">{{ QUIESCE_HELP[backupQuiesce] }}</div>
+          <div v-if="autoPaused" class="text-xs text-text-secondary">
+            A database file sits in one of these folders, so this was set to Pause. Change it back if
+            the container does not write to that database.
+          </div>
+          <div v-if="sqliteWarning" class="text-xs text-warning">
+            A database file sits in one of these folders. Copying it while the container writes to it
+            can produce a backup that does not restore.
+          </div>
+        </div>
+
         <div class="flex gap-3">
           <div class="flex-1 flex flex-col gap-1">
             <label :for="`${uid}-destination`" class="text-xs text-text-secondary">Destination (optional)</label>
-            <input
-              :id="`${uid}-destination`"
+            <PathSuggestInput
               v-model="backupDestination"
-              class="form-input compact mono"
+              scope="host"
+              :input-id="`${uid}-destination`"
               :placeholder="settingsStore.backupDestination"
             />
           </div>
@@ -146,13 +179,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, useId } from 'vue';
+import { ref, reactive, computed, onMounted, useId } from 'vue';
 import CronInput from './CronInput.vue';
+import PathSuggestInput from '@/components/PathSuggestInput.vue';
 import { useScheduleStore } from '@/stores/schedules';
 import { useSettingsStore } from '@/stores/settings';
 import { useDockerStore } from '@/stores/docker';
-import type { ScheduleAction, BackupServiceConfig, TargetType } from '@/types/schedule';
-import { SCHEDULE_ACTION_LABELS } from '@/types/schedule';
+import type { ScheduleAction, BackupServiceConfig, TargetType, QuiesceMode } from '@/types/schedule';
+import { SCHEDULE_ACTION_LABELS, QUIESCE_MODES, QUIESCE_LABELS, QUIESCE_HELP } from '@/types/schedule';
 import type { ContainerMount } from '@/stores/docker';
 
 interface Props {
@@ -189,6 +223,37 @@ const backupServices = ref<{ service: string; patterns: string[] }[]>([{ service
 const backupDestination = ref('');
 const backupRetention = ref<number | null>(null);
 
+// Nothing is paused without a reason, so a new schedule starts on 'none'. It
+// moves itself to 'pause' the first time a chosen folder turns out to hold a
+// database, and says so. A saved schedule is never moved.
+const backupQuiesce = ref<QuiesceMode>('none');
+const quiesceTouched = ref(false);
+const sqliteSeen = ref(false);
+
+const mountPaths = computed(() => containerMounts.value.map(m => m.Destination));
+const sqliteWarning = computed(() => sqliteSeen.value && backupQuiesce.value === 'none');
+
+// The state onSqlite() left behind, not a second copy of it. Picking a mode by
+// hand clears the line, because the mode is then the user's and not ours.
+const autoPaused = computed(
+  () => sqliteSeen.value && !quiesceTouched.value && backupQuiesce.value === 'pause',
+);
+
+function onSqlite(present: boolean) {
+  if (!present) return;
+
+  // Sticky: the listing that found the database is usually not the one on
+  // screen when the user reads the message.
+  sqliteSeen.value = true;
+
+  // Only ever a suggestion, and only once. Choosing 'none' by hand with a
+  // database present is a decision, not an oversight, so it is left alone and
+  // the warning below carries the risk instead.
+  if (quiesceTouched.value || backupQuiesce.value !== 'none') return;
+
+  backupQuiesce.value = 'pause';
+}
+
 function seed() {
   if (!props.editId) return;
 
@@ -205,6 +270,9 @@ function seed() {
   const config = schedule.backup_config;
   backupDestination.value = config.destination || '';
   backupRetention.value = config.retention_count || null;
+  backupQuiesce.value = config.quiesce || 'none';
+  // A saved schedule already states what it wants, including 'none'.
+  quiesceTouched.value = true;
 
   if (props.targetType === 'container' && Array.isArray(config.paths)) {
     backupPaths.value = (config.paths as string[]).length ? [...config.paths as string[]] : [''];
@@ -260,6 +328,7 @@ async function save() {
     if (backupRetention.value && backupRetention.value > 0) {
       config.retention_count = backupRetention.value;
     }
+    config.quiesce = backupQuiesce.value;
 
     data.backup_config = config;
   }

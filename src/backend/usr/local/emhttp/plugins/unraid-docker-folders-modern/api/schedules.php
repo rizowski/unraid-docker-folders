@@ -86,7 +86,35 @@ function handleGet()
     $filters['target_id'] = $_GET['target_id'];
   }
 
-  jsonResponse(['schedules' => $manager->listSchedules($filters)]);
+  jsonResponse([
+    'schedules' => $manager->listSchedules($filters),
+    'runner' => runnerState(),
+  ]);
+}
+
+/**
+ * Health of the per-minute schedule runner, for the warning row in the UI.
+ *
+ * last_tick is the mtime of the heartbeat file the runner touches on every
+ * cron invocation. crontab -l is only read when that heartbeat is missing or
+ * stale: a fresh tick already proves the entry is installed, and this runs on
+ * every load of the schedules screen.
+ */
+function runnerState()
+{
+  $lastTick = file_exists(SCHEDULER_TICK_FILE) ? filemtime(SCHEDULER_TICK_FILE) : null;
+  $fresh = $lastTick !== null && (time() - $lastTick) <= SCHEDULER_TICK_STALE_SECONDS;
+
+  // The staleness decision belongs here, not in the browser. last_tick is a
+  // server timestamp, and the frontend holds the response until something
+  // refetches, so comparing it against the browser clock would both drift with
+  // the open tab and skew with any clock difference between the two machines.
+  return [
+    'last_tick' => $lastTick,
+    'stale' => !$fresh,
+    'stale_after' => SCHEDULER_TICK_STALE_SECONDS,
+    'cron_installed' => $fresh ? true : CronManager::isSchedulerInstalled(),
+  ];
 }
 
 function handlePost()
@@ -132,6 +160,14 @@ function handlePost()
     $deleted = $manager->bulkDelete($ids);
     WebSocketPublisher::publish('schedules', 'deleted', ['count' => $deleted]);
     jsonResponse(['success' => true, 'deleted' => $deleted]);
+    return;
+  }
+
+  // Rewrite the .cron file and rebuild root's crontab. Reached from the
+  // warning row the UI shows when the runner heartbeat goes stale.
+  if ($action === 'repair_cron') {
+    CronManager::ensureSchedulerCron();
+    jsonResponse(['success' => true, 'runner' => runnerState()]);
     return;
   }
 

@@ -3,7 +3,7 @@ import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ContainerDetails from '../ContainerDetails.vue';
-import { makeContainer } from '@/test/fixtures';
+import { makeContainer, makeSchedule as baseSchedule } from '@/test/fixtures';
 import { useScheduleStore } from '@/stores/schedules';
 import type { Schedule } from '@/types/schedule';
 
@@ -78,24 +78,14 @@ describe('ContainerDetails log pane', () => {
   });
 });
 
+/** The shared fixture, re-aimed at the container these specs mount. */
 function makeSchedule(overrides: Partial<Schedule> = {}): Schedule {
-  return {
-    id: 1,
+  return baseSchedule({
     name: 'Nightly backup',
-    target_type: 'container',
     target_id: 'test-container',
     action: 'backup',
-    cron_expression: '0 3 * * *',
-    enabled: true,
-    backup_config: null,
-    last_run_at: null,
-    last_run_status: null,
-    last_run_message: null,
-    next_run_at: null,
-    created_at: 0,
-    updated_at: 0,
     ...overrides,
-  };
+  });
 }
 
 /**

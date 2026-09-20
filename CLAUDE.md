@@ -603,7 +603,15 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
 - `POST /api/pull.php` - Pull updated images (supports batches)
 - `GET|POST /api/compose.php` - Read and apply Compose files
 - `GET /api/compose-stream.php` - Stream Compose command output
-- `GET|POST /api/schedules.php` - Container action schedules
+- `GET|POST /api/schedules.php` - Container action schedules. The list GET also
+  returns `runner` (`last_tick`, `stale_after`, `cron_installed`).
+  `POST ?action=repair_cron` rewrites the cron file and rebuilds root's crontab.
+  A backup's `backup_config.quiesce` is `none`, `pause` or `stop`, and anything
+  but `none` makes a late run skip like a state change.
+- `GET /api/paths.php?scope=host|container&path=<partial>&container=<name>` -
+  Lists directories for the backup form's path suggestions. Read only. A host
+  listing stays inside `BACKUP_ALLOWED_ROOTS`. A container listing stays inside
+  that container's own mount sources.
 
 ---
 

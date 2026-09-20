@@ -11,10 +11,40 @@ export interface BackupServiceConfig {
   patterns: string[];
 }
 
+/**
+ * What happens to the container while its files are archived.
+ *
+ * 'none' is the old behavior and stays the default for a schedule saved before
+ * this field existed. A backup in 'pause' or 'stop' mode changes container
+ * state, so a late run of one is skipped rather than caught up.
+ */
+export type QuiesceMode = 'none' | 'pause' | 'stop';
+
+export const QUIESCE_MODES: QuiesceMode[] = ['none', 'pause', 'stop'];
+
+export const QUIESCE_LABELS: Record<QuiesceMode, string> = {
+  none: 'Leave running',
+  pause: 'Pause during backup',
+  stop: 'Stop during backup',
+};
+
+export const QUIESCE_HELP: Record<QuiesceMode, string> = {
+  none: 'Fastest. A database in this folder can be copied in a broken state.',
+  pause: 'Recommended. The container freezes for the length of the backup.',
+  stop: 'Safest. The container is down for the length of the backup.',
+};
+
 export interface BackupConfig {
   paths: string[] | BackupServiceConfig[];
   destination?: string | null;
   retention_count?: number | null;
+  quiesce?: QuiesceMode;
+}
+
+/** One directory offered by api/paths.php while the user types. */
+export interface PathSuggestion {
+  name: string;
+  path: string;
 }
 
 export interface Schedule {
@@ -32,6 +62,20 @@ export interface Schedule {
   next_run_at: number | null;
   created_at: number;
   updated_at: number;
+}
+
+/**
+ * Health of the per-minute schedule runner, from the list endpoint.
+ *
+ * `last_tick` is a Unix timestamp in seconds, or null when the runner has not
+ * fired since the last reboot. Schedules only run when this stays fresh.
+ */
+export interface ScheduleRunnerState {
+  last_tick: number | null;
+  /** Decided server-side, because last_tick is a server clock reading. */
+  stale: boolean;
+  stale_after: number;
+  cron_installed: boolean;
 }
 
 export interface ScheduleHistoryEntry {

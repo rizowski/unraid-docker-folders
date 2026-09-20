@@ -53,12 +53,46 @@ class CronManager
     self::removeLine('schedule-runner');
   }
 
+  /**
+   * Is the runner line actually in root's live crontab?
+   *
+   * The .cron file on flash is only the source. update_cron concatenates it
+   * into root's crontab, and nothing in this plugin notices if that step never
+   * happened. Reading `crontab -l` is the only way to tell.
+   *
+   * Read-only, so a GET handler may call it.
+   *
+   * @return bool
+   */
+  public static function isSchedulerInstalled()
+  {
+    $output = [];
+    $status = 0;
+    @exec('crontab -l 2>/dev/null', $output, $status);
+
+    if ($status !== 0) {
+      return false;
+    }
+
+    foreach ($output as $line) {
+      if (strpos($line, 'docker-folders-modern:schedule-runner') !== false) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   private static function setLine($tag, $cronExpr, $scriptPath)
   {
     $lines = self::readLines();
     // update_cron pipes this into `crontab -` (root's user crontab), which uses
     // 5 time fields + command — NO user field.
-    $entry = "{$cronExpr} /usr/bin/php {$scriptPath} > /dev/null 2>&1";
+    //
+    // Output goes to syslog rather than /dev/null so a PHP fatal in the script
+    // is visible. A healthy run prints nothing, so this writes nothing most
+    // minutes — it is not a heartbeat. SCHEDULER_TICK_FILE is the heartbeat.
+    $entry = "{$cronExpr} /usr/bin/php {$scriptPath} 2>&1 | logger -t " . PLUGIN_NAME;
     $marker = "# docker-folders-modern:{$tag}";
 
     $found = false;

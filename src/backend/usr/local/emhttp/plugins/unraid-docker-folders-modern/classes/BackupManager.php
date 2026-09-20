@@ -6,6 +6,23 @@ require_once __DIR__ . '/DockerClient.php';
 
 class BackupManager
 {
+  // What happens to the container while its files are archived.
+  const QUIESCE_NONE = 'none';
+  const QUIESCE_PAUSE = 'pause';
+  const QUIESCE_STOP = 'stop';
+
+  // Docker's own default stop timeout is 10 seconds, which is not enough for a
+  // database to checkpoint and close. The SIGKILL that follows would leave the
+  // files in the same crash state that stopping was meant to avoid.
+  const QUIESCE_STOP_TIMEOUT = 30;
+
+  // The first 16 bytes of every SQLite database file.
+  const SQLITE_MAGIC = "SQLite format 3\0";
+
+  // Containers this process paused or stopped and has not restored yet.
+  private static $pendingRestore = [];
+  private static $shutdownRegistered = false;
+
   private $db;
   private $dockerClient;
 
@@ -15,16 +32,28 @@ class BackupManager
     $this->dockerClient = new DockerClient();
   }
 
-  public function backupContainer($containerName, $patterns, $destination = null, $retention = null)
-  {
+  public function backupContainer(
+    $containerName,
+    $patterns,
+    $destination = null,
+    $retention = null,
+    $quiesce = self::QUIESCE_NONE
+  ) {
     $destination = $this->resolveDestination($destination);
     $retention = $this->resolveRetention($retention);
+    $quiesce = self::quiesceModeFor($quiesce);
 
     if (!$this->ensureDirectory($destination)) {
       return ['success' => false, 'message' => "Cannot create backup directory: {$destination}"];
     }
 
-    $hostPaths = $this->resolveHostPaths($containerName, $patterns);
+    // The container itself, not just its paths: withQuiesce() needs the id.
+    $container = $this->findContainer($containerName);
+    if (!$container) {
+      return ['success' => false, 'message' => "Container '{$containerName}' not found"];
+    }
+
+    $hostPaths = $this->resolveHostPathsForContainer($container['id'], $patterns);
     if (empty($hostPaths)) {
       return ['success' => false, 'message' => "No matching paths found for container '{$containerName}'"];
     }
@@ -32,25 +61,52 @@ class BackupManager
     $archiveName = $this->generateArchiveName($containerName);
     $archivePath = rtrim($destination, '/') . '/' . $archiveName;
 
-    if (!$this->createArchive($archivePath, $hostPaths)) {
-      return ['success' => false, 'message' => "Failed to create archive: {$archivePath}"];
+    $job = $this->runArchiveJob($container['id'], $quiesce, $archivePath, $hostPaths);
+
+    if (!$job['success']) {
+      return [
+        'success' => false,
+        'message' => $job['failure'] === 'quiesce'
+          ? $job['detail']
+          : "Failed to create archive: {$archiveName}{$job['detail']}",
+      ];
     }
 
     $size = file_exists($archivePath) ? filesize($archivePath) : 0;
     $pruned = $this->pruneOldBackups($destination, $containerName, $retention);
+    $message = "Backup created: {$archiveName}" . $job['note']
+      . ($pruned ? ", pruned {$pruned} old backup(s)" : '');
+
+    // A container left frozen is worse than a missing backup, so this reports
+    // as a failure even though the archive is on disk. The runner turns a
+    // failure into a warning notification.
+    if ($job['restore_error'] !== '') {
+      return [
+        'success' => false,
+        'message' => $message . '. ' . $job['restore_error'],
+        'backup_file' => $archivePath,
+        'backup_size' => $size,
+      ];
+    }
 
     return [
       'success' => true,
-      'message' => "Backup created: {$archiveName}" . ($pruned ? ", pruned {$pruned} old backup(s)" : ''),
+      'message' => $message,
       'backup_file' => $archivePath,
       'backup_size' => $size,
     ];
   }
 
-  public function backupStack($projectName, $serviceConfigs, $destination = null, $retention = null)
-  {
+  public function backupStack(
+    $projectName,
+    $serviceConfigs,
+    $destination = null,
+    $retention = null,
+    $quiesce = self::QUIESCE_NONE
+  ) {
     $destination = $this->resolveDestination($destination);
     $retention = $this->resolveRetention($retention);
+    $quiesce = self::quiesceModeFor($quiesce);
 
     if (!$this->ensureDirectory($destination)) {
       return ['success' => false, 'message' => "Cannot create backup directory: {$destination}"];
@@ -99,14 +155,25 @@ class BackupManager
       $archiveName = $this->generateArchiveName($prefix);
       $archivePath = rtrim($destination, '/') . '/' . $archiveName;
 
-      if (!$this->createArchive($archivePath, $hostPaths)) {
-        $results[] = "Failed to create archive for service '{$service}'";
+      // Quiet each service around its own archive, not the whole stack around
+      // all of them. One service at a time is far less downtime.
+      $job = $this->runArchiveJob($container['id'], $quiesce, $archivePath, $hostPaths);
+
+      if (!$job['success']) {
+        $results[] = $job['failure'] === 'quiesce'
+          ? "Service '{$service}': " . $job['detail']
+          : "Failed to create archive for service '{$service}'{$job['detail']}";
         $allSuccess = false;
         continue;
       }
 
+      if ($job['restore_error'] !== '') {
+        $results[] = "Service '{$service}': " . $job['restore_error'];
+        $allSuccess = false;
+      }
+
       $this->pruneOldBackups($destination, $prefix, $retention);
-      $results[] = "Backed up service '{$service}': {$archiveName}";
+      $results[] = "Backed up service '{$service}': {$archiveName}" . $job['note'];
     }
 
     $size = 0;
@@ -227,13 +294,145 @@ class BackupManager
 
   public function resolveHostPaths($containerName, $patterns)
   {
-    $containers = $this->dockerClient->listContainers(true);
-    foreach ($containers as $c) {
+    $container = $this->findContainer($containerName);
+    return $container ? $this->resolveHostPathsForContainer($container['id'], $patterns) : [];
+  }
+
+  private function findContainer($containerName)
+  {
+    foreach ($this->dockerClient->listContainers(true) as $c) {
       if ($c['name'] === $containerName) {
-        return $this->resolveHostPathsForContainer($c['id'], $patterns);
+        return $c;
       }
     }
-    return [];
+    return null;
+  }
+
+  /**
+   * Map a path inside a container onto its path on the host.
+   *
+   * Picks the longest matching mount Destination, so a nested mount wins over
+   * the parent that also covers the path. Returns null when no mount covers
+   * it, or when the part below the mount climbs back out with "..".
+   *
+   * Pure and static so both the backup runner and api/paths.php can use it,
+   * and so the suite can test it without a Docker socket.
+   *
+   * @param string $containerPath A path as the container sees it
+   * @param array $mounts Docker mount entries, with Source and Destination
+   * @return array|null
+   */
+  public static function mapContainerPath($containerPath, array $mounts)
+  {
+    $best = null;
+    $bestLength = -1;
+
+    foreach ($mounts as $mount) {
+      $dest = rtrim(isset($mount['Destination']) ? $mount['Destination'] : '', '/');
+      $src = rtrim(isset($mount['Source']) ? $mount['Source'] : '', '/');
+
+      if ($dest === '' || $src === '' || strlen($dest) <= $bestLength) {
+        continue;
+      }
+
+      if ($containerPath === $dest || $containerPath === $dest . '/') {
+        $relative = '';
+      } elseif (strpos($containerPath, $dest . '/') === 0) {
+        $relative = substr($containerPath, strlen($dest) + 1);
+      } else {
+        continue;
+      }
+
+      // The relative part is user supplied and would otherwise walk out of the
+      // mount source. It is never normalized on its own, only rejected.
+      if ($relative !== '' && in_array('..', explode('/', $relative), true)) {
+        continue;
+      }
+
+      $bestLength = strlen($dest);
+      $best = [
+        'mount_destination' => $dest,
+        'mount_source' => $src,
+        'relative' => $relative,
+        'host_path' => $relative === '' ? $src : $src . '/' . $relative,
+      ];
+    }
+
+    return $best;
+  }
+
+  /**
+   * True when the file starts with the SQLite header.
+   */
+  public static function isSqliteFile($path)
+  {
+    if (!is_file($path)) {
+      return false;
+    }
+
+    $handle = @fopen($path, 'rb');
+    if (!$handle) {
+      return false;
+    }
+
+    $header = fread($handle, 16);
+    fclose($handle);
+
+    return $header === self::SQLITE_MAGIC;
+  }
+
+  /**
+   * The write-ahead log and journal files that sit beside a database file.
+   */
+  public static function sidecarsFor($path)
+  {
+    $found = [];
+    foreach (['-wal', '-shm', '-journal'] as $suffix) {
+      if (is_file($path . $suffix)) {
+        $found[] = $path . $suffix;
+      }
+    }
+    return $found;
+  }
+
+  /**
+   * Add the sidecar files of every database file in the list.
+   *
+   * A directory is archived whole, so tar already walks its sidecars. A single
+   * file is not: a pattern such as /config/*.db matches app.db and leaves
+   * app.db-wal behind. That copy is missing every committed transaction still
+   * in the write-ahead log, which is the usual way a restored database turns
+   * out broken.
+   */
+  private static function withSidecars(array $paths)
+  {
+    $expanded = [];
+
+    foreach ($paths as $path) {
+      $expanded[] = $path;
+
+      if (is_dir($path) || !self::isSqliteFile($path)) {
+        continue;
+      }
+
+      foreach (self::sidecarsFor($path) as $sidecar) {
+        $expanded[] = $sidecar;
+      }
+    }
+
+    return array_values(array_unique($expanded));
+  }
+
+  /**
+   * Coerce a stored quiesce value to one of the three known modes.
+   */
+  public static function quiesceModeFor($value)
+  {
+    $mode = is_string($value) ? strtolower(trim($value)) : '';
+
+    return in_array($mode, [self::QUIESCE_PAUSE, self::QUIESCE_STOP], true)
+      ? $mode
+      : self::QUIESCE_NONE;
   }
 
   private function resolveHostPathsForContainer($containerId, $patterns)
@@ -247,47 +446,206 @@ class BackupManager
     $hostPaths = [];
 
     foreach ($patterns as $pattern) {
-      foreach ($mounts as $mount) {
-        $dest = rtrim($mount['Destination'], '/');
-        $src = rtrim($mount['Source'], '/');
+      $mapped = self::mapContainerPath($pattern, $mounts);
+      if ($mapped === null) {
+        continue;
+      }
 
-        if ($pattern === $dest || $pattern === $dest . '/') {
-          // Exact mount match
-          $hostPaths[] = $src;
-          break;
-        }
+      $src = $mapped['mount_source'];
+      $hostPath = $mapped['host_path'];
 
-        // Pattern is a subpath of a mount destination
-        if (strpos($pattern, $dest . '/') === 0) {
-          $relative = substr($pattern, strlen($dest) + 1);
+      // The whole mount. tar walks it, so there is nothing more to resolve.
+      if ($mapped['relative'] === '') {
+        $hostPaths[] = $src;
+        continue;
+      }
 
-          // $relative comes from user-supplied backup_config.paths and could
-          // otherwise climb back out of the mount source with "..".
-          if (in_array('..', explode('/', $relative), true)) {
-            break;
-          }
-
-          $hostPath = $src . '/' . $relative;
-
-          // Support glob patterns
-          if (strpos($relative, '*') !== false || strpos($relative, '?') !== false) {
-            $globbed = glob($hostPath);
-            if ($globbed) {
-              foreach ($globbed as $match) {
-                if (pathIsWithin($match, $src)) {
-                  $hostPaths[] = $match;
-                }
-              }
+      if (strpos($mapped['relative'], '*') !== false || strpos($mapped['relative'], '?') !== false) {
+        $globbed = glob($hostPath);
+        if ($globbed) {
+          foreach ($globbed as $match) {
+            if (pathIsWithin($match, $src)) {
+              $hostPaths[] = $match;
             }
-          } elseif (pathIsWithin($hostPath, $src) && (file_exists($hostPath) || is_dir($hostPath))) {
-            $hostPaths[] = $hostPath;
           }
-          break;
         }
+        continue;
+      }
+
+      if (pathIsWithin($hostPath, $src) && file_exists($hostPath)) {
+        $hostPaths[] = $hostPath;
       }
     }
 
-    return array_unique($hostPaths);
+    return self::withSidecars(array_unique($hostPaths));
+  }
+
+  /**
+   * Write one archive with the container quieted, and say what happened.
+   *
+   * 'success' means the archive reached disk. On a failure, 'failure' names
+   * the step that failed, either 'quiesce' or 'archive', and 'detail' holds
+   * the words that step produced. The caller words the message itself,
+   * because a single container and one service of a stack name themselves
+   * differently. 'note' and 'restore_error' come straight from withQuiesce().
+   */
+  private function runArchiveJob($containerId, $quiesce, $archivePath, $hostPaths)
+  {
+    $run = $this->withQuiesce($containerId, $quiesce, function () use ($archivePath, $hostPaths) {
+      return $this->createArchive($archivePath, $hostPaths);
+    });
+
+    if (!$run['ok']) {
+      return ['success' => false, 'failure' => 'quiesce', 'detail' => $run['message'],
+        'note' => '', 'restore_error' => ''];
+    }
+
+    $archive = $run['result'];
+    if (!$archive['success']) {
+      return ['success' => false, 'failure' => 'archive',
+        'detail' => $archive['output'] !== '' ? ': ' . $archive['output'] : '',
+        'note' => '', 'restore_error' => ''];
+    }
+
+    return ['success' => true, 'failure' => '', 'detail' => '',
+      'note' => $run['note'], 'restore_error' => $run['restore_error']];
+  }
+
+  /**
+   * Run $work with the container paused or stopped, then put it back.
+   *
+   * Returns ['ok' => false, 'message' => ...] when the container could not be
+   * quieted, and $work never runs. Otherwise 'result' holds what $work
+   * returned, 'note' is text for the success message, and 'restore_error' is
+   * non-empty when the container could not be started or resumed afterward.
+   */
+  private function withQuiesce($containerId, $mode, callable $work)
+  {
+    $quiet = ['ok' => true, 'note' => '', 'restore_error' => '', 'result' => null];
+
+    if ($mode !== self::QUIESCE_PAUSE && $mode !== self::QUIESCE_STOP) {
+      $quiet['result'] = $work();
+      return $quiet;
+    }
+
+    $state = $this->containerRunState($containerId);
+
+    // A stopped container is already as quiet as it gets, and starting it
+    // afterward would be a state change nobody asked for. A container someone
+    // else paused is left paused for the same reason.
+    if ($state === 'exited' || $state === 'paused') {
+      $quiet['result'] = $work();
+      return $quiet;
+    }
+
+    // Inspect failed, so the state is unknown. Running the archive anyway is
+    // the silent downgrade this mode exists to prevent.
+    if ($state !== 'running') {
+      return self::quiesceFailure('Could not read the container state before the backup');
+    }
+
+    $quieted = $mode === self::QUIESCE_PAUSE
+      ? $this->dockerClient->pauseContainer($containerId)
+      : $this->dockerClient->stopContainer($containerId, self::QUIESCE_STOP_TIMEOUT);
+
+    // Never fall back to an unquiet backup. The user picked this mode to
+    // protect a database, and a silent downgrade hands them an archive they
+    // believe is safe.
+    if (!$quieted) {
+      return self::quiesceFailure("Could not {$mode} the container before the backup");
+    }
+
+    self::markPending($containerId, $mode);
+
+    try {
+      $quiet['result'] = $work();
+    } finally {
+      $restored = $this->restoreContainer($containerId, $mode);
+    }
+
+    if (!$restored) {
+      $verb = $mode === self::QUIESCE_PAUSE ? 'resumed' : 'started';
+      $quiet['restore_error'] = "The container could not be {$verb} again after the backup";
+      return $quiet;
+    }
+
+    $quiet['note'] = $mode === self::QUIESCE_PAUSE
+      ? ' (container paused during backup)'
+      : ' (container stopped during backup)';
+
+    return $quiet;
+  }
+
+  /** The shape withQuiesce() returns when the work never ran. */
+  private static function quiesceFailure($message)
+  {
+    return [
+      'ok' => false,
+      'note' => '',
+      'restore_error' => '',
+      'result' => null,
+      'message' => $message,
+    ];
+  }
+
+  private function containerRunState($containerId)
+  {
+    $raw = $this->dockerClient->inspectContainerRaw($containerId);
+    if (!$raw || empty($raw['State'])) {
+      return 'unknown';
+    }
+    if (!empty($raw['State']['Paused'])) {
+      return 'paused';
+    }
+
+    return !empty($raw['State']['Running']) ? 'running' : 'exited';
+  }
+
+  private function restoreContainer($containerId, $mode)
+  {
+    // startContainer() already unpauses a paused container, so both modes are
+    // safe to call whatever state the container ended up in.
+    $ok = $mode === self::QUIESCE_PAUSE
+      ? $this->dockerClient->unpauseContainer($containerId)
+      : $this->dockerClient->startContainer($containerId);
+
+    if ($ok) {
+      unset(self::$pendingRestore[$containerId]);
+    }
+
+    return $ok;
+  }
+
+  private static function markPending($containerId, $mode)
+  {
+    self::$pendingRestore[$containerId] = $mode;
+
+    if (self::$shutdownRegistered) {
+      return;
+    }
+    self::$shutdownRegistered = true;
+
+    // A PHP fatal between the pause and the unpause would otherwise leave the
+    // container frozen until somebody noticed. This does not cover SIGKILL or
+    // a power cut. A container paused that way stays paused until the next
+    // reboot, and the reboot clears it.
+    register_shutdown_function(function () {
+      if (empty(self::$pendingRestore)) {
+        return;
+      }
+
+      $docker = new DockerClient();
+      foreach (self::$pendingRestore as $id => $mode) {
+        if ($mode === self::QUIESCE_PAUSE) {
+          $docker->unpauseContainer($id);
+        } else {
+          $docker->startContainer($id);
+        }
+        error_log("BackupManager: restored container {$id} after an unclean exit");
+      }
+
+      self::$pendingRestore = [];
+    });
   }
 
   private function createArchive($archivePath, $hostPaths)
@@ -300,7 +658,13 @@ class BackupManager
     $cmd = 'tar czf ' . escapeshellarg($archivePath) . ' ' . implode(' ', $pathArgs) . ' 2>&1';
     exec($cmd, $output, $exitCode);
 
-    return $exitCode === 0;
+    // tar's own words matter. "file changed as we read it" is what a backup of
+    // a running container looks like, and the caller used to report only
+    // "Failed to create archive".
+    return [
+      'success' => $exitCode === 0,
+      'output' => implode('; ', array_slice($output, -3)),
+    ];
   }
 
   private function pruneOldBackups($destination, $prefix, $retention)

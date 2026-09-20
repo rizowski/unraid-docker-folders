@@ -15,6 +15,28 @@
     </div>
 
     <div class="p-4 sm:p-6 flex flex-col gap-3">
+      <!-- Nothing else tells the user that schedules have stopped running. The
+           runner is a cron entry outside this app, so a missing or dead entry
+           looks exactly like a quiet day. -->
+      <div
+        v-if="scheduleStore.runnerStalled"
+        class="flex items-center gap-3 p-3 rounded border border-border bg-bg"
+      >
+        <svg class="text-warning shrink-0" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+        <div class="flex-1 min-w-0 text-xs text-text-secondary">
+          <div class="text-sm text-text">Scheduled actions are not running</div>
+          <div class="mt-0.5">{{ runnerMessage }}</div>
+        </div>
+        <button
+          class="nav-btn shrink-0"
+          :class="{ 'opacity-50 cursor-not-allowed': repairing }"
+          :disabled="repairing"
+          @click="repairRunner"
+        >
+          {{ repairing ? 'Repairing...' : 'Reinstall runner' }}
+        </button>
+      </div>
+
       <!-- The add/edit form renders inline above the list rather than opening a
            second modal over this one. -->
       <ScheduleForm
@@ -67,7 +89,7 @@
               class="icon-btn text-text-secondary hover:text-primary"
               aria-label="Run now"
               title="Run now"
-              @click="runNow(schedule.id)"
+              @click="confirmRun = schedule.id"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 4l14 8-14 8z" /></svg>
             </button>
@@ -120,6 +142,17 @@
       @confirm="doDelete"
       @cancel="confirmDelete = null"
     />
+
+    <!-- Run now sits one icon away from History and Edit and acts at once, so
+         a mis-click used to stop or restart a container with no warning. -->
+    <ConfirmModal
+      :is-open="confirmRun !== null"
+      title="Run Schedule Now"
+      :message="runConfirmMessage"
+      confirm-label="Run now"
+      @confirm="doRun"
+      @cancel="confirmRun = null"
+    />
   </BaseModal>
 </template>
 
@@ -152,6 +185,27 @@ const formOpen = ref(false);
 const editSchedule = ref<number | null>(null);
 const showHistory = ref<number | null>(null);
 const confirmDelete = ref<number | null>(null);
+const confirmRun = ref<number | null>(null);
+const repairing = ref(false);
+
+const runConfirmMessage = computed(() => {
+  const schedule = scheduleStore.schedules.find((s) => s.id === confirmRun.value);
+  if (!schedule) return 'Run this schedule now?';
+  const action = SCHEDULE_ACTION_LABELS[schedule.action].toLowerCase();
+  return `Run "${schedule.name}" now? This will ${action} ${schedule.target_type} ${schedule.target_id} immediately.`;
+});
+
+const runnerMessage = computed(() => {
+  const state = scheduleStore.runner;
+  if (!state) return '';
+  if (!state.cron_installed) {
+    return 'The cron entry that runs schedules is missing.';
+  }
+  if (state.last_tick === null) {
+    return 'The schedule runner has not run since the server started.';
+  }
+  return `The schedule runner last ran at ${formatTime(state.last_tick)}.`;
+});
 
 const targetSchedules = computed(() =>
   scheduleStore.schedulesForTarget(props.targetType, props.targetId),
@@ -161,8 +215,15 @@ const formatTime = settingsStore.formatServerTime;
 const statusClass = scheduleStatusClass;
 
 // This modal stays mounted between openings, so drop any open form on close.
+// Opening refetches: the runner state carries a server-side staleness flag
+// taken when the response was built, and a snapshot from an hour ago would
+// claim the runner had stopped.
 watch(() => props.isOpen, (open) => {
-  if (!open) closeForm();
+  if (open) {
+    scheduleStore.fetchSchedules(true);
+    return;
+  }
+  closeForm();
 });
 
 function openCreate() {
@@ -185,8 +246,24 @@ function closeForm() {
   editSchedule.value = null;
 }
 
-async function runNow(id: number) {
-  await scheduleStore.runScheduleNow(id);
+async function doRun() {
+  const id = confirmRun.value;
+  confirmRun.value = null;
+  if (id !== null) {
+    await scheduleStore.runScheduleNow(id);
+  }
+}
+
+async function repairRunner() {
+  repairing.value = true;
+  try {
+    await scheduleStore.repairCron();
+    // The heartbeat only updates once a minute, so the warning stays up until
+    // the runner actually fires. Refetch so the user sees it clear by itself.
+    await scheduleStore.fetchSchedules(true);
+  } finally {
+    repairing.value = false;
+  }
 }
 
 async function doDelete() {
