@@ -26,6 +26,7 @@ export function makeContainer(overrides: Partial<Container> = {}): Container {
     capAdd: [],
     exposedPorts: [],
     user: '',
+    imageUser: '',
     puid: '',
     pgid: '',
     umask: '',

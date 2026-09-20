@@ -188,4 +188,63 @@ final class ContainerFactsTest extends TestCase
         $this->assertSame([], $facts['ports']);
         $this->assertSame(['80/tcp'], $facts['exposedPorts']);
     }
+
+    /**
+     * Docker copies an image's USER into the container's Config.User, so the
+     * container inspect alone cannot say whether anybody chose that user. Two
+     * inspects of the same container, one created with --user and one without,
+     * differ in nothing but the storage paths. The image is the only thing left
+     * to compare against, which is what mergeImageUsers pairs up.
+     */
+    #[Test]
+    public function recordsTheUserTheImageAsksFor(): void
+    {
+        $fresh = [
+            'mimir' => ['user' => '0', 'imageUser' => ''],
+            'mariadb' => ['user' => '0', 'imageUser' => ''],
+        ];
+        $needImage = ['mimir' => 'sha256:aaa', 'mariadb' => 'sha256:bbb'];
+        $imageResults = [
+            // grafana/mimir ships USER 0.
+            'sha256:aaa' => ['Config' => ['User' => '0']],
+            // An image that declares none, so uid 0 on the container is real.
+            'sha256:bbb' => ['Config' => []],
+        ];
+
+        $merged = DockerClient::mergeImageUsers($fresh, $needImage, $imageResults);
+
+        $this->assertSame('0', $merged['mimir']['imageUser']);
+        $this->assertSame('', $merged['mariadb']['imageUser']);
+    }
+
+    #[Test]
+    public function dropsAContainerWhoseImageDidNotComeBack(): void
+    {
+        // The facts cache never expires, so an unanswered image lookup must not
+        // be cached as "the image asks for no user". That reads as a forced
+        // root and would stay on screen until the next reboot.
+        $fresh = [
+            'gone' => ['user' => '0', 'imageUser' => ''],
+            'kept' => ['user' => '0', 'imageUser' => ''],
+        ];
+        $needImage = ['gone' => 'sha256:missing', 'kept' => 'sha256:here'];
+        $imageResults = ['sha256:here' => ['Config' => ['User' => '0']]];
+
+        $merged = DockerClient::mergeImageUsers($fresh, $needImage, $imageResults);
+
+        $this->assertArrayNotHasKey('gone', $merged);
+        $this->assertSame('0', $merged['kept']['imageUser']);
+    }
+
+    #[Test]
+    public function leavesAContainerThatNeededNoImageLookupAlone(): void
+    {
+        // A container that states no user cannot be a forced-root finding, so
+        // it never reaches the image lookup and must survive it untouched.
+        $fresh = ['plain' => ['user' => '', 'imageUser' => '']];
+
+        $merged = DockerClient::mergeImageUsers($fresh, [], []);
+
+        $this->assertSame($fresh, $merged);
+    }
 }

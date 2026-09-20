@@ -37,7 +37,12 @@ class DockerClient
   // than as a miss, so the shared-folder check would have stayed silent for
   // every container that existed before the upgrade. A wrong answer is worse
   // than a rebuild.
-  const FACTS_CACHE_PATH = '/tmp/unraid-docker-container-facts-v2.json';
+  //
+  // And to v3, when imageUser joined it. A v2 entry carries no imageUser, which
+  // reads as "the image asks for no user" and makes every container built from
+  // an image that declares USER root look as though somebody pinned it to root.
+  // That is the bug v3 exists to clear, so the old entries have to go.
+  const FACTS_CACHE_PATH = '/tmp/unraid-docker-container-facts-v3.json';
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
@@ -94,6 +99,9 @@ class DockerClient
       $formatted['capAdd'] = $facts['capAdd'] ?? [];
       $formatted['exposedPorts'] = $facts['exposedPorts'] ?? [];
       $formatted['user'] = $facts['user'] ?? '';
+      // What the image asks for, so the frontend can tell an override from the
+      // image's own USER. Both fields carry the same spelling Docker reports.
+      $formatted['imageUser'] = $facts['imageUser'] ?? '';
       $formatted['puid'] = $facts['puid'] ?? '';
       $formatted['pgid'] = $facts['pgid'] ?? '';
       $formatted['umask'] = $facts['umask'] ?? '';
@@ -132,10 +140,42 @@ class DockerClient
       }
       $results = $this->requestMulti($requests);
 
+      // Held back until the image lookup below settles, so a container is
+      // never cached with a half-answered user.
+      $fresh = [];
+      $needImage = [];
+
       foreach ($missing as $id) {
         $inspect = $results[$id] ?? null;
         if ($inspect === null) continue; // transient failure — retry next list
-        $cache[$id] = self::extractFacts($inspect);
+        $facts = self::extractFacts($inspect);
+        $facts['imageUser'] = '';
+        // Asked for whenever the container states a user at all. Docker copies
+        // the image's own USER into Config.User, so the value alone cannot say
+        // whether anybody chose it. Gating on "looks like root" here instead
+        // would put a second copy of the frontend's root test in PHP, and the
+        // two drifting apart would bring the wrong answer back with no test to
+        // catch it. An empty user is never a finding, so skipping those is safe.
+        if ($facts['user'] !== '') {
+          $needImage[$id] = (string) ($inspect['Image'] ?? '');
+        }
+        $fresh[$id] = $facts;
+      }
+
+      // One inspect per distinct image, not per container.
+      if (!empty($needImage)) {
+        $imageRequests = [];
+        foreach (array_unique($needImage) as $imageId) {
+          if ($imageId !== '') {
+            $imageRequests[$imageId] = "/images/{$imageId}/json";
+          }
+        }
+        $imageResults = empty($imageRequests) ? [] : $this->requestMulti($imageRequests);
+        $fresh = self::mergeImageUsers($fresh, $needImage, $imageResults);
+      }
+
+      foreach ($fresh as $id => $facts) {
+        $cache[$id] = $facts;
         $changed = true;
       }
     }
@@ -154,6 +194,37 @@ class DockerClient
     }
 
     return $cache;
+  }
+
+  /**
+   * Write each container's image user onto its facts, dropping any container
+   * whose image did not come back.
+   *
+   * Pure, so the rule can be tested without a socket. A container is dropped
+   * rather than cached with an empty imageUser because this cache never
+   * expires: an empty value reads as "the image asks for no user", which is
+   * what makes a container look pinned to root, and the wrong finding would
+   * then stay on screen until the next reboot. Dropping it costs one more
+   * inspect on the next list.
+   *
+   * @param array $fresh        id => facts, each already carrying imageUser ''
+   * @param array $needImage    id => image ID, for the containers to resolve
+   * @param array $imageResults image ID => /images/{id}/json payload, or absent
+   * @return array The facts map, minus any container with no image payload
+   */
+  public static function mergeImageUsers(array $fresh, array $needImage, array $imageResults)
+  {
+    foreach ($needImage as $id => $imageId) {
+      $image = $imageId === '' ? null : ($imageResults[$imageId] ?? null);
+      if (!is_array($image)) {
+        unset($fresh[$id]);
+        continue;
+      }
+      $config = isset($image['Config']) && is_array($image['Config']) ? $image['Config'] : [];
+      $fresh[$id]['imageUser'] = (string) ($config['User'] ?? '');
+    }
+
+    return $fresh;
   }
 
   /**
@@ -188,9 +259,10 @@ class DockerClient
       'privileged' => !empty($host['Privileged']),
       'capAdd' => is_array($capAdd) ? array_values(array_map('strval', $capAdd)) : [],
       'exposedPorts' => is_array($exposed) ? array_map('strval', array_keys($exposed)) : [],
-      // Empty on almost every container, because the image picks the user. Only
-      // a value set here means somebody overrode it, which is the only case the
-      // frontend acts on.
+      // Empty on most containers, because most images declare no USER. When an
+      // image does declare one, Docker copies it here, so a value on its own
+      // does NOT mean somebody overrode it. The caller pairs this with the
+      // image's own user, and only a difference between the two is an override.
       'user' => (string) ($config['User'] ?? ''),
       // The user the process actually ends up as on Unraid. Images from
       // linuxserver.io start as root and drop to these, so they decide who owns

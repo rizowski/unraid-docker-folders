@@ -103,9 +103,11 @@ const containers = [
     ports: [{ IP: '0.0.0.0', PrivatePort: 3306, PublicPort: 3306, Type: 'tcp' }],
     hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3306, containerPort: 3306, type: 'tcp' }],
     // Security advisor fixture: one added capability, the warning tier, and a
-    // template that pins the container to root.
+    // template that pins the container to root. The image asks for no user, so
+    // the uid 0 here came from outside the image and is a real finding.
     capAdd: ['NET_ADMIN'],
     user: '0',
+    imageUser: '',
     mounts: [{ Source: '/mnt/user/appdata/mariadb', Destination: '/config', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.7' } },
     labels: { 'com.docker.compose.project': 'db-stack' },
@@ -174,6 +176,22 @@ const containers = [
     mounts: [{ Source: '/mnt/user/appdata/monitoring', Destination: '/shared', Type: 'bind', RW: true }],
     networkSettings: { bridge: { IPAddress: '172.17.0.14' } },
     labels: {},
+  },
+  {
+    // The counterpart to mariadb above, and the reason imageUser exists. The
+    // grafana/mimir image declares USER 0, so Docker reports uid 0 on every
+    // container built from it, with nothing in the compose file saying so.
+    // This must not raise a forced-root finding.
+    id: 'qrs789tuv012', name: 'mimir', image: 'grafana/mimir:latest', state: 'running',
+    status: 'Up 4 days', icon: null, managed: 'compose', webui: null,
+    created: Date.now() / 1000 - 345600,
+    user: '0',
+    imageUser: '0',
+    ports: [{ IP: '0.0.0.0', PrivatePort: 8080, PublicPort: 9009, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 9009, containerPort: 8080, type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/mimir', Destination: '/data', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.15' } },
+    labels: { 'com.docker.compose.project': 'monitoring' },
   },
   {
     id: 'klm123nop456', name: 'caddy', image: 'caddy:2-alpine', state: 'running',
@@ -510,6 +528,7 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
       capAdd: (c as any).capAdd ?? [],
       exposedPorts: (c as any).exposedPorts ?? [],
       user: (c as any).user ?? '',
+      imageUser: (c as any).imageUser ?? '',
       puid: (c as any).puid ?? '',
       pgid: (c as any).pgid ?? '',
       umask: (c as any).umask ?? '',

@@ -71,8 +71,17 @@ export interface Container {
   capAdd: string[];
   /** Config.ExposedPorts keys, in Docker's own "8989/tcp" form. */
   exposedPorts: string[];
-  /** Config.User. Empty means the image chose, which is the normal case. */
+  /**
+   * Config.User. Empty on most containers. A value can come from the image's
+   * own USER rather than from an override, so it only means somebody chose the
+   * user when it differs from `imageUser`.
+   */
   user: string;
+  /**
+   * Config.User of the image the container was built from, empty when the
+   * image declares none. Carried so `user` can be read as an override.
+   */
+  imageUser: string;
   /**
    * PUID and PGID from Config.Env, empty when the container does not set them.
    * On Unraid these, not `user`, decide who owns the files a container writes.

@@ -170,17 +170,40 @@ export const HIGH_RISK_CAPS = ['SYS_ADMIN', 'SYS_MODULE', 'ALL'];
 export const MAX_SUGGESTED_PORTS = 4;
 
 /**
- * Whether the container was pinned to root on purpose.
+ * The uid half of a Docker user string, with `root` resolved to the number it
+ * always is. The forced-root test and `effectiveUser` both need that one rule,
+ * and two spellings of it are two things to keep in step.
+ */
+function uidOf(user: string): string {
+  const [uid] = String(user ?? '').trim().split(':');
+  return uid?.toLowerCase() === 'root' ? '0' : (uid ?? '');
+}
+
+/** Whether a Docker user string names root, in any of its spellings. */
+function namesRoot(user: string): boolean {
+  return uidOf(user) === '0';
+}
+
+/**
+ * Whether somebody pinned the container to root, rather than the image asking
+ * for it.
  *
  * An empty user is the normal case and says nothing: the image picks the user,
  * and images from linuxserver.io, along with official ones such as postgres and
- * nginx, all start as root and drop privileges at entrypoint. Only a value set
- * in the template means somebody chose root, so that is the only case worth a
- * finding.
+ * nginx, all start as root and drop privileges at entrypoint.
+ *
+ * A value is not enough on its own. Docker copies the image's own USER into the
+ * container's Config.User, so a container built from an image that declares
+ * USER 0 reports uid 0 with nothing overriding anything. grafana/mimir ships
+ * exactly that, and every container from it read as forced-root. Two inspects
+ * of the same container, one with --user and one without, are otherwise
+ * identical, so the image is the only thing left to compare against.
+ *
+ * `imageUser` empty means the image declares no user, so any root value beside
+ * it came from outside the image. That is the case this finding is for.
  */
-export function isForcedRoot(user: string): boolean {
-  const [uid] = String(user ?? '').trim().split(':');
-  return uid === '0' || uid.toLowerCase() === 'root';
+export function isForcedRoot(user: string, imageUser = ''): boolean {
+  return namesRoot(user) && !namesRoot(imageUser);
 }
 
 /**
@@ -225,8 +248,8 @@ const numeric = (value: string) => /^\d+$/.test(value);
 export function effectiveUser(container: Container): EffectiveUser | null {
   const configured = String(container.user ?? '').trim();
   if (configured) {
-    const [rawUid, rawGid] = configured.split(':');
-    const uid = rawUid?.toLowerCase() === 'root' ? '0' : rawUid;
+    const [, rawGid] = configured.split(':');
+    const uid = uidOf(configured);
     if (!uid || !numeric(uid)) return null;
     return { uid, gid: rawGid && numeric(rawGid) ? rawGid : null, field: 'user' };
   }
@@ -722,7 +745,7 @@ export function findingsFor(
     findings.push(capabilityFinding(container, container.capAdd));
   }
 
-  if (isForcedRoot(container.user)) {
+  if (isForcedRoot(container.user, container.imageUser)) {
     findings.push({
       type: 'forced-root',
       severity: 'warning',

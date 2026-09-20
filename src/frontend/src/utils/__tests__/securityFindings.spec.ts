@@ -125,6 +125,29 @@ describe('isForcedRoot', () => {
     expect(isForcedRoot('0:0')).toBe(true);
     expect(isForcedRoot('root:root')).toBe(true);
   });
+
+  it('stays silent when the image is the one asking for root', () => {
+    // Docker copies the image's USER into the container's Config.User, so uid 0
+    // on a container built from grafana/mimir, which ships USER 0, means nobody
+    // chose anything. Every such container read as forced-root before this.
+    expect(isForcedRoot('0', '0')).toBe(false);
+    expect(isForcedRoot('root', 'root')).toBe(false);
+    // The two spellings mean the same user, so neither is an override.
+    expect(isForcedRoot('root', '0')).toBe(false);
+    expect(isForcedRoot('0', 'root')).toBe(false);
+  });
+
+  it('fires when the override disagrees with the image', () => {
+    expect(isForcedRoot('0', '1000')).toBe(true);
+    // No USER in the image, so uid 0 can only have come from outside it. This
+    // is the case the finding was written for.
+    expect(isForcedRoot('0', '')).toBe(true);
+  });
+
+  it('stays silent for a non-root user whatever the image asks', () => {
+    expect(isForcedRoot('1000', '0')).toBe(false);
+    expect(isForcedRoot('', '0')).toBe(false);
+  });
 });
 
 describe('pathIsWithin', () => {
@@ -763,6 +786,12 @@ describe('findingsFor', () => {
     expect(removals(finding)).toEqual(['--user=0']);
     expect(additions(finding)).toEqual([]);
     expect(finding.fix).toContain('Edit plex in Unraid');
+  });
+
+  it('leaves a container alone when its image is what asks for root', () => {
+    // grafana/mimir, reported from a compose stack that sets no user at all.
+    const mimir = makeContainer({ name: 'mimir', user: '0', imageUser: '0' });
+    expect(typesOf(mimir)).toEqual([]);
   });
 
   it('suggests a matching port for a host-network container', () => {
