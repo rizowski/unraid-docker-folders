@@ -200,6 +200,7 @@
                   @pull="handlePull"
                   @schedules="openSchedules"
                   @security="openSecurity"
+                  @edit-compose="openComposeEditor"
                 />
               </div>
             </div>

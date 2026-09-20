@@ -1098,7 +1098,7 @@ describe('ContainerCard', () => {
    * a broken one. The entries stay, greyed out, and say why.
    */
   describe('Unraid-only actions on an unadopted container', () => {
-    async function menuEntry(container: Partial<Container>, label: string, enableAdopt = true) {
+    function mountCard(container: Partial<Container>, enableAdopt = true) {
       const pinia = createPinia();
       setActivePinia(pinia);
 
@@ -1106,14 +1106,25 @@ describe('ContainerCard', () => {
       settingsStore.enableAdopt = enableAdopt;
       settingsStore.loaded = true;
 
-      const wrapper = mount(ContainerCard, {
+      return mount(ContainerCard, {
         props: { container: makeContainer(container), view: 'grid' as const },
         global: { plugins: [pinia], stubs: { Teleport: true } },
       });
+    }
+
+    function findEntry(wrapper: ReturnType<typeof mountCard>, label: string) {
+      return wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim().startsWith(label));
+    }
+
+    // Most tests here only need the entry. A test that also asserts on the
+    // emitted event mounts through mountCard directly, so the setup stays in
+    // one place rather than drifting between two copies.
+    async function menuEntry(container: Partial<Container>, label: string, enableAdopt = true) {
+      const wrapper = mountCard(container, enableAdopt);
 
       // Edit lives under Actions; the autostart entries have their own submenu.
       await openSubmenu(wrapper, label === 'Edit' ? 'Actions' : 'Autostart');
-      return wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim().startsWith(label));
+      return findEntry(wrapper, label);
     }
 
     for (const label of ['Edit', 'Enable Autostart', 'Autostart Delay']) {
@@ -1126,15 +1137,32 @@ describe('ContainerCard', () => {
       });
     }
 
-    it('names the stack instead of adoption for a compose container', async () => {
+    it('opens the stack file instead of adoption for a compose container', async () => {
+      // Unraid writes no XML template for a compose container, so there is
+      // nothing for the usual Edit link to open. The compose file is what
+      // defines it, so Edit stays live and opens that instead.
       const entry = await menuEntry(
         { managed: null, labels: { 'com.docker.compose.project': 'db-stack' } },
         'Edit',
       );
 
-      expect(entry!.attributes('disabled')).toBeDefined();
-      expect(entry!.attributes('title')).toContain('Compose');
+      expect(entry!.attributes('disabled')).toBeUndefined();
+      expect(entry!.attributes('href')).toBeUndefined();
+      expect(entry!.attributes('title')).toContain('db-stack');
       expect(entry!.attributes('title')).not.toContain('Adopt into Unraid');
+    });
+
+    it('asks for the stack file by name when Edit is clicked on a compose container', async () => {
+      const wrapper = mountCard({
+        managed: null,
+        labels: { 'com.docker.compose.project': 'db-stack' },
+      });
+
+      await openSubmenu(wrapper, 'Actions');
+      await findEntry(wrapper, 'Edit')!.trigger('click');
+
+      // The project name, not the container name: the editor is keyed by stack.
+      expect(wrapper.emitted('edit-compose')).toEqual([['db-stack']]);
     });
 
     it('points at the settings page when adoption is turned off', async () => {
@@ -1155,6 +1183,22 @@ describe('ContainerCard', () => {
       const entry = await menuEntry({ managed: 'dockerman', name: 'jellyfin' }, 'Edit');
 
       expect(entry!.attributes('disabled')).toBeUndefined();
+      expect(entry!.attributes('href')).toContain('my-jellyfin.xml');
+    });
+
+    it('keeps the Unraid template when a container somehow has both', async () => {
+      // Adoption refuses compose containers, so the plugin cannot produce this.
+      // If one turns up anyway, the template Unraid wrote is the thing Unraid
+      // can actually open, so Edit keeps pointing at it.
+      const entry = await menuEntry(
+        {
+          managed: 'dockerman',
+          name: 'jellyfin',
+          labels: { 'com.docker.compose.project': 'db-stack' },
+        },
+        'Edit',
+      );
+
       expect(entry!.attributes('href')).toContain('my-jellyfin.xml');
     });
   });

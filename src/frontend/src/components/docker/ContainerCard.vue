@@ -334,7 +334,7 @@ import { useFolderStore } from '@/stores/folders';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
 import { apiFetch } from '@/utils/csrf';
-import { releaseIndexUrl } from '@/utils/updateUnits';
+import { composeProjectOf, releaseIndexUrl } from '@/utils/updateUnits';
 import { submitAdopt, type AdoptFields } from '@/utils/unraidHandoff';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import InputModal from '@/components/InputModal.vue';
@@ -385,6 +385,7 @@ const emit = defineEmits<{
   pull: [data: PullRequest];
   schedules: [targetType: string, targetId: string];
   security: [containerId: string];
+  'edit-compose': [project: string];
 }>();
 
 const isActionInProgress = computed(() => !!props.actionInProgress);
@@ -707,7 +708,10 @@ const resolvedWebui = computed(() => containerWebuiUrl(props.container));
 // whether a container has a reachable web interface.
 const iconWebui = computed(() => (isRunning.value ? resolvedWebui.value : null));
 
-const isCompose = computed(() => !!props.container.labels?.['com.docker.compose.project']);
+/** The compose stack this container belongs to, empty when it has none. */
+const composeProject = computed(() => composeProjectOf(props.container) ?? '');
+
+const isCompose = computed(() => !!composeProject.value);
 
 const isManaged = computed(() => props.container.managed === 'dockerman');
 
@@ -732,6 +736,37 @@ const manageHint = computed(() => {
     return 'Only available for containers that Unraid manages. Turn on adoption in Settings > Docker Folders.';
   }
   return 'Only available for containers that Unraid manages. Use Adopt into Unraid first.';
+});
+
+/**
+ * What Edit does, which depends on what defines the container.
+ *
+ * Unraid edits a container through the XML template it wrote, and a compose
+ * container has none, so the entry used to sit there greyed out telling the
+ * reader to go and find the stack themselves. The compose file is the template
+ * for these, so Edit opens it.
+ *
+ * Every branch returns the same four keys, because the result is spread into a
+ * menu item. A key that only one branch carries reads as an oversight, and
+ * sends the reader to KebabMenuRow to find out what an absent one does.
+ */
+const editEntry = computed(() => {
+  // An Unraid template wins when there is one, the same order `manageHint`
+  // uses. Adoption refuses compose containers, so a container holding both a
+  // template and a stack label is not something the plugin can produce, and
+  // this is not the place to guess which one a stray one meant.
+  if (editUrl.value) {
+    return { href: editUrl.value, action: '', disabled: false, title: manageHint.value };
+  }
+  if (composeProject.value) {
+    return {
+      href: '',
+      action: 'edit-compose',
+      disabled: false,
+      title: `Opens the compose file for ${composeProject.value}, which is what defines this container.`,
+    };
+  }
+  return { href: '', action: '', disabled: true, title: manageHint.value };
 });
 
 const supportUrl = computed(() => {
@@ -780,7 +815,10 @@ const actionMenuItems = computed<KebabMenuItem[]>(() => [
     { label: 'Logs', icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6|M16 13H8|M16 17H8|M10 9H8', action: 'logs', show: !isCompose.value },
     // `href` is empty for an unmanaged container, so KebabMenu falls through to
     // its button branch, which is the only one that honours disabled/title.
-    { label: 'Edit', icon: EDIT_ICON, href: editUrl.value || '', disabled: !editUrl.value, title: manageHint.value },
+    // A compose container takes that branch on purpose: Unraid has no template
+    // to open for it, and the file that actually defines it is the stack's.
+    // Same label either way, so the entry keeps its place in the sorted list.
+    { label: 'Edit', icon: EDIT_ICON, ...editEntry.value },
   ]),
   { divider: true },
   { label: 'Remove', icon: TRASH_ICON, action: 'remove', class: 'text-error', show: onMobileList.value && isStopped.value },
@@ -836,6 +874,8 @@ async function handleMenuAction(action: string) {
     emit('schedules', 'container', props.container.name);
   } else if (action === 'security') {
     emit('security', props.container.id);
+  } else if (action === 'edit-compose') {
+    emit('edit-compose', composeProject.value);
   } else if (action === 'pick-folder') {
     showFolderPicker.value = true;
   } else if (action === 'console') {

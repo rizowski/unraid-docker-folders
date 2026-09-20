@@ -26,6 +26,7 @@
             @pull="(data) => emit('pull', data)"
             @schedules="(type, id) => emit('schedules', type, id)"
             @security="(id) => emit('security', id)"
+            @edit-compose="(p) => emit('edit-compose', p)"
           />
         </div>
         <!-- Compose folder: stack down — show faded service names as a preview -->
