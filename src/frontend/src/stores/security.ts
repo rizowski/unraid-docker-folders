@@ -14,9 +14,13 @@ import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import {
   findingsFor,
+  folderConflicts,
+  mountWritersFor,
   parseExposedPort,
   severityRank,
   type FindingType,
+  type FolderConflict,
+  type MountWriter,
   type PortOwners,
   type SecurityFinding,
 } from '@/utils/securityFindings';
@@ -75,6 +79,29 @@ export const useSecurityStore = defineStore('security', () => {
   );
 
   /**
+   * Every writable bind mount on the box, with the user behind it.
+   *
+   * Built once here rather than per container, because the shared-folder check
+   * has to compare each container against all the others. Running containers
+   * only, matching the rest of the advisor.
+   */
+  const mountWriters = computed<MountWriter[]>(() =>
+    runningContainers.value.flatMap(mountWritersFor),
+  );
+
+  /**
+   * Folder clashes, keyed by folder rather than by container.
+   *
+   * The panel lists these once each. Read from a container instead, the same
+   * clash appears on both sides saying the same thing mirrored, which is what
+   * made the per-container view hard to scan.
+   */
+  const conflicts = computed<FolderConflict[]>(() => {
+    if (!enabled.value) return [];
+    return folderConflicts(mountWriters.value);
+  });
+
+  /**
    * Every container's findings, derived once per container list.
    *
    * The rule set is not cheap — a capability scan, a mount scan, and a linear
@@ -87,7 +114,7 @@ export const useSecurityStore = defineStore('security', () => {
     const byId = new Map<string, SecurityFinding[]>();
     if (!enabled.value) return byId;
     for (const c of runningContainers.value) {
-      byId.set(c.id, findingsFor(c, portOwners.value));
+      byId.set(c.id, findingsFor(c, portOwners.value, mountWriters.value));
     }
     return byId;
   });
@@ -104,7 +131,10 @@ export const useSecurityStore = defineStore('security', () => {
    */
   function allFindings(container: Container): SecurityFinding[] {
     if (!enabled.value || container.state !== 'running') return [];
-    return findingsByContainer.value.get(container.id) ?? findingsFor(container, portOwners.value);
+    return (
+      findingsByContainer.value.get(container.id) ??
+      findingsFor(container, portOwners.value, mountWriters.value)
+    );
   }
 
   /** Findings the user has not accepted. What the badge and panel count. */
@@ -179,6 +209,7 @@ export const useSecurityStore = defineStore('security', () => {
   return {
     enabled,
     runningContainers,
+    conflicts,
     flagged,
     findingCount,
     hasCritical,

@@ -351,6 +351,7 @@ import ImageLink from '@/components/common/ImageLink.vue';
 import ContainerDetails from '@/components/docker/ContainerDetails.vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
 import { containerStatus, containerEditUrl, containerWebuiUrl, FALLBACK_CONTAINER_ICON, openContainerTerminal } from '@/utils/containerDisplay';
+import { imageRegistryUrl } from '@/utils/imageRegistry';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -844,18 +845,7 @@ async function handleMenuAction(action: string) {
   }
 }
 
-const imageLink = computed(() => {
-  const image = props.container.image;
-  if (!image) return null;
-  const nameOnly = image.split(':')[0];
-  if (nameOnly.includes('.')) {
-    return `https://${nameOnly}`;
-  }
-  if (nameOnly.includes('/')) {
-    return `https://hub.docker.com/r/${nameOnly}`;
-  }
-  return `https://hub.docker.com/_/${nameOnly}`;
-});
+const imageLink = computed(() => imageRegistryUrl(props.container.image));
 
 const compactPorts = computed(() => {
   const ports = props.container.ports;

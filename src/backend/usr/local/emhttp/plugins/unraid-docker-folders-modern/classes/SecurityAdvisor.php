@@ -34,6 +34,7 @@ class SecurityAdvisor
     'added-capabilities',
     'broad-mount',
     'forced-root',
+    'shared-mount-group',
   ];
 
   private $db;

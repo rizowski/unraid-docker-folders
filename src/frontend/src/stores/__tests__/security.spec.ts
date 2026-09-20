@@ -120,6 +120,62 @@ describe('security store', () => {
     expect(mockApiFetch).toHaveBeenCalledTimes(2);
   });
 
+  it('pairs containers that write one folder under different groups', () => {
+    const docker = useDockerStore();
+    docker.containers = [
+      makeContainer({
+        id: 'a',
+        name: 'plex',
+        puid: '99',
+        pgid: '100',
+        mounts: [{ Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true }],
+      }),
+      makeContainer({
+        id: 'b',
+        name: 'sabnzbd',
+        puid: '1000',
+        pgid: '1000',
+        mounts: [
+          { Source: '/mnt/user/media/downloads', Destination: '/downloads', Type: 'bind', RW: true },
+        ],
+      }),
+    ];
+
+    const security = useSecurityStore();
+    // Both sides see it: the store builds one writer list over every running
+    // container, so neither has to be asked about the other.
+    expect(security.findings(docker.containers[0]).map((f) => f.type)).toEqual([
+      'shared-mount-group',
+    ]);
+    expect(security.findings(docker.containers[1]).map((f) => f.type)).toEqual([
+      'shared-mount-group',
+    ]);
+  });
+
+  it('leaves a stopped container out of the shared-folder comparison', () => {
+    const docker = useDockerStore();
+    docker.containers = [
+      makeContainer({
+        id: 'a',
+        name: 'plex',
+        puid: '99',
+        pgid: '100',
+        mounts: [{ Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true }],
+      }),
+      makeContainer({
+        id: 'b',
+        name: 'old',
+        state: 'exited',
+        puid: '1000',
+        pgid: '1000',
+        mounts: [{ Source: '/mnt/user/media', Destination: '/media', Type: 'bind', RW: true }],
+      }),
+    ];
+
+    const security = useSecurityStore();
+    expect(security.findings(docker.containers[0])).toEqual([]);
+  });
+
   it('counts a host-network container as holding its exposed ports', () => {
     const docker = useDockerStore();
     docker.containers = [

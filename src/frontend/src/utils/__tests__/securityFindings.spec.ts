@@ -2,7 +2,16 @@ import { describe, it, expect } from 'vitest';
 import {
   DOCS,
   FINDING_TYPES,
+  describeUser,
+  effectiveUser,
   findingsFor,
+  mountWritersFor,
+  pathIsWithin,
+  pathsOverlap,
+  blockedBy,
+  describeUmask,
+  folderConflicts,
+  parseUmask,
   isForcedRoot,
   parseExposedPort,
   suggestHostPort,
@@ -15,6 +24,7 @@ const noPorts: PortOwners = new Map();
 
 const typesOf = (container: Parameters<typeof findingsFor>[0], bound = noPorts) =>
   findingsFor(container, bound).map((f) => f.type);
+
 
 /** Detail rows flattened, for assertions that do not care about the columns. */
 const detailText = (finding: SecurityFinding) =>
@@ -29,7 +39,7 @@ const additions = (finding: SecurityFinding) =>
   (finding.detail ?? []).map((d) => d.add).filter(Boolean);
 
 describe('FINDING_TYPES', () => {
-  // The same six strings are the write-side allowlist in
+  // The same strings are the write-side allowlist in
   // SecurityAdvisor::FINDING_TYPES, because PHP and TypeScript share no source.
   // SecurityAdvisorTest asserts the identical list, so adding a finding type on
   // one side alone fails a test rather than shipping a dismissal the backend
@@ -42,6 +52,7 @@ describe('FINDING_TYPES', () => {
       'added-capabilities',
       'broad-mount',
       'forced-root',
+      'shared-mount-group',
     ]);
   });
 
@@ -110,6 +121,430 @@ describe('isForcedRoot', () => {
     expect(isForcedRoot('ROOT')).toBe(true);
     expect(isForcedRoot('0:0')).toBe(true);
     expect(isForcedRoot('root:root')).toBe(true);
+  });
+});
+
+describe('pathIsWithin', () => {
+  it('counts a folder as within itself', () => {
+    expect(pathIsWithin('/mnt/user/media', '/mnt/user/media')).toBe(true);
+  });
+
+  it('counts a child', () => {
+    expect(pathIsWithin('/mnt/user/media/tv', '/mnt/user/media')).toBe(true);
+  });
+
+  it('does not count a sibling that merely shares a prefix', () => {
+    // The containment bug CLAUDE.md calls out on the PHP side. Without the
+    // trailing separator this passes and the advisor invents a conflict.
+    expect(pathIsWithin('/mnt/user/media-old', '/mnt/user/media')).toBe(false);
+  });
+
+  it('tolerates a trailing slash on the parent', () => {
+    expect(pathIsWithin('/mnt/user/media/tv', '/mnt/user/media/')).toBe(true);
+  });
+
+  it('is false for an empty path', () => {
+    expect(pathIsWithin('', '/mnt')).toBe(false);
+    expect(pathIsWithin('/mnt', '')).toBe(false);
+  });
+
+  it('overlaps in either direction', () => {
+    expect(pathsOverlap('/mnt/user/media', '/mnt/user/media/tv')).toBe(true);
+    expect(pathsOverlap('/mnt/user/media/tv', '/mnt/user/media')).toBe(true);
+    expect(pathsOverlap('/mnt/user/media', '/mnt/user/books')).toBe(false);
+  });
+});
+
+describe('effectiveUser', () => {
+  it('says nothing when the container says nothing', () => {
+    // The common case: no --user, no PUID. The image picks, and we cannot know.
+    expect(effectiveUser(makeContainer())).toBeNull();
+  });
+
+  it('reads PUID and PGID', () => {
+    const c = makeContainer({ puid: '1000', pgid: '100' });
+    expect(effectiveUser(c)).toEqual({ uid: '1000', gid: '100', field: 'puid' });
+  });
+
+  it('keeps PUID when PGID is missing', () => {
+    expect(effectiveUser(makeContainer({ puid: '99' }))).toEqual({
+      uid: '99',
+      gid: null,
+      field: 'puid',
+    });
+  });
+
+  it('prefers an explicit user over PUID, because Docker applies it', () => {
+    const c = makeContainer({ user: '0', puid: '1000', pgid: '1000' });
+    expect(effectiveUser(c)).toEqual({ uid: '0', gid: null, field: 'user' });
+  });
+
+  it('resolves root to 0', () => {
+    expect(effectiveUser(makeContainer({ user: 'root' }))?.uid).toBe('0');
+    expect(effectiveUser(makeContainer({ user: 'root:root' }))).toEqual({
+      uid: '0',
+      gid: null,
+      field: 'user',
+    });
+  });
+
+  it('gives up on a user name, rather than guess a number for it', () => {
+    // Only the host passwd file maps abc to a uid. Comparing a name against a
+    // number would invent a mismatch that may not exist.
+    expect(effectiveUser(makeContainer({ user: 'abc' }))).toBeNull();
+    expect(effectiveUser(makeContainer({ puid: 'abc' }))).toBeNull();
+  });
+
+  it('describes itself the way the setting is spelled', () => {
+    expect(describeUser({ uid: '99', gid: '100', field: 'puid' })).toBe('PUID 99, PGID 100');
+    expect(describeUser({ uid: '99', gid: null, field: 'puid' })).toBe('PUID 99');
+    expect(describeUser({ uid: '0', gid: null, field: 'user' })).toBe('--user=0');
+    expect(describeUser({ uid: '0', gid: '0', field: 'user' })).toBe('--user=0:0');
+  });
+});
+
+describe('parseUmask', () => {
+  it('reads an octal umask', () => {
+    expect(parseUmask('022')).toBe(0o022);
+    expect(parseUmask('002')).toBe(0o002);
+    expect(parseUmask('000')).toBe(0);
+    expect(parseUmask('0002')).toBe(0o002);
+  });
+
+  it('rejects anything that is not octal', () => {
+    expect(parseUmask('')).toBeNull();
+    expect(parseUmask('abc')).toBeNull();
+    expect(parseUmask('088')).toBeNull();
+    expect(parseUmask('7777')).toBeNull();
+  });
+
+  it('prints back the way a person writes it', () => {
+    expect(describeUmask(0o022)).toBe('022');
+    expect(describeUmask(0)).toBe('000');
+  });
+});
+
+describe('blockedBy', () => {
+  const writer = (uid: string, gid: string | null, umask: number) =>
+    ({
+      container: `c${uid}${gid}`,
+      source: '/mnt/user/media',
+      user: { uid, gid, field: 'puid' as const },
+      umask,
+      umaskStated: true,
+    });
+
+  it('never blocks the same user, whatever the umask', () => {
+    expect(blockedBy(writer('99', '100', 0o077), writer('99', '1000', 0o077))).toBeNull();
+  });
+
+  it('blocks the group when the umask takes group write away', () => {
+    // 0666 & ~022 = 0644. Same group, but the group cannot write.
+    expect(blockedBy(writer('99', '100', 0o022), writer('1000', '100', 0o022))).toBe('group');
+  });
+
+  it('lets the group through when the umask keeps group write', () => {
+    // 0666 & ~002 = 0664.
+    expect(blockedBy(writer('99', '100', 0o002), writer('1000', '100', 0o022))).toBeNull();
+  });
+
+  it('blocks a different group under the usual umask', () => {
+    expect(blockedBy(writer('99', '100', 0o022), writer('1000', '1000', 0o022))).toBe('other');
+  });
+
+  it('lets a different group through when everything is writable', () => {
+    // 0666 & ~000 = 0666, which is why UMASK=000 is the usual Unraid advice.
+    expect(blockedBy(writer('99', '100', 0), writer('1000', '1000', 0o022))).toBeNull();
+  });
+
+  it('says nothing when either side states no group', () => {
+    expect(blockedBy(writer('99', null, 0o022), writer('1000', '100', 0o022))).toBeNull();
+    expect(blockedBy(writer('99', '100', 0o022), writer('1000', null, 0o022))).toBeNull();
+  });
+});
+
+describe('shared folder, different group', () => {
+  const mount = (Source: string, RW = true) => ({
+    Source,
+    Destination: '/data',
+    Type: 'bind',
+    RW,
+  });
+
+  const plex = makeContainer({
+    id: 'p',
+    name: 'plex',
+    puid: '99',
+    pgid: '100',
+    mounts: [mount('/mnt/user/media')],
+  });
+
+  const sab = makeContainer({
+    id: 's',
+    name: 'sabnzbd',
+    puid: '1000',
+    pgid: '1000',
+    mounts: [mount('/mnt/user/media/downloads')],
+  });
+
+  const writersOf = (...cs: ReturnType<typeof makeContainer>[]) => cs.flatMap(mountWritersFor);
+
+  /** The shared-folder finding alone. A fixture can trip other rules too. */
+  const sharedFinding = (
+    container: ReturnType<typeof makeContainer>,
+    writers: Parameters<typeof findingsFor>[2],
+  ) => findingsFor(container, noPorts, writers).find((f) => f.type === 'shared-mount-group');
+
+  it('fires on a nested path and names the shared folder', () => {
+    const finding = sharedFinding(plex, writersOf(plex, sab))!;
+    expect(finding.severity).toBe('warning');
+    // The deeper mount is the folder they genuinely share; plex reaches it
+    // through its parent.
+    expect(removals(finding)).toEqual([
+      '/mnt/user/media/downloads as PUID 99, PGID 100, umask 022 by default',
+    ]);
+    expect(detailText(finding)).toContain('under a different group');
+  });
+
+  it('fires on both containers, from each side', () => {
+    const writers = writersOf(plex, sab);
+    expect(removals(sharedFinding(sab, writers)!)).toEqual([
+      '/mnt/user/media/downloads as PUID 1000, PGID 1000, umask 022 by default',
+    ]);
+  });
+
+  it('fires on an identical path', () => {
+    const other = makeContainer({
+      id: 'o',
+      name: 'other',
+      puid: '1000',
+      pgid: '1000',
+      mounts: [mount('/mnt/user/media')],
+    });
+    expect(sharedFinding(plex, writersOf(plex, other))).toBeDefined();
+  });
+
+  it('offers a placeholder, not the other container\'s number', () => {
+    // Naming sabnzbd's 1000 here would tell each container to become the other.
+    const finding = sharedFinding(plex, writersOf(plex, sab))!;
+    expect(additions(finding)).toEqual(['PGID <the same on both>']);
+  });
+
+  it('reads an explicit --user as the identity', () => {
+    const rooted = makeContainer({
+      id: 'r',
+      name: 'rooted',
+      user: '0:0',
+      mounts: [mount('/mnt/user/media')],
+    });
+    const finding = sharedFinding(rooted, writersOf(rooted, sab))!;
+    // Different group, so the fix is a shared PGID rather than a umask.
+    expect(additions(finding)).toEqual(['PGID <the same on both>']);
+    expect(removals(finding)).toEqual([
+      '/mnt/user/media/downloads as --user=0:0, umask 022 by default',
+    ]);
+  });
+
+  it('stays quiet when the users match, whatever the groups are', () => {
+    // Same user means the owner bits apply, which are always writable.
+    const twin = makeContainer({
+      id: 't',
+      name: 'twin',
+      puid: '99',
+      pgid: '1000',
+      mounts: [mount('/mnt/user/media/tv')],
+    });
+    expect(sharedFinding(plex, writersOf(plex, twin))).toBeUndefined();
+  });
+
+  it('stays quiet when a shared group can write, thanks to the umask', () => {
+    const relaxed = makeContainer({
+      id: 'rx',
+      name: 'relaxed',
+      puid: '99',
+      pgid: '100',
+      umask: '002',
+      mounts: [mount('/mnt/user/books')],
+    });
+    const peer = makeContainer({
+      id: 'px',
+      name: 'peer',
+      puid: '1000',
+      pgid: '100',
+      umask: '002',
+      mounts: [mount('/mnt/user/books')],
+    });
+    expect(sharedFinding(relaxed, writersOf(relaxed, peer))).toBeUndefined();
+  });
+
+  it('stays quiet when either side states no group', () => {
+    const noGroup = makeContainer({
+      id: 'u',
+      name: 'nogroup',
+      puid: '1000',
+      mounts: [mount('/mnt/user/media/tv')],
+    });
+    expect(sharedFinding(plex, writersOf(plex, noGroup))).toBeUndefined();
+
+    const bare = makeContainer({ id: 'b', name: 'bare', mounts: [mount('/mnt/user/media')] });
+    expect(sharedFinding(bare, writersOf(bare, sab))).toBeUndefined();
+  });
+
+  it('stays quiet when a mount is read-only', () => {
+    const reader = makeContainer({
+      id: 'r2',
+      name: 'reader',
+      puid: '1000',
+      pgid: '1000',
+      mounts: [mount('/mnt/user/media/tv', false)],
+    });
+    expect(sharedFinding(plex, writersOf(plex, reader))).toBeUndefined();
+  });
+
+  it('stays quiet about folders that do not overlap', () => {
+    const books = makeContainer({
+      id: 'k',
+      name: 'books',
+      puid: '1000',
+      pgid: '1000',
+      mounts: [mount('/mnt/user/books')],
+    });
+    expect(sharedFinding(plex, writersOf(plex, books))).toBeUndefined();
+  });
+
+  it('ignores a broad mount, which would otherwise pair with everything', () => {
+    // A container holding /mnt/user contains every other container's folders.
+    // Pairing it with all of them buries the real conflicts, and broad-mount
+    // already tells this container to narrow the mount.
+    const wide = makeContainer({
+      id: 'w',
+      name: 'wide',
+      puid: '99',
+      pgid: '100',
+      mounts: [mount('/mnt/user')],
+    });
+    expect(sharedFinding(wide, writersOf(wide, sab))).toBeUndefined();
+    expect(sharedFinding(sab, writersOf(wide, sab))).toBeUndefined();
+
+    // The broad mount still gets its own finding, so nothing goes unreported.
+    expect(findingsFor(wide, noPorts, writersOf(wide, sab)).map((f) => f.type)).toEqual([
+      'broad-mount',
+    ]);
+  });
+
+  it('does not report a container against itself', () => {
+    // Two mounts of one tree on one container is one group, not two.
+    const solo = makeContainer({
+      id: 'x',
+      name: 'solo',
+      puid: '99',
+      pgid: '100',
+      mounts: [mount('/mnt/user/media'), mount('/mnt/user/media/tv')],
+    });
+    expect(sharedFinding(solo, writersOf(solo))).toBeUndefined();
+  });
+
+  it('summarizes past four shared folders', () => {
+    const names = ['a', 'b', 'c', 'd', 'e'];
+    const many = makeContainer({
+      id: 'm',
+      name: 'many',
+      puid: '99',
+      pgid: '100',
+      mounts: names.map((n) => mount(`/mnt/user/${n}`)),
+    });
+    const peer = makeContainer({
+      id: 'q',
+      name: 'peer',
+      puid: '1000',
+      pgid: '1000',
+      mounts: names.map((n) => mount(`/mnt/user/${n}`)),
+    });
+    const finding = sharedFinding(many, writersOf(many, peer))!;
+    expect(finding.detail).toHaveLength(5);
+    expect(finding.detail![4]).toEqual({ note: 'And 1 more shared folder.' });
+  });
+
+  it('groups by folder, so one clash is one row, not one per container', () => {
+    const rows = folderConflicts(writersOf(plex, sab));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].path).toBe('/mnt/user/media/downloads');
+    expect(rows[0].writers.map((w) => w.container).sort()).toEqual(['plex', 'sabnzbd']);
+    expect(rows[0].reason).toBe('other');
+  });
+
+  it('keeps a third container on the same folder row', () => {
+    const third = makeContainer({
+      id: 'z',
+      name: 'radarr',
+      puid: '500',
+      pgid: '500',
+      mounts: [mount('/mnt/user/media/downloads')],
+    });
+    const rows = folderConflicts(writersOf(plex, sab, third));
+    const downloads = rows.find((r) => r.path === '/mnt/user/media/downloads')!;
+    expect(downloads.writers.map((w) => w.container).sort()).toEqual([
+      'plex',
+      'radarr',
+      'sabnzbd',
+    ]);
+  });
+
+  it('flags a shared group when the umask leaves files read-only to it', () => {
+    // The case a group-only rule misses: one group, different users, 0644.
+    const a = makeContainer({
+      id: 'ua',
+      name: 'sonarr',
+      puid: '99',
+      pgid: '100',
+      umask: '022',
+      mounts: [mount('/mnt/user/media/tv')],
+    });
+    const b = makeContainer({
+      id: 'ub',
+      name: 'radarr',
+      puid: '1000',
+      pgid: '100',
+      mounts: [mount('/mnt/user/media/tv')],
+    });
+    const rows = folderConflicts(writersOf(a, b));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].reason).toBe('group');
+
+    const finding = sharedFinding(a, writersOf(a, b))!;
+    expect(additions(finding)).toEqual(['UMASK=002']);
+    expect(finding.fix).toContain('set UMASK to 002');
+  });
+
+  it('stays quiet when the creator makes everything writable', () => {
+    // UMASK=000 is the usual Unraid fix, and it genuinely settles the problem.
+    const open = makeContainer({
+      id: 'o1',
+      name: 'open',
+      puid: '99',
+      pgid: '100',
+      umask: '000',
+      mounts: [mount('/mnt/user/media/downloads')],
+    });
+    const other = makeContainer({
+      id: 'o2',
+      name: 'other',
+      puid: '1000',
+      pgid: '1000',
+      umask: '000',
+      mounts: [mount('/mnt/user/media/downloads')],
+    });
+    expect(folderConflicts(writersOf(open, other))).toEqual([]);
+  });
+
+  it('says when a umask was assumed rather than stated', () => {
+    const finding = sharedFinding(plex, writersOf(plex, sab))!;
+    expect(removals(finding)[0]).toContain('umask 022 by default');
+  });
+
+  it('links to the page that explains PGID, not to Docker', () => {
+    const finding = sharedFinding(plex, writersOf(plex, sab))!;
+    expect(finding.docs).toBe('https://docs.linuxserver.io/general/understanding-puid-and-pgid/');
   });
 });
 

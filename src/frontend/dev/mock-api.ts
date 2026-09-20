@@ -26,9 +26,15 @@ const containers = [
     // Security advisor fixture: privileged (hardware transcoding is the usual
     // excuse) plus a writable mount of the whole /mnt/user share root.
     privileged: true,
+    // Security advisor fixture, part two: plex writes /mnt/user/media under
+    // group 100 while sabnzbd writes a folder inside it under group 1000. The
+    // nested path and the differing group are what the shared-folder check
+    // exists for.
+    puid: '99', pgid: '100',
     mounts: [
       { Source: '/mnt/user/appdata/plex', Destination: '/config', Type: 'bind', RW: true },
       { Source: '/mnt/user', Destination: '/media', Type: 'bind', RW: true },
+      { Source: '/mnt/user/media', Destination: '/media/library', Type: 'bind', RW: true },
     ],
     networkSettings: { bridge: { IPAddress: '172.17.0.2' } },
     labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/40463-support-linuxserverio-plex-media-server/' },
@@ -58,12 +64,16 @@ const containers = [
     labels: { 'com.docker.compose.project': 'db-stack' },
   },
   {
-    id: 'def456ghi789', name: 'sabnzbd', image: 'linuxserver/sabnzbd:latest', state: 'running',
+    id: 'def456ghi789', name: 'sabnzbd', image: 'lscr.io/linuxserver/sabnzbd:latest', state: 'running',
     status: 'Up 2 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:8080]/',
     created: Date.now() / 1000 - 172800,
     ports: [{ IP: '0.0.0.0', PrivatePort: 8080, PublicPort: 8080, Type: 'tcp' }],
     hostPorts: [{ hostIp: '0.0.0.0', hostPort: 8080, containerPort: 8080, type: 'tcp' }],
-    mounts: [{ Source: '/mnt/user/appdata/sabnzbd', Destination: '/config', Type: 'bind', RW: true }],
+    puid: '1000', pgid: '1000',
+    mounts: [
+      { Source: '/mnt/user/appdata/sabnzbd', Destination: '/config', Type: 'bind', RW: true },
+      { Source: '/mnt/user/media/downloads', Destination: '/downloads', Type: 'bind', RW: true },
+    ],
     networkSettings: { bridge: { IPAddress: '172.17.0.5' } },
     labels: {},
   },
@@ -137,13 +147,32 @@ const containers = [
     labels: { 'net.unraid.docker.support': 'https://forums.unraid.net/topic/98822-support-home-assistant/', 'net.unraid.docker.project': 'https://www.home-assistant.io/' },
   },
   {
+    // Security advisor fixture: same group as monitoring below, but umask 022
+    // leaves the files it writes read-only to that group.
+    puid: '472', pgid: '100', umask: '022',
     id: 'jkl012mno345', name: 'grafana', image: 'grafana/grafana:latest', state: 'running',
     status: 'Up 4 days', icon: null, managed: 'dockerman', webui: 'http://[IP]:[PORT:3000]/',
     created: Date.now() / 1000 - 345600,
     ports: [{ IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 3000, Type: 'tcp' }],
     hostPorts: [{ hostIp: '0.0.0.0', hostPort: 3000, containerPort: 3000, type: 'tcp' }],
-    mounts: [{ Source: '/mnt/user/appdata/grafana', Destination: '/var/lib/grafana', Type: 'bind', RW: true }],
+    mounts: [
+      { Source: '/mnt/user/appdata/grafana', Destination: '/var/lib/grafana', Type: 'bind', RW: true },
+      { Source: '/mnt/user/appdata/monitoring', Destination: '/shared', Type: 'bind', RW: true },
+    ],
     networkSettings: { bridge: { IPAddress: '172.17.0.10' } },
+    labels: {},
+  },
+  {
+    // The other half of the umask fixture: same group as grafana, different
+    // user, so grafana's 0644 files are read-only to it.
+    id: 'nop456qrs789', name: 'prometheus', image: 'quay.io/prometheus/prometheus:latest',
+    state: 'running', status: 'Up 4 days', icon: null, managed: 'dockerman', webui: null,
+    created: Date.now() / 1000 - 345600,
+    puid: '65534', pgid: '100', umask: '022',
+    ports: [{ IP: '0.0.0.0', PrivatePort: 9090, PublicPort: 9090, Type: 'tcp' }],
+    hostPorts: [{ hostIp: '0.0.0.0', hostPort: 9090, containerPort: 9090, type: 'tcp' }],
+    mounts: [{ Source: '/mnt/user/appdata/monitoring', Destination: '/shared', Type: 'bind', RW: true }],
+    networkSettings: { bridge: { IPAddress: '172.17.0.14' } },
     labels: {},
   },
   {
@@ -481,6 +510,9 @@ async function handleContainers(req: any, res: any, params: Record<string, strin
       capAdd: (c as any).capAdd ?? [],
       exposedPorts: (c as any).exposedPorts ?? [],
       user: (c as any).user ?? '',
+      puid: (c as any).puid ?? '',
+      pgid: (c as any).pgid ?? '',
+      umask: (c as any).umask ?? '',
     }));
     return json(res, {
       containers: containersWithAutostart,

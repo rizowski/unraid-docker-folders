@@ -33,7 +33,7 @@ final class SecurityAdvisorTest extends TestCase
      * src/frontend/src/utils/securityFindings.ts, spelled a second time because
      * PHP and TypeScript share no source. Spelling it a third time here is the
      * point: a one-sided edit fails this test instead of shipping a type the
-     * backend rejects with a 400. securityFindings.spec.ts asserts the same six.
+     * backend rejects with a 400. securityFindings.spec.ts asserts the same list.
      */
     #[Test]
     public function allowlistMatchesTheFrontendList(): void
@@ -45,6 +45,7 @@ final class SecurityAdvisorTest extends TestCase
             'added-capabilities',
             'broad-mount',
             'forced-root',
+            'shared-mount-group',
         ], SecurityAdvisor::FINDING_TYPES);
     }
 

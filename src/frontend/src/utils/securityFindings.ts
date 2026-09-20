@@ -27,6 +27,7 @@ export const FINDING_TYPES = [
   'added-capabilities',
   'broad-mount',
   'forced-root',
+  'shared-mount-group',
 ] as const;
 
 export type FindingType = (typeof FINDING_TYPES)[number];
@@ -86,6 +87,10 @@ export const DOCS: Record<FindingType, string> = {
   'added-capabilities': 'https://docs.docker.com/engine/security/#linux-kernel-capabilities',
   'broad-mount': 'https://docs.docker.com/engine/storage/bind-mounts/',
   'forced-root': 'https://docs.docker.com/engine/security/userns-remap/',
+  // Not a Docker page. PUID and PGID are a linuxserver.io convention, and this
+  // page is the one that explains what they do to the ownership of files in a
+  // shared volume. The modal derives its link label from the host.
+  'shared-mount-group': 'https://docs.linuxserver.io/general/understanding-puid-and-pgid/',
 };
 
 /** Host port -> name of a container that binds it. */
@@ -159,6 +164,87 @@ export const MAX_SUGGESTED_PORTS = 4;
 export function isForcedRoot(user: string): boolean {
   const [uid] = String(user ?? '').trim().split(':');
   return uid === '0' || uid.toLowerCase() === 'root';
+}
+
+/**
+ * Whether `child` sits inside `parent`, or is `parent`.
+ *
+ * Anchored on a trailing separator. A plain `startsWith` is the containment bug
+ * CLAUDE.md calls out on the PHP side: without the separator,
+ * `/mnt/user/media-old` reads as inside `/mnt/user/media`.
+ */
+export function pathIsWithin(child: string, parent: string): boolean {
+  if (!child || !parent) return false;
+  if (child === parent) return true;
+  const base = parent.endsWith('/') ? parent : `${parent}/`;
+  return child.startsWith(base);
+}
+
+/** Whether two mounts reach the same files, in either direction. */
+export function pathsOverlap(a: string, b: string): boolean {
+  return pathIsWithin(a, b) || pathIsWithin(b, a);
+}
+
+/** A resolved container identity. `field` names the setting that produced it. */
+export interface EffectiveUser {
+  uid: string;
+  gid: string | null;
+  field: 'user' | 'puid';
+}
+
+const numeric = (value: string) => /^\d+$/.test(value);
+
+/**
+ * Who the container's files end up belonging to, or null when it does not say.
+ *
+ * `Config.User` wins when it is set, because Docker applies it directly. Almost
+ * nothing sets it, so PUID and PGID carry the answer on Unraid: images from
+ * linuxserver.io start as root and drop to them at entrypoint.
+ *
+ * A user *name* resolves to null. Only the host's passwd file maps it to a
+ * number, and comparing a name against a number would invent a mismatch that
+ * may not exist. `root` is the exception, because it is always 0.
+ */
+export function effectiveUser(container: Container): EffectiveUser | null {
+  const configured = String(container.user ?? '').trim();
+  if (configured) {
+    const [rawUid, rawGid] = configured.split(':');
+    const uid = rawUid?.toLowerCase() === 'root' ? '0' : rawUid;
+    if (!uid || !numeric(uid)) return null;
+    return { uid, gid: rawGid && numeric(rawGid) ? rawGid : null, field: 'user' };
+  }
+
+  const puid = String(container.puid ?? '').trim();
+  if (!numeric(puid)) return null;
+  const pgid = String(container.pgid ?? '').trim();
+  return { uid: puid, gid: numeric(pgid) ? pgid : null, field: 'puid' };
+}
+
+/** How a resolved identity reads in the panel. */
+export function describeUser(user: EffectiveUser): string {
+  if (user.field === 'user') {
+    return user.gid ? `--user=${user.uid}:${user.gid}` : `--user=${user.uid}`;
+  }
+  return user.gid ? `PUID ${user.uid}, PGID ${user.gid}` : `PUID ${user.uid}`;
+}
+
+/**
+ * The umask every process starts with unless something changes it, and what a
+ * linuxserver.io image uses when the template sets no UMASK.
+ */
+export const DEFAULT_UMASK = 0o022;
+
+/** Read an octal umask string such as "022" or "0002". Null if it is not one. */
+export function parseUmask(value: string): number | null {
+  const raw = String(value ?? '').trim();
+  if (!/^[0-7]{1,4}$/.test(raw)) return null;
+  const parsed = Number.parseInt(raw, 8);
+  return parsed <= 0o777 ? parsed : null;
+}
+
+/** Three-digit octal, the way a person writes a umask. */
+export function describeUmask(umask: number): string {
+  return umask.toString(8).padStart(3, '0');
 }
 
 /**
@@ -371,10 +457,214 @@ function broadMountFindings(container: Container): FindingRule[] {
 }
 
 /**
+ * One container's writable bind mount, with the identity behind it.
+ *
+ * A flat list rather than a map keyed by path, because two mounts can reach the
+ * same files without spelling the same string. The caller builds it once over
+ * every running container.
+ */
+export interface MountWriter {
+  container: string;
+  source: string;
+  user: EffectiveUser;
+  /** The umask this container creates files with. */
+  umask: number;
+  /** False when the umask is the assumed default rather than a stated UMASK. */
+  umaskStated: boolean;
+}
+
+/** Shared folders printed before the list is summarized. */
+export const MAX_SHARED_PATHS = 4;
+
+/**
+ * Every writable bind mount of a container, paired with who writes it.
+ *
+ * A broad path is left out. A container holding /mnt/user contains every other
+ * container's folders, so it would pair with all of them and bury the specific
+ * conflicts under a list of coincidences. That mount has its own finding, and
+ * narrowing it, which is what that finding asks for, settles this one too.
+ */
+export function mountWritersFor(container: Container): MountWriter[] {
+  const user = effectiveUser(container);
+  if (!user) return [];
+
+  const stated = parseUmask(String(container.umask ?? ''));
+
+  return (container.mounts ?? [])
+    .filter((m) => m.Type === 'bind' && m.RW && !BROAD_PATHS.includes(m.Source))
+    .map((m) => ({
+      container: container.name,
+      source: m.Source,
+      user,
+      umask: stated ?? DEFAULT_UMASK,
+      umaskStated: stated !== null,
+    }));
+}
+
+/** Which permission bit keeps the other container out. */
+export type BlockReason = 'group' | 'other';
+
+/**
+ * Why `other` cannot write a file `creator` makes, or null when it can.
+ *
+ * A new file gets mode 0666 with the creator's umask taken out of it, so the
+ * umask is what decides whether the user and group actually keep anyone out:
+ *
+ *   umask 022 -> 0644, so neither the group nor anyone else can write
+ *   umask 002 -> 0664, so the group can write
+ *   umask 000 -> 0666, so anyone can write
+ *
+ * Null also covers "cannot tell". A container that states no group could be in
+ * the same one, and guessing would invent a problem.
+ */
+export function blockedBy(creator: MountWriter, other: MountWriter): BlockReason | null {
+  // Same user, so the owner bits apply and they are always writable.
+  if (creator.user.uid === other.user.uid) return null;
+
+  const mine = creator.user.gid;
+  const theirs = other.user.gid;
+  if (mine === null || theirs === null) return null;
+
+  if (mine === theirs) return (creator.umask & 0o020) !== 0 ? 'group' : null;
+  return (creator.umask & 0o002) !== 0 ? 'other' : null;
+}
+
+/**
+ * One folder two or more containers write, where one cannot use the other's
+ * files.
+ *
+ * Keyed by folder rather than by container on purpose: the same clash read from
+ * each container in turn says the same thing twice, mirrored.
+ */
+export interface FolderConflict {
+  /** The folder they share, which is the deeper of the overlapping mounts. */
+  path: string;
+  /** Everyone writing it, the blocked containers included. */
+  writers: MountWriter[];
+  /** The container whose files the others cannot write. */
+  creator: MountWriter;
+  reason: BlockReason;
+}
+
+/** Every folder clash on the box, worst path first for a stable order. */
+export function folderConflicts(writers: MountWriter[]): FolderConflict[] {
+  const byPath = new Map<string, FolderConflict>();
+
+  for (let i = 0; i < writers.length; i++) {
+    for (let j = i + 1; j < writers.length; j++) {
+      const a = writers[i];
+      const b = writers[j];
+      if (a.container === b.container) continue;
+      if (!pathsOverlap(a.source, b.source)) continue;
+
+      // Each direction is governed by the umask of whoever creates the file.
+      const aBlocks = blockedBy(a, b);
+      const reason = aBlocks ?? blockedBy(b, a);
+      if (!reason) continue;
+
+      // The deeper mount is the folder they genuinely share: the other reaches
+      // it through a parent.
+      const path = a.source.length >= b.source.length ? a.source : b.source;
+      const existing = byPath.get(path);
+
+      if (existing) {
+        for (const w of [a, b]) {
+          if (!existing.writers.some((x) => x.container === w.container)) {
+            existing.writers.push(w);
+          }
+        }
+        continue;
+      }
+
+      byPath.set(path, { path, writers: [a, b], creator: aBlocks ? a : b, reason });
+    }
+  }
+
+  return [...byPath.values()].sort((x, y) => x.path.localeCompare(y.path));
+}
+
+/** The identity line shown beside a container in the folder list. */
+export function describeWriter(writer: MountWriter): string {
+  const umask = `umask ${describeUmask(writer.umask)}`;
+  return `${describeUser(writer.user)}, ${writer.umaskStated ? umask : `${umask} by default`}`;
+}
+
+/** One sentence saying who blocks whom, and which setting fixes it. */
+export function conflictReason(conflict: FolderConflict): string {
+  const { creator, reason } = conflict;
+  const others = conflict.writers.filter((w) => w.container !== creator.container);
+  const names = others.map((w) => w.container).join(', ');
+
+  if (reason === 'group') {
+    return (
+      `${creator.container} and ${names} share group ${creator.user.gid}, but ${creator.container} ` +
+      `creates files with umask ${describeUmask(creator.umask)}, which leaves them read-only to the ` +
+      `rest of that group. Set UMASK=002 on ${creator.container}, or give every container here the ` +
+      'same PUID.'
+    );
+  }
+
+  return (
+    `${creator.container} writes as ${describeUser(creator.user)} and ${names} under a different ` +
+    `group, so files ${creator.container} creates are not writable by the others. Give every ` +
+    'container here one PGID. Unraid creates shares owned by nobody and users, which is PGID 100.'
+  );
+}
+
+/** What to change, for the right-hand column of the per-container table. */
+function conflictFix(conflict: FolderConflict): string {
+  return conflict.reason === 'group' ? 'UMASK=002' : 'PGID <the same on both>';
+}
+
+function sharedMountFindings(container: Container, conflicts: FolderConflict[]): FindingRule[] {
+  const mine = conflicts.filter((c) => c.writers.some((w) => w.container === container.name));
+  if (mine.length === 0) return [];
+
+  const shown = mine.slice(0, MAX_SHARED_PATHS);
+
+  const detail: FindingDetail[] = shown.map((conflict) => {
+    const own = conflict.writers.find((w) => w.container === container.name)!;
+    return {
+      remove: `${conflict.path} as ${describeWriter(own)}`,
+      add: conflictFix(conflict),
+      note: conflictReason(conflict),
+    };
+  });
+
+  const rest = mine.length - shown.length;
+  if (rest > 0) {
+    detail.push({ note: `And ${rest} more shared folder${rest === 1 ? '' : 's'}.` });
+  }
+
+  const onlyUmask = mine.every((c) => c.reason === 'group');
+
+  return [
+    {
+      type: 'shared-mount-group',
+      severity: 'warning',
+      title: onlyUmask
+        ? 'Writes a shared folder the other containers cannot change'
+        : 'Shares a folder with a container in a different group',
+      why: onlyUmask
+        ? 'Another container writes the same folder. The files created there are read-only to the rest of the group, so the other container cannot move or change them.'
+        : 'Two containers write the same folder under different groups. Unraid shares are group-owned, so a file one container creates is one the other cannot use.',
+      fix: onlyUmask
+        ? `Edit ${container.name} in Unraid and set UMASK to 002, so the files it creates stay writable by its group.`
+        : `Edit ${container.name} in Unraid and set PGID so every container writing this folder shares one group. Which group matters less than picking one: Unraid creates shares owned by nobody and users, which is PGID 100.`,
+      detail,
+    },
+  ];
+}
+
+/**
  * Every finding for one container, worst first. Dismissals are applied by the
  * caller, not here, so this stays a pure function of the container.
  */
-export function findingsFor(container: Container, bound: PortOwners): SecurityFinding[] {
+export function findingsFor(
+  container: Container,
+  bound: PortOwners,
+  writers: MountWriter[] = [],
+): SecurityFinding[] {
   const findings: FindingRule[] = [];
 
   if (container.privileged) {
@@ -433,6 +723,7 @@ export function findingsFor(container: Container, bound: PortOwners): SecurityFi
   }
 
   findings.push(...broadMountFindings(container));
+  findings.push(...sharedMountFindings(container, folderConflicts(writers)));
 
   return findings
     .sort((a, b) => severityRank(a.severity) - severityRank(b.severity))

@@ -91,6 +91,62 @@ final class ContainerFactsTest extends TestCase
     }
 
     #[Test]
+    public function readsPuidAndPgidFromTheEnvironment(): void
+    {
+        $facts = DockerClient::extractFacts(self::inspect([
+            'Config' => ['Env' => ['TZ=America/New_York', 'PUID=1000', 'PGID=100']],
+        ]));
+
+        $this->assertSame('1000', $facts['puid']);
+        $this->assertSame('100', $facts['pgid']);
+    }
+
+    #[Test]
+    public function readsUmaskFromTheEnvironment(): void
+    {
+        $facts = DockerClient::extractFacts(self::inspect([
+            'Config' => ['Env' => ['UMASK=002', 'PUID=99']],
+        ]));
+
+        $this->assertSame('002', $facts['umask']);
+    }
+
+    #[Test]
+    public function reportsAnAbsentPuidAsEmpty(): void
+    {
+        // The common case. Most images pick the user themselves, and the
+        // frontend reads an empty value as "this container does not say".
+        $facts = DockerClient::extractFacts(self::inspect([
+            'Config' => ['Env' => ['TZ=America/New_York']],
+        ]));
+
+        $this->assertSame('', $facts['puid']);
+        $this->assertSame('', $facts['pgid']);
+    }
+
+    #[Test]
+    public function keepsAnEqualsSignInsideAnEnvironmentValue(): void
+    {
+        // Split on the first '=' only: a base64 value or a connection string
+        // carries more of them, and splitting on all of them corrupts it.
+        $facts = DockerClient::extractFacts(self::inspect([
+            'Config' => ['Env' => ['SECRET=a=b=c', 'PUID=99']],
+        ]));
+
+        $this->assertSame('99', $facts['puid']);
+    }
+
+    #[Test]
+    public function ignoresAVariableThatMerelyEndsWithPuid(): void
+    {
+        $facts = DockerClient::extractFacts(self::inspect([
+            'Config' => ['Env' => ['OLD_PUID=1', 'PUID=2']],
+        ]));
+
+        $this->assertSame('2', $facts['puid']);
+    }
+
+    #[Test]
     public function handlesAnInspectWithNeitherSection(): void
     {
         $facts = DockerClient::extractFacts([]);
@@ -101,6 +157,9 @@ final class ContainerFactsTest extends TestCase
             'capAdd' => [],
             'exposedPorts' => [],
             'user' => '',
+            'puid' => '',
+            'pgid' => '',
+            'umask' => '',
         ], $facts);
     }
 

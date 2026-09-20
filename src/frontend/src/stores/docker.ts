@@ -73,6 +73,18 @@ export interface Container {
   exposedPorts: string[];
   /** Config.User. Empty means the image chose, which is the normal case. */
   user: string;
+  /**
+   * PUID and PGID from Config.Env, empty when the container does not set them.
+   * On Unraid these, not `user`, decide who owns the files a container writes.
+   */
+  puid: string;
+  pgid: string;
+  /**
+   * UMASK from Config.Env. Decides the mode of every file the container
+   * creates, so it decides whether puid and pgid actually keep anyone out.
+   * Empty means the image never overrode the default.
+   */
+  umask: string;
   created: number;
   icon: string | null;
   managed: string | null;

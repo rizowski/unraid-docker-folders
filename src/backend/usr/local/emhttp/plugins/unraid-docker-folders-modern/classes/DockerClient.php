@@ -31,7 +31,13 @@ class DockerClient
   // facts array below. Same file, same shape was not an option: an old entry
   // would be read as a facts array and every field would come back empty. /tmp
   // is tmpfs on Unraid, so the old file is gone at the next reboot.
-  const FACTS_CACHE_PATH = '/tmp/unraid-docker-container-facts.json';
+  //
+  // It changed again, to v2, when puid and pgid joined the array. An entry
+  // written before that carries neither, which reads as "no user set" rather
+  // than as a miss, so the shared-folder check would have stayed silent for
+  // every container that existed before the upgrade. A wrong answer is worse
+  // than a rebuild.
+  const FACTS_CACHE_PATH = '/tmp/unraid-docker-container-facts-v2.json';
 
   public function __construct($socketPath = DOCKER_SOCKET, $apiVersion = DOCKER_API_VERSION)
   {
@@ -88,6 +94,9 @@ class DockerClient
       $formatted['capAdd'] = $facts['capAdd'] ?? [];
       $formatted['exposedPorts'] = $facts['exposedPorts'] ?? [];
       $formatted['user'] = $facts['user'] ?? '';
+      $formatted['puid'] = $facts['puid'] ?? '';
+      $formatted['pgid'] = $facts['pgid'] ?? '';
+      $formatted['umask'] = $facts['umask'] ?? '';
       $containers[] = $formatted;
     }
 
@@ -160,7 +169,7 @@ class DockerClient
    * forever.
    *
    * @param array $inspect Raw /containers/{id}/json payload
-   * @return array {ports, privileged, capAdd, exposedPorts, user}
+   * @return array {ports, privileged, capAdd, exposedPorts, user, puid, pgid, umask}
    */
   public static function extractFacts(array $inspect)
   {
@@ -183,7 +192,48 @@ class DockerClient
       // a value set here means somebody overrode it, which is the only case the
       // frontend acts on.
       'user' => (string) ($config['User'] ?? ''),
+      // The user the process actually ends up as on Unraid. Images from
+      // linuxserver.io start as root and drop to these, so they decide who owns
+      // the files a container writes into a share, which User above almost
+      // never states.
+      'puid' => self::envValue($config['Env'] ?? [], 'PUID'),
+      'pgid' => self::envValue($config['Env'] ?? [], 'PGID'),
+      // Decides the mode of every file the container creates, so it decides
+      // whether the user and group above actually keep anybody out. Another
+      // linuxserver.io convention; empty means the image never overrode it.
+      'umask' => self::envValue($config['Env'] ?? [], 'UMASK'),
     ];
+  }
+
+  /**
+   * Read one variable out of Docker's ["NAME=value", ...] environment list.
+   *
+   * Splits on the first '=' only, because a value legitimately contains more of
+   * them. Returns '' when the variable is absent, which the frontend reads as
+   * "this container does not say who it runs as".
+   *
+   * A private static helper rather than AdoptBuilder::envMap(): that one is
+   * private to another class, and this needs two lookups rather than a whole
+   * map. Keeping it here leaves extractFacts() a pure transform that
+   * ContainerFactsTest can exercise with one require_once.
+   *
+   * @param mixed $env
+   * @param string $key
+   * @return string
+   */
+  private static function envValue($env, $key)
+  {
+    $prefix = $key . '=';
+    $len = strlen($prefix);
+
+    foreach ((array) $env as $line) {
+      $line = (string) $line;
+      if (strncmp($line, $prefix, $len) === 0) {
+        return substr($line, $len);
+      }
+    }
+
+    return '';
   }
 
   /**
