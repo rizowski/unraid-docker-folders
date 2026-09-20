@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.20
+- feat(security): collapse the findings panel and name each note's cell
 - feat(security): warn on shared folders and link the image page
 - feat(security): flag risky container settings and advise on them
 
