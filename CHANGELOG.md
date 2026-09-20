@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026.09.20
+- feat(security): warn on shared folders and link the image page
 - feat(security): flag risky container settings and advise on them
 
 ## 2026.09.19
