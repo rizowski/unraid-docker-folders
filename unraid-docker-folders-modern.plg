@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.20-dev5">
-<!ENTITY md5 "8da212d984770e0c40682ddf9a39a0a6">
+<!ENTITY version "2026.09.20">
+<!ENTITY md5 "7ebcbd858620ecd3f8d1c0420e39cd30">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -130,6 +130,9 @@
 
 
 
+
+###2026.09.20
+- test(settings): pin the security advisor default to on
 ###2026.09.20-dev5
 - fix(install): use installpkg so a colliding package name cannot skip the install (#16)
 ###2026.09.20-dev4
