@@ -72,12 +72,13 @@ class BackupManager
     $job = $this->runArchiveJob($container['id'], $quiesce, $archivePath, $hostPaths);
 
     if (!$job['success']) {
-      return [
-        'success' => false,
-        'message' => $job['failure'] === 'quiesce'
-          ? $job['detail']
-          : "Failed to create archive: {$archiveName}{$job['detail']}",
-      ];
+      $message = $job['failure'] === 'quiesce'
+        ? $job['detail']
+        : "Failed to create archive: {$archiveName}{$job['detail']}";
+      if ($job['restore_error'] !== '') {
+        $message .= '. ' . $job['restore_error'];
+      }
+      return ['success' => false, 'message' => $message];
     }
 
     $size = file_exists($archivePath) ? filesize($archivePath) : 0;
@@ -171,6 +172,9 @@ class BackupManager
         $results[] = $job['failure'] === 'quiesce'
           ? "Service '{$service}': " . $job['detail']
           : "Failed to create archive for service '{$service}'{$job['detail']}";
+        if ($job['restore_error'] !== '') {
+          $results[] = "Service '{$service}': " . $job['restore_error'];
+        }
         $allSuccess = false;
         continue;
       }
@@ -531,11 +535,14 @@ class BackupManager
         'note' => '', 'restore_error' => ''];
     }
 
+    // The archive can fail and the restore can fail in the same run. Both are
+    // reported, because the second one means the container is still stopped
+    // or paused.
     $archive = $run['result'];
     if (!$archive['success']) {
       return ['success' => false, 'failure' => 'archive',
         'detail' => $archive['output'] !== '' ? ': ' . $archive['output'] : '',
-        'note' => '', 'restore_error' => ''];
+        'note' => '', 'restore_error' => $run['restore_error']];
     }
 
     return ['success' => true, 'failure' => '', 'detail' => '',
