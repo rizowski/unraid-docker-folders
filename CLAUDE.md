@@ -483,11 +483,17 @@ acceptable.
 - **Vite base path**: Must be `/plugins/unraid-docker-folders-modern/assets/` for Unraid integration
 - **File permissions**: .page files = 644, scripts = 755, handled by build script
 - **Node / yarn via proto**: `.prototools` at the repo root pins `node = "22.18.0"` and `yarn = "1.22.21"`. If `yarn` isn't on PATH, run `proto use` in the repo root to install and shim them. Shims live at `~/.proto/shims/`. (`npm = "bundled"` is pinned too, but see the package-manager note above — don't use it in `src/frontend`.)
-- **No local PHP**: Lint/validate PHP with the `php:8.2-cli` Docker image, e.g.:
+- **PHP runs in Docker**: On the maintainer's machine `php` is on PATH as a
+  whalebrew wrapper around the `php:8.4-cli` image, so `php -l file.php` works.
+  If `php` is not on PATH, run the image directly:
   ```bash
-  docker run --rm -v "$(pwd)":/app -w /app php:8.2-cli php -l path/to/file.php
+  docker run --rm -v "$(pwd)":/app -w /app php:8.4-cli php -l path/to/file.php
   ```
-  Never assume a local `php` binary is available.
+  Two things break a wrapped `php` in a script. It reads stdin, so give it
+  `</dev/null` when a heredoc or pipe feeds the same command. And Docker's file
+  share can lag a write by a moment, so a lint or test that runs straight after
+  an edit can read a half-written file and report a false parse error. Rerun
+  before you believe it.
 
 ---
 
@@ -521,9 +527,12 @@ still prints handled errors (e.g. "Error fetching logs: network failure") to the
 console. Read the summary line, not the noise.
 
 ### Backend (PHPUnit)
-Lives in `tests/php/` (`AuthTest.php`, `DockerClientStatsTest.php`,
-`UpdateCheckTest.php`). There is no local PHP binary — the suite runs in Docker
-via `tests/php/run.sh`, with `Dockerfile` and `phpunit.xml.dist` alongside it.
+Lives in `tests/php/`. The suite runs in Docker via `tests/php/run.sh`, with
+`Dockerfile` and `phpunit.xml.dist` alongside it.
+
+`phpunit.xml.dist` lists every test file by name. **A new test file must be
+added there, or it never runs.** PHPUnit gives no warning, and
+`--filter <Class>` reports "No tests executed".
 
 ### Not covered by automated tests
 Anything that needs a real Unraid box: the nchan WebSocket channel, CSRF/session
