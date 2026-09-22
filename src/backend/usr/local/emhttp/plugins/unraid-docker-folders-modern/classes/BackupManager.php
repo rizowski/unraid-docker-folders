@@ -23,6 +23,10 @@ class BackupManager
   // that decides whether a file is one of our archives matches this shape.
   const ARCHIVE_STAMP_PATTERN = '\d{4}-\d{2}-\d{2}_\d{6}';
 
+  // Scopes for archivesFor().
+  const ARCHIVES_EXACT = 'exact';
+  const ARCHIVES_STACK = 'stack';
+
   // Containers this process paused or stopped and has not restored yet.
   private static $pendingRestore = [];
   private static $shutdownRegistered = false;
@@ -696,40 +700,75 @@ class BackupManager
 
   private function pruneOldBackups($destination, $prefix, $retention)
   {
-    // Same glob-injection surface as listBackups, but this one unlinks.
-    // Must match generateArchiveName's sanitizer so retention still prunes the
-    // archives this prefix actually produced.
-    $safePrefix = sanitizeArchivePrefix($prefix);
-    if ($safePrefix === null) {
+    // Exactly the archives this prefix wrote. A glob of "<prefix>.*.tar.gz"
+    // also matched other targets: a container named "blog" pruned the
+    // "blog.web.<stamp>" archives of a stack named "blog".
+    $files = self::archivesFor($destination, $prefix, self::ARCHIVES_EXACT);
+
+    if (count($files) <= $retention) {
       return 0;
     }
 
-    $pattern = rtrim($destination, '/') . '/' . $safePrefix . '.*.tar.gz';
-    $files = glob($pattern);
-
-    if (!$files || count($files) <= $retention) {
-      return 0;
-    }
-
-    usort($files, function ($a, $b) {
-      return filemtime($b) - filemtime($a);
-    });
-
-    $toDelete = array_slice($files, $retention);
     $deleted = 0;
-
-    foreach ($toDelete as $file) {
-      // Re-check containment per file. glob() can follow symlinks out of the
-      // destination even with a sanitized prefix.
-      if (!pathIsWithin($file, $destination)) {
-        continue;
-      }
+    foreach (array_slice($files, $retention) as $file) {
       if (unlink($file)) {
         $deleted++;
       }
     }
 
     return $deleted;
+  }
+
+  /**
+   * The archives in $dir that belong to one target, newest first.
+   *
+   * ARCHIVES_EXACT matches "<prefix>.<stamp>.tar.gz", which is one container,
+   * or one stack service when $prefix is "project.service". ARCHIVES_STACK
+   * matches "<prefix>.<service>.<stamp>.tar.gz", which is every service of the
+   * stack named $prefix.
+   *
+   * The directory is read with scandir(), not glob(), so a destination that
+   * contains a glob metacharacter cannot match a sibling directory.
+   *
+   * One collision remains that no name rule can separate. A container named
+   * "blog.web" and service "web" of a stack named "blog" write the same name.
+   *
+   * @param string $dir The backup destination
+   * @param string $prefix A container name, "project.service", or a project
+   * @param string $scope ARCHIVES_EXACT or ARCHIVES_STACK
+   * @return string[] Full paths, newest first
+   */
+  public static function archivesFor($dir, $prefix, $scope = self::ARCHIVES_EXACT)
+  {
+    // Must match generateArchiveName's sanitizer, or this stops finding the
+    // archives that were actually written.
+    $safePrefix = sanitizeArchivePrefix($prefix);
+    if ($safePrefix === null || !is_dir($dir)) {
+      return [];
+    }
+
+    $service = $scope === self::ARCHIVES_STACK ? '\.[A-Za-z0-9][A-Za-z0-9._-]*' : '';
+    $regex = '/^' . preg_quote($safePrefix, '/') . $service . '\.'
+      . self::ARCHIVE_STAMP_PATTERN . '\.tar\.gz$/';
+
+    $dir = rtrim($dir, '/');
+    $files = [];
+    foreach (scandir($dir) ?: [] as $name) {
+      if (preg_match($regex, $name) !== 1) {
+        continue;
+      }
+      $path = $dir . '/' . $name;
+      if (is_file($path) && !is_link($path)) {
+        $files[] = $path;
+      }
+    }
+
+    // Newest first. The name breaks a tie, since its stamp sorts in time order.
+    usort($files, function ($a, $b) {
+      return (filemtime($b) - filemtime($a)) ?: strcmp(basename($b), basename($a));
+    });
+
+    return $files;
   }
 
   private function generateArchiveName($prefix)

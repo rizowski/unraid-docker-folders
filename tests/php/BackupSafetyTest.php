@@ -178,4 +178,51 @@ final class BackupSafetyTest extends TestCase
         $this->assertFalse(BackupManager::isArchiveName('../plex.2026-09-22_031500.tar.gz'));
         $this->assertFalse(BackupManager::isArchiveName(null));
     }
+
+    private function touchArchive(string $name, int $mtime): void
+    {
+        $path = $this->dir . '/' . $name;
+        file_put_contents($path, 'x');
+        touch($path, $mtime);
+    }
+
+    #[Test]
+    public function aContainerOnlyOwnsItsExactArchives(): void
+    {
+        $this->touchArchive('blog.2026-09-20_010000.tar.gz', 1000);
+        $this->touchArchive('blog.2026-09-21_010000.tar.gz', 2000);
+        // A stack named "blog", and an unrelated container sharing the start
+        // of the name. Retention for "blog" must never delete these.
+        $this->touchArchive('blog.web.2026-09-22_010000.tar.gz', 3000);
+        $this->touchArchive('blogger.2026-09-22_010000.tar.gz', 3000);
+        $this->touchArchive('blog.tar.gz', 3000);
+
+        $files = array_map('basename', BackupManager::archivesFor($this->dir, 'blog'));
+
+        $this->assertSame(['blog.2026-09-21_010000.tar.gz', 'blog.2026-09-20_010000.tar.gz'], $files);
+    }
+
+    #[Test]
+    public function aStackOwnsEveryServiceArchiveButNotAContainerOfTheSameName(): void
+    {
+        $this->touchArchive('blog.db.2026-09-20_010000.tar.gz', 1000);
+        $this->touchArchive('blog.web.2026-09-21_010000.tar.gz', 2000);
+        $this->touchArchive('blog.2026-09-22_010000.tar.gz', 3000);
+
+        $files = array_map(
+            'basename',
+            BackupManager::archivesFor($this->dir, 'blog', BackupManager::ARCHIVES_STACK)
+        );
+
+        $this->assertSame(['blog.web.2026-09-21_010000.tar.gz', 'blog.db.2026-09-20_010000.tar.gz'], $files);
+    }
+
+    #[Test]
+    public function aGlobMetacharacterInTheDestinationMatchesNothing(): void
+    {
+        $this->touchArchive('blog.2026-09-20_010000.tar.gz', 1000);
+
+        // glob() would expand "*" and list $this->dir. scandir() does not.
+        $this->assertSame([], BackupManager::archivesFor(dirname($this->dir) . '/backup-safety-*', 'blog'));
+    }
 }
