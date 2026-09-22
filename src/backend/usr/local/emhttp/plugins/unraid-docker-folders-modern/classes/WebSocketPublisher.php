@@ -20,6 +20,8 @@ class WebSocketPublisher
    * @param string $entity  Entity type ('container' or 'folder')
    * @param string $action  Action performed (e.g. 'start', 'stop', 'create', 'delete')
    * @param mixed  $data    Associated data (container info, folder info, etc.)
+   * @return bool True when nchan accepted the event. False when the publish
+   *              failed, which is also logged, or when Unraid paused publishing.
    */
   public static function publish($entity, $action, $data = null)
   {
@@ -28,7 +30,7 @@ class WebSocketPublisher
     // sends nothing while it exists. Sending anyway would hit a socket that
     // is down on purpose and log one failure per change.
     if (is_file(self::PUBLISH_PAUSED_FILE)) {
-      return;
+      return false;
     }
 
     $event = json_encode([
@@ -54,10 +56,16 @@ class WebSocketPublisher
     $result = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 
-    if ($result === false || $httpCode >= 400) {
-      error_log('WebSocketPublisher: Failed to publish event - ' . curl_error($ch) . ' (HTTP ' . $httpCode . ')');
+    $ok = $result !== false && $httpCode < 400;
+    if (!$ok) {
+      error_log(
+        "WebSocketPublisher: Failed to publish {$entity}/{$action} - "
+        . curl_error($ch) . ' (HTTP ' . $httpCode . ')'
+      );
     }
 
     curl_close($ch);
+
+    return $ok;
   }
 }
