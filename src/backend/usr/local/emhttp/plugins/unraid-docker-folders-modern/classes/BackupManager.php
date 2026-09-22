@@ -689,6 +689,14 @@ class BackupManager
     $cmd = 'tar czf ' . escapeshellarg($archivePath) . ' ' . implode(' ', $pathArgs) . ' 2>&1';
     exec($cmd, $output, $exitCode);
 
+    // A failed archive is reported as a failure, so it must not stay on disk.
+    // It would be the newest file for this target, and retention keeps the
+    // newest, so each failed run would push out one good backup. tar exits 1
+    // on "file changed as we read it", which already counts as a failure here.
+    if ($exitCode !== 0 && is_file($archivePath)) {
+      @unlink($archivePath);
+    }
+
     // tar's own words matter. "file changed as we read it" is what a backup of
     // a running container looks like, and the caller used to report only
     // "Failed to create archive".
