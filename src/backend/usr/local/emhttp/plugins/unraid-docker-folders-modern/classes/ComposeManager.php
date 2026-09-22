@@ -550,12 +550,67 @@ class ComposeManager
 
     fclose($pipes[0]); // Close stdin
 
-    $stdout = stream_get_contents($pipes[1]);
-    $stderr = stream_get_contents($pipes[2]);
+    // Read both pipes together, and stop at $timeout. Reading stdout to the
+    // end before stderr could hang for good: a command that fills the stderr
+    // pipe waits for it to drain while this side waits for stdout to end.
+    // $timeout was also accepted and never used.
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+
+    $stdout = '';
+    $stderr = '';
+    $exitCode = null;
+    $deadline = time() + $timeout;
+
+    while (true) {
+      $read = [$pipes[1], $pipes[2]];
+      $write = null;
+      $except = null;
+      if (@stream_select($read, $write, $except, 1) === false) {
+        break;
+      }
+      foreach ($read as $stream) {
+        $chunk = fread($stream, 8192);
+        if ($chunk === false || $chunk === '') {
+          continue;
+        }
+        if ($stream === $pipes[1]) {
+          $stdout .= $chunk;
+        } else {
+          $stderr .= $chunk;
+        }
+      }
+
+      $status = proc_get_status($process);
+      if (!$status['running']) {
+        // proc_get_status() reports the real exit code only once, and older
+        // PHP makes proc_close() return -1 after that. Keep this one.
+        $exitCode = $status['exitcode'];
+        $stdout .= (string) stream_get_contents($pipes[1]);
+        $stderr .= (string) stream_get_contents($pipes[2]);
+        break;
+      }
+
+      if ($timeout > 0 && time() >= $deadline) {
+        proc_terminate($process);
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        proc_close($process);
+        return [
+          'success' => false,
+          'output' => $stdout,
+          'error' => "Command timed out after {$timeout} seconds",
+          'exit_code' => -1,
+        ];
+      }
+    }
+
     fclose($pipes[1]);
     fclose($pipes[2]);
-
-    $exitCode = proc_close($process);
+    $closeCode = proc_close($process);
+    if ($exitCode === null) {
+      $exitCode = $closeCode;
+    }
 
     return [
       'success' => $exitCode === 0,

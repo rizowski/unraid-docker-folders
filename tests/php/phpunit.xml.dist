@@ -41,6 +41,9 @@
     <testsuite name="ScheduleMigration">
       <file>ScheduleMigrationTest.php</file>
     </testsuite>
+    <testsuite name="ComposeExec">
+      <file>ComposeExecTest.php</file>
+    </testsuite>
     <testsuite name="ContainerFacts">
       <file>ContainerFactsTest.php</file>
     </testsuite>
