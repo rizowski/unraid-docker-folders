@@ -247,4 +247,25 @@ final class ContainerFactsTest extends TestCase
 
         $this->assertSame($fresh, $merged);
     }
+
+    #[Test]
+    public function cachesAContainerWhoseImageIsGoneForGood(): void
+    {
+        // A 404 never turns into an answer, so dropping the container would
+        // inspect it again on every list. It is kept, with the image user
+        // taken to be its own, which raises no forced-root finding.
+        $fresh = [
+            'removed' => ['user' => '0', 'imageUser' => ''],
+            'blank' => ['user' => 'root', 'imageUser' => ''],
+            'timeout' => ['user' => '0', 'imageUser' => ''],
+        ];
+        $needImage = ['removed' => 'sha256:removed', 'blank' => '', 'timeout' => 'sha256:slow'];
+
+        $merged = DockerClient::mergeImageUsers($fresh, $needImage, [], ['sha256:removed']);
+
+        $this->assertSame('0', $merged['removed']['imageUser']);
+        $this->assertSame('root', $merged['blank']['imageUser']);
+        // Anything that is not a 404 may pass, so it is still retried.
+        $this->assertArrayNotHasKey('timeout', $merged);
+    }
 }

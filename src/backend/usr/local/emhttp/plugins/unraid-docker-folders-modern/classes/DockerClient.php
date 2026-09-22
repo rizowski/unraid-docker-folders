@@ -170,8 +170,12 @@ class DockerClient
             $imageRequests[$imageId] = "/images/" . rawurlencode($imageId) . "/json";
           }
         }
-        $imageResults = empty($imageRequests) ? [] : $this->requestMulti($imageRequests);
-        $fresh = self::mergeImageUsers($fresh, $needImage, $imageResults);
+        $imageStatus = [];
+        $imageResults = empty($imageRequests) ? [] : $this->requestMulti($imageRequests, $imageStatus);
+        $goneImages = array_keys(array_filter($imageStatus, function ($code) {
+          return $code === 404;
+        }));
+        $fresh = self::mergeImageUsers($fresh, $needImage, $imageResults, $goneImages);
       }
 
       foreach ($fresh as $id => $facts) {
@@ -207,17 +211,31 @@ class DockerClient
    * then stay on screen until the next reboot. Dropping it costs one more
    * inspect on the next list.
    *
+   * That retry only helps when the failure was transient. An image that
+   * Docker reports as gone (404), or a container with no image id, will
+   * never resolve, and dropping it meant one more inspect on every list,
+   * forever. Those are cached with imageUser set to the container's own
+   * user. That reads as "the image asks for this user", so the unknown answer
+   * raises no finding, which is what the dropped entry showed before.
+   *
    * @param array $fresh        id => facts, each already carrying imageUser ''
    * @param array $needImage    id => image ID, for the containers to resolve
    * @param array $imageResults image ID => /images/{id}/json payload, or absent
-   * @return array The facts map, minus any container with no image payload
+   * @param array $goneImages   image IDs that Docker answered 404 for
+   * @return array The facts map, minus any container whose image failed
+   *               for a reason that may pass
    */
-  public static function mergeImageUsers(array $fresh, array $needImage, array $imageResults)
+  public static function mergeImageUsers(array $fresh, array $needImage, array $imageResults, array $goneImages = [])
   {
+    $gone = array_flip($goneImages);
     foreach ($needImage as $id => $imageId) {
       $image = $imageId === '' ? null : ($imageResults[$imageId] ?? null);
       if (!is_array($image)) {
-        unset($fresh[$id]);
+        if ($imageId === '' || isset($gone[$imageId])) {
+          $fresh[$id]['imageUser'] = (string) ($fresh[$id]['user'] ?? '');
+        } else {
+          unset($fresh[$id]);
+        }
         continue;
       }
       $config = isset($image['Config']) && is_array($image['Config']) ? $image['Config'] : [];
@@ -722,10 +740,14 @@ class DockerClient
    * Execute multiple Docker API requests in parallel via curl_multi
    *
    * @param array $requests Associative array of ['key' => '/api/path', ...]
+   * @param array $status   Filled with ['key' => HTTP status, ...], 0 for a
+   *                        transport failure, so a caller can tell a 404 from
+   *                        a timeout
    * @return array Associative array of ['key' => decoded_json | null, ...]
    */
-  private function requestMulti($requests)
+  private function requestMulti($requests, &$status = [])
   {
+    $status = [];
     if (empty($requests)) {
       return [];
     }
@@ -760,6 +782,7 @@ class DockerClient
       $response = curl_multi_getcontent($ch);
       $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
       $error = curl_error($ch);
+      $status[$key] = $error ? 0 : (int) $httpCode;
 
       if ($error || $httpCode < 200 || $httpCode >= 300) {
         $results[$key] = null;
