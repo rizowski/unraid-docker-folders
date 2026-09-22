@@ -210,8 +210,9 @@ try {
 
     sendSSE('complete', ['message' => 'Pull complete', 'image' => $image]);
   } else {
-    logUpdate("PULL FAIL {$image}");
-    sendSSE('error', ['message' => 'Pull failed']);
+    $reason = $dockerClient->getLastError();
+    logUpdate("PULL FAIL {$image}" . ($reason !== '' ? ": {$reason}" : ''));
+    sendSSE('error', ['message' => 'Pull failed' . ($reason !== '' ? ": {$reason}" : '')]);
   }
 } catch (\Throwable $e) {
   logUpdate("PULL ERROR {$image}: " . $e->getMessage());

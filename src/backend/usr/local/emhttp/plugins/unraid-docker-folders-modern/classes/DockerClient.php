@@ -1566,8 +1566,14 @@ class DockerClient
     curl_setopt($ch, CURLOPT_HEADER, false);
     curl_setopt($ch, CURLOPT_TIMEOUT, 600); // 10 minute timeout
 
+    // Docker answers 200 as soon as the pull starts, then streams progress.
+    // A pull that fails after that, such as "manifest unknown", arrives as a
+    // line with an "error" key under the same 200. The status alone cannot
+    // report it.
+    $streamError = '';
+
     // Stream response chunks to the callback
-    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($onProgress) {
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($onProgress, &$streamError) {
       // Docker sends newline-delimited JSON
       $lines = explode("\n", $data);
       foreach ($lines as $line) {
@@ -1575,6 +1581,9 @@ class DockerClient
         if (empty($line)) continue;
         $decoded = json_decode($line, true);
         if ($decoded !== null) {
+          if (isset($decoded['error']) && $streamError === '') {
+            $streamError = (string) $decoded['error'];
+          }
           $onProgress($decoded);
         }
       }
@@ -1588,6 +1597,13 @@ class DockerClient
 
     if ($error) {
       error_log("Docker pull error: {$error}");
+      $this->lastError = $error;
+      return false;
+    }
+
+    if ($streamError !== '') {
+      error_log("Docker pull error: {$streamError}");
+      $this->lastError = $streamError;
       return false;
     }
 
