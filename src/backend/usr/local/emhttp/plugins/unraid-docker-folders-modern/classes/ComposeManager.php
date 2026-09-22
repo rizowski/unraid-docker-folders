@@ -1582,7 +1582,20 @@ class ComposeManager
 
     foreach ($stacks as $stack) {
       $projectName = $stack['project_name'];
+
+      // project_name comes from the com.docker.compose.project label of a
+      // running container, which anyone who can start a container can set.
+      // A value such as "../../etc" would put these root-owned writes outside
+      // the export directory.
+      if (safeProjectName($projectName) === null) {
+        $errors[] = "Skipped a stack with an unsafe project name";
+        continue;
+      }
       $projectDir = $exportDir . '/' . $projectName;
+      if (!pathIsWithin($projectDir, $exportDir)) {
+        $errors[] = "Skipped a stack with an unsafe project name";
+        continue;
+      }
 
       if (!is_dir($projectDir)) {
         if (!@mkdir($projectDir, 0755, true)) {
