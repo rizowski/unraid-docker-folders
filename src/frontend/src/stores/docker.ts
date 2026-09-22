@@ -30,6 +30,29 @@ export interface HostPortBinding {
   type: string; // 'tcp' | 'udp'
 }
 
+/**
+ * The host ports a container holds right now.
+ *
+ * `hostPorts` comes from the backend's inspect cache, which skips a binding
+ * with no fixed host port (`-p 80` or `-P`). Docker picks a new port for those
+ * on every start, and that cache never expires, so storing one would go stale.
+ * A running container reports the port Docker picked in the list response's
+ * `ports[].PublicPort`, so it is read live here instead.
+ */
+export function heldBindings(c: Container): HostPortBinding[] {
+  const held = [...(c.hostPorts ?? [])];
+  if (c.state !== 'running') return held;
+  for (const p of c.ports ?? []) {
+    if (!p.PublicPort) continue;
+    const type = (p.Type || 'tcp').toLowerCase();
+    // Docker lists a port once per address family, and a fixed binding is
+    // already in hostPorts. One entry per port and protocol is enough.
+    if (held.some((b) => b.hostPort === p.PublicPort && b.type === type)) continue;
+    held.push({ hostIp: p.IP ?? '', hostPort: p.PublicPort, containerPort: p.PrivatePort, type });
+  }
+  return held;
+}
+
 export interface ConflictDetail {
   hostPort: number;
   type: string;
@@ -146,7 +169,7 @@ export const useDockerStore = defineStore('docker', () => {
   const boundHostPorts = computed<Map<number, string>>(() => {
     const owners = new Map<number, string>();
     for (const c of containers.value) {
-      for (const b of c.hostPorts ?? []) {
+      for (const b of heldBindings(c)) {
         if (!owners.has(b.hostPort)) owners.set(b.hostPort, c.name);
       }
     }
@@ -162,7 +185,7 @@ export const useDockerStore = defineStore('docker', () => {
     const occupied: Array<{ port: number; type: string; ip: string; name: string }> = [];
     for (const c of containers.value) {
       if (c.state !== 'running') continue;
-      for (const b of c.hostPorts ?? []) {
+      for (const b of heldBindings(c)) {
         occupied.push({ port: b.hostPort, type: b.type, ip: b.hostIp, name: c.name });
       }
     }

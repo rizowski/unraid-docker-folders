@@ -103,4 +103,32 @@ describe('docker store – portConflicts', () => {
     const conflict = store.getPortConflict('stopped');
     expect(conflict!.conflicts[0].heldBy).toEqual(['holder']);
   });
+
+  it('counts a random host port that a running container holds', () => {
+    // "-p 3000" with no host port: hostPorts is empty, and the port Docker
+    // picked only shows in ports[].PublicPort, once per address family.
+    const store = useDockerStore();
+    const random = baseContainer({
+      ...makeContainer('random-port', 'running', []),
+      ports: [
+        { IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 49153, Type: 'tcp' },
+        { IP: '::', PrivatePort: 3000, PublicPort: 49153, Type: 'tcp' },
+      ],
+    });
+    store.containers = [random, makeContainer('fixed', 'exited', [tcp(49153)])];
+
+    expect(store.boundHostPorts.get(49153)).toBe('random-port');
+    expect(store.getPortConflict('fixed')!.conflicts[0].heldBy).toEqual(['random-port']);
+  });
+
+  it('ignores ports[] on a stopped container', () => {
+    const store = useDockerStore();
+    const stopped = baseContainer({
+      ...makeContainer('stopped', 'exited', []),
+      ports: [{ IP: '0.0.0.0', PrivatePort: 3000, PublicPort: 49153, Type: 'tcp' }],
+    });
+    store.containers = [stopped];
+
+    expect(store.boundHostPorts.has(49153)).toBe(false);
+  });
 });
