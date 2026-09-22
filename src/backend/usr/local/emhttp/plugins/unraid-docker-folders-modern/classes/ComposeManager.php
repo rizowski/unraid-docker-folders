@@ -330,22 +330,26 @@ class ComposeManager
   public function upsertStack($projectName, $workingDir, $composeFile)
   {
     $existing = $this->db->fetchOne(
-      'SELECT project_name FROM compose_stacks WHERE project_name = ?',
+      'SELECT project_name, working_dir, compose_file FROM compose_stacks WHERE project_name = ?',
       [$projectName]
     );
 
     $now = time();
 
     if ($existing) {
-      // Only update paths if they changed (don't overwrite user settings)
-      $updates = ['updated_at' => $now];
-      if ($workingDir) {
+      // Write only a path that changed. This runs on every container-list
+      // GET, so writing unconditionally bumped updated_at on every poll.
+      $updates = [];
+      if ($workingDir && $workingDir !== $existing['working_dir']) {
         $updates['working_dir'] = $workingDir;
       }
-      if ($composeFile) {
+      if ($composeFile && $composeFile !== $existing['compose_file']) {
         $updates['compose_file'] = $composeFile;
       }
-      $this->db->update('compose_stacks', $updates, 'project_name = ?', [$projectName]);
+      if (!empty($updates)) {
+        $updates['updated_at'] = $now;
+        $this->db->update('compose_stacks', $updates, 'project_name = ?', [$projectName]);
+      }
     } else {
       $this->db->insert('compose_stacks', [
         'project_name' => $projectName,

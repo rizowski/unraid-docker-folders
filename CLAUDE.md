@@ -447,10 +447,12 @@ Covered by `tests/php/PathSafetyTest.php`.
 
 Documented so they are not mistaken for intentional design:
 
-- **A GET handler mutates the database.** `containers.php:98-105` calls
-  `reconcileContainerIds()` and `syncComposeStacks()` on the list path, so it
-  writes to `container_folders`, `folders`, and `compose_stacks` with no CSRF
-  gate at any layer.
+- **A GET handler mutates the database.** The container-list path in
+  `containers.php` calls `reconcileContainerIds()` and `syncComposeStacks()`,
+  so it writes to `container_folders`, `folders`, and `compose_stacks` with no
+  CSRF gate at any layer. The writes happen only when something changed: an id
+  moved after a recreate, a new stack appeared, or a stack's paths changed.
+  `upsertStack()` no longer rewrites an unchanged row on every poll.
 - **No CORS, CSP, `X-Frame-Options`, or `X-Content-Type-Options` headers** are set
   anywhere. The `case 'OPTIONS'` branches are labelled "CORS preflight" but emit
   no `Access-Control-*` headers, so they are inert.
