@@ -12,6 +12,8 @@ require_once dirname(__DIR__) . '/include/config.php';
 
 class WebSocketPublisher
 {
+  const PUBLISH_PAUSED_FILE = '/tmp/publishPaused';
+
   /**
    * Publish an event to nchan
    *
@@ -21,6 +23,14 @@ class WebSocketPublisher
    */
   public static function publish($entity, $action, $data = null)
   {
+    // Unraid creates this file while it restarts nginx after nchan runs out
+    // of shared memory, and its own publisher (dynamix/include/publish.php)
+    // sends nothing while it exists. Sending anyway would hit a socket that
+    // is down on purpose and log one failure per change.
+    if (is_file(self::PUBLISH_PAUSED_FILE)) {
+      return;
+    }
+
     $event = json_encode([
       'type' => 'event',
       'entity' => $entity,
