@@ -419,7 +419,10 @@ Three rules that are easy to get wrong:
    collapse against on its own.
 2. **`pathIsWithin` fails closed on a weak base** — empty, relative, or `/`. Some
    bases (`working_dir`, a mount `Source`) are label-derived and attacker-influenced;
-   containment against `/` would pass for everything.
+   containment against `/` would pass for everything. It does **not** fail closed
+   on an allowed root itself. A backup destination of `/mnt` passes, and then
+   "inside the destination" is the whole array. Anything that deletes must also
+   check what the file is, as `BackupManager::isArchiveName()` does.
 3. **Never use `strpos($a, $b) === 0` for containment.** That was the original bug:
    `realpath()` never returns a trailing slash, so `/mnt/user/backups-evil` passed a
    `/mnt/user/backups` check.

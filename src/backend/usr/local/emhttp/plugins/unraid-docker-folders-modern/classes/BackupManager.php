@@ -19,6 +19,10 @@ class BackupManager
   // The first 16 bytes of every SQLite database file.
   const SQLITE_MAGIC = "SQLite format 3\0";
 
+  // The timestamp generateArchiveName() writes, date('Y-m-d_His'). Every rule
+  // that decides whether a file is one of our archives matches this shape.
+  const ARCHIVE_STAMP_PATTERN = '\d{4}-\d{2}-\d{2}_\d{6}';
+
   // Containers this process paused or stopped and has not restored yet.
   private static $pendingRestore = [];
   private static $shutdownRegistered = false;
@@ -242,18 +246,41 @@ class BackupManager
     $realDest = realpath($destination);
     $realFile = realpath($filePath);
 
-    // Only allow deleting files within the backup destination.
-    // pathIsWithin() anchors on a trailing separator; a bare strpos() prefix
-    // test would accept a sibling directory such as "<dest>-evil".
-    if (!$realFile || !$realDest || !pathIsWithin($realFile, $realDest)) {
+    if (!$realFile || !$realDest) {
       return false;
     }
 
-    if (file_exists($filePath) && is_file($filePath)) {
-      return unlink($filePath);
+    // Only an archive this plugin wrote, directly in the destination.
+    // Containment alone is not enough. The destination can be an allowed root
+    // itself, such as /mnt, or a broad one such as /mnt/user, and then "inside
+    // the destination" means every file on the array.
+    if (dirname($realFile) !== $realDest || !self::isArchiveName(basename($realFile))) {
+      return false;
     }
 
-    return false;
+    if (!is_file($realFile)) {
+      return false;
+    }
+
+    return unlink($realFile);
+  }
+
+  /**
+   * Is $basename shaped like a file generateArchiveName() writes?
+   *
+   * @param string $basename A file name with no directory part
+   * @return bool
+   */
+  public static function isArchiveName($basename)
+  {
+    if (!is_string($basename)) {
+      return false;
+    }
+
+    return preg_match(
+      '/^[A-Za-z0-9][A-Za-z0-9._-]*\.' . self::ARCHIVE_STAMP_PATTERN . '\.tar\.gz$/',
+      $basename
+    ) === 1;
   }
 
   private function resolveDestination($override)

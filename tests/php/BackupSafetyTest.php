@@ -160,4 +160,22 @@ final class BackupSafetyTest extends TestCase
         $this->assertSame('none', BackupManager::quiesceModeFor(['pause']));
         $this->assertSame('none', BackupManager::quiesceModeFor(''));
     }
+
+    // --- archive names ------------------------------------------------------
+
+    #[Test]
+    public function onlyAWrittenArchiveNameCountsAsAnArchive(): void
+    {
+        $this->assertTrue(BackupManager::isArchiveName('plex.2026-09-22_031500.tar.gz'));
+        $this->assertTrue(BackupManager::isArchiveName('blog.web.2026-09-22_031500.tar.gz'));
+
+        // deleteBackup() refuses anything else, so a destination of /mnt
+        // cannot turn it into a delete for any file on the array.
+        $this->assertFalse(BackupManager::isArchiveName('appdata.tar.gz'));
+        $this->assertFalse(BackupManager::isArchiveName('plex.2026-09-22_031500.tar'));
+        $this->assertFalse(BackupManager::isArchiveName('movie.mkv'));
+        $this->assertFalse(BackupManager::isArchiveName('.plex.2026-09-22_031500.tar.gz'));
+        $this->assertFalse(BackupManager::isArchiveName('../plex.2026-09-22_031500.tar.gz'));
+        $this->assertFalse(BackupManager::isArchiveName(null));
+    }
 }
