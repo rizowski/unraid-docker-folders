@@ -136,7 +136,7 @@ class DockerClient
     if (!empty($missing)) {
       $requests = [];
       foreach ($missing as $id) {
-        $requests[$id] = "/containers/{$id}/json";
+        $requests[$id] = "/containers/" . rawurlencode($id) . "/json";
       }
       $results = $this->requestMulti($requests);
 
@@ -167,7 +167,7 @@ class DockerClient
         $imageRequests = [];
         foreach (array_unique($needImage) as $imageId) {
           if ($imageId !== '') {
-            $imageRequests[$imageId] = "/images/{$imageId}/json";
+            $imageRequests[$imageId] = "/images/" . rawurlencode($imageId) . "/json";
           }
         }
         $imageResults = empty($imageRequests) ? [] : $this->requestMulti($imageRequests);
@@ -357,7 +357,7 @@ class DockerClient
    */
   public function inspectContainer($id)
   {
-    $response = $this->request('GET', "/containers/{$id}/json");
+    $response = $this->request('GET', "/containers/" . rawurlencode($id) . "/json");
 
     if (!$response) {
       return null;
@@ -381,7 +381,7 @@ class DockerClient
     if (!empty($info['State']['Paused'])) {
       return $this->unpauseContainer($id);
     }
-    $response = $this->request('POST', "/containers/{$id}/start");
+    $response = $this->request('POST', "/containers/" . rawurlencode($id) . "/start");
     return $response !== false;
   }
 
@@ -394,7 +394,7 @@ class DockerClient
    */
   public function stopContainer($id, $timeout = 10)
   {
-    $response = $this->request('POST', "/containers/{$id}/stop?t={$timeout}", null, $timeout + 5);
+    $response = $this->request('POST', "/containers/" . rawurlencode($id) . "/stop?t={$timeout}", null, $timeout + 5);
     return $response !== false;
   }
 
@@ -407,19 +407,19 @@ class DockerClient
    */
   public function restartContainer($id, $timeout = 10)
   {
-    $response = $this->request('POST', "/containers/{$id}/restart?t={$timeout}", null, $timeout + 5);
+    $response = $this->request('POST', "/containers/" . rawurlencode($id) . "/restart?t={$timeout}", null, $timeout + 5);
     return $response !== false;
   }
 
   public function pauseContainer($id)
   {
-    $response = $this->request('POST', "/containers/{$id}/pause");
+    $response = $this->request('POST', "/containers/" . rawurlencode($id) . "/pause");
     return $response !== false;
   }
 
   public function unpauseContainer($id)
   {
-    $response = $this->request('POST', "/containers/{$id}/unpause");
+    $response = $this->request('POST', "/containers/" . rawurlencode($id) . "/unpause");
     return $response !== false;
   }
 
@@ -433,7 +433,7 @@ class DockerClient
   public function removeContainer($id, $force = false)
   {
     $params = $force ? '?force=1' : '';
-    $response = $this->request('DELETE', "/containers/{$id}{$params}");
+    $response = $this->request('DELETE', "/containers/" . rawurlencode($id) . "{$params}");
     return $response !== false;
   }
 
@@ -443,7 +443,7 @@ class DockerClient
   public function removeImage($imageId, $force = false)
   {
     $params = $force ? '?force=1' : '';
-    $response = $this->request('DELETE', "/images/" . urlencode($imageId) . $params);
+    $response = $this->request('DELETE', "/images/" . rawurlencode($imageId) . $params);
     return $response !== false;
   }
 
@@ -458,7 +458,7 @@ class DockerClient
    */
   public function getContainerLogs($id, $tail = 100)
   {
-    $raw = $this->requestRaw('GET', "/containers/{$id}/logs?stdout=1&stderr=1&timestamps=1&tail={$tail}");
+    $raw = $this->requestRaw('GET', "/containers/" . rawurlencode($id) . "/logs?stdout=1&stderr=1&timestamps=1&tail={$tail}");
     if ($raw === false) {
       // A 400 from /logs specifically means the container's logging driver
       // can't be read back (--log-driver=none, syslog, …). This is the only
@@ -605,7 +605,7 @@ class DockerClient
    */
   public function getContainerStats($id)
   {
-    $response = $this->request('GET', "/containers/{$id}/stats?stream=0");
+    $response = $this->request('GET', "/containers/" . rawurlencode($id) . "/stats?stream=0");
     return $response ?: null;
   }
 
@@ -617,7 +617,7 @@ class DockerClient
    */
   public function getImageInfo($imageId)
   {
-    $response = $this->request('GET', "/images/{$imageId}/json");
+    $response = $this->request('GET', "/images/" . rawurlencode($imageId) . "/json");
     return $response ?: null;
   }
 
@@ -1037,7 +1037,7 @@ class DockerClient
     if (!empty($staleIds)) {
       $inspectRequests = [];
       foreach ($staleIds as $id) {
-        $inspectRequests[$id] = "/containers/{$id}/json";
+        $inspectRequests[$id] = "/containers/" . rawurlencode($id) . "/json";
       }
       $inspectResults = $this->requestMulti($inspectRequests);
 
@@ -1050,7 +1050,7 @@ class DockerClient
 
       $imageRequests = [];
       foreach (array_keys($imageMap) as $imageId) {
-        $imageRequests[$imageId] = "/images/{$imageId}/json";
+        $imageRequests[$imageId] = "/images/" . rawurlencode($imageId) . "/json";
       }
       $imageResults = $this->requestMulti($imageRequests);
 
@@ -1165,7 +1165,7 @@ class DockerClient
     // Phase 1: Fetch all container stats in parallel
     $statsRequests = [];
     foreach ($ids as $id) {
-      $statsRequests[$id] = "/containers/{$id}/stats?stream=0";
+      $statsRequests[$id] = "/containers/" . rawurlencode($id) . "/stats?stream=0";
     }
     $statsResults = $this->requestMulti($statsRequests);
 
@@ -1173,7 +1173,7 @@ class DockerClient
     $inspectRequests = [];
     foreach ($ids as $id) {
       if ($statsResults[$id] !== null) {
-        $inspectRequests[$id] = "/containers/{$id}/json";
+        $inspectRequests[$id] = "/containers/" . rawurlencode($id) . "/json";
       }
     }
     $inspectResults = $this->requestMulti($inspectRequests);
@@ -1190,7 +1190,7 @@ class DockerClient
 
     $imageRequests = [];
     foreach (array_keys($imageMap) as $imageId) {
-      $imageRequests[$imageId] = "/images/{$imageId}/json";
+      $imageRequests[$imageId] = "/images/" . rawurlencode($imageId) . "/json";
     }
     $imageResults = $this->requestMulti($imageRequests);
 
@@ -1335,7 +1335,7 @@ class DockerClient
    */
   public function inspectContainerRaw($id)
   {
-    return $this->request('GET', "/containers/{$id}/json") ?: null;
+    return $this->request('GET', "/containers/" . rawurlencode($id) . "/json") ?: null;
   }
 
   /**
@@ -1347,7 +1347,7 @@ class DockerClient
    */
   public function renameContainer($id, $newName)
   {
-    $response = $this->request('POST', "/containers/{$id}/rename?name=" . urlencode($newName));
+    $response = $this->request('POST', "/containers/" . rawurlencode($id) . "/rename?name=" . urlencode($newName));
     return $response !== false;
   }
 
@@ -1998,6 +1998,11 @@ class DockerClient
    * @param string $path API path
    * @param array|null $data Request body
    * @return mixed Response data or false on error
+   */
+  /**
+   * Every caller builds $path with rawurlencode() on each id or image segment.
+   * An id reaches here from $_GET['id'], and a "/" or "?" in it would select a
+   * different Docker endpoint.
    */
   private function request($method, $path, $data = null, $timeout = 5)
   {
