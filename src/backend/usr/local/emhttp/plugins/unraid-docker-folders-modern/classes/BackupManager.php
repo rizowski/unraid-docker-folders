@@ -203,14 +203,13 @@ class BackupManager
       }
     }
 
+    // The newest archive across the stack's services. end() of a glob gave
+    // the alphabetically last name, and names sort by service before stamp.
     $size = 0;
     $lastArchive = '';
-    $safeProject = sanitizeArchivePrefix($projectName);
-    $files = $safeProject === null
-      ? []
-      : glob(rtrim($destination, '/') . "/{$safeProject}.*.tar.gz");
+    $files = self::archivesFor($destination, $projectName, self::ARCHIVES_STACK);
     if ($files) {
-      $lastArchive = end($files);
+      $lastArchive = $files[0];
       $size = filesize($lastArchive);
     }
 
