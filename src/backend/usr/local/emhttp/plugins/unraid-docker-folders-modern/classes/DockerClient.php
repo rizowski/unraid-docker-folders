@@ -648,6 +648,13 @@ class DockerClient
    */
   public function getContainerLogSize($fullId)
   {
+    // A full container id is 64 hex characters. The callers fall back to the
+    // id from the request when Docker returns none, and that value goes into
+    // a filesystem path here, so anything else is refused.
+    if (!is_string($fullId) || !preg_match('/^[a-f0-9]{64}$/', $fullId)) {
+      return 0;
+    }
+
     $logPath = "/var/lib/docker/containers/{$fullId}/{$fullId}-json.log";
     if (file_exists($logPath)) {
       return (int) filesize($logPath);
