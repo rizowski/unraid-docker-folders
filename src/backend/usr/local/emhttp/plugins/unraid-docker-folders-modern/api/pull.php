@@ -135,8 +135,17 @@ try {
 
       $db = Database::getInstance();
       $db->query(
-        'INSERT OR REPLACE INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
-         VALUES (:image, :local, :remote, 0, :now, NULL)',
+        // An upsert that names only the columns a pull changes. INSERT OR
+        // REPLACE deleted the row first, so source_url and source_repo became
+        // NULL and the release-notes link was gone until the next full check.
+        'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
+         VALUES (:image, :local, :remote, 0, :now, NULL)
+         ON CONFLICT(image) DO UPDATE SET
+           local_digest = excluded.local_digest,
+           remote_digest = excluded.remote_digest,
+           update_available = 0,
+           checked_at = excluded.checked_at,
+           error = NULL',
         [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
       );
       logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
