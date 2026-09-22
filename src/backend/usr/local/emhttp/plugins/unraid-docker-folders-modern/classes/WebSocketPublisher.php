@@ -31,6 +31,8 @@ class WebSocketPublisher
 
     $ch = curl_init(NCHAN_PUB_URL);
     curl_setopt_array($ch, [
+      // nchan's publisher listens on a Unix socket. See NCHAN_SOCKET_PATH.
+      CURLOPT_UNIX_SOCKET_PATH => NCHAN_SOCKET_PATH,
       CURLOPT_POST => true,
       CURLOPT_POSTFIELDS => $event,
       CURLOPT_HTTPHEADER => ['Content-Type: application/json'],

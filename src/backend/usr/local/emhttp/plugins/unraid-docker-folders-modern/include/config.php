@@ -69,7 +69,20 @@ if (!defined('DOCKER_API_VERSION')) {
 }
 
 // nchan WebSocket
-define('NCHAN_PUB_URL', 'http://localhost:4433/pub/docker-modern');
+//
+// The publisher listens on a Unix socket, not on a TCP port. `conf.d/servers.conf`
+// sets `listen unix:/var/run/nginx.socket` for the `/pub/` locations, and nothing
+// listens on localhost:4433, which is what this constant used to say. Every
+// publish therefore failed and live updates fell back to the 30-second poll.
+//
+// `buffer_length` is required, not optional. The location sets
+// `nchan_message_buffer_length $arg_buffer_length`, so without the query
+// parameter the buffer length is empty and nchan answers 403 instead of 201.
+//
+// `/usr/local/emhttp/plugins/dynamix/include/publish.php` is Unraid's own
+// publisher and is where this shape comes from.
+define('NCHAN_SOCKET_PATH', '/var/run/nginx.socket');
+define('NCHAN_PUB_URL', 'http://localhost/pub/docker-modern?buffer_length=1');
 define('NCHAN_SUB_PATH', '/sub/docker-modern');
 
 // Error reporting (disable in production)

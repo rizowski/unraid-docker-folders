@@ -490,7 +490,7 @@ acceptable.
 
 **Architecture**:
 1. PHP API endpoints publish events to nchan after each successful mutation
-2. `WebSocketPublisher.php` POSTs JSON to `NCHAN_PUB_URL` (fire-and-forget, 2s timeout)
+2. `WebSocketPublisher.php` POSTs JSON to `NCHAN_PUB_URL` over the Unix socket `NCHAN_SOCKET_PATH` (fire-and-forget, 2s timeout)
 3. Frontend connects to `ws://<host>/sub/docker-modern` via `useWebSocket.ts` composable
 4. On event received, stores call `fetchContainers()` or `fetchFolders()` (full refetch, not patching)
 5. Exponential backoff reconnection (1s base, 30s max)
@@ -584,7 +584,7 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
 - `PLUGIN_NAME`: `unraid-docker-folders-modern`
 - `DB_PATH`: `/boot/config/plugins/unraid-docker-folders-modern/data.db`
 - `DOCKER_SOCKET`: `/var/run/docker.sock`
-- `NCHAN_PUB_URL`: `http://localhost:4433/pub/docker-modern`
+- `NCHAN_PUB_URL`: `http://localhost/pub/docker-modern?buffer_length=1`, sent over the Unix socket `NCHAN_SOCKET_PATH` (`/var/run/nginx.socket`). Nothing listens on port 4433.
 
 ### API Endpoints
 - `GET /api/containers.php` - List containers (includes ports, mounts, networkSettings)
