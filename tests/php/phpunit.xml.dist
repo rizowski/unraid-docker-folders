@@ -44,6 +44,9 @@
     <testsuite name="ComposeExec">
       <file>ComposeExecTest.php</file>
     </testsuite>
+    <testsuite name="ComposeServiceNames">
+      <file>ComposeServiceNamesTest.php</file>
+    </testsuite>
     <testsuite name="ContainerFacts">
       <file>ContainerFactsTest.php</file>
     </testsuite>

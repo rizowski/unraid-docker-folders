@@ -266,7 +266,9 @@ class ComposeManager
    */
   private function parseComposeServiceNames($stack)
   {
-    if (empty($stack['compose_file'])) return [];
+    // No early return on an empty compose_file. resolveComposeFilePath()
+    // falls back to the standard names in working_dir, and a stack known
+    // only by its directory has services too.
     $path = $this->resolveComposeFilePath($stack);
     if (!$path || !file_exists($path)) return [];
     $content = @file_get_contents($path);
