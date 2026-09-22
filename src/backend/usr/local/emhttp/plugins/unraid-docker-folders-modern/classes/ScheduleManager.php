@@ -360,6 +360,9 @@ class ScheduleManager
 
     $results = [];
     foreach ($due as $schedule) {
+      if (!$this->claimSlot($schedule, $now)) {
+        continue;
+      }
       $lateBy = $now - (int) $schedule['next_run_at'];
 
       if (self::shouldSkipMissedRun($schedule['action'], $lateBy, self::scheduleQuiesceMode($schedule))) {
@@ -371,6 +374,30 @@ class ScheduleManager
     }
 
     return $results;
+  }
+
+  /**
+   * Take this slot, or learn that another runner already took it.
+   *
+   * Moves next_run_at past the slot only if it still holds the value this
+   * runner read. The Unraid API plugin runs schedules too, and around a
+   * backend-mode switch or a restart both runners can find the same row due
+   * in the same minute. The flock in run-schedules.php only keeps PHP from
+   * racing itself, so without this compare-and-set both run the action.
+   * executeSchedule() sets next_run_at again when the run finishes.
+   *
+   * @param array $schedule The full schedules row, as read by the runner
+   * @param int $now The runner's clock for this pass
+   * @return bool True if this runner owns the slot
+   */
+  private function claimSlot(array $schedule, $now)
+  {
+    return $this->db->update(
+      'schedules',
+      ['next_run_at' => self::computeNextRun($schedule['cron_expression'], $now)],
+      'id = ? AND enabled = 1 AND next_run_at = ?',
+      [(int) $schedule['id'], (int) $schedule['next_run_at']]
+    ) === 1;
   }
 
   /**
