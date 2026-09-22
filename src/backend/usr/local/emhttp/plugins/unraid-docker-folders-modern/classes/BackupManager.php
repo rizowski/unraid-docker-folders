@@ -137,12 +137,18 @@ class BackupManager
 
     $results = [];
     $allSuccess = true;
+    $archived = 0;
 
-    foreach ($serviceConfigs as $config) {
+    // Every path that archives nothing is a failure, the same as in
+    // backupContainer(). Before, a malformed entry was skipped in silence, so
+    // a config where no entry was valid reported success.
+    foreach ((array) $serviceConfigs as $config) {
       $service = $config['service'] ?? null;
       $patterns = $config['patterns'] ?? [];
 
       if (!$service || empty($patterns)) {
+        $results[] = 'Skipped a service entry with no service name or no paths';
+        $allSuccess = false;
         continue;
       }
 
@@ -157,6 +163,7 @@ class BackupManager
 
       if (empty($hostPaths)) {
         $results[] = "No matching paths for service '{$service}'";
+        $allSuccess = false;
         continue;
       }
 
@@ -186,6 +193,14 @@ class BackupManager
 
       $this->pruneOldBackups($destination, $prefix, $retention);
       $results[] = "Backed up service '{$service}': {$archiveName}" . $job['note'];
+      $archived++;
+    }
+
+    if ($archived === 0) {
+      $allSuccess = false;
+      if (empty($results)) {
+        $results[] = "No services configured for stack '{$projectName}'";
+      }
     }
 
     $size = 0;
