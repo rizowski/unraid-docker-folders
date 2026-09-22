@@ -174,7 +174,7 @@ function handlePost($composeManager)
     }
 
     WebSocketPublisher::publish('compose', 'create', ['project' => $projectName]);
-    WebSocketPublisher::publish('folders', 'updated');
+    WebSocketPublisher::publish('folder', 'updated');
     jsonResponse($result);
   }
 

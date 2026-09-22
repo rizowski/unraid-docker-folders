@@ -139,7 +139,7 @@ function handleGet($dockerClient)
     // Auto-group Docker Compose stacks into folders
     $changed = $folderManager->syncComposeStacks($containers);
     if ($changed) {
-      WebSocketPublisher::publish('folders', 'updated');
+      WebSocketPublisher::publish('folder', 'updated');
     }
 
     // Security findings are derived in the frontend from fields already on each
@@ -307,7 +307,7 @@ function handlePost($dockerClient)
         require_once dirname(__DIR__) . '/classes/FolderManager.php';
         $folderManager = new FolderManager();
         $folderManager->removeContainerByName($containerName);
-        WebSocketPublisher::publish('folders', 'updated');
+        WebSocketPublisher::publish('folder', 'updated');
 
         // Optionally remove the image
         $data = getRequestData();
