@@ -418,6 +418,12 @@ function handlePost($composeManager)
 
   // Set description
   if ($action === 'set_description') {
+    // Every other per-stack write is refused while management is off, which
+    // is when compose.manager owns the stacks. This one was the exception.
+    if (!$status['management_enabled']) {
+      errorResponse('Compose management is disabled', 403);
+    }
+
     $data = getRequestData();
     if (!isset($data['description'])) {
       errorResponse('description is required', 400);
