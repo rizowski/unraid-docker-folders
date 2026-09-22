@@ -1539,6 +1539,35 @@ class DockerClient
   }
 
   /**
+   * Split an image reference into the fromImage and tag that /images/create
+   * takes.
+   *
+   * A digest pin ("foo@sha256:...") goes whole as fromImage with no tag.
+   * Otherwise the tag is the text after the last ":", but only when that
+   * colon comes after the last "/". In "registry:5000/foo/bar" the colon
+   * belongs to the registry port, and the tag defaults to "latest". Leaving
+   * the tag out for a name without a digest would pull every tag.
+   *
+   * @param string $reference An image reference
+   * @return array [fromImage, tag], where tag is null for a digest pin
+   */
+  public static function splitImageReference($reference)
+  {
+    $reference = (string) $reference;
+    if (strpos($reference, '@') !== false) {
+      return [$reference, null];
+    }
+
+    $colon = strrpos($reference, ':');
+    $slash = strrpos($reference, '/');
+    if ($colon !== false && ($slash === false || $colon > $slash)) {
+      return [substr($reference, 0, $colon), substr($reference, $colon + 1)];
+    }
+
+    return [$reference, 'latest'];
+  }
+
+  /**
    * Pull a Docker image with progress callback
    *
    * @param string $imageName Image to pull (e.g. linuxserver/plex:latest)
@@ -1551,12 +1580,10 @@ class DockerClient
       return false;
     }
 
-    // Split name:tag
-    $parts = explode(':', $imageName, 2);
-    $fromImage = $parts[0];
-    $tag = $parts[1] ?? 'latest';
+    list($fromImage, $tag) = self::splitImageReference($imageName);
 
-    $url = "http://localhost/{$this->apiVersion}/images/create?fromImage=" . urlencode($fromImage) . "&tag=" . urlencode($tag);
+    $url = "http://localhost/{$this->apiVersion}/images/create?fromImage=" . urlencode($fromImage)
+      . ($tag !== null ? "&tag=" . urlencode($tag) : '');
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, $this->socketPath);
