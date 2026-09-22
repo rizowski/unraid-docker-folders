@@ -311,10 +311,13 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
       continue;
     }
 
+    // Counted once, before the try. An exception after the count used to be
+    // counted again in the catch, so the image showed up twice in the total.
+    $checked++;
+
     // Wrap each image check in try/catch so one failure doesn't kill the loop
     try {
       $check = $dockerClient->checkImageUpdate($imageName, $imageId);
-      $checked++;
 
       // Suppress false positives: if we previously marked this image as
       // up-to-date (e.g. after a pull) and the remote digest hasn't changed,
@@ -374,7 +377,6 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     } catch (\Throwable $e) {
       $log('FATAL ' . $imageName . ': ' . $e->getMessage());
       $errors++;
-      $checked++;
       $results[$imageName] = imageCheckResult($imageName, ['error' => $e->getMessage()]);
     }
   }
