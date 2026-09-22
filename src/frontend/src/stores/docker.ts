@@ -266,7 +266,9 @@ export const useDockerStore = defineStore('docker', () => {
       const response = await apiFetch(`${API_BASE}/containers.php`);
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // The server says why when it can, for example "Cannot reach Docker".
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || `HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();

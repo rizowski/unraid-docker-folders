@@ -142,6 +142,14 @@ function handleGet($dockerClient)
     // List all containers
     $containers = $dockerClient->listContainers(true);
 
+    // listContainers() answers [] both for a server with no containers and for
+    // a request that failed. Only the failure sets lastError. Report it,
+    // instead of serving an empty list that looks like every container is
+    // gone, and stop before the reconcile and compose sync run on no data.
+    if (empty($containers) && $dockerClient->getLastError() !== '') {
+      errorResponse('Cannot reach Docker: ' . $dockerClient->getLastError(), 503);
+    }
+
     // Reconcile container IDs (handles container recreate/update)
     $folderManager = new FolderManager();
     $folderManager->reconcileContainerIds($containers);
