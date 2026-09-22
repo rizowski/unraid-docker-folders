@@ -1718,7 +1718,7 @@ class DockerClient
    * @param string $containerName Container name for template lookup (optional)
    * @return string Resolved tag or original reference
    */
-  private function resolveImageTag($imageRef, $containerName = '')
+  public function resolveImageTag($imageRef, $containerName = '')
   {
     if (!$imageRef || strpos($imageRef, 'sha256:') !== 0) {
       return $imageRef;

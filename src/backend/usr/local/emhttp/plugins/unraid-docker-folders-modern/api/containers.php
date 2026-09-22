@@ -110,6 +110,16 @@ function handleGet($dockerClient)
     // TCP_PORT_n variables, so the preview cannot describe ports without it.
     $driver = $dockerClient->getNetworkDriver((string)($inspect['HostConfig']['NetworkMode'] ?? ''));
 
+    // After an update-triggered recreate, Config.Image can be a sha256 digest.
+    // The Unraid template needs the tag a user would recognize, the same one
+    // the container list shows.
+    if (!empty($inspect['Config']['Image'])) {
+      $inspect['Config']['Image'] = $dockerClient->resolveImageTag(
+        $inspect['Config']['Image'],
+        ltrim((string)($inspect['Name'] ?? ''), '/')
+      );
+    }
+
     $result = AdoptBuilder::build($inspect, $image, $driver);
     $result['managed'] = $inspect['Config']['Labels']['net.unraid.docker.managed'] ?? null;
 
