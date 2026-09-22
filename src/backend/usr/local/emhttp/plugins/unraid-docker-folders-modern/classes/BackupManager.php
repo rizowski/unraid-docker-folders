@@ -228,26 +228,13 @@ class BackupManager
       return [];
     }
 
-    // $targetId reaches here straight from the request. Unsanitized it would be
-    // injected into a glob pattern, where both ../ and the glob metacharacters
-    // turn this listing into a directory oracle over the whole filesystem.
-    // Must match generateArchiveName's sanitizer, or this stops finding the
-    // archives that were actually written.
-    $prefix = sanitizeArchivePrefix($targetId);
-    if ($prefix === null) {
-      return [];
-    }
-
-    $pattern = rtrim($destination, '/') . '/' . $prefix . '.*.tar.gz';
-    $files = glob($pattern);
-
-    if (!$files) {
-      return [];
-    }
-
-    usort($files, function ($a, $b) {
-      return filemtime($b) - filemtime($a);
-    });
+    // $targetId reaches here straight from the request. archivesFor()
+    // sanitizes it and matches whole names only, so neither ../ nor a glob
+    // metacharacter in it can list anything else. A stack lists every one of
+    // its services. A container lists only its own archives, not those of a
+    // stack with the same name.
+    $scope = $targetType === 'stack' ? self::ARCHIVES_STACK : self::ARCHIVES_EXACT;
+    $files = self::archivesFor($destination, $targetId, $scope);
 
     $backups = [];
     foreach ($files as $file) {
