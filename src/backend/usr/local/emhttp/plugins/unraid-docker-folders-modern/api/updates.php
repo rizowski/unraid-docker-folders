@@ -112,6 +112,14 @@ function handlePost()
     }
   }
 
+  // Release the PHP session lock before the long part, as pull.php does. A
+  // check can run for minutes, and the lock would block every other request
+  // on this session, including the rest of the Unraid webgui. Nothing below
+  // reads $_SESSION.
+  if (session_status() === PHP_SESSION_ACTIVE) {
+    session_write_close();
+  }
+
   // Allow unlimited execution time — registry checks can take 15s each
   set_time_limit(0);
   ignore_user_abort(true);
