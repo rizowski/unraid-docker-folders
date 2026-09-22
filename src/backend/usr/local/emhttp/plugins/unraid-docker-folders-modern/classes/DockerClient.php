@@ -1424,6 +1424,21 @@ class DockerClient
     // Remove read-only HostConfig fields
     unset($createBody['HostConfig']['ContainerIDFile']);
 
+    // The same {} to [] problem for string maps. Docker refuses an array
+    // where it wants a map, so a container with no labels failed to recreate
+    // with "cannot unmarshal array into ... Config.Labels".
+    if (isset($createBody['Labels']) && $createBody['Labels'] === []) {
+      $createBody['Labels'] = (object) [];
+    }
+    foreach (['Sysctls', 'StorageOpt', 'Tmpfs', 'Annotations'] as $field) {
+      if (isset($createBody['HostConfig'][$field]) && $createBody['HostConfig'][$field] === []) {
+        $createBody['HostConfig'][$field] = (object) [];
+      }
+    }
+    if (isset($createBody['HostConfig']['LogConfig']['Config']) && $createBody['HostConfig']['LogConfig']['Config'] === []) {
+      $createBody['HostConfig']['LogConfig']['Config'] = (object) [];
+    }
+
     // Fix PortBindings: PHP json_decode turns {} into [] (empty array),
     // but Docker expects an object/map for PortBindings and each binding value.
     if (isset($createBody['HostConfig']['PortBindings'])) {
