@@ -13,6 +13,9 @@ class ScheduleManager
   // runner was not active when the schedule came due.
   const MISFIRE_GRACE_SECONDS = 300;
 
+  // One lock file per schedule, held for the whole of a run.
+  const RUN_LOCK_PATTERN = '/tmp/unraid-docker-schedule-%d.lock';
+
   private $db;
 
   public function __construct()
@@ -464,6 +467,35 @@ class ScheduleManager
       'action' => $schedule['action'],
     ];
 
+    // One run of a schedule at a time. The cron runner claims its slot
+    // first, but a manual "Run now" is not tied to a slot. A click in the
+    // minute the runner picks the schedule up ran the action twice at once.
+    $lock = @fopen(sprintf(self::RUN_LOCK_PATTERN, (int) $id), 'c');
+    if (!$lock || !flock($lock, LOCK_EX | LOCK_NB)) {
+      if ($lock) {
+        fclose($lock);
+      }
+      return [
+        'success' => false,
+        'schedule_id' => $id,
+        'status' => 'busy',
+        'message' => 'This schedule is already running',
+      ] + $about;
+    }
+
+    try {
+      return $this->runSchedule($schedule, $id, $about);
+    } finally {
+      flock($lock, LOCK_UN);
+      fclose($lock);
+    }
+  }
+
+  /**
+   * The body of executeSchedule(), run while it holds the schedule's lock.
+   */
+  private function runSchedule(array $schedule, $id, array $about)
+  {
     $startedAt = time();
     $historyId = $this->db->insert('schedule_history', [
       'schedule_id' => $id,

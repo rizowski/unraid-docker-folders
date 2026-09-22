@@ -109,4 +109,29 @@ final class ScheduleClaimTest extends TestCase
 
         $this->assertFalse($this->claim($schedule, $now));
     }
+
+    #[Test]
+    public function aScheduleThatIsAlreadyRunningIsNotRunAgain(): void
+    {
+        $schedule = $this->dueSchedule(1000);
+        $id = (int) $schedule['id'];
+
+        // Stand in for a run already in progress, from "Run now" or the runner.
+        $lock = fopen(sprintf(ScheduleManager::RUN_LOCK_PATTERN, $id), 'c');
+        $this->assertTrue(flock($lock, LOCK_EX | LOCK_NB));
+
+        try {
+            $result = $this->manager->executeSchedule($id);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
+
+        $this->assertFalse($result['success']);
+        $this->assertSame('busy', $result['status']);
+        $this->assertSame(0, (int) $this->db->fetchValue(
+            'SELECT COUNT(*) FROM schedule_history WHERE schedule_id = ?',
+            [$id]
+        ));
+    }
 }
