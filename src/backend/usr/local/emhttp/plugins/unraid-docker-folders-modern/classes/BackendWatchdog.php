@@ -22,6 +22,8 @@ class BackendWatchdog
   const STALE_GRACE = 300;
   /** After an install, the first heartbeat can take a minute or more. */
   const INSTALL_GRACE = 300;
+  /** An install or removal older than this is stuck, not running. */
+  const STUCK_RUN = 900;
   /** When the heartbeat first went stale. In RAM, so a reboot starts over. */
   const STALE_SINCE_FILE = '/var/run/' . PLUGIN_NAME . '.backend-stale';
 
@@ -90,11 +92,14 @@ class BackendWatchdog
     $alive = @filemtime(DFM_RUNNER_ALIVE_FILE);
     $in['heartbeatAge'] = $alive === false ? null : $now - $alive;
 
+    // A run still in progress holds the grace, but only while it is recent:
+    // a script killed mid-run leaves "installing" behind for good.
     $state = dfmReadJsonFile(DFM_API_PLUGIN_STATE_FILE);
-    if (is_array($state) && in_array($state['state'] ?? '', ['installing', 'removing'], true)) {
-      $in['sinceInstall'] = 0;
-    } elseif (is_array($state) && in_array($state['state'] ?? '', ['ready', 'installed'], true)) {
-      $in['sinceInstall'] = $now - (int) ($state['at'] ?? 0);
+    $stateAge = is_array($state) ? $now - (int) ($state['at'] ?? 0) : null;
+    if ($stateAge !== null && in_array($state['state'] ?? '', ['installing', 'removing'], true)) {
+      $in['sinceInstall'] = $stateAge < self::STUCK_RUN ? 0 : $stateAge;
+    } elseif ($stateAge !== null && in_array($state['state'] ?? '', ['ready', 'installed'], true)) {
+      $in['sinceInstall'] = $stateAge;
     } else {
       $in['sinceInstall'] = null;
     }

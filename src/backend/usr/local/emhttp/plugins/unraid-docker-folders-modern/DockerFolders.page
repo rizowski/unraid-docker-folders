@@ -941,7 +941,7 @@ if (file_exists($changelogPath)) {
         <div class="description">
           Which backend the Folders page and the dashboard tile use. <strong>PHP</strong> is this plugin's own API and is always available.
           <strong>GraphQL</strong> is highly experimental. Choosing it installs a backend into the Unraid API and restarts the API. It sends live updates for container changes, stats and logs, and it also runs schedules and update checks.
-          If the GraphQL backend stops answering for 5 minutes, the plugin switches back to PHP, and you get a notification. Choosing PHP removes the backend from the Unraid API again.
+          If the GraphQL backend stops answering for about 8 minutes while the Unraid API runs, the plugin switches back to PHP, and you get a notification. Choosing PHP removes the backend from the Unraid API again.
           The Folders page reads this setting when it loads, so reload it after a change.
           <strong>Default: PHP</strong>
           <?php if (!$graphqlSelectable && $graphqlUnavailableReason !== ''): ?>
@@ -1059,12 +1059,12 @@ var BACKEND_WARNING =
   '<div style="text-align:left">' +
   '<p>The GraphQL backend is <b>highly experimental</b>.</p>' +
   '<p>It installs code into the Unraid API. A fault in that code can take the whole Unraid GraphQL service offline, and the dashboard and other parts of the webgui use that service. The Unraid API restarts now, and is offline for about 15 seconds.</p>' +
-  '<p>If the backend stops answering for 5 minutes, the plugin switches back to PHP by itself and sends a notification.</p>' +
+  '<p>If the backend stops answering for about 8 minutes while the Unraid API runs, the plugin switches back to PHP by itself and sends a notification.</p>' +
   '<p>To go back by hand, in this order:</p>' +
   '<ol style="margin-left:20px">' +
   '<li>On this page, set the data source to PHP.</li>' +
   '<li>If the webgui does not respond, run this over SSH or on the local console:<br>' +
-  '<code>/usr/local/emhttp/plugins/unraid-docker-folders-modern/scripts/api-plugin.sh rollback</code></li>' +
+  '<code>bash /usr/local/emhttp/plugins/unraid-docker-folders-modern/scripts/api-plugin.sh rollback</code></li>' +
   '<li>If that fails, remove the Docker Folders plugin on the Plugins page, or run <code>plugin remove unraid-docker-folders-modern.plg</code>. The removal also takes the backend out of the Unraid API, and your folders are kept in a database backup.</li>' +
   '</ol></div>';
 
@@ -1078,6 +1078,9 @@ function changeBackendMode(select) {
     return;
   }
 
+  // Show the stored mode until the user confirms, so a dialog that closes
+  // without a callback leaves the select telling the truth.
+  select.value = previous;
   swal({
     title: 'Switch to the GraphQL backend?',
     text: BACKEND_WARNING,
@@ -1091,6 +1094,7 @@ function changeBackendMode(select) {
       select.value = previous;
       return;
     }
+    select.value = mode;
     startBackendSwitch(select, mode, 'Installing the GraphQL backend. The Unraid API restarts for about 15 seconds.');
   });
 }

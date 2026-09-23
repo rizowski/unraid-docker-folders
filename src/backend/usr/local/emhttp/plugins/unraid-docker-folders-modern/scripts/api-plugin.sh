@@ -49,8 +49,11 @@ probe_backend() {
     | grep -q '"path":\["dockerFoldersInfo"\]\|"dockerFoldersInfo":{'
 }
 
+# Every unraid-api call has a timeout. The watchdog removes the backend when
+# the API is wedged, which is when these are most likely to hang, and a hang
+# would hold the lock and leave the state at "removing".
 api_online() {
-  unraid-api status 2>/dev/null | grep -q 'online'
+  timeout 15 unraid-api status 2>/dev/null | grep -q 'online'
 }
 
 backend_in_api() {
@@ -60,8 +63,8 @@ backend_in_api() {
 # `unraid-api restart` does not reload a plugin; stop then start does.
 # Waits up to 60 s for the given check to pass.
 restart_api_until() {
-  unraid-api stop >> "${LOG_FILE}" 2>&1 || true
-  unraid-api start >> "${LOG_FILE}" 2>&1 || true
+  timeout 60 unraid-api stop >> "${LOG_FILE}" 2>&1 || true
+  timeout 60 unraid-api start >> "${LOG_FILE}" 2>&1 || true
   local waited=0
   while [ "${waited}" -lt 60 ]; do
     sleep 3
@@ -196,7 +199,7 @@ do_remove() {
 
   if [ "${was_installed}" = "1" ]; then
     echo "Removing the GraphQL backend..."
-    unraid-api plugins remove "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
+    timeout 120 unraid-api plugins remove "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
   fi
   if [ -f "${API_CONFIG}" ]; then
     node -e '
