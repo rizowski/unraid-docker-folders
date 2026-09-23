@@ -44,8 +44,9 @@ class ComposeManager
    */
   const STACK_COMMAND_TIMEOUT = 600;
 
-  // Set once "docker compose version" succeeds. See isComposeAvailable().
-  private $composeAvailable = false;
+  // The answer of "docker compose version", or null before the first ask.
+  // See isComposeAvailable().
+  private $composeAvailable = null;
 
   public function __construct()
   {
@@ -60,11 +61,11 @@ class ComposeManager
   public function isComposeAvailable()
   {
     // getAllStacks() calls stackPs() once per stack, and each asked again,
-    // which ran "docker compose version" once per stack on every list. Only a
-    // yes is kept: after installComposeBinary() a no can turn into a yes
-    // within the same request.
-    if ($this->composeAvailable) {
-      return true;
+    // which ran "docker compose version" once per stack on every list. Both
+    // answers are kept. installComposeBinary() clears the answer, because a
+    // no can turn into a yes within the same request.
+    if ($this->composeAvailable !== null) {
+      return $this->composeAvailable;
     }
 
     $output = [];
@@ -147,6 +148,7 @@ class ComposeManager
     }
 
     @chmod(self::COMPOSE_BINARY_PATH, 0755);
+    $this->composeAvailable = null;
 
     return ['success' => true, 'error' => null];
   }
