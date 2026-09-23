@@ -526,8 +526,27 @@ calls every backend through `src/frontend/src/backends/types.ts`, with
 `php.ts` and `graphql.ts` as the two implementations. If the plugin does not
 answer at boot, the frontend falls back to PHP and shows a notice.
 
-Both backends read and write the same `data.db`. `build.sh` packs the plugin,
-and the `.plg` installs it with `unraid-api plugins install`.
+Both backends read and write the same `data.db`. `build.sh` packs the plugin
+into the `.txz`. It is installed into the Unraid API only while `backend_mode`
+is `graphql`, because the Unraid API gives third-party plugins no stable
+contract and a fault there can take all of Unraid's GraphQL offline.
+
+- `scripts/api-plugin.sh` (`install [--activate]`, `remove`, `rollback`,
+  `status`) is the only code that installs or removes it. The `.plg`, the
+  settings switch and the watchdog all call it. It takes a lock and writes
+  its state to `/var/run/unraid-docker-folders-modern.api-plugin.state`.
+- Choosing GraphQL on the settings page shows a warning dialog, then runs
+  `install --activate` detached. The script stores `graphql` only after the
+  backend answers, and removes the backend again if it does not. Choosing PHP
+  stores `php` at once and runs `remove`. The plugin's own `settings.set`
+  refuses `backend_mode`.
+- `classes/BackendWatchdog.php` runs every minute from `run-schedules.php`.
+  When the plugin's heartbeat has been stale for 5 minutes and the API is
+  running, it switches to PHP and sends a notification. If GraphQL itself is
+  down while the backend is installed, it also removes the backend, which
+  restarts the API. It records why in `backend-rollback.json` on `/boot`.
+  `php scripts/backend-watchdog.php --dry-run` prints its decision.
+  The schedule-runner cron line is kept in GraphQL mode for this reason.
 
 Rules that are easy to break:
 

@@ -38,10 +38,12 @@ class CronManager
   }
 
   /**
-   * Write or drop the runner line to match the number of enabled schedules.
+   * Write or drop the runner line. It is wanted while any schedule is
+   * enabled, and in GraphQL mode, where the same runner also runs the
+   * backend watchdog (see BackendWatchdog).
    *
    * @return bool True when the line is now wanted, false when it was removed
-   *              because no schedule is enabled.
+   *              because no schedule is enabled and the mode is PHP.
    */
   public static function ensureSchedulerCron($db = null)
   {
@@ -51,8 +53,9 @@ class CronManager
     }
 
     $count = $db->fetchValue('SELECT COUNT(*) FROM schedules WHERE enabled = 1');
+    $mode = $db->fetchValue('SELECT value FROM settings WHERE key = ?', ['backend_mode']);
 
-    if ($count > 0) {
+    if ($count > 0 || $mode === 'graphql') {
       self::setLine('schedule-runner', '* * * * *', self::SCHEDULER_SCRIPT);
       return true;
     }
@@ -129,8 +132,8 @@ class CronManager
     }
     @touch(SCHEDULER_REPAIR_FILE);
 
-    // No enabled schedule means the line is correctly absent, and rewriting it
-    // would be wrong rather than helpful.
+    // No enabled schedule in PHP mode means the line is correctly absent, and
+    // rewriting it would be wrong rather than helpful.
     if (!self::ensureSchedulerCron()) {
       return ['installed' => false, 'repaired' => false];
     }

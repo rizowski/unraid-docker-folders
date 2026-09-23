@@ -16,6 +16,15 @@ set_time_limit(300);
 // its mtime, and the schedules screen warns when it goes stale.
 @touch(SCHEDULER_TICK_FILE);
 
+// Switch back to PHP if the GraphQL backend broke. Never let it stop the
+// schedules below.
+try {
+  require_once dirname(__DIR__) . '/classes/BackendWatchdog.php';
+  BackendWatchdog::run();
+} catch (Throwable $e) {
+  error_log('Backend watchdog error: ' . $e->getMessage());
+}
+
 if (!file_exists(DOCKER_SOCKET)) {
   exit(0);
 }

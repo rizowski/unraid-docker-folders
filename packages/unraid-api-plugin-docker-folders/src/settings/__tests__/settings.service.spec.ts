@@ -55,20 +55,12 @@ describe('SettingsService', () => {
         it('rejects a key PHP does not recognize either', () => {
             expect(() => service.set('csrf_token', 'x')).toThrow('Invalid settings key');
         });
-
-        it('accepts every key in the PHP allowlist, including backend_mode', () => {
-            expect(() => service.set('backend_mode', 'php')).not.toThrow();
-        });
     });
 
     describe('set — backend_mode', () => {
-        it('accepts the two known transports', () => {
-            expect(service.set('backend_mode', 'php').value).toBe('php');
-            expect(service.set('backend_mode', 'graphql').value).toBe('graphql');
-        });
-
-        it('rejects anything else, so the frontend is never left with no transport', () => {
-            expect(() => service.set('backend_mode', 'rest')).toThrow('Invalid backend mode');
+        it('is refused, because only PHP installs or removes this backend', () => {
+            expect(() => service.set('backend_mode', 'php')).toThrow('backend_mode is set on the PHP settings page');
+            expect(() => service.set('backend_mode', 'graphql')).toThrow(BadRequestException);
         });
     });
 

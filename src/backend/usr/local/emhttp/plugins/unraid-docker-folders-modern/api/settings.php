@@ -42,6 +42,16 @@ try {
 
 function handleGet()
 {
+  // Polled by the settings page while the GraphQL backend installs or is
+  // removed. Read only.
+  if (($_GET['action'] ?? '') === 'backend-status') {
+    jsonResponse([
+      'mode' => dfmBackendMode(),
+      'plugin' => dfmReadJsonFile(DFM_API_PLUGIN_STATE_FILE),
+      'rollback' => dfmReadJsonFile(DFM_BACKEND_ROLLBACK_MARKER),
+    ]);
+  }
+
   $db = Database::getInstance();
   $rows = $db->fetchAll('SELECT key, value FROM settings');
 
@@ -158,6 +168,23 @@ function handlePost()
     $value = (string) $n;
   }
 
+  // Switching backends installs or removes the GraphQL backend in the Unraid
+  // API, which restarts the API, so the script runs detached. GraphQL is not
+  // stored here: the script stores it once the backend answers, so a failed
+  // install leaves the page on PHP. PHP is stored at once, before the removal.
+  if ($key === 'backend_mode') {
+    // started_at lets the page ignore a state file from an earlier run.
+    $startedAt = time();
+    if ($value === 'graphql') {
+      @unlink(DFM_BACKEND_ROLLBACK_MARKER);
+      dfmLaunchApiPlugin('install');
+      jsonResponse(['success' => true, 'key' => $key, 'value' => dfmBackendMode(), 'pending' => 'install', 'started_at' => $startedAt]);
+    }
+    dfmWriteBackendMode($db, 'php');
+    dfmLaunchApiPlugin('remove');
+    jsonResponse(['success' => true, 'key' => $key, 'value' => 'php', 'pending' => 'remove', 'started_at' => $startedAt]);
+  }
+
   // Upsert: insert or update
   $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', [$key]);
 
@@ -165,14 +192,6 @@ function handlePost()
     $db->update('settings', ['value' => $value, 'updated_at' => $now], 'key = ?', [$key]);
   } else {
     $db->insert('settings', ['key' => $key, 'value' => $value, 'updated_at' => $now]);
-  }
-
-  // Heal the schedule-runner cron line on every backend switch. The plugin
-  // never writes root's crontab, so schedules created in GraphQL mode do not
-  // add the line PHP needs; without this, switching back to PHP, or PHP
-  // taking over while the API is down, would leave nothing running them.
-  if ($key === 'backend_mode') {
-    CronManager::ensureSchedulerCron($db);
   }
 
   // When update_check_schedule changes, update or remove the cron file

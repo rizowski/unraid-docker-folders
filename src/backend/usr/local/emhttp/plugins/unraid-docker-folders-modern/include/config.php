@@ -829,9 +829,72 @@ function dfmBackendMode()
 }
 
 /**
+ * Store backend_mode, then heal the schedule-runner cron line. The plugin
+ * never writes root's crontab, so schedules created in GraphQL mode do not
+ * add the line PHP needs; without this, switching back to PHP, or PHP taking
+ * over while the API is down, would leave nothing running them.
+ *
+ * @param Database $db
+ */
+function dfmWriteBackendMode($db, $mode)
+{
+  $mode = dfmNormalizeBackendMode($mode);
+  $now = time();
+  if ($db->fetchOne('SELECT key FROM settings WHERE key = ?', ['backend_mode'])) {
+    $db->query('UPDATE settings SET value = ?, updated_at = ? WHERE key = ?', [$mode, $now, 'backend_mode']);
+  } else {
+    $db->query('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)', ['backend_mode', $mode, $now]);
+  }
+  require_once PLUGIN_DIR . '/classes/CronManager.php';
+  CronManager::ensureSchedulerCron($db);
+}
+
+/**
+ * scripts/api-plugin.sh installs and removes the GraphQL backend. Both take
+ * the Unraid API down for a restart, so web requests start it detached and
+ * poll DFM_API_PLUGIN_STATE_FILE instead of waiting.
+ */
+define('DFM_API_PLUGIN_SCRIPT', PLUGIN_DIR . '/scripts/api-plugin.sh');
+define('DFM_API_PLUGIN_STATE_FILE', '/var/run/' . PLUGIN_NAME . '.api-plugin.state');
+// Written by the watchdog when it switches back to PHP. On /boot so the
+// reason survives a reboot, and so a rollback that restarted the API cannot
+// repeat until the user picks GraphQL again, which deletes it.
+define('DFM_BACKEND_ROLLBACK_MARKER', CONFIG_DIR . '/backend-rollback.json');
+
+/** Start `api-plugin.sh install --activate` or `remove`, detached. */
+function dfmLaunchApiPlugin($verb)
+{
+  $args = [
+    'install' => ['install', '--activate'],
+    'remove' => ['remove'],
+  ][$verb] ?? null;
+  if ($args === null) {
+    return false;
+  }
+  $cmd = 'setsid nohup /bin/bash ' . escapeshellarg(DFM_API_PLUGIN_SCRIPT);
+  foreach ($args as $arg) {
+    $cmd .= ' ' . escapeshellarg($arg);
+  }
+  exec($cmd . ' </dev/null >/dev/null 2>&1 &');
+  return true;
+}
+
+/** Decode a small JSON file this plugin wrote, or null. */
+function dfmReadJsonFile($path)
+{
+  $raw = @file_get_contents($path);
+  if ($raw === false) {
+    return null;
+  }
+  $data = json_decode($raw, true);
+  return is_array($data) ? $data : null;
+}
+
+/**
  * Whether the Unraid API plugin that serves the GraphQL backend is usable.
  *
- * Returns 'ready', or a reason it is not. The settings page uses this to say
+ * Returns 'ready', or a reason it is not: 'no-api', 'not-installed',
+ * 'load-failed' or 'offline'. The settings page uses this to say
  * why the GraphQL option is unavailable instead of offering a switch that
  * would only fall back.
  *
@@ -871,11 +934,27 @@ function dfmGraphqlPluginState()
   if ($failed || !is_string($body)) {
     return 'no-api';
   }
-  if (strpos($body, 'GRAPHQL_VALIDATION_FAILED') !== false) {
-    return dfmGraphqlPluginInstalled() ? 'load-failed' : 'not-installed';
-  }
+  return dfmClassifyGraphqlProbe($body, 'dfmGraphqlPluginInstalled');
+}
 
-  return 'ready';
+/**
+ * Read the probe's answer. A positive match on the field: an unauthenticated
+ * answer names it in its error path. A missing field fails validation. Any
+ * other answer, such as "Graphql is offline", means the API process runs but
+ * its GraphQL service does not work, which the watchdog must tell apart from
+ * a working backend.
+ *
+ * @param callable $installed Only called for a missing field.
+ */
+function dfmClassifyGraphqlProbe($body, callable $installed)
+{
+  if (preg_match('/"path":\["dockerFoldersInfo"\]|"dockerFoldersInfo":\{/', $body)) {
+    return 'ready';
+  }
+  if (strpos($body, 'GRAPHQL_VALIDATION_FAILED') !== false) {
+    return $installed() ? 'load-failed' : 'not-installed';
+  }
+  return 'offline';
 }
 
 /**

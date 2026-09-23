@@ -5,7 +5,7 @@ import { SORT_MODES } from '../folders/folder.model.js';
 import { normalizePath, pathIsWithinAny } from '../paths/paths.js';
 import { detectServerTimezone } from '../util/timezone.js';
 import { nowSeconds } from '../util/time.js';
-import { BACKEND_MODES, DockerFoldersSetting, isAllowedSettingKey } from './settings.model.js';
+import { DockerFoldersSetting, isAllowedSettingKey } from './settings.model.js';
 
 /**
  * `settings.value` is a schemaless TEXT column, and `settings.php` caps a
@@ -88,21 +88,22 @@ export class SettingsService {
 
     /**
      * Validate and upsert one setting, in the same order `handlePost()` does:
-     * allowlist, then the two fixed-vocabulary keys, then length, then path
+     * allowlist, then the fixed-vocabulary key, then length, then path
      * containment, then the `update_concurrency` clamp. Order matters only in
      * that an earlier check must not let a later one see a value it would
      * mishandle (e.g. the length cap runs before a path is normalized, so a
      * 10001-character path is rejected for its length, not resolved first).
      */
     set(key: string, value: string): DockerFoldersSetting {
-        if (!isAllowedSettingKey(key)) {
-            throw new BadRequestException('Invalid settings key');
+        // Switching backends installs or removes this plugin inside the
+        // Unraid API, which only PHP's settings.php can do. See
+        // scripts/api-plugin.sh.
+        if (key === 'backend_mode') {
+            throw new BadRequestException('backend_mode is set on the PHP settings page');
         }
 
-        // Anything other than the two known transports would leave the
-        // frontend with no backend to talk to, so reject rather than store it.
-        if (key === 'backend_mode' && !(BACKEND_MODES as readonly string[]).includes(value)) {
-            throw new BadRequestException('Invalid backend mode');
+        if (!isAllowedSettingKey(key)) {
+            throw new BadRequestException('Invalid settings key');
         }
 
         if (key === 'sort_mode' && !(SORT_MODES as readonly string[]).includes(value)) {

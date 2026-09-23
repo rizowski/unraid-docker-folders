@@ -42,13 +42,6 @@ export class DockerFoldersSettingInput {
 }
 
 /**
- * Which backend the Vue app should talk to. Matches `BACKEND_MODES` in
- * `include/config.php`. Kept here, not in `folder.model.ts`, because the
- * setting itself is generic plugin config, not folder-shaped.
- */
-export const BACKEND_MODES = ['php', 'graphql'] as const;
-
-/**
  * The full key allowlist from `settings.php`'s `handlePost()`, in the same
  * order. A key outside this list is rejected, not silently ignored — keep
  * this list byte-for-byte in sync with the PHP one, including entries (like
@@ -77,7 +70,6 @@ export const ALLOWED_SETTING_KEYS = [
     'default_retention_count',
     'sort_mode',
     'sort_folders',
-    'backend_mode',
 ] as const;
 
 export type AllowedSettingKey = (typeof ALLOWED_SETTING_KEYS)[number];
