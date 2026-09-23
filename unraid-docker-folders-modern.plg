@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.20-dev8">
-<!ENTITY md5 "2709818b13c5fbb0bc2194d0b94a134e">
+<!ENTITY version "2026.09.23-dev1">
+<!ENTITY md5 "504022f4a9224f028a5fee28e4a3a970">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -133,6 +133,62 @@
 
 
 
+
+###2026.09.23-dev1
+- fix(backups): check deleteBackup() containment with pathIsWithin() again
+- fix(schedules): report a lock file that cannot be opened as a failure
+- fix(compose): recheck every stack before an import rollback deletes files
+- fix(compose): do not roll back a file the import did not create
+- fix(compose): check project names with one shared rule
+- docs(docker): merge the two docblocks on request()
+- fix(backups): report the archive this stack backup actually wrote
+- fix(updates): decode whole lines of a pull stream and report every failure
+- fix(compose): apply the 128-character name limit in compose.php too
+- fix(compose): import only stacks the API can address, and keep a racing import's files
+- perf(compose): cache a missing docker compose too
+- fix(compose): stop execCommand spinning once its pipes close
+- fix(compose): give up, down, stop and pull 600 seconds
+- docs(docker): name the one path request() gets unencoded
+- fix(api): read "false" as false in request flags
+- refactor(updates): stop writing the unused release_notes.etag
+- fix(updates): keep autolink URLs in release-note summaries
+- refactor(compose): drop snapshotVersion's unused $sourcePath
+- fix(compose): copy imported files outside the database transaction
+- fix(compose): check the project name the same way in both endpoints
+- fix(compose): keep exporting stacks whose names contain a dot
+- fix(compose): refuse set_description while management is off
+- fix(compose): list services for a stack that has no compose_file set
+- perf(compose): check for docker compose once per request
+- fix(compose): enforce execCommand's timeout and read both pipes together
+- fix(ports): count random host ports in conflict detection
+- docs(claude): describe how PHP actually runs here
+- fix(updates): count each checked image once
+- fix(compose): update a stack row only when its paths change
+- fix(docker): stop inspecting a container whose image is gone
+- fix(websocket): return whether a publish succeeded
+- fix(websocket): send nothing while Unraid pauses publishing
+- fix(stats): accept only a full container id in getContainerLogSize
+- fix(docker): URL-encode every id in a Docker socket path
+- fix(schedules): run one schedule at most once at a time
+- fix(updates): release the session lock during a manual check
+- fix(containers): report a Docker failure instead of an empty list
+- fix(updates): split an image reference with a registry port or digest
+- fix(updates): keep the release-notes link after a pull
+- fix(adopt): write the image tag, not a digest, into the template
+- fix(websocket): publish folder refreshes as entity "folder"
+- fix(compose): refuse an unsafe project name in exportConfigs
+- fix(updates): fail a pull when Docker streams an error
+- test(backups): pin what deleteBackup may delete
+- fix(backups): list only the target's own archives
+- fix(backups): report the newest archive of a stack backup
+- fix(backups): fail a stack backup that archived nothing
+- fix(backups): report a failed restart when the archive also fails
+- fix(backups): remove the partial archive when tar fails
+- fix(backups): prune only the archives the target wrote
+- fix(backups): delete only an archive the plugin wrote
+- fix(schedules): claim each due slot, so two runners cannot both run it
+- fix(updates): recreate a container that has no labels
+- fix(websocket): publish to nchan over the Unix socket
 ###2026.09.20-dev8
 - fix(schedules): read the right crontab spool and repair the runner itself
 ###2026.09.20-dev7
