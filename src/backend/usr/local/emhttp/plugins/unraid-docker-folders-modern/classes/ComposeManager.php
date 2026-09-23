@@ -1659,8 +1659,10 @@ class ComposeManager
       // project_name comes from the com.docker.compose.project label of a
       // running container, which anyone who can start a container can set.
       // A value such as "../../etc" would put these root-owned writes outside
-      // the export directory.
-      if (safeProjectName($projectName) === null) {
+      // the export directory. safePathComponent() and not safeProjectName():
+      // a stack imported from compose.manager keeps its directory name, which
+      // can contain a dot.
+      if (safePathComponent($projectName) === null) {
         $errors[] = "Skipped a stack with an unsafe project name";
         continue;
       }
