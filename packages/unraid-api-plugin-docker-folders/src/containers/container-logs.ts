@@ -18,6 +18,8 @@
  * one whole buffer.
  */
 
+import { formatInTimeZone } from '../util/timezone.js';
+
 /** PHP clamps `tail` to this range and defaults to 50. `containers.php:63`. */
 const MIN_TAIL = 1;
 const MAX_TAIL = 500;
@@ -88,7 +90,10 @@ const OWN_TIMESTAMP_PREFIX =
  * sequences terminated by BEL or ST (ESC \). */
 const ESCAPE_SEQUENCE_RE = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
 
-/** Simplify Docker's RFC3339Nano timestamps to YYYY-MM-DD HH:MM:SS. */
+/** Docker's own per-line stamp, always UTC, at the start of a line. */
+const DOCKER_STAMP_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.\d+Z/;
+
+/** Simplify any other RFC3339Nano UTC timestamps to YYYY-MM-DD HH:MM:SS. */
 const TIMESTAMP_SIMPLIFY_RE = /(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\.\d+Z/g;
 
 // A bare CR rewrites the current line in a terminal, so keep only what a
@@ -129,15 +134,19 @@ const CR_REWRITE_RE = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} )?[^\n]*\r/gm;
  * "replace every `\r\n` with `\n`" and a per-line "drop a trailing `\r`" are
  * the same operation.
  */
-function formatOneLine(rawLine: string): string {
+function formatOneLine(rawLine: string, timeZone: string): string {
     const withoutTrailingCr = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
     let line = withoutTrailingCr.replace(ESCAPE_SEQUENCE_RE, '');
+    // Docker stamps in UTC. Show it in the server's zone, as PHP does, so it
+    // reads in order beside lines whose own local timestamp replaces it.
+    line = line.replace(DOCKER_STAMP_RE, (_match, stamp: string) => formatInTimeZone(new Date(`${stamp}Z`), timeZone));
     line = line.replace(TIMESTAMP_SIMPLIFY_RE, '$1 $2');
     line = line.replace(CR_REWRITE_RE, '$1');
     return OWN_TIMESTAMP_PREFIX.test(line) ? line.slice(TIMESTAMP_PREFIX_LENGTH) : line;
 }
 
-export function formatLogStream(raw: Buffer): string {
+/** `timeZone` is the zone Docker's line stamps are shown in, `detectServerTimezone()` in production. */
+export function formatLogStream(raw: Buffer, timeZone = 'UTC'): string {
     const demuxed = looksMultiplexed(raw) ? demuxLogStream(raw) : raw;
     const text = demuxed.toString('utf8').replace(/\n+$/, '');
 
@@ -145,7 +154,7 @@ export function formatLogStream(raw: Buffer): string {
         return '';
     }
 
-    const lines = text.split('\n').map(formatOneLine);
+    const lines = text.split('\n').map((line) => formatOneLine(line, timeZone));
     return lines.reverse().join('\n');
 }
 
@@ -192,6 +201,9 @@ export function formatLogStream(raw: Buffer): string {
  * synthesize one either.
  */
 export class LogStreamDecoder {
+    /** `timeZone` is the zone Docker's line stamps are shown in, as in `formatLogStream`. */
+    constructor(private readonly timeZone = 'UTC') {}
+
     /** `null` until the first 8+ bytes decide multiplexed vs. raw framing. */
     private multiplexed: boolean | null = null;
     /** Bytes seen before there were enough of them (8) to decide framing. */
@@ -249,7 +261,7 @@ export class LogStreamDecoder {
 
         while (newlineIndex !== -1) {
             const rawLine = this.lineBuf.subarray(start, newlineIndex).toString('utf8');
-            lines.push(formatOneLine(rawLine));
+            lines.push(formatOneLine(rawLine, this.timeZone));
             start = newlineIndex + 1;
             newlineIndex = this.lineBuf.indexOf(0x0a, start);
         }

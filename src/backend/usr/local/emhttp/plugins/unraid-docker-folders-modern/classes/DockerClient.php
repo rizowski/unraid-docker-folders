@@ -521,7 +521,21 @@ class DockerClient
       $output
     );
 
-    // Simplify Docker RFC3339Nano timestamps to YYYY-MM-DD HH:MM:SS
+    // Docker stamps each line in UTC. Show that stamp in the server's own time
+    // zone, the default config.php sets, so it reads in order beside the lines
+    // below whose own local timestamp replaces it.
+    $zone = new DateTimeZone(date_default_timezone_get());
+    $utc = new DateTimeZone('UTC');
+    $output = preg_replace_callback(
+      '/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\.\d+Z/m',
+      function ($m) use ($zone, $utc) {
+        $stamp = new DateTime($m[1] . ' ' . $m[2], $utc);
+        return $stamp->setTimezone($zone)->format('Y-m-d H:i:s');
+      },
+      $output
+    );
+
+    // Simplify any other Docker RFC3339Nano timestamps to YYYY-MM-DD HH:MM:SS
     $output = preg_replace(
       '/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})\.\d+Z/',
       '$1 $2',

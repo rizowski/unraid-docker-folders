@@ -1,6 +1,13 @@
 import { PassThrough } from 'node:stream';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// The fixtures are UTC. Pin the server zone, or the run would take this
+// machine's /etc/localtime.
+vi.mock('../../util/timezone.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../util/timezone.js')>()),
+    detectServerTimezone: () => 'UTC',
+}));
 
 import { ContainerLogsService, type ContainerLogsResult } from '../container-logs.service.js';
 import type {

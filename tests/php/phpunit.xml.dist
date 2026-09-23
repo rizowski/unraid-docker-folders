@@ -11,6 +11,7 @@
     <testsuite name="DockerClientStats">
       <file>DbCopyScriptTest.php</file>
       <file>DockerClientStatsTest.php</file>
+      <file>DockerClientLogsTest.php</file>
     </testsuite>
     <testsuite name="ImageReference">
       <file>ImageReferenceTest.php</file>

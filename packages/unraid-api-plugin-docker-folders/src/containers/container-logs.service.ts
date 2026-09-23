@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 
 import { LogStreamDecoder, clampTail, formatLogStream } from './container-logs.js';
+import { detectServerTimezone } from '../util/timezone.js';
 import { DOCKER_CLIENT_TOKEN, type DockerFoldersExtraDockerClient } from './extras-docker-client.js';
 
 /**
@@ -69,7 +70,7 @@ export class ContainerLogsService {
             return { logs: '', error: false, message: null };
         }
 
-        return { logs: formatLogStream(raw), error: false, message: null };
+        return { logs: formatLogStream(raw, detectServerTimezone()), error: false, message: null };
     }
 
     /**
@@ -120,7 +121,7 @@ export class ContainerLogsService {
             let unsubscribed = false;
             let stream: NodeJS.ReadableStream | null = null;
             let timer: ReturnType<typeof setTimeout> | null = null;
-            const decoder = new LogStreamDecoder();
+            const decoder = new LogStreamDecoder(detectServerTimezone());
             let pendingLines: string[] = [];
             let sentFirst = false;
 

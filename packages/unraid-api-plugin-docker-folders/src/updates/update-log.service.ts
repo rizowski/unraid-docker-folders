@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { appendFileSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 
-import { detectServerTimezone } from '../util/timezone.js';
+import { detectServerTimezone, formatInTimeZone } from '../util/timezone.js';
 
 /**
  * Appends timestamped lines to `update-check.log`, ported from `logUpdate()`
@@ -39,7 +39,7 @@ export class UpdateLogService {
     ) {}
 
     log(message: string): void {
-        const line = `[${formatTimestamp(new Date(), detectServerTimezone())}] ${message}\n`;
+        const line = `[${formatInTimeZone(new Date(), detectServerTimezone())}] ${message}\n`;
         try {
             // The 'a' flag opens with O_APPEND, so the write itself — like
             // PHP's FILE_APPEND — is atomic against another writer's append.
@@ -90,20 +90,4 @@ export class UpdateLogService {
             this.logger.warn(`Could not truncate ${this.path}: ${String(error)}`);
         }
     }
-}
-
-/** `date('Y-m-d H:i:s')` after PHP's `date_default_timezone_set(detectServerTimezone())`. */
-function formatTimestamp(date: Date, timeZone: string): string {
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hourCycle: 'h23',
-    }).formatToParts(date);
-    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
-    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
 }

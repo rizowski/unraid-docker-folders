@@ -98,3 +98,30 @@ function isValidTimeZone(zone: string): boolean {
         return false;
     }
 }
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * `date('Y-m-d H:i:s')` in `timeZone`, the way PHP prints a time after
+ * `date_default_timezone_set(detectServerTimezone())`. One formatter per zone
+ * is kept, because a log read formats up to 500 lines.
+ */
+export function formatInTimeZone(date: Date, timeZone: string): string {
+    let formatter = formatters.get(timeZone);
+    if (!formatter) {
+        formatter = new Intl.DateTimeFormat('en-US', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hourCycle: 'h23',
+        });
+        formatters.set(timeZone, formatter);
+    }
+    const parts = formatter.formatToParts(date);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00';
+    return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+}

@@ -167,6 +167,41 @@ describe('formatLogStream', () => {
     });
 });
 
+describe('Docker line stamps in the server zone', () => {
+    // Docker stamps in UTC. A line with its own local timestamp loses Docker's
+    // stamp, so Docker's must be local too, or the pane jumps between clocks.
+    const raw = Buffer.from(
+        [
+            '2026-09-09T05:29:29.100000000Z [info] Attempting to start Privoxy...',
+            '2026-09-09T05:29:30.200000000Z 2026-09-08 23:29:30,822 DEBG watchdog output',
+            '2026-09-09T05:29:30.300000000Z [info] Privoxy process started',
+            '',
+        ].join('\n'),
+    );
+
+    it('shows Docker stamps in the given zone, newest first', () => {
+        expect(formatLogStream(raw, 'America/Denver').split('\n')).toEqual([
+            '2026-09-08 23:29:30 [info] Privoxy process started',
+            '2026-09-08 23:29:30,822 DEBG watchdog output',
+            '2026-09-08 23:29:29 [info] Attempting to start Privoxy...',
+        ]);
+    });
+
+    it('keeps UTC by default', () => {
+        expect(formatLogStream(raw).split('\n')[2]).toBe('2026-09-09 05:29:29 [info] Attempting to start Privoxy...');
+    });
+
+    it('converts only the stamp at the start of the line', () => {
+        const line = Buffer.from('2026-09-09T05:29:29.1Z build 2026-09-09T05:00:00.5Z\n');
+        expect(formatLogStream(line, 'America/Denver')).toBe('2026-09-08 23:29:29 build 2026-09-09 05:00:00');
+    });
+
+    it('does the same in the follow decoder', () => {
+        const decoder = new LogStreamDecoder('America/Denver');
+        expect(decoder.push(Buffer.from('2026-09-09T05:29:29.1Z hello\n'))).toEqual(['2026-09-08 23:29:29 hello']);
+    });
+});
+
 describe('LogStreamDecoder', () => {
     it('returns nothing until a line completes', () => {
         const decoder = new LogStreamDecoder();
