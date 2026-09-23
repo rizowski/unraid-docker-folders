@@ -1,6 +1,16 @@
 # Changelog
 
 ## 2026.09.23
+- feat(dashboard): put the folded tile's summary on one line
+- feat(dashboard): show running count, CPU and RAM on the folded tile
+- test(container-card): stop a stats fetch from replacing seeded stats
+- feat(widget): show the all-running total as two arc gauges
+- fix(containers): keep volumes and ports in one order across refreshes
+- feat(ui): show shimmer skeletons during the first load
+- refactor: clean up after review of the stats and database changes
+- perf(graphql): share one database handle, and speed up the page load
+- feat(stats): measure folder and total stats against the host
+- fix(plg): skip the Unraid API plugin install when it is current
 - fix(build): lock @unraid/shared to the tarball CI downloads
 - feat(settings): mark the GraphQL backend as unstable
 - feat(graphql): add a GraphQL backend beside PHP, chosen by a setting

@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.23-dev2">
-<!ENTITY md5 "859d94d5cbd34e842f54b0e7d4b4d760">
+<!ENTITY version "2026.09.23-dev3">
+<!ENTITY md5 "cf26817f857deb82e52d940f2975d986">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -135,6 +135,18 @@
 
 
 
+
+###2026.09.23-dev3
+- feat(dashboard): put the folded tile's summary on one line
+- feat(dashboard): show running count, CPU and RAM on the folded tile
+- test(container-card): stop a stats fetch from replacing seeded stats
+- feat(widget): show the all-running total as two arc gauges
+- fix(containers): keep volumes and ports in one order across refreshes
+- feat(ui): show shimmer skeletons during the first load
+- refactor: clean up after review of the stats and database changes
+- perf(graphql): share one database handle, and speed up the page load
+- feat(stats): measure folder and total stats against the host
+- fix(plg): skip the Unraid API plugin install when it is current
 ###2026.09.23-dev2
 - fix(build): lock @unraid/shared to the tarball CI downloads
 - feat(settings): mark the GraphQL backend as unstable
