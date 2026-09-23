@@ -19,14 +19,15 @@
       >&times;</button>
     </div>
 
-    <div
-      v-if="prefs.showStats && runningIds.length > 0"
-      class="widget-total flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-border"
-      :title="totalTitle"
-    >
-      <span class="flex-1 min-w-0 truncate text-xs font-semibold">All running</span>
-      <span class="shrink-0 text-xs text-text-secondary">{{ runningIds.length }}</span>
-      <WidgetStatGauges :cpu="runningTotal?.cpuPercent" :memory="runningTotal?.memPercent" />
+    <div v-if="prefs.showStats && runningIds.length > 0" class="widget-total pb-2 mb-1 border-b border-border" :title="totalTitle">
+      <div class="flex items-center justify-between px-2 mb-1 text-xs">
+        <span class="font-semibold">All running</span>
+        <span class="text-text-secondary">{{ runningIds.length }} {{ runningIds.length === 1 ? 'container' : 'containers' }}</span>
+      </div>
+      <div class="grid grid-cols-2 gap-3 px-2">
+        <WidgetArcGauge label="CPU" :percent="runningTotal?.cpuPercent" :detail="cpuDetail" />
+        <WidgetArcGauge label="Memory" :percent="runningTotal?.memPercent" :detail="memoryDetail" />
+      </div>
     </div>
 
     <!-- Placeholder rows shaped like WidgetContainerRow while the first load runs. -->
@@ -113,7 +114,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import WidgetContainerRow from './WidgetContainerRow.vue';
-import WidgetStatGauges from './WidgetStatGauges.vue';
+import WidgetArcGauge from './WidgetArcGauge.vue';
 import WidgetSettingsPanel from './WidgetSettings.vue';
 import { loadWidgetSettings, saveWidgetSettings } from './widgetSettings';
 import { useDockerStore, type Container } from '@/stores/docker';
@@ -261,6 +262,15 @@ const runningTotal = computed(() => {
   if (!prefs.value.showStats) return null;
   const list = runningIds.value.map((id) => statsStore.getStats(id)).filter((s): s is ContainerStats => !!s);
   return aggregateStats(list);
+});
+const cpuDetail = computed(() => {
+  const t = runningTotal.value;
+  if (!t) return '';
+  return t.hostCpus === 1 ? 'of 1 core' : `of ${t.hostCpus} cores`;
+});
+const memoryDetail = computed(() => {
+  const t = runningTotal.value;
+  return t ? `${formatBytes(t.memoryUsage)} / ${formatBytes(t.hostMemory)}` : '';
 });
 const totalTitle = computed(() => {
   const t = runningTotal.value;

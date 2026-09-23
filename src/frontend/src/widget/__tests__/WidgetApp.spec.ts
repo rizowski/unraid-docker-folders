@@ -295,10 +295,14 @@ describe('WidgetApp', () => {
       expect(wrapper.findAll('.widget-row')).toHaveLength(0);
       const total = wrapper.find('.widget-total');
       expect(total.text()).toContain('All running');
-      expect(total.text()).toContain('2');
-      // (300 + 100) / 4 cores, and 4 GB of 16 GB.
-      expect(total.text()).toContain('100.0%');
-      expect(total.text()).toContain('25.0%');
+      expect(total.text()).toContain('2 containers');
+      // (300 + 100) / 4 cores, and 4 GB of 16 GB, each on its own arc.
+      const arcs = total.findAll('.widget-arc');
+      expect(arcs.map((a) => a.text())).toEqual(['100.0%CPUof 4 cores', '25.0%Memory4.0 GB / 16.0 GB']);
+      expect(arcs[0].find('.arc-fill').attributes('stroke-dasharray')).toBe('100 100');
+      expect(arcs[0].find('.arc-fill').classes()).toContain('text-error');
+      expect(arcs[1].find('.arc-fill').attributes('stroke-dasharray')).toBe('25 100');
+      expect(arcs[1].find('.arc-fill').classes()).toContain('text-success');
       expect(total.attributes('title')).toBe('CPU 100.0% of 4 cores · Memory 4.0 GB / 16.0 GB');
       expect(statsStore.registerVisible).toHaveBeenCalledWith('c1');
       expect(statsStore.registerVisible).toHaveBeenCalledWith('c3');
