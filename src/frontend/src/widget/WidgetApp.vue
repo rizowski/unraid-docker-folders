@@ -238,6 +238,12 @@ const settingsOpen = ref(false);
 // Its own computed, so changing another setting does not rerun the group filter.
 const hideStopped = computed(() => prefs.value.hideStopped);
 
+// True while the dashboard tile is folded shut. The page tells the frame, and
+// the frame keeps measuring stats then, for the summary in the tile header.
+const tileCollapsed = ref(false);
+/** Whether stats are measured: shown in the widget, or summed for the folded tile's header. */
+const trackStats = computed(() => prefs.value.showStats || tileCollapsed.value);
+
 // Every running container is registered for stats here, not by its row. The
 // all-running total needs them all, including those in a collapsed folder, whose
 // rows are unmounted. The stats store keeps a plain set of ids, so a row that
@@ -252,14 +258,14 @@ function syncRegistered(ids: string[]) {
   registeredIds = ids;
 }
 watch(
-  () => (prefs.value.showStats ? runningIds.value : []),
+  () => (trackStats.value ? runningIds.value : []),
   syncRegistered,
   { immediate: true },
 );
 
 /** Every running container together, as a share of the host. Null until any stats arrive. */
 const runningTotal = computed(() => {
-  if (!prefs.value.showStats) return null;
+  if (!trackStats.value) return null;
   const list = runningIds.value.map((id) => statsStore.getStats(id)).filter((s): s is ContainerStats => !!s);
   return aggregateStats(list);
 });
@@ -280,11 +286,27 @@ const totalTitle = computed(() => {
 });
 
 // The cog in the tile header lives in the dashboard page, outside this frame,
-// so it asks for the panel with a message.
+// so it asks for the panel with a message. The page also says when the tile
+// folds or opens.
 function onParentMessage(e: MessageEvent) {
   if (e.source !== window.parent || e.origin !== window.location.origin) return;
   if (e.data?.type === 'docker-folders-widget-settings') settingsOpen.value = !settingsOpen.value;
+  if (e.data?.type === 'docker-folders-tile-collapsed') tileCollapsed.value = e.data.collapsed === true;
 }
+
+// The folded tile shows only its header row, and the header lives in the
+// dashboard page. Send it the totals to draw there. Percents are null until
+// stats arrive.
+const tileSummary = computed(() => ({
+  type: 'docker-folders-summary',
+  running: runningIds.value.length,
+  total: dockerStore.containers.length,
+  cpu: runningTotal.value?.cpuPercent ?? null,
+  memory: runningTotal.value?.memPercent ?? null,
+}));
+watch(tileSummary, (summary) => {
+  if (window.parent !== window && !isLoading.value) window.parent.postMessage(summary, window.location.origin);
+}, { immediate: true });
 
 // The count in each header stays running/total over every member, so a folder
 // keeps showing how much of it is stopped while those rows are hidden.
@@ -332,6 +354,9 @@ function onMenuOpenChange(_open: boolean, bottom: number) {
 
 onMounted(async () => {
   window.addEventListener('message', onParentMessage);
+  // The app mounts after the backend check, so a fold message the page sent
+  // on frame load came too early. Ask for it again now that someone listens.
+  if (window.parent !== window) window.parent.postMessage({ type: 'docker-folders-widget-ready' }, window.location.origin);
   if (rootEl.value) resendHeight = reportHeightToParent(rootEl.value, () => menuBottom);
   // Tag data loads after the rows, and only when tags are on. Turning tags on
   // later loads it then (watch below).

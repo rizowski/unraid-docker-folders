@@ -36,6 +36,22 @@ $tile = <<<'EOT'
       <i class="icon-docker f32"></i>
       <div class="section">
         <h3 class="tile-header-main">Docker Folders</h3>
+        <span class="flex flex-row flex-wrap items-center gap-4">
+          <!-- The dashboard shows span.switch only while the tile is folded, the
+               way the System tile shows its RAM bar. The widget frame sends the
+               numbers, because it keeps running while its row is hidden. -->
+          <span class="switch">
+            <span id="dfm-summary-count">Running: --</span><br>
+            CPU:<span class="head_bar">
+              <span class="dfm-summary-cpu load">--</span>
+              <div class="usage-disk sys"><span id="dfm-summary-cpu"></span><span></span></div>
+            </span><br>
+            RAM:<span class="head_bar">
+              <span class="dfm-summary-memory load">--</span>
+              <div class="usage-disk sys"><span id="dfm-summary-memory"></span><span></span></div>
+            </span>
+          </span>
+        </span>
       </div>
     </span>
     <span class="tile-header-right">
@@ -68,13 +84,47 @@ $tile = <<<'EOT'
       if (frame.contentWindow) frame.contentWindow.postMessage({ type: 'docker-folders-widget-settings' }, location.origin);
     });
 
+    var frameRow = frame.closest('tr');
+
+    // The folded-tile summary. Same load thresholds as the widget's own bars.
+    function loadBar(name, percent) {
+      var label = document.querySelector('.dfm-summary-' + name);
+      var bar = document.getElementById('dfm-summary-' + name);
+      if (typeof percent !== 'number') {
+        label.textContent = '--';
+        bar.style.width = '0';
+        return;
+      }
+      var text = percent.toFixed(1) + '%';
+      label.textContent = text;
+      label.style.color = percent > 80 ? '#f0000c' : percent > 50 ? '#e68a00' : '#4f8a10';
+      bar.className = percent > 80 ? 'redbar' : percent > 50 ? 'orangebar' : '';
+      bar.style.width = Math.min(percent, 100) + '%';
+    }
+
     window.addEventListener('message', function(e) {
       if (!e.data || typeof e.data !== 'object') return;
       if (e.source !== frame.contentWindow) return;
       if (e.data.type === 'docker-folders-resize') {
         frame.style.height = e.data.height + 'px';
       }
+      if (e.data.type === 'docker-folders-widget-ready' && e.origin === location.origin) sendCollapsed();
+      if (e.data.type === 'docker-folders-summary' && e.origin === location.origin) {
+        document.getElementById('dfm-summary-count').textContent = 'Running: ' + e.data.running + ' / ' + e.data.total;
+        loadBar('cpu', e.data.cpu);
+        loadBar('memory', e.data.memory);
+      }
     });
+
+    // Folding the tile hides this row with an inline display:none, which is all
+    // the dashboard's openClose() changes. Tell the frame, so it keeps
+    // measuring stats for the header while its own rows are out of sight.
+    function sendCollapsed() {
+      if (!frame.contentWindow) return;
+      frame.contentWindow.postMessage({ type: 'docker-folders-tile-collapsed', collapsed: frameRow.style.display === 'none' }, location.origin);
+    }
+    // The widget also asks once it has mounted (docker-folders-widget-ready).
+    new MutationObserver(sendCollapsed).observe(frameRow, { attributes: true, attributeFilter: ['style'] });
 
     // Set src only after the dashboard sorts its tiles. sortTables() moves each
     // tile with appendTo, and moving an iframe reloads it, so an earlier src

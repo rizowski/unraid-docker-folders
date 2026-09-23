@@ -324,6 +324,24 @@ describe('WidgetApp', () => {
       expect(statsStore.registerVisible).not.toHaveBeenCalled();
       expect(wrapper.find('.widget-total').exists()).toBe(false);
     });
+
+    it('measures stats while the dashboard tile is folded, even with stats off', async () => {
+      const { statsStore } = await mountWidget(containers, []);
+      const fold = (collapsed: boolean) =>
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'docker-folders-tile-collapsed', collapsed },
+          origin: window.location.origin,
+          source: window.parent,
+        }));
+      fold(true);
+      await flushPromises();
+      expect(statsStore.registerVisible).toHaveBeenCalledWith('c1');
+      expect(statsStore.registerVisible).toHaveBeenCalledWith('c3');
+      fold(false);
+      await flushPromises();
+      expect(statsStore.unregisterVisible).toHaveBeenCalledWith('c1');
+      expect(statsStore.unregisterVisible).toHaveBeenCalledWith('c3');
+    });
   });
 
   describe('tags', () => {
