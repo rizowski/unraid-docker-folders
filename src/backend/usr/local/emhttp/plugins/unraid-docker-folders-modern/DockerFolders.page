@@ -202,6 +202,17 @@ if (file_exists($changelogPath)) {
   gap: 8px;
 }
 
+.unstable-tag {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--text-color, #333) 70%, transparent);
+}
+
 .settings-group + .settings-group {
   margin-top: 15px;
 }
@@ -916,18 +927,20 @@ if (file_exists($changelogPath)) {
   </div>
 
   <!-- Which backend the Vue app talks to. PHP is the default and always works;
-       GraphQL needs the companion Unraid API plugin. -->
+       GraphQL needs the companion Unraid API plugin, and is marked unstable
+       while it is tested. -->
   <div class="settings-section">
-    <h3>Backend</h3>
+    <h3>Backend <span class="unstable-tag">Unstable</span></h3>
 
     <div class="setting-row">
       <div class="setting-info">
         <label for="backend-mode">Data source</label>
         <div class="description">
-          Which backend the Folders page reads from. <strong>PHP</strong> is this plugin's own API and is always available.
-          <strong>GraphQL</strong> reads through the Unraid API, using the companion API plugin, and currently serves the folder list only.
-          Everything else uses the PHP API in both modes. If the GraphQL backend cannot be reached when the page loads, it falls back to PHP and shows a notice there.
-          The Folders page reads this when it loads, so reload it after changing this setting.
+          Which backend the Folders page and the dashboard tile use. <strong>PHP</strong> is this plugin's own API and is always available.
+          <strong>GraphQL</strong> is unstable and is here for testing. It goes through the Unraid API, using the companion API plugin, and sends live updates for container changes, stats and logs.
+          In GraphQL mode the API plugin also runs schedules and update checks. If the GraphQL backend cannot be reached when the page loads, the page uses PHP and shows a notice.
+          If something does not work in GraphQL mode, switch back to PHP and report it.
+          The page reads this setting when it loads, so reload it after a change.
           <strong>Default: PHP</strong>
           <?php if (!$graphqlSelectable && $graphqlUnavailableReason !== ''): ?>
           <br><em><?= htmlspecialchars($graphqlUnavailableReason) ?></em>
@@ -937,7 +950,7 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <select id="backend-mode" onchange="saveSetting('backend_mode', this.value)">
           <option value="php" <?= $backendMode === 'php' ? 'selected' : '' ?>>PHP (default)</option>
-          <option value="graphql" <?= $backendMode === 'graphql' ? 'selected' : '' ?> <?= $graphqlSelectable ? '' : 'disabled' ?>>GraphQL (Unraid API)</option>
+          <option value="graphql" <?= $backendMode === 'graphql' ? 'selected' : '' ?> <?= $graphqlSelectable ? '' : 'disabled' ?>>GraphQL (unstable)</option>
         </select>
         <span id="save-status-backend-mode" class="save-status">Saved</span>
       </div>
