@@ -1091,7 +1091,7 @@ class ComposeManager
     if (file_exists($path)) {
       $currentContent = @file_get_contents($path);
       if ($currentContent !== false) {
-        $this->snapshotVersion($projectName, 'compose', $path, $currentContent);
+        $this->snapshotVersion($projectName, 'compose', $currentContent);
       }
     }
 
@@ -1162,7 +1162,7 @@ class ComposeManager
     if ($path && file_exists($path)) {
       $currentContent = @file_get_contents($path);
       if ($currentContent !== false && $currentContent !== '') {
-        $this->snapshotVersion($projectName, 'env', $path, $currentContent);
+        $this->snapshotVersion($projectName, 'env', $currentContent);
       }
     }
 
@@ -1231,7 +1231,7 @@ class ComposeManager
 
   // ─── File Versioning ────────────────────────────────────────────────
 
-  private function snapshotVersion($projectName, $fileType, $sourcePath, $content)
+  private function snapshotVersion($projectName, $fileType, $content)
   {
     $hash = md5($content);
 
