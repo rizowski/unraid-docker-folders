@@ -584,10 +584,17 @@ class ComposeManager
     $deadline = time() + $timeout;
 
     while (true) {
-      $read = [$pipes[1], $pipes[2]];
+      // A pipe at EOF stays readable, so select would return at once on every
+      // pass and the loop would spin. Watch only the pipes still open, and
+      // sleep when none is left but the process has not exited yet.
+      $read = array_values(array_filter([$pipes[1], $pipes[2]], function ($p) {
+        return !feof($p);
+      }));
       $write = null;
       $except = null;
-      if (@stream_select($read, $write, $except, 1) === false) {
+      if (empty($read)) {
+        usleep(100000);
+      } elseif (@stream_select($read, $write, $except, 1) === false) {
         break;
       }
       foreach ($read as $stream) {
