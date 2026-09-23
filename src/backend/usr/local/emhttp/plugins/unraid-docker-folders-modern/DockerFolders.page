@@ -24,6 +24,16 @@ $showInlineLogs = ($settings['show_inline_logs'] ?? '0') === '1';
 $enableAdopt = ($settings['enable_adopt'] ?? '1') === '1';
 $enableSecurityAdvisor = ($settings['enable_security_advisor'] ?? '1') === '1';
 $logRefreshInterval = $settings['log_refresh_interval'] ?? '10';
+$backendMode = dfmNormalizeBackendMode($settings['backend_mode'] ?? 'php');
+$graphqlPluginState = dfmGraphqlPluginState();
+// The switch is offered only when it can work. A stored 'graphql' still shows,
+// so a user who lost the plugin can see why the page fell back to PHP.
+$graphqlSelectable = $graphqlPluginState === 'ready' || $backendMode === 'graphql';
+$graphqlUnavailableReason = [
+  'no-api' => 'The Unraid API is not running on this system. It ships with Unraid 7.2 and later.',
+  'not-installed' => 'The Docker Folders API plugin is not installed.',
+  'load-failed' => 'The Docker Folders API plugin is installed but the Unraid API did not load it. Check /var/log/graphql-api.log.',
+][$graphqlPluginState] ?? '';
 $enableUpdateChecks = ($settings['enable_update_checks'] ?? '0') === '1';
 $updateCheckSchedule = $settings['update_check_schedule'] ?? 'disabled';
 $notifyOnUpdates = ($settings['notify_on_updates'] ?? '0') === '1';
@@ -901,6 +911,35 @@ if (file_exists($changelogPath)) {
       <div class="setting-control">
         <input type="checkbox" id="show-legacy-buttons" <?= $showLegacyButtons ? 'checked' : '' ?> onchange="saveSetting('show_legacy_buttons', this.checked ? '1' : '0')" />
         <span id="save-status-show-legacy-buttons" class="save-status">Saved</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Which backend the Vue app talks to. PHP is the default and always works;
+       GraphQL needs the companion Unraid API plugin. -->
+  <div class="settings-section">
+    <h3>Backend</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="backend-mode">Data source</label>
+        <div class="description">
+          Which backend the Folders page reads from. <strong>PHP</strong> is this plugin's own API and is always available.
+          <strong>GraphQL</strong> reads through the Unraid API, using the companion API plugin, and currently serves the folder list only.
+          Everything else uses the PHP API in both modes. If the GraphQL backend cannot be reached when the page loads, it falls back to PHP and shows a notice there.
+          The Folders page reads this when it loads, so reload it after changing this setting.
+          <strong>Default: PHP</strong>
+          <?php if (!$graphqlSelectable && $graphqlUnavailableReason !== ''): ?>
+          <br><em><?= htmlspecialchars($graphqlUnavailableReason) ?></em>
+          <?php endif; ?>
+        </div>
+      </div>
+      <div class="setting-control">
+        <select id="backend-mode" onchange="saveSetting('backend_mode', this.value)">
+          <option value="php" <?= $backendMode === 'php' ? 'selected' : '' ?>>PHP (default)</option>
+          <option value="graphql" <?= $backendMode === 'graphql' ? 'selected' : '' ?> <?= $graphqlSelectable ? '' : 'disabled' ?>>GraphQL (Unraid API)</option>
+        </select>
+        <span id="save-status-backend-mode" class="save-status">Saved</span>
       </div>
     </div>
   </div>

@@ -47,10 +47,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, useId } from 'vue';
-import { apiFetch } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import type { PathSuggestion } from '@/types/schedule';
-
-const API_URL = '/plugins/unraid-docker-folders-modern/api/paths.php';
 
 // Long enough that typing a full path is one request per pause, short enough
 // that the list feels attached to the keyboard.
@@ -127,9 +125,10 @@ async function load() {
   }
 
   try {
-    const response = await apiFetch(`${API_URL}?${params.toString()}`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json();
+    const { ok, error: failure, data } = await useBackend().paths.list(
+      Object.fromEntries(params.entries()),
+    );
+    if (!ok) throw new Error(failure);
     if (mine !== requestId) return;
 
     entries.value = data.entries || [];

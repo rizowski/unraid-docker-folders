@@ -19,6 +19,8 @@ if (!file_exists(DB_PATH)) return;
 // They are computed here because a nowdoc cannot hold a PHP expression, and are
 // substituted by str_replace after the string is built.
 $frameSrcVersion = dfmAssetVersion(PLUGIN_DIR . '/include/frameSrc.js');
+// Which backend the widget frame should use. See dfmBackendMode() in config.php.
+$backendMode = dfmBackendMode();
 $widgetVersion = dfmAssetVersion(PLUGIN_DIR . '/assets/widget.html');
 
 // A nowdoc, not a heredoc: the inline JavaScript below uses jQuery's `$`, and a
@@ -46,6 +48,7 @@ $tile = <<<'EOT'
 </td></tr>
 <tr><td>
   <iframe id="docker-folders-widget-frame" scrolling="no" style="display:block;width:100%;height:40px;border:none;"></iframe>
+  <script>window.dockerFoldersBackendMode = '__DFM_BACKEND__';</script>
   <script>window.dockerFoldersAssetVersion = '__DFM_WIDGET_V__';</script>
   <script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js?v=__DFM_FRAMESRC_V__"></script>
   <script>
@@ -87,8 +90,8 @@ $tile = <<<'EOT'
 EOT;
 
 $mytiles['unraid-docker-folders-modern']['column2'] = str_replace(
-  ['__DFM_WIDGET_V__', '__DFM_FRAMESRC_V__'],
-  [$widgetVersion, $frameSrcVersion],
+  ['__DFM_WIDGET_V__', '__DFM_FRAMESRC_V__', '__DFM_BACKEND__'],
+  [$widgetVersion, $frameSrcVersion, $backendMode],
   $tile
 );
 ?>

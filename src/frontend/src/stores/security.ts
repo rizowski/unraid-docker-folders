@@ -9,7 +9,8 @@
 
 import { defineStore } from 'pinia';
 import { computed } from 'vue';
-import { apiFetch } from '@/utils/csrf';
+import { useBackend } from '@/backends';
+import type { FindingAction } from '@/backends/types';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
 import {
@@ -24,8 +25,6 @@ import {
   type PortOwners,
   type SecurityFinding,
 } from '@/utils/securityFindings';
-
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 export interface ContainerFindings {
   container: Container;
@@ -175,13 +174,10 @@ export const useSecurityStore = defineStore('security', () => {
     flagged.value.some((row) => row.findings.some((f) => f.severity === 'critical')),
   );
 
-  async function post(action: 'dismiss-finding' | 'restore-finding', name: string, type: FindingType) {
+  async function post(action: FindingAction, name: string, type: FindingType) {
     try {
-      const response = await apiFetch(`${API_BASE}/containers.php?action=${action}`, {
-        method: 'POST',
-        body: JSON.stringify({ container_name: name, finding_type: type }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const { ok, error: failure } = await useBackend().containers.setFindingDismissed(action, name, type);
+      if (!ok) throw new Error(failure);
       return true;
     } catch (e) {
       console.error(`Error saving security dismissal:`, e);

@@ -42,3 +42,13 @@ export interface ComposeImportResult {
   stacks_skipped: number;
   errors: string[];
 }
+
+/**
+ * One problem `docker compose config` reported, positioned in the file.
+ * The compose editor turns these into CodeMirror diagnostics.
+ */
+export interface ComposeValidationError {
+  line: number;
+  column?: number;
+  message: string;
+}

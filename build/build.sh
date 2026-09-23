@@ -108,7 +108,7 @@ echo ""
 
 # Clean previous build
 STEP=0
-TOTAL_STEPS=$([ "$BUILD_TYPE" == "release" ] && echo "7" || echo "5")
+TOTAL_STEPS=$([ "$BUILD_TYPE" == "release" ] && echo "8" || echo "6")
 echo -e "${YELLOW}[$((++STEP))/${TOTAL_STEPS}]${NC} Cleaning previous build..."
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
@@ -212,12 +212,57 @@ if [ "$BUILD_TYPE" == "release" ]; then
   echo ""
 fi
 
+# Build the Unraid API plugin
+#
+# The GraphQL backend is an npm package the Unraid API loads, shipped inside
+# this .txz and installed by the .plg. It is versioned from the release
+# version, not from its own package.json, because npm caches a file: tarball
+# by name and version: reinstalling the same version after a change installs
+# the cached copy, silently. A new version per release makes that impossible.
+echo -e "${YELLOW}[$((++STEP))/${TOTAL_STEPS}]${NC} Building Unraid API plugin..."
+API_PLUGIN_DIR="${PROJECT_ROOT}/packages/unraid-api-plugin-docker-folders"
+API_PLUGIN_NAME="unraid-api-plugin-docker-folders"
+cd "$API_PLUGIN_DIR"
+
+# @unraid/shared is not on npm. Take it from the Unraid API's own release.
+if ! ls vendor/unraid-shared-*.tgz >/dev/null 2>&1; then
+    ./scripts/vendor-unraid-shared.sh release
+fi
+npm ci --no-audit --no-fund
+npm run build
+npm run validate
+
+# semver forbids leading zeros, so 2026.09.20-dev6 becomes 2026.9.20-dev6.
+NPM_VERSION=$(echo "$VERSION" | sed -E 's/^([0-9]+)\.0*([0-9]+)\.0*([0-9]+)/\1.\2.\3/')
+
+# Pack from a staging copy so the release never rewrites the committed
+# package.json, which build.sh does not commit.
+PACK_DIR=$(mktemp -d)
+cp -r dist package.json README.md "$PACK_DIR"/
+node -e "const f='$PACK_DIR/package.json';const p=require(f);p.version='$NPM_VERSION';require('fs').writeFileSync(f, JSON.stringify(p,null,2)+'\n')"
+(cd "$PACK_DIR" && npm pack --silent >/dev/null)
+API_PLUGIN_TARBALL="${API_PLUGIN_NAME}-${NPM_VERSION}.tgz"
+if [ ! -f "${PACK_DIR}/${API_PLUGIN_TARBALL}" ]; then
+    echo -e "${RED}✗${NC} npm pack did not produce ${API_PLUGIN_TARBALL}"
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} ${API_PLUGIN_TARBALL}"
+echo ""
+cd "$PROJECT_ROOT"
+
 # Copy backend files to build directory
 echo -e "${YELLOW}[$((++STEP))/${TOTAL_STEPS}]${NC} Packaging backend..."
 cd "$PROJECT_ROOT"
 
 # Copy the entire backend structure
 cp -r "${BACKEND_DIR}/usr" "${BUILD_DIR}/"
+
+# The API plugin travels inside the .txz. The .plg copies it to the flash
+# drive before installing it, because the Unraid API records the tarball's
+# path, and only /boot survives a reboot.
+mkdir -p "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/api-plugin"
+cp "${PACK_DIR}/${API_PLUGIN_TARBALL}" "${BUILD_DIR}/usr/local/emhttp/plugins/${PLUGIN_NAME}/api-plugin/"
+rm -rf "$PACK_DIR"
 
 # Copy CHANGELOG.md into plugin directory for settings page
 if [ -f "${PROJECT_ROOT}/CHANGELOG.md" ]; then

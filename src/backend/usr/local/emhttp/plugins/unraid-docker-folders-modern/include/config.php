@@ -34,6 +34,10 @@ define('BACKUP_ALLOWED_ROOTS', ['/mnt', '/boot/config/plugins']);
 // Sort modes for folders and folder contents. Must match SortMode in
 // src/frontend/src/types/folder.ts.
 define('SORT_MODES', ['manual', 'name-asc', 'name-desc', 'status', 'created-asc', 'created-desc']);
+define('BACKEND_MODES', ['php', 'graphql']);
+define('GRAPHQL_PLUGIN_NAME', 'unraid-api-plugin-docker-folders');
+define('UNRAID_API_DIR', '/usr/local/unraid-api');
+define('UNRAID_API_SOCKET', '/var/run/unraid-api.sock');
 
 // Database
 define('DB_PATH', CONFIG_DIR . '/data.db');
@@ -753,6 +757,200 @@ function dfmAssetVersion($absolutePath)
 {
   $mtime = @filemtime($absolutePath);
   return $mtime !== false ? (string) $mtime : PLUGIN_VERSION;
+}
+
+/**
+ * Which backend the Vue app should talk to: 'php' or 'graphql'.
+ *
+ * The selector lives here rather than in the GraphQL backend on purpose. PHP
+ * is always present, so the setting is always readable; storing it in the
+ * backend being selected would be circular.
+ *
+ * Fails to 'php' on any error. A database that is missing, locked, or holding
+ * a value we do not recognise must not leave the frontend without a
+ * transport. The page files pass the result to the iframe as a query param,
+ * because a global set here belongs to the parent document.
+ */
+/**
+ * Reduce a stored or submitted backend mode to one we can serve.
+ *
+ * Both readers need this: `dfmBackendMode()` for pages that have not loaded
+ * settings, and `DockerFolders.page`, which already has them in an array.
+ */
+function dfmNormalizeBackendMode($mode)
+{
+  return in_array($mode, BACKEND_MODES, true) ? $mode : 'php';
+}
+
+/**
+ * The stored backend mode, or null when it could not be read.
+ *
+ * Distinct from dfmBackendMode() because one caller must not treat "could not
+ * read" as "php". The busy timeout matters: while the plugin writes the same
+ * database, a read without one fails at once, and the schedule runner took
+ * that failure for PHP mode and fired a backup the plugin was already
+ * running. Seen on the target server, at the first five-minute slot after the
+ * handover.
+ */
+function dfmReadBackendMode()
+{
+  if (!is_file(DB_PATH)) {
+    return 'php';
+  }
+  try {
+    // A read-only handle, not the Database singleton. The singleton opens for
+    // writing and sets the foreign-key and WAL pragmas, which a page render
+    // that only reads one string does not need.
+    $db = new SQLite3(DB_PATH, SQLITE3_OPEN_READONLY);
+    $db->busyTimeout(5000);
+    $stmt = $db->prepare('SELECT value FROM settings WHERE key = ?');
+    if ($stmt === false) {
+      $db->close();
+      return null;
+    }
+    $stmt->bindValue(1, 'backend_mode', SQLITE3_TEXT);
+    $result = $stmt->execute();
+    if ($result === false) {
+      $db->close();
+      return null;
+    }
+    $row = $result->fetchArray(SQLITE3_ASSOC);
+    $db->close();
+    return dfmNormalizeBackendMode(is_array($row) ? $row['value'] : null);
+  } catch (Throwable $e) {
+    return null;
+  }
+}
+
+function dfmBackendMode()
+{
+  $mode = dfmReadBackendMode();
+  return $mode === null ? 'php' : $mode;
+}
+
+/**
+ * Whether the Unraid API plugin that serves the GraphQL backend is usable.
+ *
+ * Returns 'ready', or a reason it is not. The settings page uses this to say
+ * why the GraphQL option is unavailable instead of offering a switch that
+ * would only fall back.
+ *
+ * The answer comes from asking the API, not from inspecting where it keeps
+ * its files. `dockerFoldersInfo` is a field this project defines, so its
+ * presence in the schema is the fact we actually care about, and it stays
+ * true regardless of how upstream arranges its install directory or config.
+ *
+ * The probe sends no credentials, which is enough. A field that is absent
+ * answers GRAPHQL_VALIDATION_FAILED, and a field that is present but
+ * unauthorized answers UNAUTHENTICATED, so the two are distinguishable
+ * without a session. What this cannot see is whether the plugin can read its
+ * database, because that needs the browser's session cookie. The frontend
+ * probe in `backends/graphql.ts` checks that and shows a notice when it fails.
+ */
+function dfmGraphqlPluginState()
+{
+  if (!file_exists(UNRAID_API_SOCKET)) {
+    return 'no-api';
+  }
+
+  $ch = curl_init('http://localhost/graphql');
+  curl_setopt_array($ch, [
+    CURLOPT_UNIX_SOCKET_PATH => UNRAID_API_SOCKET,
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => json_encode(['query' => 'query { dockerFoldersInfo { version } }']),
+    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+    CURLOPT_RETURNTRANSFER => true,
+    // A settings page must not hang on a wedged API.
+    CURLOPT_CONNECTTIMEOUT => 1,
+    CURLOPT_TIMEOUT => 2,
+  ]);
+  $body = curl_exec($ch);
+  $failed = curl_errno($ch) !== 0;
+  curl_close($ch);
+
+  if ($failed || !is_string($body)) {
+    return 'no-api';
+  }
+  if (strpos($body, 'GRAPHQL_VALIDATION_FAILED') !== false) {
+    return dfmGraphqlPluginInstalled() ? 'load-failed' : 'not-installed';
+  }
+
+  return 'ready';
+}
+
+/**
+ * Whether the package is on disk, which separates "never installed" from
+ * "installed but the API did not load it". The second case points at the API
+ * log, where an invalid export shape is reported.
+ *
+ * This reads upstream's install layout, which is not a contract we own, so it
+ * decides nothing on its own. It only picks which explanation to show once
+ * the probe above has already established that the field is missing. A stale
+ * answer here costs a wrong sentence, not a wrong switch.
+ */
+function dfmGraphqlPluginInstalled()
+{
+  return is_dir(UNRAID_API_DIR . '/node_modules/' . GRAPHQL_PLUGIN_NAME);
+}
+
+/**
+ * Whether this PHP runner should fire due schedules this minute.
+ *
+ * Exactly one backend may. Both read `schedules.next_run_at`, so two runners
+ * in the same minute start, stop or back up a container twice. The flock in
+ * run-schedules.php cannot prevent that: it is a BSD advisory lock, which the
+ * Unraid API's Node process has no way to take, so it only ever kept PHP from
+ * racing itself.
+ *
+ * In GraphQL mode the plugin's runner owns schedules while its heartbeat file
+ * is fresh. It touches that file every minute, and only when this function
+ * exists, so the two halves can only ever be on together. If the API is
+ * stopped, crashed, in safe mode or without the plugin, the file goes stale
+ * within DFM_RUNNER_ALIVE_STALE_SECONDS and PHP takes the work back. That is
+ * inside the runner's five-minute grace for a late run, so nothing is skipped.
+ *
+ * A file rather than a GraphQL probe: cron has no session, so every probe
+ * logged two authentication errors in the API log, once a minute.
+ */
+define('DFM_RUNNER_ALIVE_FILE', '/var/run/' . PLUGIN_NAME . '.graphql-runner');
+define('DFM_RUNNER_ALIVE_STALE_SECONDS', 150);
+
+function dfmPhpOwnsSchedules()
+{
+  return !dfmPluginRunnerOwns('schedules');
+}
+
+/** The same arbitration for the image update check. See dfmPluginRunnerOwns(). */
+function dfmPhpOwnsUpdateChecks()
+{
+  return !dfmPluginRunnerOwns('update-checks');
+}
+
+/**
+ * Whether the plugin's runner owns one kind of background work this minute.
+ *
+ * The heartbeat file lists what that runner can do, one word per job, and is
+ * rewritten every minute. PHP stands down for a job only when the file is
+ * fresh and names it, so a plugin build that predates a job never makes PHP
+ * stop doing that job.
+ */
+function dfmPluginRunnerOwns($job)
+{
+  clearstatcache(true, DFM_RUNNER_ALIVE_FILE);
+  $alive = @filemtime(DFM_RUNNER_ALIVE_FILE);
+  if ($alive === false || (time() - $alive) > DFM_RUNNER_ALIVE_STALE_SECONDS) {
+    return false;
+  }
+  $jobs = preg_split('/\s+/', trim((string) @file_get_contents(DFM_RUNNER_ALIVE_FILE)));
+  if (!in_array($job, $jobs, true)) {
+    return false;
+  }
+
+  $mode = dfmReadBackendMode();
+  // Unreadable, even after waiting, with the runner alive and able: stand
+  // down. It reads the mode itself and acts only in GraphQL mode, so the worst
+  // case is one missed minute instead of the same job run twice.
+  return $mode === null || $mode === 'graphql';
 }
 
 // JSON response helper

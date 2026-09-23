@@ -4,10 +4,8 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeFileVersion, ComposeFileVersionDetail } from '@/types/compose';
-import { apiFetch } from '@/utils/csrf';
-
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
+import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeFileVersion, ComposeFileVersionDetail, ComposeValidationError } from '@/types/compose';
+import { useBackend } from '@/backends';
 
 export const useComposeStore = defineStore('compose', () => {
   // State
@@ -69,9 +67,8 @@ export const useComposeStore = defineStore('compose', () => {
   // Actions
   async function fetchStatus() {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?action=status`);
-      if (response.ok) {
-        const data = await response.json();
+      const { ok, data } = await useBackend().compose.status();
+      if (ok) {
         status.value = data;
         statusChecked.value = true;
       }
@@ -93,13 +90,12 @@ export const useComposeStore = defineStore('compose', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?action=list`);
+      const { ok, error: failure, data } = await useBackend().compose.list();
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!ok) {
+        throw new Error(failure);
       }
 
-      const data = await response.json();
       stacks.value = data.stacks || [];
       initialLoadDone = true;
     } catch (e) {
@@ -115,17 +111,13 @@ export const useComposeStore = defineStore('compose', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?action=install_binary`, {
-        method: 'POST',
-      });
+      const { ok, data } = await useBackend().compose.installBinary();
 
-      if (!response.ok) {
-        const data = await response.json();
+      if (!ok) {
         throw new Error(data.message || 'Failed to install Docker Compose');
       }
 
-      const data = await response.json();
-      status.value = data.status;
+      status.value = data.status as ComposeStatus;
       return true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -138,13 +130,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function stackUp(project: string, forceRecreate = false): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=up`, {
-        method: 'POST',
-        body: JSON.stringify({ force_recreate: forceRecreate }),
-      });
+      const { ok, data } = await useBackend().compose.stackAction(project, 'up', { force_recreate: forceRecreate });
 
-      const data = await response.json();
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.message || 'Failed to start stack');
       }
 
@@ -159,12 +147,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function stackDown(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=down`, {
-        method: 'POST',
-      });
+      const { ok, data } = await useBackend().compose.stackAction(project, 'down');
 
-      const data = await response.json();
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.message || 'Failed to stop stack');
       }
 
@@ -179,12 +164,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function stackStop(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=stop`, {
-        method: 'POST',
-      });
+      const { ok, data } = await useBackend().compose.stackAction(project, 'stop');
 
-      const data = await response.json();
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.message || 'Failed to stop stack');
       }
 
@@ -199,12 +181,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function stackRestart(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=restart`, {
-        method: 'POST',
-      });
+      const { ok, data } = await useBackend().compose.stackAction(project, 'restart');
 
-      const data = await response.json();
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(data.message || 'Failed to restart stack');
       }
 
@@ -224,17 +203,15 @@ export const useComposeStore = defineStore('compose', () => {
   async function validateCompose(
     project: string,
     content?: string,
-  ): Promise<{ success: boolean; errors: { line: number; column?: number; message: string }[]; output?: string }> {
+  ): Promise<{ success: boolean; errors: ComposeValidationError[]; output?: string }> {
     try {
-      const response = await apiFetch(
-        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=validate`,
-        {
-          method: 'POST',
-          body: content !== undefined ? JSON.stringify({ content }) : undefined,
-          headers: content !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-        },
-      );
-      const data = await response.json();
+      const { ok, error: failure, data } = await useBackend().compose.validate(project, content);
+      // A validation failure answers 200 with `success: false`, so a non-ok
+      // here means the request itself failed and there is nothing to report
+      // line by line.
+      if (!ok && !Array.isArray(data.errors)) {
+        return { success: false, errors: [{ line: 1, message: failure ?? 'Request failed' }] };
+      }
       return {
         success: !!data.success,
         errors: Array.isArray(data.errors) ? data.errors : [],
@@ -248,14 +225,13 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function getComposeFile(project: string): Promise<{ content: string | null; path: string | null; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=file`);
-      const data = await response.json();
+      const { ok, data } = await useBackend().compose.getFile(project);
 
-      if (!response.ok) {
+      if (!ok) {
         return { content: null, path: null, error: data.message };
       }
 
-      return { content: data.content, path: data.path };
+      return { content: data.content ?? null, path: data.path ?? null };
     } catch (e) {
       return { content: null, path: null, error: e instanceof Error ? e.message : 'Unknown error' };
     }
@@ -263,13 +239,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function saveComposeFile(project: string, content: string): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=save_file`, {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      });
+      const { ok, data } = await useBackend().compose.saveFile(project, { content });
 
-      if (!response.ok) {
-        const data = await response.json();
+      if (!ok) {
         throw new Error(data.message || 'Failed to save compose file');
       }
 
@@ -282,14 +254,13 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function getEnvFile(project: string): Promise<{ content: string | null; path: string | null; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=env`);
-      const data = await response.json();
+      const { ok, data } = await useBackend().compose.getEnv(project);
 
-      if (!response.ok) {
+      if (!ok) {
         return { content: null, path: null, error: data.message };
       }
 
-      return { content: data.content, path: data.path };
+      return { content: data.content ?? null, path: data.path ?? null };
     } catch (e) {
       return { content: null, path: null, error: e instanceof Error ? e.message : 'Unknown error' };
     }
@@ -297,13 +268,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function saveEnvFile(project: string, content: string): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=save_env`, {
-        method: 'POST',
-        body: JSON.stringify({ content }),
-      });
+      const { ok, data } = await useBackend().compose.saveEnv(project, { content });
 
-      if (!response.ok) {
-        const data = await response.json();
+      if (!ok) {
         throw new Error(data.message || 'Failed to save env file');
       }
 
@@ -316,12 +283,9 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function setEnvPath(project: string, path: string): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=set_env_path`, {
-        method: 'POST',
-        body: JSON.stringify({ path }),
-      });
+      const { ok } = await useBackend().compose.setEnvPath(project, { path });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error('Failed to set env file path');
       }
 
@@ -335,12 +299,12 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function setAutostart(project: string, enabled: boolean, forceRecreate = false): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=autostart`, {
-        method: 'POST',
-        body: JSON.stringify({ enabled, force_recreate: forceRecreate }),
+      const { ok } = await useBackend().compose.setAutostart(project, {
+        enabled,
+        force_recreate: forceRecreate,
       });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error('Failed to set autostart');
       }
 
@@ -360,8 +324,10 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function getLogs(project: string, tail = 100): Promise<{ output: string; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=logs&tail=${tail}`);
-      const data = await response.json();
+      const { ok, error: failure, data } = await useBackend().compose.logs(project, tail);
+      if (!ok) {
+        return { output: '', error: failure };
+      }
       return { output: data.output || '', error: data.error || undefined };
     } catch (e) {
       return { output: '', error: e instanceof Error ? e.message : 'Unknown error' };
@@ -373,16 +339,13 @@ export const useComposeStore = defineStore('compose', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?action=import`, {
-        method: 'POST',
-      });
+      const { ok, error: failure, data } = await useBackend().compose.importStacks({});
 
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || `Import failed (HTTP ${response.status})`);
+      if (!ok) {
+        throw new Error(failure);
       }
 
-      const result: ComposeImportResult = await response.json();
+      const result = data as unknown as ComposeImportResult;
 
       // Refresh stacks and status
       await Promise.all([fetchStacks(true), fetchStatus()]);
@@ -409,17 +372,12 @@ export const useComposeStore = defineStore('compose', () => {
     envContent: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const response = await apiFetch(`${API_BASE}/compose.php?action=create`, {
-        method: 'POST',
-        body: JSON.stringify({
-          project_name: projectName,
-          compose_content: composeContent,
-          env_content: envContent,
-        }),
+      const { ok, data } = await useBackend().compose.create({
+        project_name: projectName,
+        compose_content: composeContent,
+        env_content: envContent,
       });
-
-      const data = await response.json();
-      if (!response.ok) {
+      if (!ok) {
         return { success: false, error: data.message || 'Failed to create stack' };
       }
 
@@ -437,10 +395,7 @@ export const useComposeStore = defineStore('compose', () => {
     fileType: 'compose' | 'env' = 'compose',
   ): Promise<{ versions: ComposeFileVersion[] }> {
     try {
-      const response = await apiFetch(
-        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=versions&file_type=${fileType}`,
-      );
-      const data = await response.json();
+      const { data } = await useBackend().compose.fileVersions(project, fileType);
       return { versions: data.versions || [] };
     } catch (e) {
       console.error('Error fetching file versions:', e);
@@ -453,14 +408,11 @@ export const useComposeStore = defineStore('compose', () => {
     versionId: number,
   ): Promise<{ version: ComposeFileVersionDetail | null; error?: string }> {
     try {
-      const response = await apiFetch(
-        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=version&version_id=${versionId}`,
-      );
-      const data = await response.json();
-      if (!response.ok) {
+      const { ok, data } = await useBackend().compose.fileVersion(project, versionId);
+      if (!ok) {
         return { version: null, error: data.message };
       }
-      return { version: data.version };
+      return { version: data.version ?? null };
     } catch (e) {
       return { version: null, error: e instanceof Error ? e.message : 'Unknown error' };
     }
@@ -468,14 +420,8 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function restoreFileVersion(project: string, versionId: number): Promise<boolean> {
     try {
-      const response = await apiFetch(
-        `${API_BASE}/compose.php?project=${encodeURIComponent(project)}&action=restore_version`,
-        {
-          method: 'POST',
-          body: JSON.stringify({ version_id: versionId }),
-        },
-      );
-      return response.ok;
+      const { ok } = await useBackend().compose.restoreVersion(project, { version_id: versionId });
+      return ok;
     } catch (e) {
       console.error('Error restoring file version:', e);
       return false;

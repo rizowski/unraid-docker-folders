@@ -113,7 +113,7 @@ This is a **split frontend/backend architecture** with an unusual build output l
 src/frontend/              # Vue 3 application
   ├── src/
   │   ├── components/      # Vue components (ConnectionStatus, ContainerCard, Folder*)
-  │   ├── composables/     # useWebSocket.ts
+  │   ├── composables/     # useLiveUpdates.ts (nchan or GraphQL subscription)
   │   ├── stores/          # Pinia state management (docker.ts, folders.ts, settings.ts, stats.ts)
   │   ├── types/           # TypeScript definitions (folder.ts, websocket.ts)
   │   └── utils/           # csrf.ts
@@ -502,7 +502,7 @@ acceptable.
 **Architecture**:
 1. PHP API endpoints publish events to nchan after each successful mutation
 2. `WebSocketPublisher.php` POSTs JSON to `NCHAN_PUB_URL` over the Unix socket `NCHAN_SOCKET_PATH` (fire-and-forget, 2s timeout)
-3. Frontend connects to `ws://<host>/sub/docker-modern` via `useWebSocket.ts` composable
+3. Frontend connects to `ws://<host>/sub/docker-modern` via `useLiveUpdates.ts`. In GraphQL mode it subscribes to `dockerFoldersEvents` at `/graphql` instead, which also reports container changes made outside the plugin
 4. On event received, stores call `fetchContainers()` or `fetchFolders()` (full refetch, not patching)
 5. Exponential backoff reconnection (1s base, 30s max)
 6. 30s polling fallback (60s in the dashboard widget) catches external changes (CLI, Portainer, etc.). It pauses while the tab is hidden and refetches once the tab is visible again.
@@ -515,10 +515,46 @@ acceptable.
 
 ---
 
+## GraphQL Backend (Unraid API plugin)
+
+A second backend ships beside the PHP one. It is an Unraid API plugin, an npm
+package in `packages/unraid-api-plugin-docker-folders/`, which adds NestJS
+resolvers to the API's GraphQL server at `/graphql`. The `backend_mode` setting
+(`php` or `graphql`, default `php`) selects the backend. `Folders.page` reads
+it and passes it to the iframe as the `backend` query parameter. The frontend
+calls every backend through `src/frontend/src/backends/types.ts`, with
+`php.ts` and `graphql.ts` as the two implementations. If the plugin does not
+answer at boot, the frontend falls back to PHP and shows a notice.
+
+Both backends read and write the same `data.db`. `build.sh` packs the plugin,
+and the `.plg` installs it with `unraid-api plugins install`.
+
+Rules that are easy to break:
+
+- **Every plugin GraphQL type name starts with `DockerFolders`.** A name the
+  Unraid API already uses fails the whole schema, and GraphQL goes offline for
+  the entire server.
+- **Every `@InputType` field needs a class-validator decorator.** The API's
+  global `ValidationPipe` rejects any property without one.
+- **Every resolver field needs `@UsePermissions`**, or the API refuses to load
+  the plugin.
+- **`unraid-api restart` does not reload plugins.** Run `unraid-api stop`, then
+  `unraid-api start`.
+- **Exactly one backend runs schedules and update checks.** In GraphQL mode the
+  plugin writes `/var/run/unraid-docker-folders-modern.graphql-runner` as a
+  heartbeat, and `run-schedules.php` and `check-updates.php` exit while it is
+  fresh (`dfmPluginRunnerOwns()` in `config.php`). Both runners also claim
+  each due slot with a compare-and-set on `next_run_at` before they run it.
+  Keep both halves.
+- **A new PHP feature needs a plugin port**, or GraphQL mode loses it. Compare
+  the two backends' output on real data before you call a port done.
+
+---
+
 ## Testing Strategy
 
 ### Frontend (Vitest)
-190 tests across 12 files, colocated in `__tests__/` directories next to the code
+731 tests across 47 files, colocated in `__tests__/` directories next to the code
 they cover (stores, utils, and components). Run with `yarn test:run` in
 `src/frontend`.
 
@@ -533,6 +569,12 @@ Lives in `tests/php/`. The suite runs in Docker via `tests/php/run.sh`, with
 `phpunit.xml.dist` lists every test file by name. **A new test file must be
 added there, or it never runs.** PHPUnit gives no warning, and
 `--filter <Class>` reports "No tests executed".
+
+### GraphQL plugin (Vitest)
+Lives in `packages/unraid-api-plugin-docker-folders`. Run `npx vitest run` and
+`npx tsc --noEmit -p .` in that directory. Several suites check the plugin
+against PHP's own output: the fixtures under `src/schedules/__tests__/` come
+from PHP methods, run by the scripts in `scripts/*-oracle.php`.
 
 ### Not covered by automated tests
 Anything that needs a real Unraid box: the nchan WebSocket channel, CSRF/session

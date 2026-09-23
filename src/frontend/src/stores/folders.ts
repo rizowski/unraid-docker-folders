@@ -13,12 +13,10 @@ import type {
   FolderImportResult,
   SortMode,
 } from '@/types/folder';
-import { apiFetch } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import { useSettingsStore } from '@/stores/settings';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { bestState, sortByMode } from '@/utils/sortMode';
-
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 export const useFolderStore = defineStore('folders', () => {
   // State
@@ -110,13 +108,12 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php`);
+      const { ok, error: failure, data } = await useBackend().folders.list();
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!ok) {
+        throw new Error(failure);
       }
 
-      const data = await response.json();
       folders.value = (data.folders || []).map(withPendingCollapse);
       unfolderedOrder.value = Array.isArray(data.unfoldered_order) ? data.unfoldered_order : [];
       initialLoadDone = true;
@@ -132,17 +129,13 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
+      const { ok, data: result } = await useBackend().folders.create(data);
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to create folder`);
       }
 
-      const result = await response.json();
-      const newFolder = result.folder;
+      const newFolder = result.folder as Folder;
 
       // Add to local state
       folders.value.push(newFolder);
@@ -159,17 +152,13 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?id=${id}`, {
-        method: 'PUT',
-        body: JSON.stringify(data),
-      });
+      const { ok, data: result } = await useBackend().folders.update(id, data);
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to update folder`);
       }
 
-      const result = await response.json();
-      const updatedFolder = result.folder;
+      const updatedFolder = result.folder as Folder;
 
       // Update local state
       const index = folders.value.findIndex((f) => f.id === id);
@@ -189,11 +178,9 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?id=${id}`, {
-        method: 'DELETE',
-      });
+      const { ok } = await useBackend().folders.remove(id);
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to delete folder`);
       }
 
@@ -210,20 +197,16 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function addContainerToFolder(folderId: number, containerId: string, containerName: string): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?id=${folderId}&action=add_container`, {
-        method: 'POST',
-        body: JSON.stringify({
-          container_id: containerId,
-          container_name: containerName,
-        }),
+      const { ok, data: result } = await useBackend().folders.addContainer(folderId, {
+        container_id: containerId,
+        container_name: containerName,
       });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to add container to folder`);
       }
 
-      const result = await response.json();
-      const updatedFolder = result.folder;
+      const updatedFolder = result.folder as Folder;
 
       // Update local state
       const index = folders.value.findIndex((f) => f.id === folderId);
@@ -245,14 +228,11 @@ export const useFolderStore = defineStore('folders', () => {
     }
 
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?action=remove_container`, {
-        method: 'POST',
-        body: JSON.stringify({
-          container_name: containerName,
-        }),
+      const { ok } = await useBackend().folders.removeContainer({
+        container_name: containerName,
       });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to remove container from folder`);
       }
 
@@ -352,19 +332,15 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function reorderContainers(folderId: number, containerIds: string[]): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?id=${folderId}&action=reorder_containers`, {
-        method: 'POST',
-        body: JSON.stringify({
-          container_ids: containerIds,
-        }),
+      const { ok, data: result } = await useBackend().folders.reorderContainers(folderId, {
+        container_ids: containerIds,
       });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to reorder containers`);
       }
 
-      const result = await response.json();
-      const updatedFolder = result.folder;
+      const updatedFolder = result.folder as Folder;
 
       // Update local state
       const index = folders.value.findIndex((f) => f.id === folderId);
@@ -385,18 +361,14 @@ export const useFolderStore = defineStore('folders', () => {
    */
   async function reorderUnfoldered(containerNames: string[]): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?action=reorder_unfoldered`, {
-        method: 'POST',
-        body: JSON.stringify({
-          container_names: containerNames,
-        }),
+      const { ok, data: result } = await useBackend().folders.reorderUnfoldered({
+        container_names: containerNames,
       });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to reorder unfoldered containers`);
       }
 
-      const result = await response.json();
       unfolderedOrder.value = Array.isArray(result.unfoldered_order) ? result.unfoldered_order : containerNames;
 
       return true;
@@ -408,14 +380,11 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function reorderFolders(folderIds: number[]): Promise<boolean> {
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?action=reorder_folders`, {
-        method: 'POST',
-        body: JSON.stringify({
-          folder_ids: folderIds,
-        }),
+      const { ok } = await useBackend().folders.reorderFolders({
+        folder_ids: folderIds,
       });
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to reorder folders`);
       }
 
@@ -431,13 +400,13 @@ export const useFolderStore = defineStore('folders', () => {
 
   async function exportConfiguration(): Promise<FolderExportConfig | null> {
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?action=export`);
+      const { ok, data } = await useBackend().folders.exportConfig();
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to export configuration`);
       }
 
-      return await response.json();
+      return data;
     } catch (e) {
       console.error('Error exporting configuration:', e);
       return null;
@@ -449,16 +418,11 @@ export const useFolderStore = defineStore('folders', () => {
     error.value = null;
 
     try {
-      const response = await apiFetch(`${API_BASE}/folders.php?action=import`, {
-        method: 'POST',
-        body: JSON.stringify(config),
-      });
+      const { ok, data: result } = await useBackend().folders.importConfig(config);
 
-      if (!response.ok) {
+      if (!ok) {
         throw new Error(`Failed to import configuration`);
       }
-
-      const result = await response.json();
 
       // Refresh folders
       await fetchFolders(true);
@@ -482,12 +446,10 @@ export const useFolderStore = defineStore('folders', () => {
       pendingCollapse.set(id, collapsed);
 
       // Persist to backend silently — don't touch loading/error state
-      apiFetch(`${API_BASE}/folders.php?id=${id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ collapsed }),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      useBackend()
+        .folders.update(id, { collapsed })
+        .then(({ ok, error: failure }) => {
+          if (!ok) throw new Error(failure);
         })
         .catch((e) => {
           console.error('Error persisting folder collapse:', e);

@@ -53,7 +53,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
-import { getCsrfToken } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import { useParentModal } from '@/composables/useParentModal';
 import BaseModal from '@/components/BaseModal.vue';
 
@@ -173,68 +173,14 @@ async function startStream() {
 
   abortController = new AbortController();
 
-  const API_BASE = '/plugins/unraid-docker-folders-modern/api';
-  const token = getCsrfToken();
-  const body = new URLSearchParams();
-  if (token) body.append('csrf_token', token);
-  if (!isPull.value && props.forceRecreate) body.append('force_recreate', '1');
-
   try {
-    const response = await fetch(
-      `${API_BASE}/compose-stream.php?action=${props.mode}&project=${encodeURIComponent(props.projectName)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-        signal: abortController.signal,
-      },
+    await useBackend().streams.compose(
+      props.projectName,
+      props.mode,
+      { forceRecreate: props.forceRecreate },
+      handleSSEEvent,
+      abortController.signal,
     );
-
-    if (!response.ok) {
-      errorMessage.value = `HTTP ${response.status}`;
-      statusMessage.value = 'Error';
-      isDone.value = true;
-      patchStatus();
-      showCloseButton();
-      return;
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      errorMessage.value = 'No response stream';
-      statusMessage.value = 'Error';
-      isDone.value = true;
-      patchStatus();
-      showCloseButton();
-      return;
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const chunks = buffer.split('\n');
-      buffer = chunks.pop() || '';
-
-      let currentEvent = '';
-      for (const line of chunks) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7);
-        } else if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          try {
-            const data = JSON.parse(dataStr);
-            handleSSEEvent(currentEvent, data);
-          } catch {
-            // skip malformed
-          }
-        }
-      }
-    }
   } catch (e: any) {
     if (e.name !== 'AbortError') {
       errorMessage.value = e.message || (isPull.value ? 'Image pull failed' : 'Stack start failed');

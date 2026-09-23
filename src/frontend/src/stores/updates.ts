@@ -4,7 +4,7 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import { apiFetch } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import { useSettingsStore } from '@/stores/settings';
 import { useDockerStore } from '@/stores/docker';
 
@@ -34,8 +34,6 @@ export interface ImageUpdateStatus {
   source_repo: string | null;
   release: ReleaseNote | null;
 }
-
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 /** Simple glob matching (supports * and ?). Uses lazy quantifiers to prevent ReDoS. */
 function globMatch(pattern: string, str: string): boolean {
@@ -84,9 +82,8 @@ export const useUpdatesStore = defineStore('updates', () => {
 
   async function fetchCachedUpdates() {
     try {
-      const response = await apiFetch(`${API_BASE}/updates.php`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
+      const { ok, error: failure, data } = await useBackend().updates.getCached();
+      if (!ok) throw new Error(failure);
       updates.value = data.updates || {};
 
       // Set lastChecked from most recent check
@@ -102,11 +99,8 @@ export const useUpdatesStore = defineStore('updates', () => {
   async function checkForUpdates() {
     checking.value = true;
     try {
-      const response = await apiFetch(`${API_BASE}/updates.php?action=check`, {
-        method: 'POST',
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
+      const { ok, error: failure, data } = await useBackend().updates.check();
+      if (!ok) throw new Error(failure);
       updates.value = data.updates || {};
       lastChecked.value = Math.floor(Date.now() / 1000);
     } catch (e) {
@@ -127,12 +121,8 @@ export const useUpdatesStore = defineStore('updates', () => {
 
     checkingImages.value = [...new Set([...checkingImages.value, ...unique])];
     try {
-      const response = await apiFetch(`${API_BASE}/updates.php?action=check`, {
-        method: 'POST',
-        body: JSON.stringify({ images: unique }),
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
+      const { ok, error: failure, data } = await useBackend().updates.check({ images: unique });
+      if (!ok) throw new Error(failure);
       updates.value = { ...updates.value, ...data.updates };
     } catch (e) {
       console.error('Error checking images for updates:', e);

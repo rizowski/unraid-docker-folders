@@ -100,7 +100,7 @@ import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import { useScheduleStore } from '@/stores/schedules';
 import type { Schedule } from '@/types/schedule';
-import { initWebSocket } from '@/composables/useWebSocket';
+import { initLiveUpdates } from '@/composables/useLiveUpdates';
 import { containerMatchesSearch } from '@/utils/search';
 import { isAliveContainer } from '@/utils/containerDisplay';
 import { composeProjectOf } from '@/utils/updateUnits';
@@ -110,7 +110,10 @@ import { safeLocalStorageGetJson, safeLocalStorageSet } from '@/utils/safeStorag
 
 /** Slower than the Folders page: the dashboard is often left open for hours. */
 const WIDGET_POLL_INTERVAL = 60000;
-/** Stats poll slower than the Folders page (5s) for the same reason. */
+/**
+ * Stats poll slower than the Folders page (5s) for the same reason. PHP mode
+ * only: in GraphQL mode the server pushes stats every 2s, as on the Folders page.
+ */
 const WIDGET_STATS_INTERVAL = 15000;
 const NO_SCHEDULES: Schedule[] = [];
 const COLLAPSE_KEY = 'docker-folders-widget-collapsed';
@@ -266,7 +269,7 @@ onMounted(async () => {
   if (prefs.value.showTags) void scheduleStore.fetchSchedules();
   await Promise.all([dockerStore.fetchContainers(), folderStore.fetchFolders(), settingsStore.fetchSettings()]);
   loadUpdates();
-  initWebSocket({ pollInterval: WIDGET_POLL_INTERVAL });
+  initLiveUpdates({ pollInterval: WIDGET_POLL_INTERVAL });
 });
 
 // Same rule as the Folders page: no update tags unless update checks are on.

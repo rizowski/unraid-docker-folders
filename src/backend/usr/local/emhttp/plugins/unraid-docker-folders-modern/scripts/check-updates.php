@@ -20,6 +20,12 @@ require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 // Allow unlimited execution time (CLI default is 0, but be explicit)
 set_time_limit(0);
 
+// In GraphQL mode the Unraid API plugin runs the update check instead. See
+// dfmPluginRunnerOwns().
+if (!dfmPhpOwnsUpdateChecks()) {
+  exit(0);
+}
+
 // Exit gracefully if Docker socket is not available
 if (!file_exists(DOCKER_SOCKET)) {
   logUpdate('SKIP Docker socket not available');

@@ -11,6 +11,11 @@
  * window.dockerFoldersAssetVersion before calling this. Read it inside the
  * function, not at file scope: the two pages set it at different points
  * relative to this script tag.
+ *
+ * `backend` works the same way, from window.dockerFoldersBackendMode. The
+ * frame cannot read a global set out here, so which backend the app talks to
+ * has to travel in the URL like csrf_token and theme do. Omitted when the
+ * page did not set it, and the app then defaults to PHP.
  */
 window.dockerFoldersFrameSrc = function(page) {
   var token = (typeof csrf_token === 'string') ? csrf_token : '';
@@ -29,9 +34,13 @@ window.dockerFoldersFrameSrc = function(page) {
   var themeParam = Object.keys(theme).length > 0
     ? '&theme=' + encodeURIComponent(JSON.stringify(theme))
     : '';
+  var backend = window.dockerFoldersBackendMode;
+  var backendParam = (backend === 'graphql' || backend === 'php')
+    ? '&backend=' + encodeURIComponent(backend)
+    : '';
   var version = window.dockerFoldersAssetVersion;
   var versionParam = (version !== undefined && version !== null && version !== '')
     ? '&v=' + encodeURIComponent(String(version))
     : '';
-  return '/plugins/unraid-docker-folders-modern/assets/' + page + '?csrf_token=' + encodeURIComponent(token) + themeParam + versionParam;
+  return '/plugins/unraid-docker-folders-modern/assets/' + page + '?csrf_token=' + encodeURIComponent(token) + themeParam + backendParam + versionParam;
 };

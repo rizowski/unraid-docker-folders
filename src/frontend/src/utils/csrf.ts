@@ -16,6 +16,8 @@
  * matching the pattern Unraid plugins use.
  */
 
+import { getHostParam } from './iframeHost';
+
 declare global {
   // `var` is required here — it is the only declaration form that adds to the
   // global scope from a `declare global` block.
@@ -29,8 +31,7 @@ export function getCsrfToken(): string {
   }
 
   // Fallback: query parameter (for standalone/dev mode)
-  const params = new URLSearchParams(window.location.search);
-  return params.get('csrf_token') || '';
+  return getHostParam('csrf_token');
 }
 
 /**

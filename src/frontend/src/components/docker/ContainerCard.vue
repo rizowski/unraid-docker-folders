@@ -98,7 +98,7 @@
         <ContainerDetails
           class="block px-4 sm:px-6 pb-2 pt-3 border-t border-border"
           v-bind="detailsProps"
-          @refresh-logs="fetchLogs"
+          @refresh-logs="refreshLogs"
         />
       </div>
     </Transition>
@@ -269,7 +269,7 @@
         <ContainerDetails
           class="block px-2 sm:px-4 pb-4 pt-2 border-t border-border"
           v-bind="detailsProps"
-          @refresh-logs="fetchLogs"
+          @refresh-logs="refreshLogs"
         />
       </div>
     </Transition>
@@ -333,7 +333,7 @@ import { useSecurityStore } from '@/stores/security';
 import { useFolderStore } from '@/stores/folders';
 import { useContainerStats } from '@/composables/useContainerStats';
 import { useIsMobile } from '@/composables/useIsMobile';
-import { apiFetch } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import { composeProjectOf, releaseIndexUrl } from '@/utils/updateUnits';
 import { submitAdopt, type AdoptFields } from '@/utils/unraidHandoff';
 import ConfirmModal from '@/components/ConfirmModal.vue';
@@ -443,11 +443,8 @@ async function openAdopt() {
   adoptError.value = null;
   adoptOpen.value = true;
   try {
-    const res = await apiFetch(
-      `${API_BASE}/containers.php?action=adopt-fields&id=${encodeURIComponent(props.container.name)}`,
-    );
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const { ok, error: failure, data } = await useBackend().containers.adoptFields(props.container.name);
+    if (!ok) throw new Error(failure);
     if (data.error) throw new Error(data.message || 'Failed to read the container');
     adoptData.value = data as AdoptFields;
   } catch (e) {
@@ -594,7 +591,6 @@ const releaseNotesUrl = computed<string | null>(() =>
 // Inline logs panel, shown in both grid and list view. Ownership stays here rather than in
 // ContainerDetails: that child is mid-leave-transition during a collapse and
 // stops receiving prop updates, so it cannot tell when to stop polling.
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 const logLines = ref<string[]>([]);
 const newLineCount = ref(0);
 const logsLoading = ref(false);
@@ -602,6 +598,14 @@ const logsLoading = ref(false);
 // logLines, which just means the container hasn't logged anything.
 const logError = ref('');
 const logRefreshTimer = ref<ReturnType<typeof setInterval> | null>(null);
+// GraphQL mode pushes new lines instead of polling. The pane keeps at most
+// this many, newest first; polling shows the last 50.
+const MAX_STREAMED_LOG_LINES = 200;
+// After a log stream ends while the pane is still open, poll for this long
+// before opening a new stream.
+const LOG_STREAM_RETRY_MS = 15000;
+let closeLogStream: (() => void) | null = null;
+let logStreamRetryTimer: ReturnType<typeof setTimeout> | undefined;
 
 const shouldShowInlineLogs = computed(
   () => settingsStore.showInlineLogs && expanded.value && isRunning.value,
@@ -624,9 +628,8 @@ const detailsProps = computed(() => ({
 async function fetchLogs() {
   logsLoading.value = true;
   try {
-    const res = await apiFetch(`${API_BASE}/containers.php?action=logs&id=${encodeURIComponent(props.container.name)}&tail=50`);
-    if (res.ok) {
-      const data = await res.json();
+    const { ok, data } = await useBackend().containers.logs(props.container.name, 50);
+    if (ok) {
       const raw = data.logs || '';
       const prevFirst = logLines.value[0] || '';
       const lines = raw ? raw.split('\n') : [];
@@ -643,6 +646,12 @@ async function fetchLogs() {
       // Matches the API's error envelope: `error` is a boolean, the human text
       // is in `message`.
       logError.value = data.error ? data.message || 'Failed to load logs.' : '';
+    } else {
+      // The backend turns a transport failure into `ok: false` rather than
+      // throwing, so this branch covers what the catch below used to.
+      logLines.value = [];
+      logError.value = 'Failed to load logs.';
+      newLineCount.value = 0;
     }
   } catch (e) {
     console.error('Error fetching logs:', e);
@@ -654,8 +663,53 @@ async function fetchLogs() {
   }
 }
 
-function startLogPolling() {
-  stopLogPolling();
+/**
+ * Open a log stream: the first batch replaces the pane like a fetch does, and
+ * each later batch is added at the top. If the stream ends while the pane is
+ * open (the API restarted, the connection dropped, or the container restarted),
+ * poll until a new stream can be opened.
+ */
+function startLogStream(): boolean {
+  const live = useBackend().live;
+  if (!live) return false;
+
+  let first = true;
+  logsLoading.value = true;
+  closeLogStream = live.logs(props.container.name, 50, {
+    onData: (data) => {
+      logsLoading.value = false;
+      if (data.error) {
+        logLines.value = [];
+        logError.value = data.message || 'Failed to load logs.';
+        newLineCount.value = 0;
+        return;
+      }
+      const lines = data.logs ? data.logs.split('\n') : [];
+      logError.value = '';
+      if (first) {
+        first = false;
+        logLines.value = lines;
+        newLineCount.value = 0;
+        return;
+      }
+      logLines.value = [...lines, ...logLines.value].slice(0, MAX_STREAMED_LOG_LINES);
+      newLineCount.value = lines.length;
+    },
+    onEnd: (error) => {
+      closeLogStream = null;
+      logsLoading.value = false;
+      if (!shouldShowInlineLogs.value) return;
+      if (error) console.warn('Log stream ended, polling instead:', error);
+      startTimedLogPolling();
+      logStreamRetryTimer = setTimeout(() => {
+        if (shouldShowInlineLogs.value) startLogPolling();
+      }, LOG_STREAM_RETRY_MS);
+    },
+  });
+  return true;
+}
+
+function startTimedLogPolling() {
   fetchLogs();
   const interval = settingsStore.logRefreshInterval;
   if (interval > 0) {
@@ -663,11 +717,31 @@ function startLogPolling() {
   }
 }
 
+/**
+ * Start showing logs. A refresh interval of 0 means the user refreshes by
+ * hand, so that fetches once in both modes. Otherwise GraphQL mode streams
+ * and PHP mode polls at the interval.
+ */
+function startLogPolling() {
+  stopLogPolling();
+  if (settingsStore.logRefreshInterval > 0 && startLogStream()) return;
+  startTimedLogPolling();
+}
+
 function stopLogPolling() {
   if (logRefreshTimer.value !== null) {
     clearInterval(logRefreshTimer.value);
     logRefreshTimer.value = null;
   }
+  closeLogStream?.();
+  closeLogStream = null;
+  clearTimeout(logStreamRetryTimer);
+}
+
+/** The refresh button. A stream is reopened, so the pane starts again from a fresh tail. */
+function refreshLogs() {
+  if (closeLogStream) startLogPolling();
+  else fetchLogs();
 }
 
 watch(shouldShowInlineLogs, (show) => {
@@ -675,8 +749,12 @@ watch(shouldShowInlineLogs, (show) => {
   else stopLogPolling();
 });
 
-watch(() => settingsStore.logRefreshInterval, () => {
-  if (shouldShowInlineLogs.value) startLogPolling();
+watch(() => settingsStore.logRefreshInterval, (next, prev) => {
+  if (!shouldShowInlineLogs.value) return;
+  // A stream does not use the interval, so a change between two nonzero
+  // values leaves it alone.
+  if (closeLogStream && next > 0 && prev > 0) return;
+  startLogPolling();
 });
 
 // State change pulse animation

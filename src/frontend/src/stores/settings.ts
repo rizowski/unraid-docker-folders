@@ -4,11 +4,9 @@
 
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { apiFetch } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import { SORT_MODE_OPTIONS, type SortMode } from '@/types/folder';
 import { formatTimestamp } from '@/utils/format';
-
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 export const useSettingsStore = defineStore('settings', () => {
   const distinguishHealthy = ref(true);
@@ -38,10 +36,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   async function fetchSettings() {
     try {
-      const response = await apiFetch(`${API_BASE}/settings.php`);
-      if (!response.ok) return;
+      const { ok, data } = await useBackend().settings.getAll();
+      if (!ok) return;
 
-      const data = await response.json();
       const settings = data.settings || {};
 
       if ('distinguish_healthy' in settings) {
@@ -116,10 +113,7 @@ export const useSettingsStore = defineStore('settings', () => {
     distinguishHealthy.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'distinguish_healthy', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('distinguish_healthy', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -129,10 +123,7 @@ export const useSettingsStore = defineStore('settings', () => {
     sortMode.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'sort_mode', value }),
-      });
+      await useBackend().settings.set('sort_mode', value);
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -142,10 +133,7 @@ export const useSettingsStore = defineStore('settings', () => {
     sortFolders.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'sort_folders', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('sort_folders', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -155,10 +143,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showStats.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'show_stats', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('show_stats', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -168,10 +153,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showFolderPorts.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'show_folder_ports', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('show_folder_ports', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -181,10 +163,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showInlineLogs.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'show_inline_logs', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('show_inline_logs', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -194,10 +173,7 @@ export const useSettingsStore = defineStore('settings', () => {
     enableAdopt.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'enable_adopt', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('enable_adopt', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -207,10 +183,7 @@ export const useSettingsStore = defineStore('settings', () => {
     enableSecurityAdvisor.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'enable_security_advisor', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('enable_security_advisor', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -220,10 +193,7 @@ export const useSettingsStore = defineStore('settings', () => {
     logRefreshInterval.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'log_refresh_interval', value: String(value) }),
-      });
+      await useBackend().settings.set('log_refresh_interval', String(value));
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -233,10 +203,7 @@ export const useSettingsStore = defineStore('settings', () => {
     enableUpdateChecks.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'enable_update_checks', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('enable_update_checks', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -246,10 +213,7 @@ export const useSettingsStore = defineStore('settings', () => {
     updateCheckSchedule.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'update_check_schedule', value }),
-      });
+      await useBackend().settings.set('update_check_schedule', value);
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -259,10 +223,7 @@ export const useSettingsStore = defineStore('settings', () => {
     notifyOnUpdates.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'notify_on_updates', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('notify_on_updates', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -272,10 +233,7 @@ export const useSettingsStore = defineStore('settings', () => {
     updateCheckExclude.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'update_check_exclude', value }),
-      });
+      await useBackend().settings.set('update_check_exclude', value);
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -285,10 +243,7 @@ export const useSettingsStore = defineStore('settings', () => {
     postPullAction.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'post_pull_action', value }),
-      });
+      await useBackend().settings.set('post_pull_action', value);
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -299,10 +254,7 @@ export const useSettingsStore = defineStore('settings', () => {
     updateConcurrency.value = clamped;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'update_concurrency', value: String(clamped) }),
-      });
+      await useBackend().settings.set('update_concurrency', String(clamped));
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -312,10 +264,7 @@ export const useSettingsStore = defineStore('settings', () => {
     backupDestination.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'backup_destination', value }),
-      });
+      await useBackend().settings.set('backup_destination', value);
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -325,10 +274,7 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultRetentionCount.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'default_retention_count', value: String(value) }),
-      });
+      await useBackend().settings.set('default_retention_count', String(value));
     } catch (e) {
       console.error('Error saving setting:', e);
     }
@@ -338,10 +284,7 @@ export const useSettingsStore = defineStore('settings', () => {
     replaceDockerSection.value = value;
 
     try {
-      await apiFetch(`${API_BASE}/settings.php`, {
-        method: 'POST',
-        body: JSON.stringify({ key: 'replace_docker_section', value: value ? '1' : '0' }),
-      });
+      await useBackend().settings.set('replace_docker_section', value ? '1' : '0');
     } catch (e) {
       console.error('Error saving setting:', e);
     }

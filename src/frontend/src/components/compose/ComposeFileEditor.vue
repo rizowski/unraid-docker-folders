@@ -174,6 +174,8 @@
 import { ref, watch, computed, onUnmounted } from 'vue';
 import { useComposeStore } from '@/stores/compose';
 import { useParentModal } from '@/composables/useParentModal';
+import { useComposeLogsStream } from '@/composables/useComposeLogsStream';
+import { useBackend } from '@/backends';
 import BaseModal from '@/components/BaseModal.vue';
 import type { ComposeFileVersion } from '@/types/compose';
 
@@ -220,7 +222,6 @@ const originalEnvPath = ref('');
 
 const logsContent = ref('');
 const logsAutoRefresh = ref(true);
-let logsPollTimer: number | null = null;
 
 const showHistory = ref(false);
 const historyFileType = ref<'compose' | 'env'>('compose');
@@ -312,7 +313,7 @@ function buildDescriptor() {
       type: 'checkbox-list',
       id: 'logsControls',
       items: [
-        { id: 'auto', label: 'Auto-refresh every 3s', checked: logsAutoRefresh.value },
+        { id: 'auto', label: useBackend().live ? 'Live updates' : 'Auto-refresh every 3s', checked: logsAutoRefresh.value },
       ],
       tab: 'logs',
     });
@@ -374,34 +375,47 @@ function patchActions() {
   }
 }
 
+/** Pushes accumulated log text to the local ref and, in iframe mode, to the parent modal's field — the one place either polling or streaming is allowed to touch `logsContent`. */
+function applyLogsContent(next: string) {
+  logsContent.value = next;
+  if (inIframe) {
+    parentModal.update({
+      fields: [{ id: 'logsContent', content: next }],
+    });
+  }
+}
+
 async function fetchLogsTick() {
   if (!props.projectName) return;
   try {
     const result = await composeStore.getLogs(props.projectName, 500);
     const next = result.output || result.error || '';
     if (next === logsContent.value) return;
-    logsContent.value = next;
-    if (inIframe) {
-      parentModal.update({
-        fields: [{ id: 'logsContent', content: next }],
-      });
-    }
+    applyLogsContent(next);
   } catch (e) {
     console.error('Failed to fetch compose logs:', e);
   }
 }
 
+/**
+ * GraphQL mode streams `docker compose logs --follow` instead of polling
+ * `fetchLogsTick` every 3s: the first chunk replaces `logsContent`, later
+ * chunks append (see `useComposeLogsStream`). It falls back to `fetchLogsTick`
+ * on an interval if the stream ends unexpectedly, retrying the stream after
+ * 15s. PHP mode (no `live`) just runs `fetchLogsTick` on the interval, same
+ * as before this existed.
+ */
+const logsStream = useComposeLogsStream(
+  { getLive: () => useBackend().live, getProjectName: () => props.projectName, pollTick: fetchLogsTick },
+  { onContent: applyLogsContent },
+);
+
 function startLogsPolling() {
-  if (logsPollTimer != null) return;
-  fetchLogsTick();
-  logsPollTimer = window.setInterval(fetchLogsTick, 3000);
+  logsStream.start();
 }
 
 function stopLogsPolling() {
-  if (logsPollTimer != null) {
-    clearInterval(logsPollTimer);
-    logsPollTimer = null;
-  }
+  logsStream.stop();
 }
 
 async function loadForEdit() {

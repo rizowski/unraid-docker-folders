@@ -61,7 +61,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { getCsrfToken } from '@/utils/csrf';
+import { useBackend } from '@/backends';
+import { SseHttpError, SseNoStreamError } from '@/backends/sse';
 import { useParentModal } from '@/composables/useParentModal';
 import { useSettingsStore } from '@/stores/settings';
 import BaseModal from '@/components/BaseModal.vue';
@@ -89,8 +90,6 @@ interface LayerProgress {
 type UnitResult = 'success' | 'error' | 'cancelled';
 
 const settingsStore = useSettingsStore();
-
-const API_BASE = '/plugins/unraid-docker-folders-modern/api';
 
 // All per-unit state is keyed by unit id — several units run at once, so
 // nothing here can be a single in-flight value.
@@ -268,31 +267,6 @@ function setStatus(id: string, text: string) {
   unitStatus.value = { ...unitStatus.value, [id]: text };
 }
 
-/** The endpoint + body for a unit, keyed off its kind. */
-function requestFor(unit: UpdateUnit): { url: string; body: URLSearchParams } {
-  const body = new URLSearchParams();
-  const token = getCsrfToken();
-  if (token) body.append('csrf_token', token);
-
-  if (unit.kind === 'compose') {
-    // `up` pulls and then recreates changed services; `pull` downloads only.
-    // Honour the same post-pull setting standalone containers use.
-    const action = settingsStore.postPullAction === 'pull_and_auto_recreate' ? 'up' : 'pull';
-    return {
-      url: `${API_BASE}/compose-stream.php?action=${action}&project=${encodeURIComponent(unit.project)}`,
-      body,
-    };
-  }
-
-  // Send the exact container set the confirm dialog listed, so the backend
-  // recreates those and nothing else.
-  body.append('containers', unit.containers.map((c) => c.id).join(','));
-  return {
-    url: `${API_BASE}/pull.php?image=${encodeURIComponent(unit.image)}`,
-    body,
-  };
-}
-
 /**
  * Apply one SSE event to a unit's state. Returns 'success'/'error' on a
  * terminal event, otherwise null. `pull.php` and `compose-stream.php` share
@@ -370,52 +344,39 @@ async function runUnit(unit: UpdateUnit): Promise<UnitResult> {
   const controller = new AbortController();
   controllers.add(controller);
 
-  const { url, body } = requestFor(unit);
+  let result: UnitResult = 'error';
+
+  const onEvent = (event: string, data: unknown) => {
+    const terminal = applyEvent(unit, event, (data ?? {}) as Record<string, any>);
+    if (terminal) result = terminal;
+    patchUnit(unit);
+  };
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) return 'error';
-
-    const reader = response.body?.getReader();
-    if (!reader) return 'error';
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let result: UnitResult = 'error';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      let currentEvent = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7);
-        } else if (line.startsWith('data: ')) {
-          try {
-            const terminal = applyEvent(unit, currentEvent, JSON.parse(line.slice(6)));
-            if (terminal) result = terminal;
-            patchUnit(unit);
-          } catch {
-            // skip malformed JSON
-          }
-        }
-      }
+    if (unit.kind === 'compose') {
+      // `up` pulls and then recreates changed services; `pull` downloads only.
+      // Honour the same post-pull setting standalone containers use.
+      const action = settingsStore.postPullAction === 'pull_and_auto_recreate' ? 'up' : 'pull';
+      await useBackend().streams.compose(unit.project, action, {}, onEvent, controller.signal);
+    } else {
+      // Send the exact container set the confirm dialog listed, so the
+      // backend recreates those and nothing else.
+      await useBackend().streams.pull(
+        unit.image,
+        { containerIds: unit.containers.map((c) => c.id) },
+        onEvent,
+        controller.signal,
+      );
     }
 
     return result;
   } catch (e: any) {
     if (e.name === 'AbortError') return 'error';
+    // A response-level failure (non-2xx, or no readable stream) is treated
+    // as a silent 'error' here — matches the original inline fetch, which
+    // never set unitErrors for these two cases, unlike the single-unit
+    // PullProgressModal/ComposeProgressModal, which do show them.
+    if (e instanceof SseHttpError || e instanceof SseNoStreamError) return 'error';
     unitErrors.value = { ...unitErrors.value, [unit.id]: e.message || 'Update failed' };
     return 'error';
   } finally {

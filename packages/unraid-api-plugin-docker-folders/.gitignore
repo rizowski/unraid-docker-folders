@@ -1,0 +1,9 @@
+node_modules/
+dist/
+dist-pack/
+# Built from source by scripts/vendor-unraid-shared.sh. @unraid/shared is not
+# published to npm, so the tarball is a local build artifact, not a source file.
+vendor/
+# The repo root ignores package-lock.json, because src/frontend is yarn-only
+# and npm would rewrite its yarn.lock. This package is npm, so it keeps its own.
+!package-lock.json

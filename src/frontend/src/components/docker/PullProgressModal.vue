@@ -83,7 +83,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { getCsrfToken } from '@/utils/csrf';
+import { useBackend } from '@/backends';
 import { useSettingsStore } from '@/stores/settings';
 import { useParentModal } from '@/composables/useParentModal';
 import BaseModal from '@/components/BaseModal.vue';
@@ -220,72 +220,13 @@ async function startPull() {
 
   abortController = new AbortController();
 
-  const API_BASE = '/plugins/unraid-docker-folders-modern/api';
-  const token = getCsrfToken();
-  const body = new URLSearchParams();
-  if (token) body.append('csrf_token', token);
-  if (props.force && props.containerId) {
-    body.append('recreate', '1');
-    body.append('containers', props.containerId);
-  }
-
   try {
-    const response = await fetch(
-      `${API_BASE}/pull.php?image=${encodeURIComponent(props.image)}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString(),
-        signal: abortController.signal,
-      },
+    await useBackend().streams.pull(
+      props.image,
+      props.force && props.containerId ? { containerIds: [props.containerId], recreate: true } : {},
+      handleSSEEvent,
+      abortController.signal,
     );
-
-    if (!response.ok) {
-      errorMessage.value = `HTTP ${response.status}`;
-      statusMessage.value = 'Error';
-      isDone.value = true;
-      patchStatus();
-      showCloseButton();
-      return;
-    }
-
-    const reader = response.body?.getReader();
-    if (!reader) {
-      errorMessage.value = 'No response stream';
-      statusMessage.value = 'Error';
-      isDone.value = true;
-      patchStatus();
-      showCloseButton();
-      return;
-    }
-
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      let currentEvent = '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEvent = line.slice(7);
-        } else if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          try {
-            const data = JSON.parse(dataStr);
-            handleSSEEvent(currentEvent, data);
-          } catch {
-            // skip malformed JSON
-          }
-        }
-      }
-    }
   } catch (e: any) {
     if (e.name !== 'AbortError') {
       errorMessage.value = e.message || 'Pull failed';

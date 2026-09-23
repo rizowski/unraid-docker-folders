@@ -13,7 +13,7 @@ import type { Schedule } from '@/types/schedule';
 import type { Container } from '@/stores/docker';
 import type { Folder } from '@/types/folder';
 
-vi.mock('@/composables/useWebSocket', () => ({ initWebSocket: vi.fn() }));
+vi.mock('@/composables/useLiveUpdates', () => ({ initLiveUpdates: vi.fn() }));
 
 const COLLAPSE_KEY = 'docker-folders-widget-collapsed';
 const SETTINGS_KEY = 'docker-folders-widget-settings';

@@ -3,9 +3,22 @@
  * Shared by the Folders page (main.ts) and the dashboard widget (widget/main.ts).
  */
 
+/**
+ * Read a value the host page put on the iframe URL.
+ *
+ * The page cannot reach into the frame, so everything it wants to hand over
+ * rides on the query string: `csrf_token`, `theme`, `backend`, and the `v`
+ * cache-busting stamp (see `include/frameSrc.js`). Returns '' when absent,
+ * which is also what standalone dev gets.
+ */
+export function getHostParam(name: string): string {
+  if (typeof window === 'undefined') return '';
+  return new URLSearchParams(window.location.search).get(name) || '';
+}
+
 /** Apply the Unraid theme CSS variables the host page passed in `?theme=`. */
 export function applyThemeParam(): void {
-  const themeParam = new URLSearchParams(window.location.search).get('theme');
+  const themeParam = getHostParam('theme');
   if (!themeParam) return;
   try {
     const vars = JSON.parse(themeParam) as Record<string, string>;

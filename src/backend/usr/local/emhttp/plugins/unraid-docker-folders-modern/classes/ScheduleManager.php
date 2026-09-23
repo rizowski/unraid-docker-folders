@@ -389,6 +389,11 @@ class ScheduleManager
    * racing itself, so without this compare-and-set both run the action.
    * executeSchedule() sets next_run_at again when the run finishes.
    *
+   * This makes a slot run at most once. If the run fails after the claim and
+   * before its history row, the slot is lost with no record, where before the
+   * claim it was retried on the next tick. For a backup or a restart, a lost
+   * run is the better failure than a doubled one.
+   *
    * @param array $schedule The full schedules row, as read by the runner
    * @param int $now The runner's clock for this pass
    * @return bool True if this runner owns the slot

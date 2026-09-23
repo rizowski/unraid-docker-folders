@@ -737,6 +737,75 @@ if [ -f "${CONFIG_DIR}/data.db" ]; then
   echo "Database permissions set." >> "${LOG_FILE}"
 fi
 
+# Install the GraphQL backend into the Unraid API, where there is one.
+#
+# Optional by design. PHP is the default backend and works without it, the
+# frontend falls back to PHP whenever this plugin does not answer, and every
+# failure below is logged and skipped rather than failing the install.
+#
+# This runs on every boot, not only on install. The API's node_modules live in
+# RAM, so a plugin installed into them is gone after a reboot unless something
+# installs it again, and this is that something.
+API_PLUGIN_PKG="unraid-api-plugin-docker-folders"
+API_PLUGIN_SRC=$(ls "${PLUGIN_DIR}"/api-plugin/${API_PLUGIN_PKG}-*.tgz 2>/dev/null | head -1)
+API_CONFIG="/boot/config/plugins/dynamix.my.servers/configs/api.json"
+if command -v unraid-api >/dev/null 2>&1 && [ -n "${API_PLUGIN_SRC}" ]; then
+  echo "Installing the Unraid API plugin..."
+  # The API records the tarball's path in its package.json. Only /boot survives
+  # a reboot, and a relative path would resolve inside /usr/local/unraid-api.
+  mkdir -p "${CONFIG_DIR}/api-plugin"
+  rm -f "${CONFIG_DIR}"/api-plugin/${API_PLUGIN_PKG}-*.tgz
+  cp "${API_PLUGIN_SRC}" "${CONFIG_DIR}/api-plugin/"
+  API_PLUGIN_TGZ="${CONFIG_DIR}/api-plugin/$(basename "${API_PLUGIN_SRC}")"
+
+  if timeout 300 unraid-api plugins install "${API_PLUGIN_TGZ}" >> "${LOG_FILE}" 2>&1; then
+    # `plugins install` writes the tarball path into api.json's plugins list,
+    # but the API matches that list against package names, so the entry is
+    # rewritten to the bare name. Measured on API 4.35.1: with the path the
+    # plugin can go unlisted, with the name it lists and loads.
+    if [ -f "${API_CONFIG}" ]; then
+      node -e '
+        const fs = require("fs");
+        const [file, name] = process.argv.slice(1);
+        const config = JSON.parse(fs.readFileSync(file, "utf8"));
+        const others = (config.plugins || []).filter((p) => typeof p === "string" && !p.includes(name));
+        config.plugins = [...others, name];
+        fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+      ' "${API_CONFIG}" "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
+    fi
+
+    # A positive match on the field itself: an unauthenticated answer names it
+    # in its error path, while a missing field and "Graphql is offline" do not.
+    #
+    # `unraid-api restart` does not reload a plugin; stop then start does. Only
+    # when the API was already running, though. At boot the API may not be up
+    # yet, and starting it from here would race Unraid's own start of it; it
+    # loads the plugin by itself when it comes up.
+    probe_api_plugin() {
+      curl -s --max-time 5 --unix-socket /var/run/unraid-api.sock \
+        -H 'Content-Type: application/json' \
+        -d '{"query":"query { dockerFoldersInfo { version } }"}' \
+        http://localhost/graphql 2>/dev/null \
+        | grep -q '"path":\["dockerFoldersInfo"\]\|"dockerFoldersInfo":{'
+    }
+    if unraid-api status 2>/dev/null | grep -q 'online' && ! probe_api_plugin; then
+      unraid-api stop >> "${LOG_FILE}" 2>&1 || true
+      unraid-api start >> "${LOG_FILE}" 2>&1 || true
+      sleep 15
+    fi
+    if probe_api_plugin; then
+      echo "  ✓ Unraid API plugin loaded"
+      echo "Unraid API plugin loaded" >> "${LOG_FILE}"
+    else
+      echo "  ! Unraid API plugin installed but not answering; the PHP backend is unaffected"
+      echo "WARNING: Unraid API plugin not answering after install" >> "${LOG_FILE}"
+    fi
+  else
+    echo "  ! Unraid API plugin install failed; the PHP backend is unaffected"
+    echo "WARNING: unraid-api plugins install failed" >> "${LOG_FILE}"
+  fi
+fi
+
 # Verify installation
 echo "Verifying installation..."
 VERIFY_FAIL=0
@@ -838,6 +907,25 @@ rm -f "${CONFIG_DIR}/${PLUGIN_NAME}.cron" "/etc/cron.d/${PLUGIN_NAME}"
 if [ -x /usr/local/sbin/update_cron ]; then
   /usr/local/sbin/update_cron >/dev/null 2>&1
 fi
+
+# Take the GraphQL backend out of the Unraid API. It lives in the API's own
+# dependency list, so leaving it would keep a plugin loaded whose PHP half,
+# settings page and database readers are gone.
+if command -v unraid-api >/dev/null 2>&1; then
+  echo "Removing the Unraid API plugin..."
+  unraid-api plugins remove unraid-api-plugin-docker-folders >/dev/null 2>&1 || true
+  API_CONFIG="/boot/config/plugins/dynamix.my.servers/configs/api.json"
+  if [ -f "${API_CONFIG}" ]; then
+    node -e '
+      const fs = require("fs");
+      const [file, name] = process.argv.slice(1);
+      const config = JSON.parse(fs.readFileSync(file, "utf8"));
+      config.plugins = (config.plugins || []).filter((p) => typeof p === "string" && !p.includes(name));
+      fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+    ' "${API_CONFIG}" unraid-api-plugin-docker-folders >/dev/null 2>&1 || true
+  fi
+fi
+rm -rf "${CONFIG_DIR}/api-plugin"
 
 # Backup data before removal
 if [ -f "${CONFIG_DIR}/data.db" ]; then

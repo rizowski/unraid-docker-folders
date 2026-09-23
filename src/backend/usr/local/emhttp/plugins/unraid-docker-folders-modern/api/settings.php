@@ -96,9 +96,17 @@ function handlePost()
     'backup_destination',
     'default_retention_count',
     'sort_mode', 'sort_folders',
+    'backend_mode',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);
+  }
+
+  // backend_mode picks which backend the Vue app talks to. Anything other
+  // than the two known values would leave the frontend with no transport, so
+  // reject rather than store it.
+  if ($key === 'backend_mode' && !in_array($value, BACKEND_MODES, true)) {
+    errorResponse('Invalid backend mode', 400);
   }
 
   // Validate sort_mode against the known set of modes.
@@ -149,6 +157,14 @@ function handlePost()
     $db->update('settings', ['value' => $value, 'updated_at' => $now], 'key = ?', [$key]);
   } else {
     $db->insert('settings', ['key' => $key, 'value' => $value, 'updated_at' => $now]);
+  }
+
+  // Heal the schedule-runner cron line on every backend switch. The plugin
+  // never writes root's crontab, so schedules created in GraphQL mode do not
+  // add the line PHP needs; without this, switching back to PHP, or PHP
+  // taking over while the API is down, would leave nothing running them.
+  if ($key === 'backend_mode') {
+    CronManager::ensureSchedulerCron($db);
   }
 
   // When update_check_schedule changes, update or remove the cron file

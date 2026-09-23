@@ -1,0 +1,61 @@
+{
+  "name": "unraid-api-plugin-docker-folders",
+  "version": "0.0.8",
+  "description": "Docker Folders plugin for the Unraid API",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc",
+    "type-check": "tsc --noEmit -p tsconfig.test.json",
+    "pack:tarball": "npm run build && npm run validate && mkdir -p dist-pack && npm pack --pack-destination ./dist-pack",
+    "vendor:shared": "./scripts/vendor-unraid-shared.sh",
+    "validate": "node scripts/validate-plugin-shape.mjs",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/graphql": "^13.0.0",
+    "@unraid/shared": "*",
+    "class-validator": "^0.14.0",
+    "dockerode": "^4.0.0",
+    "graphql": "^16.0.0",
+    "graphql-subscriptions": "^3.0.0",
+    "nest-commander": "^3.0.0",
+    "reflect-metadata": "*",
+    "rxjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "11.1.26",
+    "@nestjs/config": "4.0.2",
+    "@nestjs/core": "11.1.26",
+    "@nestjs/graphql": "13.4.2",
+    "@types/dockerode": "3.3.43",
+    "@types/node": "22.18.0",
+    "@unraid/shared": "file:vendor/unraid-shared-4.25.3.tgz",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.2",
+    "dockerode": "4.0.7",
+    "graphql": "16.11.0",
+    "graphql-scalars": "1.24.2",
+    "graphql-subscriptions": "3.0.0",
+    "nest-authz": "2.17.0",
+    "nest-commander": "3.19.0",
+    "reflect-metadata": "0.1.14",
+    "rxjs": "7.8.2",
+    "typescript": "5.9.2",
+    "vite": "8.3.0",
+    "vitest": "5.0.1"
+  }
+}

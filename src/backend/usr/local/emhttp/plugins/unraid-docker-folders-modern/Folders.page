@@ -134,6 +134,7 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 <!-- frameSrc.js appends this to the iframe URL. index.html carries no content
      hash, so without it the browser serves the previous build's copy, which
      names chunk files the update already deleted. -->
+<script>window.dockerFoldersBackendMode = <?= json_encode(dfmBackendMode()) ?>;</script>
 <script>window.dockerFoldersAssetVersion = <?= json_encode(dfmAssetVersion(PLUGIN_DIR . '/assets/index.html')) ?>;</script>
 <script src="/plugins/unraid-docker-folders-modern/include/frameSrc.js?v=<?= dfmAssetVersion(PLUGIN_DIR . '/include/frameSrc.js') ?>"></script>
 <script>

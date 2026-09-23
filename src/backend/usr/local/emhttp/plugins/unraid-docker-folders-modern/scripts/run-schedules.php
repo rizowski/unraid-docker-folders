@@ -20,6 +20,12 @@ if (!file_exists(DOCKER_SOCKET)) {
   exit(0);
 }
 
+// In GraphQL mode the Unraid API plugin runs due schedules instead, and a
+// schedule fired by both would run twice. See dfmPhpOwnsSchedules().
+if (!dfmPhpOwnsSchedules()) {
+  exit(0);
+}
+
 $lockFile = '/tmp/unraid-docker-schedules.lock';
 $fp = fopen($lockFile, 'w');
 if (!$fp || !flock($fp, LOCK_EX | LOCK_NB)) {
