@@ -655,14 +655,17 @@ function refreshReleaseNotes(array &$results, $db, callable $log, $full, $now = 
       'published_at' => $release['published_at'] ?? null,
       'url' => $release['url'] ?? null,
       'summary' => $release['summary'] ?? null,
-      'etag' => null,
       'status' => in_array($status, ['ok', 'not_found'], true) ? $status : 'error',
       'fetched_at' => $now,
     ];
 
+    // release_notes.etag is left out. It was a placeholder for conditional
+    // requests that were never built, and PHP only ever wrote NULL into it,
+    // which REPLACE also leaves there. The column stays, because the Unraid
+    // API plugin writes the same table and still names it.
     $db->query(
-      'INSERT OR REPLACE INTO release_notes (repo, tag, name, published_at, url, summary, etag, status, fetched_at)
-       VALUES (:repo, :tag, :name, :published_at, :url, :summary, :etag, :status, :fetched_at)',
+      'INSERT OR REPLACE INTO release_notes (repo, tag, name, published_at, url, summary, status, fetched_at)
+       VALUES (:repo, :tag, :name, :published_at, :url, :summary, :status, :fetched_at)',
       [
         ':repo' => $row['repo'],
         ':tag' => $row['tag'],
@@ -670,7 +673,6 @@ function refreshReleaseNotes(array &$results, $db, callable $log, $full, $now = 
         ':published_at' => $row['published_at'],
         ':url' => $row['url'],
         ':summary' => $row['summary'],
-        ':etag' => $row['etag'],
         ':status' => $row['status'],
         ':fetched_at' => $row['fetched_at'],
       ]
