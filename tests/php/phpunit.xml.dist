@@ -9,6 +9,7 @@
       <file>AuthTest.php</file>
     </testsuite>
     <testsuite name="DockerClientStats">
+      <file>DbCopyScriptTest.php</file>
       <file>DockerClientStatsTest.php</file>
     </testsuite>
     <testsuite name="ImageReference">

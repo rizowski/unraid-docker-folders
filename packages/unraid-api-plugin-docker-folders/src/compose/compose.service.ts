@@ -320,14 +320,11 @@ export class ComposeService {
     // ─── Stack CRUD ──────────────────────────────────────────────────────
 
     /**
-     * `ComposeManager::getAllStacks`. For each stack, runs `docker compose
-     * ps` to count running services — sequential, matching PHP's
-     * synchronous loop (ComposeManager.php:227-248) rather than
-     * `Promise.all`. Each iteration spawns two child processes (`stackPs`
-     * checks `isComposeAvailable` every time — see `stackPs` below), so a
-     * box with many stacks pays for `2N` processes either way; sequential
-     * keeps that bounded to one at a time instead of a burst of `2N`
-     * concurrent `docker` invocations against a production Docker daemon.
+     * `ComposeManager::getAllStacks`. Checks for Compose once, then runs
+     * `docker compose ps` per stack to count running services, sequentially
+     * like PHP's loop (ComposeManager.php:244-269) rather than
+     * `Promise.all`, so a production Docker daemon sees one `docker` process
+     * at a time instead of a burst.
      */
     async getAllStacks(): Promise<DockerFoldersComposeStack[]> {
         const rows = this.db.read(
@@ -335,8 +332,9 @@ export class ComposeService {
         );
 
         const stacks: DockerFoldersComposeStack[] = [];
+        const available = rows.length > 0 && (await this.isComposeAvailable());
         for (const row of rows) {
-            const ps = await this.stackPs(row.project_name);
+            const ps = await this.stackPs(row.project_name, available);
             stacks.push(this.toStackDto(row, ps));
         }
         return stacks;
@@ -743,21 +741,19 @@ export class ComposeService {
     }
 
     /**
-     * `ComposeManager::stackPs`. Calls `isComposeAvailable()` on every
-     * invocation (ComposeManager.php:934), which `getAllStacks` then calls
-     * once per row — an N-stack list therefore runs `2N` sequential
-     * `docker` processes just to render the list. Reported, not fixed:
-     * caching availability for the duration of one list request would
-     * change behavior if Compose becomes available mid-request, which is
-     * exactly the kind of edge case a faithful port should not paper over
-     * without being asked.
+     * `ComposeManager::stackPs`.
+     *
+     * `composeAvailable` lets a caller that asks for many stacks check for
+     * Compose once. `getAllStacks` does, the way PHP's `isComposeAvailable()`
+     * now keeps its answer for the request, so a list of N stacks runs N + 1
+     * `docker` processes rather than 2N.
      *
      * Unlike every other stack action, PHP redirects stderr to `/dev/null`
      * here rather than merging it (`2>/dev/null`, not `2>&1`), so a failure
      * is silently empty — `stderr` from `exec()` is intentionally not read.
      */
-    async stackPs(projectName: string): Promise<ComposePsEntry[]> {
-        if (!(await this.isComposeAvailable())) return [];
+    async stackPs(projectName: string, composeAvailable?: boolean): Promise<ComposePsEntry[]> {
+        if (!(composeAvailable ?? (await this.isComposeAvailable()))) return [];
 
         const { args, stack } = this.stackArgs(projectName);
         const result = await this.runner.exec(['compose', ...args, 'ps', '--format', 'json'], {

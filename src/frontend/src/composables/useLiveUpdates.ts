@@ -10,17 +10,14 @@
  * container started from the Unraid webgui, from the command line, or by its
  * own restart policy shows up at once instead of on the next poll.
  *
- * In GraphQL mode both run. That is deliberate and temporary: compose,
- * schedules and updates still go through PHP, which publishes to nchan only,
- * so dropping nchan now would make those three silently stop updating. Every
- * event is a "refetch this entity" signal rather than a patch, so a duplicate
- * costs one extra fetch, which the stores' own 500ms debounce absorbs. nchan's
- * half goes away when the last PHP domain moves over.
+ * Each mode uses one transport. In GraphQL mode every write goes through the
+ * plugin, which publishes on its subscription (and to nchan as well, for a tab
+ * still in PHP mode), and PHP's schedule and update runners stand down while
+ * the plugin runs them. So nchan carries nothing a GraphQL-mode page needs,
+ * and it is not opened. The fallback poll covers what neither announces.
  *
- * `connectionStatus` follows the transport that matters for the active mode,
- * so the header keeps meaning what it meant: in PHP mode nchan, in GraphQL
- * mode the subscription. A failure of the supplementary transport is logged,
- * not shown, because the user can do nothing about it and the poll covers it.
+ * `connectionStatus` follows the active mode's transport: in PHP mode nchan,
+ * in GraphQL mode the subscription.
  */
 
 import { ref } from 'vue';
@@ -315,8 +312,8 @@ export function initLiveUpdates(options: { pollInterval?: number } = {}) {
 
   document.addEventListener('visibilitychange', onVisibilityChange);
 
-  connectNchan();
   if (mode === 'graphql') connectGraphql();
+  else connectNchan();
 }
 
 export function destroyLiveUpdates() {

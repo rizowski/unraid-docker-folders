@@ -128,15 +128,15 @@ describe('initLiveUpdates', () => {
     expect(FakeWebSocket.instances[0].url).toContain('/sub/docker-modern');
   });
 
-  it('opens both the nchan and graphql sockets in graphql mode', async () => {
+  it('opens only the graphql socket in graphql mode', async () => {
     mocks.backendKind = 'graphql';
     const { initLiveUpdates } = await loadLiveUpdates();
 
     initLiveUpdates();
 
-    // Compose, schedules and updates still publish to nchan only, so it has
-    // to stay open even once the plugin's own subscription is live.
-    expect(() => findSocket('/sub/docker-modern')).not.toThrow();
+    // Every GraphQL-mode write publishes on the subscription, so nchan would
+    // only carry duplicates.
+    expect(FakeWebSocket.instances).toHaveLength(1);
     expect(() => findSocket('/graphql')).not.toThrow();
   });
 });
@@ -181,47 +181,5 @@ describe('graphql subscription dispatch', () => {
     expect(mocks.fetchContainers).toHaveBeenCalledTimes(1);
     expect(useLiveUpdates().connectionStatus.value).toBe('connected');
   });
-
-  it('keeps connectionStatus on the graphql transport when nchan closes', async () => {
-    mocks.backendKind = 'graphql';
-    const { initLiveUpdates, useLiveUpdates } = await loadLiveUpdates();
-    initLiveUpdates();
-    const nchan = findSocket('/sub/docker-modern');
-    const gql = findSocket('/graphql');
-
-    gql.triggerOpen();
-    gql.triggerMessage(JSON.stringify({ type: 'connection_ack' }));
-    gql.triggerMessage(
-      JSON.stringify({
-        type: 'next',
-        id: '1',
-        payload: { data: { dockerFoldersEvents: { entity: 'container', action: 'update', timestamp: 1 } } },
-      }),
-    );
-    expect(useLiveUpdates().connectionStatus.value).toBe('connected');
-
-    // nchan is only supplementary in graphql mode, so losing it must not
-    // move the header's status indicator.
-    nchan.triggerClose(1006, 'nginx reload');
-
-    expect(useLiveUpdates().connectionStatus.value).toBe('connected');
-  });
 });
 
-describe('destroyLiveUpdates', () => {
-  it('closes both sockets and stops the poll', async () => {
-    mocks.backendKind = 'graphql';
-    const { initLiveUpdates, destroyLiveUpdates } = await loadLiveUpdates();
-    initLiveUpdates();
-    const nchan = findSocket('/sub/docker-modern');
-    const gql = findSocket('/graphql');
-    nchan.triggerOpen();
-
-    destroyLiveUpdates();
-    vi.advanceTimersByTime(60_000);
-
-    expect(nchan.readyState).toBe(FakeWebSocket.CLOSED);
-    expect(gql.readyState).toBe(FakeWebSocket.CLOSED);
-    expect(mocks.fetchContainers).not.toHaveBeenCalled();
-  });
-});

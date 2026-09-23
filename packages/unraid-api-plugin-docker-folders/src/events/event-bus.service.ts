@@ -10,16 +10,10 @@ import { NchanService } from './nchan.service.js';
 /**
  * One call site for "something changed", fanned out to both transports.
  *
- * Every mutation calls this rather than either transport directly. In GraphQL
- * mode a browser holds a subscription, but compose, schedules and updates
- * still run through PHP, which publishes to nchan only. So the frontend keeps
- * both connections open for now and this keeps both fed. A mutation that
- * announced on one transport only would leave whichever tab picked the other
- * one stale, and which tab that is would depend on the backend mode, which is
- * the hardest kind of bug to see.
- *
- * nchan's role shrinks phase by phase as each PHP domain moves over. When the
- * last one lands, this class loses its nchan half and nothing else changes.
+ * Every mutation calls this rather than either transport directly. A
+ * GraphQL-mode page listens only to the subscription. nchan is still fed for
+ * a tab that is in PHP mode, for example one that fell back to PHP when the
+ * plugin did not answer, or one opened before the mode changed.
  *
  * Neither publish can fail a mutation: nchan is fire and forget by
  * construction, and the pubsub publish is a promise nobody awaits, so its

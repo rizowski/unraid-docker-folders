@@ -639,7 +639,10 @@ if [ -f "${CONFIG_DIR}/data.db" ]; then
   # Create backup of existing database before migration
   BACKUP_FILE="${CONFIG_DIR}/backups/pre-upgrade-$(date +%Y%m%d-%H%M%S).db"
   echo "Creating backup: ${BACKUP_FILE}"
-  cp "${CONFIG_DIR}/data.db" "${BACKUP_FILE}"
+  # Through SQLite, not cp: the database is in use while this runs (the Unraid
+  # API plugin, PHP requests, the schedule runner), and a raw copy of a WAL
+  # database misses commits still in data.db-wal. See scripts/db-copy.php.
+  php "${PLUGIN_DIR}/scripts/db-copy.php" backup "${CONFIG_DIR}/data.db" "${BACKUP_FILE}" >> "${LOG_FILE}" 2>&1
 
   if [ $? -eq 0 ]; then
     echo "Backup created successfully." >> "${LOG_FILE}"
@@ -674,10 +677,18 @@ if [ $MIGRATION_STATUS -ne 0 ]; then
   echo ""
 
   # Restore backup if this was an upgrade
+  # Each migration runs in its own transaction, so the failed one already
+  # rolled back. The restore also undoes any migration that succeeded earlier
+  # in this run. It writes through SQLite rather than cp: a file copied over
+  # the live database while connections have it open would meet the old WAL.
   if [ $DB_EXISTS -eq 1 ] && [ -f "${BACKUP_FILE}" ]; then
     echo "Restoring database from backup..."
-    cp "${BACKUP_FILE}" "${CONFIG_DIR}/data.db"
-    echo "Database restored from backup." >> "${LOG_FILE}"
+    if php "${PLUGIN_DIR}/scripts/db-copy.php" restore "${BACKUP_FILE}" "${CONFIG_DIR}/data.db" >> "${LOG_FILE}" 2>&1; then
+      echo "Database restored from backup." >> "${LOG_FILE}"
+    else
+      echo "WARNING: Restore failed. The database is as the failed migration left it, and the backup is at ${BACKUP_FILE}."
+      echo "WARNING: Restore from ${BACKUP_FILE} failed" >> "${LOG_FILE}"
+    fi
   fi
 
   echo "See log file for details: ${LOG_FILE}"
@@ -963,9 +974,19 @@ rm -rf "${CONFIG_DIR}/api-plugin"
 if [ -f "${CONFIG_DIR}/data.db" ]; then
   echo "Backing up database..."
   mkdir -p "${CONFIG_DIR}/backups"
-  BACKUP_FILE="${CONFIG_DIR}/backups/data-backup-$(date +%Y%m%d-%H%M%S).db"
-  cp "${CONFIG_DIR}/data.db" "${BACKUP_FILE}"
-  echo "Database backed up to: ${BACKUP_FILE}"
+  # Each migration runs in its own transaction, so the failed one already
+  # rolled back. The restore also undoes any migration that succeeded earlier
+  # in this run. It writes through SQLite rather than cp: a file copied over
+  # the live database while connections have it open would meet the old WAL.
+  if [ $DB_EXISTS -eq 1 ] && [ -f "${BACKUP_FILE}" ]; then
+    echo "Restoring database from backup..."
+    if php "${PLUGIN_DIR}/scripts/db-copy.php" restore "${BACKUP_FILE}" "${CONFIG_DIR}/data.db" >> "${LOG_FILE}" 2>&1; then
+      echo "Database restored from backup." >> "${LOG_FILE}"
+    else
+      echo "WARNING: Restore failed. The database is as the failed migration left it, and the backup is at ${BACKUP_FILE}."
+      echo "WARNING: Restore from ${BACKUP_FILE} failed" >> "${LOG_FILE}"
+    fi
+  fi
 fi
 
 # Export configuration as JSON backup

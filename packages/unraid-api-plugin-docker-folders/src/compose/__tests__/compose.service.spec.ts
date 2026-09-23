@@ -462,6 +462,29 @@ describe('ComposeService', () => {
             }
         });
 
+        it('checks for Compose once per list, not once per stack', async () => {
+            for (const name of ['alpha', 'beta', 'gamma']) insertStack({ project_name: name });
+            fake.setExec((args) => (args.includes('ps') ? ok({ stdout: '{"State":"running"}\n' }) : ok()));
+            fake.calls.length = 0;
+
+            const stacks = await service.getAllStacks();
+
+            expect(stacks.map((s) => s.servicesRunning)).toEqual([1, 1, 1]);
+            const commands = fake.calls.map((c) => c.args.filter((a) => a === 'version' || a === 'ps').join(''));
+            expect(commands).toEqual(['version', 'ps', 'ps', 'ps']);
+        });
+
+        it('runs no ps when Compose is missing', async () => {
+            insertStack({ project_name: 'alpha' });
+            fake.setExec((args) => (args.includes('version') ? { ...ok(), success: false } : ok({ stdout: '{"State":"running"}\n' })));
+            fake.calls.length = 0;
+
+            const stacks = await service.getAllStacks();
+
+            expect(stacks[0].servicesTotal).toBe(0);
+            expect(fake.calls.some((c) => c.args.includes('ps'))).toBe(false);
+        });
+
         it('reports no service names when compose_file is unset, even if working_dir has one (ported PHP guard)', async () => {
             const dir = mkdtempSync(join(tmpdir(), 'compose-list-'));
             try {
