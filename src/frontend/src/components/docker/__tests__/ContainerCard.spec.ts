@@ -496,6 +496,11 @@ describe('ContainerCard', () => {
       if (opts.seedStatsId) {
         const statsStore = useStatsStore();
         statsStore.stats[opts.seedStatsId] = { ...FAKE_STATS };
+        // Registering starts a real stats fetch after 50ms, and its empty
+        // answer replaces the seeded stats. On a slow run that lands before
+        // the assertions, so these layout tests register nothing.
+        statsStore.registerVisible = vi.fn();
+        statsStore.registerExpanded = vi.fn();
       }
 
       return mount(ContainerCard, {
