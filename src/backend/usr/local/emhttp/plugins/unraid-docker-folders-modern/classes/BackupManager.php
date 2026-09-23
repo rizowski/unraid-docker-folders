@@ -138,6 +138,7 @@ class BackupManager
     $results = [];
     $allSuccess = true;
     $archived = 0;
+    $lastArchive = '';
 
     // Every path that archives nothing is a failure, the same as in
     // backupContainer(). Before, a malformed entry was skipped in silence, so
@@ -194,6 +195,7 @@ class BackupManager
       $this->pruneOldBackups($destination, $prefix, $retention);
       $results[] = "Backed up service '{$service}': {$archiveName}" . $job['note'];
       $archived++;
+      $lastArchive = $archivePath;
     }
 
     if ($archived === 0) {
@@ -203,15 +205,10 @@ class BackupManager
       }
     }
 
-    // The newest archive across the stack's services. end() of a glob gave
-    // the alphabetically last name, and names sort by service before stamp.
-    $size = 0;
-    $lastArchive = '';
-    $files = self::archivesFor($destination, $projectName, self::ARCHIVES_STACK);
-    if ($files) {
-      $lastArchive = $files[0];
-      $size = filesize($lastArchive);
-    }
+    // The last archive this run wrote, not the newest one in the directory. A
+    // scan reported an old archive for a run that wrote none, and its stack
+    // pattern also matched another stack, such as "blog.v2" for "blog".
+    $size = $lastArchive !== '' && is_file($lastArchive) ? filesize($lastArchive) : 0;
 
     return [
       'success' => $allSuccess,
