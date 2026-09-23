@@ -53,7 +53,7 @@ if (!$status['management_enabled']) {
   errorResponse('Compose management is disabled', 403);
 }
 
-$forceRecreate = !empty($_POST['force_recreate']);
+$forceRecreate = requestFlag($_POST['force_recreate'] ?? false);
 
 set_time_limit(0);
 ignore_user_abort(true);

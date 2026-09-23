@@ -215,7 +215,7 @@ function handlePost($composeManager)
     }
 
     $data = getRequestData();
-    $forceRecreate = !empty($data['force_recreate']);
+    $forceRecreate = requestFlag($data['force_recreate'] ?? false);
     $result = $composeManager->stackUp($project, $forceRecreate);
 
     WebSocketPublisher::publish('compose', 'up', ['project' => $project]);
@@ -414,8 +414,8 @@ function handlePost($composeManager)
     }
 
     $data = getRequestData();
-    $enabled = !empty($data['enabled']);
-    $forceRecreate = !empty($data['force_recreate']);
+    $enabled = requestFlag($data['enabled'] ?? false);
+    $forceRecreate = requestFlag($data['force_recreate'] ?? false);
 
     $composeManager->setAutostart($project, $enabled, $forceRecreate);
 

@@ -156,6 +156,31 @@ require_once __DIR__ . '/paths.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
 
 /**
+ * Read a request flag as a boolean.
+ *
+ * JSON sends true or false, but a form sends strings, and !empty() reads the
+ * string "false" as true. This accepts a bool, a number, or the strings that
+ * FILTER_VALIDATE_BOOLEAN knows ("1", "true", "on", "yes" and their opposites).
+ * Anything else is false.
+ *
+ * @param mixed $value
+ * @return bool
+ */
+function requestFlag($value)
+{
+  if (is_bool($value)) {
+    return $value;
+  }
+  if (is_int($value) || is_float($value)) {
+    return $value != 0;
+  }
+  if (is_string($value)) {
+    return filter_var(trim($value), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false;
+  }
+  return false;
+}
+
+/**
  * Read JSON request data from the request body.
  * Checks $_POST['payload'] first (form-encoded alongside csrf_token),
  * then parses php://input as URL-encoded (for PUT/DELETE where PHP

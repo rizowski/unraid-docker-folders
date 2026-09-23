@@ -200,7 +200,7 @@ function handlePost($dockerClient)
       errorResponse('Invalid container name', 400);
     }
     $data = getRequestData();
-    $enabled = !empty($data['enabled']);
+    $enabled = requestFlag($data['enabled'] ?? false);
     $delay = isset($data['delay']) ? max(0, (int)$data['delay']) : null;
 
     // Update Unraid's autostart flat file (authoritative source)
@@ -329,7 +329,7 @@ function handlePost($dockerClient)
 
         // Optionally remove the image
         $data = getRequestData();
-        if (!empty($data['remove_image']) && $containerImage) {
+        if (requestFlag($data['remove_image'] ?? false) && $containerImage) {
           $dockerClient->removeImage($containerImage, true);
         }
       }
