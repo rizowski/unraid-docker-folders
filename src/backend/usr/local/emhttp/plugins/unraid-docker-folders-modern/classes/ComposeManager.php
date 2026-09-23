@@ -1525,7 +1525,7 @@ class ComposeManager
       // compose.php and compose-stream.php refuse any other name, so a stack
       // imported under one could never be started, edited, or deleted. This
       // also keeps hidden directories such as ".git" out.
-      if (safePathComponent($dir) === null) {
+      if (safeComposeProjectParam($dir) === null) {
         $result['errors'][] = $dir . ': unsupported project name, skipped';
         continue;
       }

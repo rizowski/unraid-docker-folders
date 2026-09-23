@@ -41,7 +41,7 @@ if (!in_array($action, ['up', 'pull'], true) || !$project) {
 }
 
 // The same rule as compose.php. The old pattern accepted "." and "..".
-if (safePathComponent($project) === null || strlen($project) > 128) {
+if (safeComposeProjectParam($project) === null) {
   header('Content-Type: application/json');
   errorResponse('Invalid project name', 400);
 }

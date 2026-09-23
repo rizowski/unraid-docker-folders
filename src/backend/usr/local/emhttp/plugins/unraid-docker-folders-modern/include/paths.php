@@ -169,6 +169,25 @@ function safePathComponent($value)
 }
 
 /**
+ * Validate a stack's project name as the compose endpoints accept it.
+ *
+ * One path segment (safePathComponent) of at most 128 characters. Dots stay
+ * legal, because a stack imported from compose.manager keeps its directory
+ * name. compose.php, compose-stream.php and the compose.manager import all
+ * use this, so a stack the import accepts can always be addressed by the API.
+ *
+ * @param string|null $value
+ * @return string|null The name, or null if it is not acceptable
+ */
+function safeComposeProjectParam($value)
+{
+  if (safePathComponent($value) === null || strlen($value) > 128) {
+    return null;
+  }
+  return $value;
+}
+
+/**
  * Coerce a backup archive prefix into a safe filename component.
  *
  * Unlike safePathComponent() this REPLACES bad characters rather than rejecting

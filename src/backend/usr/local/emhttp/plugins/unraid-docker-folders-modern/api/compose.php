@@ -24,8 +24,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 // one path segment. Dots stay legal, because a stack imported from
 // compose.manager keeps its directory name.
 $projectParam = $_GET['project'] ?? null;
-if ($projectParam !== null && $projectParam !== ''
-  && (safePathComponent($projectParam) === null || strlen($projectParam) > 128)) {
+if ($projectParam !== null && $projectParam !== '' && safeComposeProjectParam($projectParam) === null) {
   errorResponse('Invalid project name', 400);
 }
 
