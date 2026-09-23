@@ -113,8 +113,11 @@ marketing-style empty states. None of that belongs here.
   only. Existing exceptions (600ms state pulse, 2s log-line fade) are the
   ceiling for attention effects. The full motion scale is in §15.
 - Animation must communicate a **state change** (started, connected, new line).
-  No entrance choreography, staggered reveals, hover scale-ups, bounces, or
-  shimmer skeletons.
+  No entrance choreography, staggered reveals, hover scale-ups, or bounces.
+- One exception, requested by the maintainer: the first load of the Folders
+  page and the dashboard widget shows shimmer skeletons (the `.skeleton` class
+  in `main.css`, `LoadingSkeleton.vue`). Do not add shimmer anywhere else.
+  It stops under `prefers-reduced-motion`.
 
 ## 7. Language
 
@@ -517,5 +520,6 @@ Before committing UI work, grep yourself against this list. Any hit is a bug:
 - [ ] `backdrop-blur`, glassmorphism, glow effects (except `.status-halo` — §2)
 - [ ] Headings above `text-lg`; marketing-style hero/empty states
 - [ ] Hover `scale-*` transforms, entrance animations, shimmer skeletons
+      (except the first-load skeleton — §6)
 - [ ] Whitespace padding `p-6`+ on ordinary panels
 - [ ] A new component that duplicates an existing pattern with different styling

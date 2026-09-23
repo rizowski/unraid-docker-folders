@@ -134,9 +134,7 @@
     <main class="min-h-[200px]">
       <BackendNotice />
       <ComposeSetupBanner />
-      <div v-if="isLoading" class="text-center py-8 px-6 text-text-secondary">
-        <p>Loading...</p>
-      </div>
+      <LoadingSkeleton v-if="isLoading" :view="viewMode" />
 
       <div v-else-if="error" class="text-center py-8 px-6 text-error">
         <p>Error: {{ error }}</p>
@@ -316,6 +314,7 @@ import ComposeProgressModal from '@/components/compose/ComposeProgressModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
+import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue';
 import CreateMenu from '@/components/CreateMenu.vue';
 import SortMenu from '@/components/SortMenu.vue';
 import PullProgressModal from '@/components/docker/PullProgressModal.vue';

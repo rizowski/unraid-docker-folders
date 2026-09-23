@@ -29,7 +29,19 @@
       <WidgetStatGauges :cpu="runningTotal?.cpuPercent" :memory="runningTotal?.memPercent" />
     </div>
 
-    <p v-if="isLoading" class="text-xs text-text-secondary py-1">Loading...</p>
+    <!-- Placeholder rows shaped like WidgetContainerRow while the first load runs. -->
+    <div v-if="isLoading" role="status" aria-busy="true" class="flex flex-col">
+      <span class="sr-only">Loading...</span>
+      <div v-for="width in SKELETON_NAME_WIDTHS" :key="width" class="flex items-center gap-2 py-1 pl-2 pr-1">
+        <span class="skeleton size-6 shrink-0 rounded-full!" />
+        <span class="skeleton h-3" :style="{ width }" />
+        <span class="flex-1" />
+        <template v-if="prefs.showStats">
+          <span class="skeleton h-3 w-10" />
+          <span class="skeleton h-3 w-10" />
+        </template>
+      </div>
+    </div>
     <p v-else-if="error" class="text-xs text-error py-1">Error: {{ error }}</p>
     <p v-else-if="groups.length === 0" class="text-xs text-text-secondary py-1">
       {{ query ? 'No containers match.' : prefs.hideStopped ? 'No running containers.' : 'No containers.' }}
@@ -158,6 +170,8 @@ statsStore.setPollInterval(WIDGET_STATS_INTERVAL);
 const query = ref('');
 const isSearching = computed(() => query.value.trim().length > 0);
 const isLoading = computed(() => dockerStore.loading || folderStore.loading);
+/** Name bar widths for the loading rows, varied so they do not look stamped. */
+const SKELETON_NAME_WIDTHS = ['45%', '30%', '55%', '38%'];
 const error = computed(() => dockerStore.error || folderStore.error);
 
 // Enabled schedules whose last run failed, by container name. A stack schedule

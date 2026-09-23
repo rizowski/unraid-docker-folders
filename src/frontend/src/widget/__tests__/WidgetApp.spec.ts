@@ -95,6 +95,20 @@ describe('WidgetApp', () => {
     makeContainer({ id: 'c3', name: 'redis', image: 'redis:7' }),
   ];
 
+  it('shows placeholder rows during the first load, then the containers', async () => {
+    const { wrapper, dockerStore } = await mountWidget(containers, []);
+    dockerStore.loading = true;
+    await flushPromises();
+    expect(wrapper.find('[aria-busy="true"]').exists()).toBe(true);
+    expect(wrapper.findAll('.skeleton').length).toBeGreaterThan(0);
+    expect(wrapper.find('.widget-row').exists()).toBe(false);
+
+    dockerStore.loading = false;
+    await flushPromises();
+    expect(wrapper.find('.skeleton').exists()).toBe(false);
+    expect(rowNames(wrapper)).toContain('plex');
+  });
+
   it('lists folders in order with their members, then an Other group', async () => {
     const { wrapper } = await mountWidget(containers, [makeFolder(['sonarr', 'plex'])]);
     expect(groupNames(wrapper)).toEqual(['Media', 'Other']);

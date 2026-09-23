@@ -504,6 +504,36 @@
   animation: log-line-highlight 2s ease-out;
 }
 
+/* Loading skeleton. A placeholder block with a highlight that sweeps across
+   it while the first data load runs. This is a deliberate exception to
+   DESIGN.md §6 ("no shimmer skeletons"), requested by the maintainer.
+   Colors come from the theme, so it works on dark and light themes. */
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+#unraid-docker-folders-modern .skeleton {
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--text-color, #1a1a1a) 7%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #unraid-docker-folders-modern .skeleton {
+    animation: none;
+    background-image: none;
+  }
+}
+
 /* Drag and drop styles */
 .sortable-ghost {
   opacity: 0.4;
