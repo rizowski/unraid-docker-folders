@@ -1,29 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { aggregateStats } from '../aggregateStats';
-import type { ContainerStats } from '@/stores/stats';
+import { makeContainerStats } from '@/test/fixtures';
 
 const GB = 1024 ** 3;
 
-function stats(over: Partial<ContainerStats>): ContainerStats {
-  return {
-    cpuPercent: 0,
-    memoryUsage: 0,
-    memoryLimit: 16 * GB,
-    memoryPercent: 0,
-    blockRead: 0,
-    blockWrite: 0,
-    netRx: 0,
-    netTx: 0,
-    pids: 1,
-    restartCount: 0,
-    startedAt: '',
-    imageSize: 0,
-    logSize: 0,
-    hostCpus: 4,
-    hostMemory: 16 * GB,
-    ...over,
-  };
-}
+const stats = makeContainerStats;
 
 describe('aggregateStats', () => {
   it('returns null for no containers', () => {

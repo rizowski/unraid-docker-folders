@@ -143,20 +143,17 @@ function handlePost()
   }
 
   // Clamp bounded numeric settings — the UI <select> is not the only writer.
-  if ($key === 'update_concurrency') {
+  // The plugin clamps its stats stream to 1s..300s, so a stored
+  // stats_refresh_interval outside that would not take effect.
+  $integerRanges = [
+    'update_concurrency' => [1, 5],
+    'stats_refresh_interval' => [1, 300],
+  ];
+  if (isset($integerRanges[$key])) {
+    [$min, $max] = $integerRanges[$key];
     $n = (int) $value;
-    if ($n < 1 || $n > 5) {
-      errorResponse('update_concurrency must be between 1 and 5', 400);
-    }
-    $value = (string) $n;
-  }
-
-  // Seconds between live stats pushes in GraphQL mode. The plugin clamps its
-  // stream to 1s..300s, so a stored value outside that would not take effect.
-  if ($key === 'stats_refresh_interval') {
-    $n = (int) $value;
-    if ($n < 1 || $n > 300) {
-      errorResponse('stats_refresh_interval must be between 1 and 300', 400);
+    if ($n < $min || $n > $max) {
+      errorResponse("{$key} must be between {$min} and {$max}", 400);
     }
     $value = (string) $n;
   }

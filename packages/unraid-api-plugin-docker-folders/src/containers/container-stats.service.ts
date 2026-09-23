@@ -392,11 +392,12 @@ export class ContainerStatsService {
      * this sequentially would make a 10-container fallback take 10 seconds.
      */
     private async getStatsSlow(ids: string[]): Promise<Map<string, DockerFoldersContainerStatsResult | null>> {
-        const entries = await Promise.all(ids.map((id) => this.getOneSlow(id)));
+        const hostMemory = readSystemMemoryTotalBytes();
+        const entries = await Promise.all(ids.map((id) => this.getOneSlow(id, hostMemory)));
         return new Map(entries);
     }
 
-    private async getOneSlow(id: string): Promise<[string, DockerFoldersContainerStatsResult | null]> {
+    private async getOneSlow(id: string, hostMemory: number): Promise<[string, DockerFoldersContainerStatsResult | null]> {
         let stats;
         try {
             stats = await this.docker.getContainer(id).stats({ stream: false });
@@ -428,7 +429,6 @@ export class ContainerStatsService {
         }
 
         const logSize = containerLogSize(stats.id, id);
-        const hostMemory = readSystemMemoryTotalBytes();
 
         return [id, buildContainerStats(stats, inspect, imageSize, logSize, hostMemory)];
     }

@@ -4,8 +4,8 @@ import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import FolderHeader from '../FolderHeader.vue';
 import { useDockerStore } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
-import { useStatsStore, type ContainerStats } from '@/stores/stats';
-import { makeContainer } from '@/test/fixtures';
+import { useStatsStore } from '@/stores/stats';
+import { makeContainer, makeContainerStats } from '@/test/fixtures';
 import type { Folder } from '@/types/folder';
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
@@ -302,23 +302,8 @@ describe('FolderHeader', () => {
 
   describe('collapsed folder stats', () => {
     const GB = 1024 ** 3;
-    const entry = (cpuPercent: number, memoryUsage: number): ContainerStats => ({
-      cpuPercent,
-      memoryUsage,
-      memoryLimit: 32 * GB,
-      memoryPercent: (memoryUsage / (32 * GB)) * 100,
-      blockRead: 0,
-      blockWrite: 0,
-      netRx: 0,
-      netTx: 0,
-      pids: 1,
-      restartCount: 0,
-      startedAt: '',
-      imageSize: 0,
-      logSize: 0,
-      hostCpus: 8,
-      hostMemory: 32 * GB,
-    });
+    const entry = (cpuPercent: number, memoryUsage: number) =>
+      makeContainerStats({ cpuPercent, memoryUsage, memoryLimit: 32 * GB, hostCpus: 8, hostMemory: 32 * GB });
 
     it('shows the members as a share of the host, not their average', () => {
       const docker = useDockerStore();

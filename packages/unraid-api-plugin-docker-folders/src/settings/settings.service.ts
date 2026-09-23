@@ -38,6 +38,15 @@ const PATH_SETTING_ROOTS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * Integer settings and their inclusive bounds, the same table as `settings.php`.
+ * `stats_refresh_interval` matches the stats stream's 1s..300s clamp.
+ */
+const INTEGER_SETTING_RANGES: Readonly<Record<string, readonly [number, number]>> = {
+    update_concurrency: [1, 5],
+    stats_refresh_interval: [1, 300],
+};
+
+/**
  * The settings read and write path, ported from `api/settings.php`.
  *
  * Unlike `FolderService`, a write here never calls `EventBusService.publish`.
@@ -125,19 +134,13 @@ export class SettingsService {
         // maps to 0 here, the same value PHP's `(int)` cast produces, so a
         // garbage input fails the range check exactly like it does in PHP
         // rather than silently passing through as NaN.
-        if (key === 'update_concurrency') {
+        const range = INTEGER_SETTING_RANGES[key];
+        if (range) {
+            const [min, max] = range;
             const parsed = Number.parseInt(stored, 10);
             const n = Number.isNaN(parsed) ? 0 : parsed;
-            if (n < 1 || n > 5) {
-                throw new BadRequestException('update_concurrency must be between 1 and 5');
-            }
-            stored = String(n);
-        }
-        if (key === 'stats_refresh_interval') {
-            const parsed = Number.parseInt(stored, 10);
-            const n = Number.isNaN(parsed) ? 0 : parsed;
-            if (n < 1 || n > 300) {
-                throw new BadRequestException('stats_refresh_interval must be between 1 and 300');
+            if (n < min || n > max) {
+                throw new BadRequestException(`${key} must be between ${min} and ${max}`);
             }
             stored = String(n);
         }

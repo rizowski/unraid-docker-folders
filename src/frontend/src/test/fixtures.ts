@@ -1,4 +1,5 @@
 import type { Container } from '@/stores/docker';
+import type { ContainerStats } from '@/stores/stats';
 import type { ImageUpdateStatus } from '@/stores/updates';
 import type { Folder } from '@/types/folder';
 import type { Schedule } from '@/types/schedule';
@@ -148,6 +149,28 @@ export function makeSchedule(overrides: Partial<Schedule> = {}): Schedule {
     next_run_at: null,
     created_at: 0,
     updated_at: 0,
+    ...overrides,
+  };
+}
+
+/** One idle container's stats on a 4-core, 16 GiB host. */
+export function makeContainerStats(overrides: Partial<ContainerStats> = {}): ContainerStats {
+  return {
+    cpuPercent: 0,
+    memoryUsage: 0,
+    memoryLimit: 16 * 1024 ** 3,
+    memoryPercent: 0,
+    blockRead: 0,
+    blockWrite: 0,
+    netRx: 0,
+    netTx: 0,
+    pids: 1,
+    restartCount: 0,
+    startedAt: '',
+    imageSize: 0,
+    logSize: 0,
+    hostCpus: 4,
+    hostMemory: 16 * 1024 ** 3,
     ...overrides,
   };
 }
