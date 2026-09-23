@@ -93,7 +93,7 @@ describe('formatLogStream', () => {
             frame(1, '2024-01-01T00:00:01.987654321Z second message\n'),
         ]);
 
-        expect(formatLogStream(buf)).toBe(
+        expect(formatLogStream(buf, 'UTC')).toBe(
             '2024-01-01 00:00:01 second message\n2024-01-01 00:00:00 first message'
         );
     });
@@ -101,31 +101,31 @@ describe('formatLogStream', () => {
     it('passes a raw (TTY) stream through without demuxing', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z hello\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 hello');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 hello');
     });
 
     it('normalises CRLF to LF', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z one\r\n2024-01-01T00:00:01.000000000Z two\r\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:01 two\n2024-01-01 00:00:00 one');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:01 two\n2024-01-01 00:00:00 one');
     });
 
     it('strips CSI escape sequences, including private-parameter forms', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z \x1b[?25l\x1b[32mGreen\x1b[0m\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 Green');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 Green');
     });
 
     it('strips an OSC title sequence terminated by BEL', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z \x1b]0;My Title\x07Visible\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 Visible');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 Visible');
     });
 
     it('strips an OSC title sequence terminated by ST (ESC backslash)', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z \x1b]0;My Title\x1b\\Visible\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 Visible');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 Visible');
     });
 
     /**
@@ -142,13 +142,13 @@ describe('formatLogStream', () => {
     it('collapses multiple carriage returns on one line to the text after the last one', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z progress1\rprogress2\rprogress3\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 progress3');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 progress3');
     });
 
     it('keeps a timestamped prefix while collapsing a CR-rewritten line', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z 10%\r50%\r100% done\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 100% done');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 100% done');
     });
 
     it("strips Docker's own prefix when the log line already carries its own timestamp", () => {
@@ -157,13 +157,13 @@ describe('formatLogStream', () => {
             'utf8'
         );
 
-        expect(formatLogStream(raw)).toBe('2024-06-01 10:00:00 something happened');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-06-01 10:00:00 something happened');
     });
 
     it('leaves a line with no timestamp of its own untouched apart from the reversal', () => {
         const raw = Buffer.from('2024-01-01T00:00:00.000000000Z plain application log line\n', 'utf8');
 
-        expect(formatLogStream(raw)).toBe('2024-01-01 00:00:00 plain application log line');
+        expect(formatLogStream(raw, 'UTC')).toBe('2024-01-01 00:00:00 plain application log line');
     });
 });
 
@@ -187,8 +187,8 @@ describe('Docker line stamps in the server zone', () => {
         ]);
     });
 
-    it('keeps UTC by default', () => {
-        expect(formatLogStream(raw).split('\n')[2]).toBe('2026-09-09 05:29:29 [info] Attempting to start Privoxy...');
+    it('keeps UTC when the server is UTC', () => {
+        expect(formatLogStream(raw, 'UTC').split('\n')[2]).toBe('2026-09-09 05:29:29 [info] Attempting to start Privoxy...');
     });
 
     it('converts only the stamp at the start of the line', () => {
@@ -204,13 +204,13 @@ describe('Docker line stamps in the server zone', () => {
 
 describe('LogStreamDecoder', () => {
     it('returns nothing until a line completes', () => {
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
         expect(decoder.push(Buffer.from('no newline yet', 'utf8'))).toEqual([]);
     });
 
     it('reassembles a multiplexed frame header split across chunks, waiting for the payload', () => {
         const full = frame(1, 'hello\n');
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
 
         // First 5 of the 8 header bytes: not enough to decide framing yet.
         expect(decoder.push(full.subarray(0, 5))).toEqual([]);
@@ -222,7 +222,7 @@ describe('LogStreamDecoder', () => {
 
     it('reassembles a multiplexed frame payload split across chunks', () => {
         const full = frame(1, 'hello world\n');
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
         const header = full.subarray(0, 8);
         const payloadPart1 = full.subarray(8, 11);
         const payloadPart2 = full.subarray(11);
@@ -234,7 +234,7 @@ describe('LogStreamDecoder', () => {
 
     it('holds a line pending across chunks until its newline arrives', () => {
         const full = frame(1, 'no newline yet more text\n');
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
         const splitAt = 8 + 10; // header + "no newline" (10 bytes, no \n in this prefix)
 
         expect(decoder.push(full.subarray(0, splitAt))).toEqual([]);
@@ -243,7 +243,7 @@ describe('LogStreamDecoder', () => {
 
     it('decodes a multi-byte UTF-8 character split across chunks', () => {
         const raw = Buffer.from('hello 日 done\n', 'utf8');
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
 
         // First 8 bytes: "hello " (6 bytes) plus the first 2 of "日"'s 3 UTF-8 bytes.
         expect(decoder.push(raw.subarray(0, 8))).toEqual([]);
@@ -251,7 +251,7 @@ describe('LogStreamDecoder', () => {
     });
 
     it('passes raw TTY bytes through without demuxing, across chunks', () => {
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
         const raw = Buffer.from('first tty line\nsecond tty line\n', 'utf8');
         const mid = 10; // arbitrary split point, not aligned to a line boundary
 
@@ -260,7 +260,7 @@ describe('LogStreamDecoder', () => {
     });
 
     it('demuxes stdout and stderr frames arriving in sequence', () => {
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
         const chunk = Buffer.concat([frame(1, 'out line\n'), frame(2, 'err line\n')]);
 
         expect(decoder.push(chunk)).toEqual(['out line', 'err line']);
@@ -271,11 +271,11 @@ describe('LogStreamDecoder', () => {
             frame(1, '2024-01-01T00:00:00.123456789Z first message\n'),
             frame(1, '2024-01-01T00:00:01.987654321Z second message\n'),
         ]);
-        const decoder = new LogStreamDecoder();
+        const decoder = new LogStreamDecoder('UTC');
 
         const lines = decoder.push(buf);
 
         // decoder returns oldest-first (arrival order); formatLogStream returns newest-first.
-        expect(lines.slice().reverse().join('\n')).toBe(formatLogStream(buf));
+        expect(lines.slice().reverse().join('\n')).toBe(formatLogStream(buf, 'UTC'));
     });
 });
