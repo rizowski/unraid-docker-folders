@@ -41,14 +41,10 @@ $tile = <<<'EOT'
                way the System tile shows its RAM bar. The widget frame sends the
                numbers, because it keeps running while its row is hidden. -->
           <span class="switch">
-            <span id="dfm-summary-count">Running: --</span><br>
-            CPU:<span class="head_bar">
-              <span class="dfm-summary-cpu load">--</span>
-              <div class="usage-disk sys"><span id="dfm-summary-cpu"></span><span></span></div>
-            </span><br>
-            RAM:<span class="head_bar">
-              <span class="dfm-summary-memory load">--</span>
-              <div class="usage-disk sys"><span id="dfm-summary-memory"></span><span></span></div>
+            <span class="dfm-summary">
+              <span id="dfm-summary-count">-- running</span>
+              <span class="dfm-summary-item">CPU <span class="dfm-summary-cpu">--</span><span class="dfm-summary-track"><span id="dfm-summary-cpu"></span></span></span>
+              <span class="dfm-summary-item">RAM <span class="dfm-summary-memory">--</span><span class="dfm-summary-track"><span id="dfm-summary-memory"></span></span></span>
             </span>
           </span>
         </span>
@@ -63,6 +59,19 @@ $tile = <<<'EOT'
   </span>
 </td></tr>
 <tr><td>
+  <style>
+    /* The folded-tile summary on one line. Unraid's own head_bar layout
+       stacks one bar per line, so these are small inline bars in its colors.
+       The header keeps the icon beside the title, and a narrow tile wraps
+       the summary between items instead. */
+    #docker_folders_view .tile-header-left { flex-wrap: nowrap; min-width: 0; }
+    #docker_folders_view .tile-header-left .section { min-width: 0; }
+    #docker_folders_view .dfm-summary { display: inline-flex; flex-wrap: wrap; align-items: center; column-gap: 12px; }
+    #docker_folders_view .dfm-summary > span { white-space: nowrap; }
+    #docker_folders_view .dfm-summary-item { display: inline-flex; align-items: center; gap: 5px; }
+    #docker_folders_view .dfm-summary-track { position: relative; display: inline-block; width: 40px; height: 8px; background-color: var(--usage-disk-background-color); }
+    #docker_folders_view .dfm-summary-track > span { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background-color: var(--gray-400); }
+  </style>
   <iframe id="docker-folders-widget-frame" scrolling="no" style="display:block;width:100%;height:40px;border:none;"></iframe>
   <script>window.dockerFoldersBackendMode = '__DFM_BACKEND__';</script>
   <script>window.dockerFoldersAssetVersion = '__DFM_WIDGET_V__';</script>
@@ -110,7 +119,7 @@ $tile = <<<'EOT'
       }
       if (e.data.type === 'docker-folders-widget-ready' && e.origin === location.origin) sendCollapsed();
       if (e.data.type === 'docker-folders-summary' && e.origin === location.origin) {
-        document.getElementById('dfm-summary-count').textContent = 'Running: ' + e.data.running + ' / ' + e.data.total;
+        document.getElementById('dfm-summary-count').textContent = e.data.running + ' / ' + e.data.total + ' running';
         loadBar('cpu', e.data.cpu);
         loadBar('memory', e.data.memory);
       }
