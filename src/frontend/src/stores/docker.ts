@@ -77,6 +77,22 @@ export interface PullRequest {
   force?: boolean;
 }
 
+/**
+ * Docker builds `Mounts` and the list API's `Ports` by walking a Go map, so
+ * their order changes from one fetch to the next, and the details view would
+ * swap rows on a refresh. Sort them once here, so every view gets one order:
+ * mounts by container path, ports by container port, protocol, then host port.
+ */
+export function withStableOrder(c: Container): Container {
+  return {
+    ...c,
+    mounts: [...(c.mounts ?? [])].sort((a, b) => a.Destination.localeCompare(b.Destination) || a.Source.localeCompare(b.Source)),
+    ports: [...(c.ports ?? [])].sort(
+      (a, b) => a.PrivatePort - b.PrivatePort || a.Type.localeCompare(b.Type) || (a.PublicPort ?? 0) - (b.PublicPort ?? 0) || (a.IP ?? '').localeCompare(b.IP ?? ''),
+    ),
+  };
+}
+
 export interface Container {
   id: string;
   name: string;
@@ -290,7 +306,7 @@ export const useDockerStore = defineStore('docker', () => {
         throw new Error(failure);
       }
 
-      containers.value = data.containers || [];
+      containers.value = (data.containers || []).map(withStableOrder);
       securityDismissals.value = data.dismissals || [];
       initialLoadDone = true;
     } catch (e) {
