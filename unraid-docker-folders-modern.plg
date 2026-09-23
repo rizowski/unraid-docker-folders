@@ -749,36 +749,66 @@ fi
 # failure below is logged and skipped rather than failing the install.
 #
 # This runs on every boot, not only on install. The API's node_modules live in
-# RAM, so a plugin installed into them is gone after a reboot unless something
-# installs it again, and this is that something.
+# RAM, so a plugin installed into them can be gone after a reboot, and this
+# puts it back. When the same version is already installed, it skips the
+# install: `unraid-api plugins install` runs npm and then writes a ~22 MB
+# archive of the API's node_modules to the flash drive, every time it runs.
 API_PLUGIN_PKG="unraid-api-plugin-docker-folders"
 API_PLUGIN_SRC=$(ls "${PLUGIN_DIR}"/api-plugin/${API_PLUGIN_PKG}-*.tgz 2>/dev/null | head -1)
 API_CONFIG="/boot/config/plugins/dynamix.my.servers/configs/api.json"
+API_DIR="/usr/local/unraid-api"
 if command -v unraid-api >/dev/null 2>&1 && [ -n "${API_PLUGIN_SRC}" ]; then
-  echo "Installing the Unraid API plugin..."
   # The API records the tarball's path in its package.json. Only /boot survives
   # a reboot, and a relative path would resolve inside /usr/local/unraid-api.
-  mkdir -p "${CONFIG_DIR}/api-plugin"
-  rm -f "${CONFIG_DIR}"/api-plugin/${API_PLUGIN_PKG}-*.tgz
-  cp "${API_PLUGIN_SRC}" "${CONFIG_DIR}/api-plugin/"
   API_PLUGIN_TGZ="${CONFIG_DIR}/api-plugin/$(basename "${API_PLUGIN_SRC}")"
 
-  if timeout 300 unraid-api plugins install "${API_PLUGIN_TGZ}" >> "${LOG_FILE}" 2>&1; then
-    # `plugins install` writes the tarball path into api.json's plugins list,
-    # but the API matches that list against package names, so the entry is
-    # rewritten to the bare name. Measured on API 4.35.1: with the path the
-    # plugin can go unlisted, with the name it lists and loads.
-    if [ -f "${API_CONFIG}" ]; then
-      node -e '
-        const fs = require("fs");
-        const [file, name] = process.argv.slice(1);
-        const config = JSON.parse(fs.readFileSync(file, "utf8"));
-        const others = (config.plugins || []).filter((p) => typeof p === "string" && !p.includes(name));
-        config.plugins = [...others, name];
-        fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
-      ' "${API_CONFIG}" "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
-    fi
+  # Installed means: the API's node_modules holds the version this package
+  # ships, the API's package.json points at the tarball on /boot, and that
+  # tarball is still there.
+  API_PLUGIN_WANT=$(tar -xzOf "${API_PLUGIN_SRC}" package/package.json 2>/dev/null \
+    | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{try{process.stdout.write(JSON.parse(s).version||"")}catch{}})' 2>/dev/null)
+  API_PLUGIN_HAVE=$(node -e 'try{process.stdout.write(require(process.argv[1]).version||"")}catch{}' \
+    "${API_DIR}/node_modules/${API_PLUGIN_PKG}/package.json" 2>/dev/null)
+  API_PLUGIN_CURRENT=0
+  if [ -n "${API_PLUGIN_WANT}" ] && [ "${API_PLUGIN_WANT}" = "${API_PLUGIN_HAVE}" ] \
+    && [ -f "${API_PLUGIN_TGZ}" ] && cmp -s "${API_PLUGIN_SRC}" "${API_PLUGIN_TGZ}" \
+    && grep -qF "$(basename "${API_PLUGIN_TGZ}")" "${API_DIR}/package.json" 2>/dev/null; then
+    API_PLUGIN_CURRENT=1
+  fi
 
+  API_PLUGIN_OK=0
+  if [ "${API_PLUGIN_CURRENT}" = "1" ]; then
+    echo "Unraid API plugin ${API_PLUGIN_WANT} is already installed"
+    echo "Unraid API plugin ${API_PLUGIN_WANT} already installed, skipping install" >> "${LOG_FILE}"
+    API_PLUGIN_OK=1
+  else
+    echo "Installing the Unraid API plugin..."
+    mkdir -p "${CONFIG_DIR}/api-plugin"
+    rm -f "${CONFIG_DIR}"/api-plugin/${API_PLUGIN_PKG}-*.tgz
+    cp "${API_PLUGIN_SRC}" "${CONFIG_DIR}/api-plugin/"
+    if timeout 300 unraid-api plugins install "${API_PLUGIN_TGZ}" >> "${LOG_FILE}" 2>&1; then
+      API_PLUGIN_OK=1
+      # `plugins install` writes the tarball path into api.json's plugins list,
+      # but the API matches that list against package names, so the entry is
+      # rewritten to the bare name. Measured on API 4.35.1: with the path the
+      # plugin can go unlisted, with the name it lists and loads.
+      if [ -f "${API_CONFIG}" ]; then
+        node -e '
+          const fs = require("fs");
+          const [file, name] = process.argv.slice(1);
+          const config = JSON.parse(fs.readFileSync(file, "utf8"));
+          const others = (config.plugins || []).filter((p) => typeof p === "string" && !p.includes(name));
+          config.plugins = [...others, name];
+          fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+        ' "${API_CONFIG}" "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
+      fi
+    else
+      echo "  ! Unraid API plugin install failed; the PHP backend is unaffected"
+      echo "WARNING: unraid-api plugins install failed" >> "${LOG_FILE}"
+    fi
+  fi
+
+  if [ "${API_PLUGIN_OK}" = "1" ]; then
     # A positive match on the field itself: an unauthenticated answer names it
     # in its error path, while a missing field and "Graphql is offline" do not.
     #
@@ -805,9 +835,6 @@ if command -v unraid-api >/dev/null 2>&1 && [ -n "${API_PLUGIN_SRC}" ]; then
       echo "  ! Unraid API plugin installed but not answering; the PHP backend is unaffected"
       echo "WARNING: Unraid API plugin not answering after install" >> "${LOG_FILE}"
     fi
-  else
-    echo "  ! Unraid API plugin install failed; the PHP backend is unaffected"
-    echo "WARNING: unraid-api plugins install failed" >> "${LOG_FILE}"
   fi
 fi
 
