@@ -1,6 +1,9 @@
 # Changelog
 
 ## 2026.09.23
+- fix(build): lock @unraid/shared to the tarball CI downloads
+- feat(settings): mark the GraphQL backend as unstable
+- feat(graphql): add a GraphQL backend beside PHP, chosen by a setting
 - fix(backups): check deleteBackup() containment with pathIsWithin() again
 - fix(schedules): report a lock file that cannot be opened as a failure
 - fix(compose): recheck every stack before an import rollback deletes files
