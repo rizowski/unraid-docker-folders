@@ -1692,7 +1692,23 @@ class ComposeManager
 
       // No row survived, so remove what this run copied. Only files this run
       // wrote, and a directory only if this run created it and it is empty.
+      // The in-transaction check above only reached the plans before the one
+      // that threw. A racing import can have committed any of the rest, and
+      // its row points at these files, so look again now.
+      // If that lookup fails too, keep the files: an orphan is safer than
+      // deleting a live stack's compose file.
       foreach ($plans as $plan) {
+        try {
+          $owned = $this->db->fetchOne(
+            'SELECT project_name FROM compose_stacks WHERE project_name = ?',
+            [$plan['project']]
+          );
+        } catch (Exception $lookupError) {
+          $owned = true;
+        }
+        if ($owned) {
+          continue;
+        }
         foreach ($plan['copied'] as $file) {
           @unlink($file);
         }
