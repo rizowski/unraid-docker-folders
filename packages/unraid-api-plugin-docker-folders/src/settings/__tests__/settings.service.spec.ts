@@ -163,6 +163,22 @@ describe('SettingsService', () => {
         });
     });
 
+    describe('set — stats_refresh_interval', () => {
+        it('stores 1 through 300 seconds as an integer string', () => {
+            expect(service.set('stats_refresh_interval', '1').value).toBe('1');
+            expect(service.set('stats_refresh_interval', '300').value).toBe('300');
+            expect(service.set('stats_refresh_interval', '5s').value).toBe('5');
+        });
+
+        it('rejects 0, 301, and a non-numeric value', () => {
+            for (const bad of ['0', '301', 'abc']) {
+                expect(() => service.set('stats_refresh_interval', bad)).toThrow(
+                    'stats_refresh_interval must be between 1 and 300'
+                );
+            }
+        });
+    });
+
     describe('set — upsert', () => {
         it('inserts a new key', () => {
             service.set('show_stats', '1');

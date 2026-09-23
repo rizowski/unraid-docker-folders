@@ -4,6 +4,7 @@ import { setActiveBackend } from '@/backends';
 import { phpBackend } from '@/backends/php';
 import type { Backend, LiveHandlers } from '@/backends/types';
 import { useStatsStore, type ContainerStats } from '../stats';
+import { useSettingsStore } from '../settings';
 
 type StatsHandlers = LiveHandlers<Record<string, ContainerStats | null>>;
 
@@ -72,6 +73,23 @@ describe('stats store with a live backend', () => {
 
     await vi.advanceTimersByTimeAsync(20000);
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it('streams at the stats refresh setting and reopens when it changes', async () => {
+    const store = useStatsStore();
+    const settings = useSettingsStore();
+    settings.statsRefreshInterval = 10;
+    store.registerVisible('a');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(opened).toHaveLength(1);
+    expect(opened[0].intervalMs).toBe(10000);
+
+    settings.statsRefreshInterval = 1;
+    await vi.advanceTimersByTimeAsync(0);
+    expect(opened[0].close).toHaveBeenCalled();
+    expect(opened).toHaveLength(2);
+    expect(opened[1].intervalMs).toBe(1000);
+    expect(opened[1].ids).toEqual(['a']);
   });
 
   it('stores what the stream sends', async () => {

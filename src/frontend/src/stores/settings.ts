@@ -8,6 +8,9 @@ import { useBackend } from '@/backends';
 import { SORT_MODE_OPTIONS, type SortMode } from '@/types/folder';
 import { formatTimestamp } from '@/utils/format';
 
+/** Matches the settings page default for `stats_refresh_interval`. */
+export const DEFAULT_STATS_REFRESH_INTERVAL = 2;
+
 export const useSettingsStore = defineStore('settings', () => {
   const distinguishHealthy = ref(true);
   const sortMode = ref<SortMode>('manual');
@@ -21,6 +24,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const enableAdopt = ref(true);
   const enableSecurityAdvisor = ref(true);
   const logRefreshInterval = ref(10);
+  /** Seconds between live stats pushes when the backend streams them (GraphQL mode). */
+  const statsRefreshInterval = ref(DEFAULT_STATS_REFRESH_INTERVAL);
   const enableUpdateChecks = ref(false);
   const updateCheckSchedule = ref('disabled');
   const notifyOnUpdates = ref(false);
@@ -72,6 +77,10 @@ export const useSettingsStore = defineStore('settings', () => {
       if ('log_refresh_interval' in settings) {
         const parsed = parseInt(settings.log_refresh_interval, 10);
         logRefreshInterval.value = Number.isNaN(parsed) ? 10 : parsed;
+      }
+      if ('stats_refresh_interval' in settings) {
+        const parsed = parseInt(settings.stats_refresh_interval, 10);
+        statsRefreshInterval.value = parsed >= 1 ? parsed : DEFAULT_STATS_REFRESH_INTERVAL;
       }
       if ('enable_update_checks' in settings) {
         enableUpdateChecks.value = settings.enable_update_checks === '1';
@@ -307,6 +316,7 @@ export const useSettingsStore = defineStore('settings', () => {
     enableAdopt,
     enableSecurityAdvisor,
     logRefreshInterval,
+    statsRefreshInterval,
     enableUpdateChecks,
     updateCheckSchedule,
     notifyOnUpdates,

@@ -15,6 +15,8 @@ class DockerClient
   /** HTTP status behind the last failure, or 0 if it wasn't an HTTP error. */
   private $lastErrorCode = 0;
   private $imageInfoCache = [];
+  /** Cached result of readHostMemoryTotal(), null until first read. */
+  private $hostMemoryTotal = null;
 
   private static $cgroupLayout = null;
   private static $cgroupLayoutDetected = false;
@@ -733,6 +735,8 @@ class DockerClient
       'startedAt' => $startedAt,
       'imageSize' => $imageSize,
       'logSize' => $logSize,
+      'hostCpus' => $this->getHostCpuCount($stats),
+      'hostMemory' => $this->readHostMemoryTotal(),
     ];
   }
 
@@ -1010,6 +1014,30 @@ class DockerClient
   }
 
   /**
+   * Read the host's total memory (MemTotal) from /proc/meminfo, in bytes.
+   *
+   * Cached per instance — /proc/meminfo does not change within a request's
+   * lifetime, and this is called once per container in a batch.
+   *
+   * @return int Host MemTotal in bytes, or 0 if it could not be read
+   */
+  private function readHostMemoryTotal()
+  {
+    if ($this->hostMemoryTotal !== null) {
+      return $this->hostMemoryTotal;
+    }
+
+    $total = 0;
+    $memInfo = @file_get_contents('/proc/meminfo');
+    if ($memInfo && preg_match('/MemTotal:\s+(\d+)\s+kB/', $memInfo, $m)) {
+      $total = (int) $m[1] * 1024;
+    }
+
+    $this->hostMemoryTotal = $total;
+    return $total;
+  }
+
+  /**
    * Fast batch stats using cgroup filesystem reads + cached slow data.
    * Falls back to Docker API if cgroup reads are unavailable.
    *
@@ -1109,8 +1137,8 @@ class DockerClient
       $this->saveJsonCache(self::SLOW_CACHE_PATH, $slowCache);
     }
 
-    $systemMemLimit = null;
     $output = [];
+    $hostMemory = $this->readHostMemoryTotal();
 
     foreach ($ids as $id) {
       if (isset($fallbackSet[$id])) {
@@ -1134,14 +1162,7 @@ class DockerClient
 
       $memLimit = $cg['memory_limit'];
       if ($memLimit === PHP_INT_MAX) {
-        if ($systemMemLimit === null) {
-          $systemMemLimit = 0;
-          $memInfo = @file_get_contents('/proc/meminfo');
-          if ($memInfo && preg_match('/MemTotal:\s+(\d+)\s+kB/', $memInfo, $m)) {
-            $systemMemLimit = (int) $m[1] * 1024;
-          }
-        }
-        $memLimit = $systemMemLimit;
+        $memLimit = $hostMemory;
       }
 
       $memPercent = $memLimit > 0 ? round(($cg['memory_usage'] / $memLimit) * 100, 2) : 0;
@@ -1160,6 +1181,8 @@ class DockerClient
         'startedAt' => $slow['startedAt'] ?? '',
         'imageSize' => $slow['imageSize'] ?? 0,
         'logSize' => $slow['logSize'] ?? 0,
+        'hostCpus' => $cg['online_cpus'],
+        'hostMemory' => $hostMemory,
       ];
     }
 
@@ -1269,6 +1292,8 @@ class DockerClient
         'startedAt' => $startedAt,
         'imageSize' => $imageSize,
         'logSize' => $logSize,
+        'hostCpus' => $this->getHostCpuCount($stats),
+        'hostMemory' => $this->readHostMemoryTotal(),
       ];
     }
 
@@ -1708,13 +1733,39 @@ class DockerClient
               - ($preCpuStats['cpu_usage']['total_usage'] ?? 0);
     $systemDelta = ($cpuStats['system_cpu_usage'] ?? 0)
                  - ($preCpuStats['system_cpu_usage'] ?? 0);
-    $onlineCpus = $cpuStats['online_cpus'] ?? 1;
+    $onlineCpus = $this->getHostCpuCount($stats);
 
     if ($systemDelta > 0 && $cpuDelta >= 0) {
       return round(($cpuDelta / $systemDelta) * $onlineCpus * 100, 2);
     }
 
     return 0.0;
+  }
+
+  /**
+   * Determine the host's online CPU count from a Docker stats payload.
+   *
+   * Docker reports `cpu_stats.online_cpus` on modern kernels; older ones omit
+   * it, so this falls back to the length of the percpu_usage array, and then
+   * to 1 if neither is present. Mirrors the online_cpus lookup used in
+   * calculateCpuPercent().
+   *
+   * @param array $stats Raw Docker stats
+   * @return int Host online CPU count
+   */
+  private function getHostCpuCount($stats)
+  {
+    $cpuStats = $stats['cpu_stats'] ?? [];
+    if (isset($cpuStats['online_cpus'])) {
+      return (int) $cpuStats['online_cpus'];
+    }
+
+    $percpu = $cpuStats['cpu_usage']['percpu_usage'] ?? [];
+    if (is_array($percpu) && count($percpu) > 0) {
+      return count($percpu);
+    }
+
+    return 1;
   }
 
   /**

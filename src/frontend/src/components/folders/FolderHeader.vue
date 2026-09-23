@@ -57,12 +57,12 @@
         <span class="hidden sm:inline">Checking…</span>
       </span>
       <span v-if="folder.collapsed && collapsedPorts" class="hidden sm:inline text-[11px] text-text font-mono ml-2 truncate">Ports: {{ collapsedPorts }}</span>
-      <!-- Folder average stats loading -->
+      <!-- Folder total stats loading -->
       <div v-if="folder.collapsed && settingsStore.showStats && !folderStats && runningCount > 0" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5">
         <StatsBar label="CPU" :percent="null" size="inline" />
         <StatsBar label="MEM" :percent="null" size="inline" />
       </div>
-      <!-- Folder average stats -->
+      <!-- Folder total stats, as a share of the host -->
       <div v-if="folder.collapsed && settingsStore.showStats && folderStats" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5" @click.stop>
         <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
         <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
@@ -114,7 +114,8 @@ import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
-import { useStatsStore } from '@/stores/stats';
+import { useStatsStore, type ContainerStats } from '@/stores/stats';
+import { aggregateStats } from '@/utils/aggregateStats';
 import { useUpdatesStore } from '@/stores/updates';
 import { useComposeStore } from '@/stores/compose';
 import { useFolderRunningState } from '@/composables/useFolderRunningState';
@@ -430,20 +431,17 @@ const containerIcons = computed(() => {
   return icons;
 });
 
+// Measured against the host, not averaged over members: an average hides one
+// busy container among idle ones. See aggregateStats.
 const folderStats = computed(() => {
-  let cpuTotal = 0;
-  let memTotal = 0;
-  let count = 0;
+  const list: ContainerStats[] = [];
   for (const assoc of props.folder.containers) {
     const container = dockerStore.containers.find((c) => c.name === assoc.container_name);
     if (!container) continue;
     const s = statsStore.getStats(container.id);
-    if (!s) continue;
-    cpuTotal += s.cpuPercent;
-    memTotal += s.memoryPercent;
-    count++;
+    if (s) list.push(s);
   }
-  if (count === 0) return null;
-  return { cpuPercent: cpuTotal / count, memPercent: memTotal / count };
+  const total = aggregateStats(list);
+  return total && { cpuPercent: total.cpuPercent, memPercent: total.memPercent };
 });
 </script>

@@ -272,7 +272,9 @@ export class ContainerStatsService {
             await this.refreshSlowCache(staleIds);
         }
 
-        let systemMemoryTotal: number | null = null;
+        // Read once per call, always — not only when a container's own limit
+        // is unlimited — since every result now also reports it as `hostMemory`.
+        const hostMemory = readSystemMemoryTotalBytes(sources);
         const output = new Map<string, DockerFoldersContainerStatsResult | null>();
 
         for (const id of ids) {
@@ -288,11 +290,7 @@ export class ContainerStatsService {
                 ? cpuPercentFromDelta(cg.cpuUsage - previous.cpuUsage, cg.systemTime - previous.systemTime, cg.onlineCpus)
                 : 0.0;
 
-            let memoryLimit = cg.memoryLimit;
-            if (memoryLimit === MEMORY_UNLIMITED) {
-                systemMemoryTotal ??= readSystemMemoryTotalBytes(sources);
-                memoryLimit = systemMemoryTotal;
-            }
+            const memoryLimit = cg.memoryLimit === MEMORY_UNLIMITED ? hostMemory : cg.memoryLimit;
 
             output.set(id, {
                 cpuPercent,
@@ -308,6 +306,8 @@ export class ContainerStatsService {
                 startedAt: slow?.startedAt ?? '',
                 imageSize: slow?.imageSize ?? 0,
                 logSize: slow?.logSize ?? 0,
+                hostCpus: cg.onlineCpus,
+                hostMemory,
             });
         }
 
@@ -428,8 +428,9 @@ export class ContainerStatsService {
         }
 
         const logSize = containerLogSize(stats.id, id);
+        const hostMemory = readSystemMemoryTotalBytes();
 
-        return [id, buildContainerStats(stats, inspect, imageSize, logSize)];
+        return [id, buildContainerStats(stats, inspect, imageSize, logSize, hostMemory)];
     }
 }
 

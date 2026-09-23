@@ -127,6 +127,13 @@ describe('ContainerStatsService (slow, Docker-API path)', () => {
         expect(entry?.startedAt).toBe('now');
         expect(entry?.imageSize).toBe(0);
         expect(entry?.pids).toBe(3);
+        expect(entry?.hostCpus).toBe(1);
+        // The slow path has no `sources` override, so this reads the real
+        // host's /proc/meminfo — present (and positive) on Linux, absent (0)
+        // on a non-Linux test runner such as macOS. Either way it must be a
+        // well-formed number, not undefined or NaN.
+        expect(typeof entry?.hostMemory).toBe('number');
+        expect(Number.isNaN(entry?.hostMemory ?? NaN)).toBe(false);
     });
 
     it('fetches every id in parallel, independent of one another', async () => {
@@ -212,6 +219,9 @@ describe('ContainerStatsService (fast, cgroup path)', () => {
         expect(entry?.restartCount).toBe(2);
         expect(entry?.startedAt).toBe('t0');
         expect(entry?.imageSize).toBe(555);
+        // /proc/stat in beforeEach has one online CPU line (cpu0).
+        expect(entry?.hostCpus).toBe(1);
+        expect(entry?.hostMemory).toBe(8000000 * 1024);
     });
 
     it('computes a real CPU percent on the second call, from the in-memory previous sample', async () => {

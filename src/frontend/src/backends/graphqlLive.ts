@@ -22,7 +22,7 @@ const STATS_STREAM_SUBSCRIPTION = `
       id
       stats {
         cpuPercent memoryUsage memoryLimit memoryPercent blockRead blockWrite
-        netRx netTx pids restartCount startedAt imageSize logSize
+        netRx netTx pids restartCount startedAt imageSize logSize hostCpus hostMemory
       }
     }
   }

@@ -270,10 +270,41 @@ describe('WidgetApp', () => {
       expect(bars[1].classes()).toContain('bg-error');
     });
 
+    it('shows every running container as a share of the host, including a collapsed folder', async () => {
+      // The Media folder stays collapsed, so plex's row is not mounted.
+      saveSettings({ startCollapsed: true, showStats: true });
+      const GB = 1024 ** 3;
+      const host = { hostCpus: 4, hostMemory: 16 * GB };
+      const { wrapper, statsStore } = await mountWidget(containers, [makeFolder(['plex'])], {
+        stats: { c1: { cpuPercent: 300, memoryUsage: 2 * GB, ...host }, c3: { cpuPercent: 100, memoryUsage: 2 * GB, ...host } },
+      });
+      expect(wrapper.findAll('.widget-row')).toHaveLength(0);
+      const total = wrapper.find('.widget-total');
+      expect(total.text()).toContain('All running');
+      expect(total.text()).toContain('2');
+      // (300 + 100) / 4 cores, and 4 GB of 16 GB.
+      expect(total.text()).toContain('100.0%');
+      expect(total.text()).toContain('25.0%');
+      expect(total.attributes('title')).toBe('CPU 100.0% of 4 cores · Memory 4.0 GB / 16.0 GB');
+      expect(statsStore.registerVisible).toHaveBeenCalledWith('c1');
+      expect(statsStore.registerVisible).toHaveBeenCalledWith('c3');
+      expect(statsStore.registerVisible).not.toHaveBeenCalledWith('c2');
+    });
+
+    it('unregisters the running containers on unmount', async () => {
+      saveSettings({ startCollapsed: false, showStats: true });
+      const { wrapper, statsStore } = await mountWidget(containers, []);
+      expect(wrapper.find('.widget-total').exists()).toBe(true);
+      wrapper.unmount();
+      expect(statsStore.unregisterVisible).toHaveBeenCalledWith('c1');
+      expect(statsStore.unregisterVisible).toHaveBeenCalledWith('c3');
+    });
+
     it('registers nothing and shows no numbers when off', async () => {
       const { wrapper, statsStore } = await mountWidget(containers, [], { stats: { c1: { cpuPercent: 3 } } });
       expect(rowText(wrapper, 'plex')).not.toContain('%');
       expect(statsStore.registerVisible).not.toHaveBeenCalled();
+      expect(wrapper.find('.widget-total').exists()).toBe(false);
     });
   });
 

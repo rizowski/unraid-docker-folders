@@ -300,3 +300,25 @@ describe('settings store – enableSecurityAdvisor', () => {
     });
   });
 });
+
+describe('settings store – statsRefreshInterval', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    mockApiFetch.mockReset();
+  });
+
+  it('defaults to 2 seconds', () => {
+    expect(useSettingsStore().statsRefreshInterval).toBe(2);
+  });
+
+  it('reads stats_refresh_interval, and keeps the default for a value below 1', async () => {
+    mockApiFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ settings: { stats_refresh_interval: '15' } }) } as Response);
+    const store = useSettingsStore();
+    await store.fetchSettings();
+    expect(store.statsRefreshInterval).toBe(15);
+
+    mockApiFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ settings: { stats_refresh_interval: '0' } }) } as Response);
+    await store.fetchSettings();
+    expect(store.statsRefreshInterval).toBe(2);
+  });
+});

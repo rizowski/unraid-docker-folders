@@ -133,6 +133,14 @@ export class SettingsService {
             }
             stored = String(n);
         }
+        if (key === 'stats_refresh_interval') {
+            const parsed = Number.parseInt(stored, 10);
+            const n = Number.isNaN(parsed) ? 0 : parsed;
+            if (n < 1 || n > 300) {
+                throw new BadRequestException('stats_refresh_interval must be between 1 and 300');
+            }
+            stored = String(n);
+        }
 
         // TODO(scheduler): `settings.php` also has two cron side effects here
         // that this port intentionally leaves out:

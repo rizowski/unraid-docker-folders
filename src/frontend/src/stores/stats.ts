@@ -12,8 +12,9 @@
  */
 
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useBackend } from '@/backends';
+import { useSettingsStore } from '@/stores/settings';
 
 export interface ContainerStats {
   cpuPercent: number;
@@ -29,16 +30,13 @@ export interface ContainerStats {
   startedAt: string;
   imageSize: number;
   logSize: number;
+  /** Online CPU cores on the host. Optional: a backend older than this field omits it. */
+  hostCpus?: number;
+  /** Host MemTotal in bytes. Optional for the same reason. */
+  hostMemory?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
-/**
- * How often the server pushes stats when the backend can stream them, on
- * every page, including the dashboard tile. A reading costs the server a few
- * milliseconds and is shared by every open tab, where a PHP poll was a whole
- * request, so the stream can be faster. `setPollInterval` does not change it.
- */
-const STREAM_INTERVAL_MS = 2000;
 /** How long to poll after a stats stream ends unexpectedly, before opening it again. */
 const STREAM_RETRY_MS = 15000;
 
@@ -109,7 +107,12 @@ export const useStatsStore = defineStore('stats', () => {
   function openStream() {
     const live = useBackend().live;
     const ids = allTrackedIds();
-    const key = [...ids].sort().join(',');
+    // How often the server pushes, on every page including the dashboard tile.
+    // The `stats_refresh_interval` setting, in seconds. `setPollInterval` does
+    // not change it: a pushed reading is shared by every open tab, where a
+    // poll is a whole request per tab.
+    const intervalMs = useSettingsStore().statsRefreshInterval * 1000;
+    const key = `${intervalMs}:${[...ids].sort().join(',')}`;
     if (closeStream && key === streamKey) return;
 
     closeStream?.();
@@ -118,7 +121,7 @@ export const useStatsStore = defineStore('stats', () => {
 
     streamKey = key;
 
-    closeStream = live.stats(ids, STREAM_INTERVAL_MS, {
+    closeStream = live.stats(ids, intervalMs, {
       onData: (incoming) => {
         for (const id of ids) {
           stats.value[id] = incoming[id] ?? null;
@@ -187,13 +190,23 @@ export const useStatsStore = defineStore('stats', () => {
 
   /**
    * The dashboard widget polls slower than the Folders page. A running timer
-   * restarts at the new rate. Polling only: a stream always runs at
-   * `STREAM_INTERVAL_MS`.
+   * restarts at the new rate. Polling only: a stream runs at the
+   * `stats_refresh_interval` setting.
    */
   function setPollInterval(ms: number) {
     pollIntervalMs = ms;
     if (pollTimer) restartTimer();
   }
+
+  // The settings usually load after the first stream opens, and a settings
+  // refetch can change the interval. An open stream reopens at the new rate;
+  // `openStream` sees the changed key.
+  watch(
+    () => useSettingsStore().statsRefreshInterval,
+    () => {
+      if (closeStream) openStream();
+    },
+  );
 
   function stopPolling() {
     active = false;

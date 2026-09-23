@@ -71,6 +71,12 @@ export class DockerFoldersContainerStats {
 
     @Field(() => Float)
     logSize!: number;
+
+    @Field(() => Int, { description: "Host online CPU count, for the frontend to divide a summed cpuPercent by." })
+    hostCpus!: number;
+
+    @Field(() => Float, { description: 'Host MemTotal in bytes, for the frontend to divide a summed memoryUsage by.' })
+    hostMemory!: number;
 }
 
 /**

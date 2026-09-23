@@ -124,7 +124,7 @@ export interface DockerFoldersRawStats {
     /** Full 64-char container id, echoed back by Docker. Absent only in fakes. */
     id?: string;
     cpu_stats?: {
-        cpu_usage?: { total_usage?: number };
+        cpu_usage?: { total_usage?: number; percpu_usage?: number[] | null };
         system_cpu_usage?: number;
         online_cpus?: number;
     };

@@ -24,6 +24,8 @@ $showInlineLogs = ($settings['show_inline_logs'] ?? '0') === '1';
 $enableAdopt = ($settings['enable_adopt'] ?? '1') === '1';
 $enableSecurityAdvisor = ($settings['enable_security_advisor'] ?? '1') === '1';
 $logRefreshInterval = $settings['log_refresh_interval'] ?? '10';
+$statsRefreshInterval = $settings['stats_refresh_interval'] ?? '2';
+$statsRefreshOptions = ['1' => '1 second', '2' => '2 seconds', '5' => '5 seconds', '10' => '10 seconds', '15' => '15 seconds', '30' => '30 seconds', '60' => '60 seconds'];
 $backendMode = dfmNormalizeBackendMode($settings['backend_mode'] ?? 'php');
 $graphqlPluginState = dfmGraphqlPluginState();
 // The switch is offered only when it can work. A stored 'graphql' still shows,
@@ -953,6 +955,24 @@ if (file_exists($changelogPath)) {
           <option value="graphql" <?= $backendMode === 'graphql' ? 'selected' : '' ?> <?= $graphqlSelectable ? '' : 'disabled' ?>>GraphQL (unstable)</option>
         </select>
         <span id="save-status-backend-mode" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="stats-refresh-interval">Stats refresh interval</label>
+        <div class="description">
+          How often the server sends live CPU, memory and I/O stats in GraphQL mode, on the Folders page and the dashboard tile. A shorter interval costs the server more work. PHP mode does not use this setting.
+          <strong>Default: 2 seconds</strong>
+        </div>
+      </div>
+      <div class="setting-control">
+        <select id="stats-refresh-interval" onchange="saveSetting('stats_refresh_interval', this.value)">
+          <?php foreach ($statsRefreshOptions as $statsOptValue => $statsOptLabel): ?>
+          <option value="<?= $statsOptValue ?>" <?= $statsRefreshInterval === (string) $statsOptValue ? 'selected' : '' ?>><?= $statsOptLabel ?></option>
+          <?php endforeach; ?>
+        </select>
+        <span id="save-status-stats-refresh-interval" class="save-status">Saved</span>
       </div>
     </div>
   </div>

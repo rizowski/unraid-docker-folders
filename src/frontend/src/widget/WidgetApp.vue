@@ -19,6 +19,16 @@
       >&times;</button>
     </div>
 
+    <div
+      v-if="prefs.showStats && runningIds.length > 0"
+      class="widget-total flex items-center gap-2 px-2 py-1.5 mb-1 border-b border-border"
+      :title="totalTitle"
+    >
+      <span class="flex-1 min-w-0 truncate text-xs font-semibold">All running</span>
+      <span class="shrink-0 text-xs text-text-secondary">{{ runningIds.length }}</span>
+      <WidgetStatGauges :cpu="runningTotal?.cpuPercent" :memory="runningTotal?.memPercent" />
+    </div>
+
     <p v-if="isLoading" class="text-xs text-text-secondary py-1">Loading...</p>
     <p v-else-if="error" class="text-xs text-error py-1">Error: {{ error }}</p>
     <p v-else-if="groups.length === 0" class="text-xs text-text-secondary py-1">
@@ -91,12 +101,13 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import WidgetContainerRow from './WidgetContainerRow.vue';
+import WidgetStatGauges from './WidgetStatGauges.vue';
 import WidgetSettingsPanel from './WidgetSettings.vue';
 import { loadWidgetSettings, saveWidgetSettings } from './widgetSettings';
 import { useDockerStore, type Container } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
-import { useStatsStore } from '@/stores/stats';
+import { useStatsStore, type ContainerStats } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import { useScheduleStore } from '@/stores/schedules';
 import type { Schedule } from '@/types/schedule';
@@ -107,6 +118,8 @@ import { composeProjectOf } from '@/utils/updateUnits';
 import { effectiveSortMode, sortByMode } from '@/utils/sortMode';
 import { reportHeightToParent } from '@/utils/iframeHost';
 import { safeLocalStorageGetJson, safeLocalStorageSet } from '@/utils/safeStorage';
+import { aggregateStats } from '@/utils/aggregateStats';
+import { formatBytes, formatPercent } from '@/utils/format';
 
 /** Slower than the Folders page: the dashboard is often left open for hours. */
 const WIDGET_POLL_INTERVAL = 60000;
@@ -210,6 +223,38 @@ const settingsOpen = ref(false);
 // Its own computed, so changing another setting does not rerun the group filter.
 const hideStopped = computed(() => prefs.value.hideStopped);
 
+// Every running container is registered for stats here, not by its row. The
+// all-running total needs them all, including those in a collapsed folder, whose
+// rows are unmounted. The stats store keeps a plain set of ids, so a row that
+// unregistered on unmount would also drop the id from the total.
+const runningIds = computed(() => dockerStore.containers.filter((c) => c.state === 'running').map((c) => c.id));
+let registeredIds: string[] = [];
+function syncRegistered(ids: string[]) {
+  const next = new Set(ids);
+  for (const id of registeredIds) if (!next.has(id)) statsStore.unregisterVisible(id);
+  const prev = new Set(registeredIds);
+  for (const id of ids) if (!prev.has(id)) statsStore.registerVisible(id);
+  registeredIds = ids;
+}
+watch(
+  () => (prefs.value.showStats ? runningIds.value : []),
+  syncRegistered,
+  { immediate: true },
+);
+
+/** Every running container together, as a share of the host. Null until any stats arrive. */
+const runningTotal = computed(() => {
+  if (!prefs.value.showStats) return null;
+  const list = runningIds.value.map((id) => statsStore.getStats(id)).filter((s): s is ContainerStats => !!s);
+  return aggregateStats(list);
+});
+const totalTitle = computed(() => {
+  const t = runningTotal.value;
+  if (!t) return 'Loading stats';
+  const cores = t.hostCpus === 1 ? '1 core' : `${t.hostCpus} cores`;
+  return `CPU ${formatPercent(t.cpuPercent)} of ${cores} · Memory ${formatBytes(t.memoryUsage)} / ${formatBytes(t.hostMemory)}`;
+});
+
 // The cog in the tile header lives in the dashboard page, outside this frame,
 // so it asks for the panel with a message.
 function onParentMessage(e: MessageEvent) {
@@ -287,5 +332,8 @@ watch(
   },
 );
 
-onUnmounted(() => window.removeEventListener('message', onParentMessage));
+onUnmounted(() => {
+  window.removeEventListener('message', onParentMessage);
+  syncRegistered([]);
+});
 </script>

@@ -7,6 +7,7 @@ import {
     calculateMemoryStats,
     calculateNetworkIO,
     calculatePids,
+    getHostCpuCount,
 } from '../container-stats.js';
 import type { DockerFoldersRawInspect, DockerFoldersRawStats } from '../extras-docker-client.js';
 
@@ -75,6 +76,22 @@ describe('calculateCpuPercent', () => {
 
         // (1000 / 30000) * 1 * 100 = 3.333... -> 3.33
         expect(calculateCpuPercent(stats)).toBe(3.33);
+    });
+
+    /**
+     * cpuPercent and hostCpus must scale by the same CPU count — the frontend
+     * divides a summed cpuPercent by hostCpus. A payload that omits
+     * online_cpus but carries percpu_usage exercises calculateCpuPercent's use
+     * of getHostCpuCount() rather than a bare `?? 1` default.
+     */
+    it('falls back to the percpu_usage count when online_cpus is missing', () => {
+        const stats: DockerFoldersRawStats = {
+            cpu_stats: { cpu_usage: { total_usage: 50000, percpu_usage: [1, 2, 3, 4] }, system_cpu_usage: 200000 },
+            precpu_stats: { cpu_usage: { total_usage: 0 }, system_cpu_usage: 0 },
+        };
+
+        // (50000 / 200000) * 4 percpu entries * 100 = 100.0
+        expect(calculateCpuPercent(stats)).toBe(100.0);
     });
 });
 
@@ -239,7 +256,7 @@ describe('buildContainerStats', () => {
             State: { StartedAt: '2024-01-01T00:00:00Z' },
         };
 
-        const result = buildContainerStats(stats, inspect, 12345, 6789);
+        const result = buildContainerStats(stats, inspect, 12345, 6789, 16000000000);
 
         expect(result).toEqual({
             cpuPercent: 80.0,
@@ -255,13 +272,45 @@ describe('buildContainerStats', () => {
             startedAt: '2024-01-01T00:00:00Z',
             imageSize: 12345,
             logSize: 6789,
+            hostCpus: 4,
+            hostMemory: 16000000000,
         });
     });
 
     it('defaults restartCount and startedAt when inspect is unavailable', () => {
-        const result = buildContainerStats({}, null, 0, 0);
+        const result = buildContainerStats({}, null, 0, 0, 0);
 
         expect(result.restartCount).toBe(0);
         expect(result.startedAt).toBe('');
+    });
+});
+
+describe('getHostCpuCount', () => {
+    it('uses online_cpus when present', () => {
+        const stats: DockerFoldersRawStats = {
+            cpu_stats: { online_cpus: 8, cpu_usage: { percpu_usage: [1, 2] } },
+        };
+
+        expect(getHostCpuCount(stats)).toBe(8);
+    });
+
+    it('falls back to the percpu_usage array length', () => {
+        const stats: DockerFoldersRawStats = {
+            cpu_stats: { cpu_usage: { percpu_usage: [1, 2, 3, 4] } },
+        };
+
+        expect(getHostCpuCount(stats)).toBe(4);
+    });
+
+    it('defaults to 1 when nothing is present', () => {
+        expect(getHostCpuCount({})).toBe(1);
+    });
+
+    it('defaults to 1 when percpu_usage is empty', () => {
+        const stats: DockerFoldersRawStats = {
+            cpu_stats: { cpu_usage: { percpu_usage: [] } },
+        };
+
+        expect(getHostCpuCount(stats)).toBe(1);
     });
 });

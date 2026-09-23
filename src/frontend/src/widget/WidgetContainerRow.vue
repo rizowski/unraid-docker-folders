@@ -35,19 +35,12 @@
         >Failed</span>
       </span>
     </span>
-    <span v-if="showStats && isRunning" class="shrink-0 flex gap-1.5 text-xs font-mono" :title="statsTitle">
-      <span v-for="part in statParts" :key="part.key" class="widget-stat flex flex-col w-10">
-        <span class="text-right leading-tight" :class="loadClass(part.percent)">{{ part.percent === undefined ? '--' : formatPercent(part.percent) }}</span>
-        <span class="h-0.5 stats-bar-track rounded-full overflow-hidden">
-          <span
-            v-if="part.percent !== undefined"
-            class="block h-full rounded-full transition-all duration-300"
-            :class="LOAD_BAR_CLASSES[loadLevel(part.percent)]"
-            :style="{ width: Math.min(part.percent, 100) + '%' }"
-          />
-        </span>
-      </span>
-    </span>
+    <WidgetStatGauges
+      v-if="showStats && isRunning"
+      :title="statsTitle"
+      :cpu="stats?.cpuPercent"
+      :memory="stats?.memoryPercent"
+    />
     <!-- Always rendered while the setting is on, disabled when there is no page
          to open, so every row's kebab lands in the same column. The disabled
          state is a span, not a link: `.icon-btn` only styles a and button, so
@@ -91,8 +84,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
+import WidgetStatGauges from './WidgetStatGauges.vue';
 import IconGlobe from '@/components/icons/IconGlobe.vue';
 import KebabMenu, { type KebabMenuItem } from '@/components/KebabMenu.vue';
 import { useDockerStore, type Container } from '@/stores/docker';
@@ -101,12 +95,11 @@ import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import type { Schedule } from '@/types/schedule';
 import { containerEditUrl, containerStatus, containerWebuiUrl, FALLBACK_CONTAINER_ICON, openContainerTerminal } from '@/utils/containerDisplay';
-import { formatBytes, formatPercent, loadLevel, LOAD_BAR_CLASSES } from '@/utils/format';
+import { formatBytes, formatPercent } from '@/utils/format';
 import { releaseIndexUrl } from '@/utils/updateUnits';
 
 /** One or two restarts are often a deliberate restart. Three or more point at a restart loop. */
 const RESTART_TAG_MIN = 3;
-const LOAD_TEXT_CLASSES = { high: 'text-error', medium: 'text-warning', low: 'text-text-secondary' } as const;
 
 const props = defineProps<{
   container: Container;
@@ -145,16 +138,9 @@ const webuiDisabledTitle = computed(() =>
     : "No WebUI configured. Set the WebUI field in the container's Unraid template to enable this.",
 );
 
-// Registered here, not through useContainerStats: that composable follows the
-// Folders page stats setting, and the widget has its own. A collapsed folder
-// unmounts its rows, so its containers stop polling.
-watch(
-  () => props.showStats && isRunning.value,
-  (on) => (on ? statsStore.registerVisible(props.container.id) : statsStore.unregisterVisible(props.container.id)),
-  { immediate: true },
-);
-onUnmounted(() => statsStore.unregisterVisible(props.container.id));
-
+// Stats are registered by WidgetApp for every running container, not per row:
+// the all-running total needs them while a folder is collapsed, and a row
+// unregistering on unmount would drop an id the total still reads.
 const stats = computed(() => (props.showStats ? statsStore.getStats(props.container.id) : null));
 const restartCount = computed(() => stats.value?.restartCount ?? 0);
 const statsTitle = computed(() =>
@@ -162,16 +148,6 @@ const statsTitle = computed(() =>
     ? `CPU ${formatPercent(stats.value.cpuPercent)} · Memory ${formatBytes(stats.value.memoryUsage)} / ${formatBytes(stats.value.memoryLimit)}`
     : 'Loading stats',
 );
-// Named, and computed rather than built in the template, so a rerender that
-// does not touch the stats does not rebuild the pair.
-const statParts = computed(() => [
-  { key: 'cpu', percent: stats.value?.cpuPercent },
-  { key: 'memory', percent: stats.value?.memoryPercent },
-]);
-function loadClass(percent: number | undefined): string {
-  return percent === undefined ? 'text-text-secondary' : LOAD_TEXT_CLASSES[loadLevel(percent)];
-}
-
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));
 const releaseNotesUrl = computed(() => releaseIndexUrl(updatesStore.updates[props.container.image]));
 const hasTags = computed(

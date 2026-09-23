@@ -4,6 +4,8 @@ import { createPinia, setActivePinia, type Pinia } from 'pinia';
 import FolderHeader from '../FolderHeader.vue';
 import { useDockerStore } from '@/stores/docker';
 import { useSettingsStore } from '@/stores/settings';
+import { useStatsStore, type ContainerStats } from '@/stores/stats';
+import { makeContainer } from '@/test/fixtures';
 import type { Folder } from '@/types/folder';
 
 function makeFolder(overrides: Partial<Folder> = {}): Folder {
@@ -296,5 +298,44 @@ describe('FolderHeader', () => {
     await wrapper.vm.$nextTick();
 
     expect(wrapper.find('.kebab-menu-item').exists()).toBe(false);
+  });
+
+  describe('collapsed folder stats', () => {
+    const GB = 1024 ** 3;
+    const entry = (cpuPercent: number, memoryUsage: number): ContainerStats => ({
+      cpuPercent,
+      memoryUsage,
+      memoryLimit: 32 * GB,
+      memoryPercent: (memoryUsage / (32 * GB)) * 100,
+      blockRead: 0,
+      blockWrite: 0,
+      netRx: 0,
+      netTx: 0,
+      pids: 1,
+      restartCount: 0,
+      startedAt: '',
+      imageSize: 0,
+      logSize: 0,
+      hostCpus: 8,
+      hostMemory: 32 * GB,
+    });
+
+    it('shows the members as a share of the host, not their average', () => {
+      const docker = useDockerStore();
+      docker.containers = [makeContainer({ id: 'a', name: 'a' }), makeContainer({ id: 'b', name: 'b' })];
+      useStatsStore().stats = { a: entry(400, 4 * GB), b: entry(0, 4 * GB) };
+
+      const wrapper = mountHeader({
+        collapsed: true,
+        containers: [{ container_name: 'a' }, { container_name: 'b' }] as unknown as Folder['containers'],
+      });
+
+      // CPU: 400% of one core over 8 cores. Memory: 8 GB of 32 GB. An average
+      // would have shown 200% CPU and 12.5% memory.
+      const text = wrapper.text();
+      expect(text).toContain('50.0%');
+      expect(text).toContain('25.0%');
+      expect(text).not.toContain('200.0%');
+    });
   });
 });

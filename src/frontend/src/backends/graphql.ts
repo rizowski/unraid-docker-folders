@@ -478,7 +478,7 @@ const CONTAINER_STATS = `
       id
       stats {
         cpuPercent memoryUsage memoryLimit memoryPercent blockRead blockWrite
-        netRx netTx pids restartCount startedAt imageSize logSize
+        netRx netTx pids restartCount startedAt imageSize logSize hostCpus hostMemory
       }
     }
   }

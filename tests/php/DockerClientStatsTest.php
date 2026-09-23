@@ -134,6 +134,32 @@ final class DockerClientStatsTest extends TestCase
         $this->assertSame(25.0, $result);
     }
 
+    /**
+     * cpuPercent and hostCpus must scale by the same CPU count — the frontend
+     * divides a summed cpuPercent by hostCpus. A payload that omits
+     * online_cpus but carries percpu_usage exercises calculateCpuPercent's use
+     * of getHostCpuCount() rather than a bare `?? 1` default.
+     */
+    #[Test]
+    public function cpuPercent_falls_back_to_percpu_usage_count_when_online_cpus_missing(): void
+    {
+        $stats = [
+            'cpu_stats' => [
+                'cpu_usage' => ['total_usage' => 50000, 'percpu_usage' => [1, 2, 3, 4]],
+                'system_cpu_usage' => 200000,
+                // online_cpus missing
+            ],
+            'precpu_stats' => [
+                'cpu_usage' => ['total_usage' => 0],
+                'system_cpu_usage' => 0,
+            ],
+        ];
+
+        // (50000 / 200000) * 4 percpu entries * 100 = 100.0
+        $result = $this->invoke('calculateCpuPercent', [$stats]);
+        $this->assertSame(100.0, $result);
+    }
+
     #[Test]
     public function cpuPercent_rounds_to_two_decimals(): void
     {
@@ -379,5 +405,76 @@ final class DockerClientStatsTest extends TestCase
 
         $result = $this->invoke('calculatePids', [$stats]);
         $this->assertSame(0, $result);
+    }
+
+    // ---------------------------------------------------------------
+    // getHostCpuCount()
+    // ---------------------------------------------------------------
+
+    #[Test]
+    public function hostCpuCount_uses_online_cpus_when_present(): void
+    {
+        $stats = [
+            'cpu_stats' => [
+                'online_cpus' => 8,
+                'cpu_usage' => ['percpu_usage' => [1, 2]],
+            ],
+        ];
+
+        $result = $this->invoke('getHostCpuCount', [$stats]);
+        $this->assertSame(8, $result);
+    }
+
+    #[Test]
+    public function hostCpuCount_falls_back_to_percpu_usage_count(): void
+    {
+        $stats = [
+            'cpu_stats' => [
+                'cpu_usage' => ['percpu_usage' => [1, 2, 3, 4]],
+            ],
+        ];
+
+        $result = $this->invoke('getHostCpuCount', [$stats]);
+        $this->assertSame(4, $result);
+    }
+
+    #[Test]
+    public function hostCpuCount_defaults_to_1_when_nothing_present(): void
+    {
+        $result = $this->invoke('getHostCpuCount', [[]]);
+        $this->assertSame(1, $result);
+    }
+
+    #[Test]
+    public function hostCpuCount_defaults_to_1_when_percpu_empty(): void
+    {
+        $stats = [
+            'cpu_stats' => [
+                'cpu_usage' => ['percpu_usage' => []],
+            ],
+        ];
+
+        $result = $this->invoke('getHostCpuCount', [$stats]);
+        $this->assertSame(1, $result);
+    }
+
+    // ---------------------------------------------------------------
+    // readHostMemoryTotal()
+    // ---------------------------------------------------------------
+
+    #[Test]
+    public function hostMemoryTotal_reads_positive_value_from_proc_meminfo(): void
+    {
+        $result = $this->invoke('readHostMemoryTotal', []);
+        $this->assertIsInt($result);
+        $this->assertGreaterThan(0, $result);
+    }
+
+    #[Test]
+    public function hostMemoryTotal_is_cached_per_instance(): void
+    {
+        $first = $this->invoke('readHostMemoryTotal', []);
+        $second = $this->invoke('readHostMemoryTotal', []);
+        $this->assertSame($first, $second);
     }
 }

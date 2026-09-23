@@ -776,6 +776,8 @@ function generateMockStats(id: string) {
     startedAt: new Date(Date.now() - profile.startedHoursAgo * 3600_000).toISOString(),
     imageSize: Math.round(profile.imageSizeMB * MB),
     logSize: Math.round(profile.logSizeMB * MB),
+    hostCpus: 16,
+    hostMemory: 64 * 1024 * MB,
   };
 }
 

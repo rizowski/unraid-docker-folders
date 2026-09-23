@@ -14,7 +14,7 @@ export interface WidgetSettings {
   showWebui: boolean;
   /** Container images. Off shows a small status dot instead. */
   showIcons: boolean;
-  /** CPU and memory percent on running containers. Off by default: it polls stats.php. */
+  /** CPU and memory percent on running containers, and their total. Off by default: it polls stats for every running container. */
   showStats: boolean;
   /** Update, restart, and failed-schedule tags on rows and folder headers. */
   showTags: boolean;

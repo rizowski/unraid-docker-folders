@@ -71,6 +71,7 @@ export const ALLOWED_SETTING_KEYS = [
     'post_pull_action',
     'update_concurrency',
     'log_refresh_interval',
+    'stats_refresh_interval',
     'compose_export_dir',
     'backup_destination',
     'default_retention_count',

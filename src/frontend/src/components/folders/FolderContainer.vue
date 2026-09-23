@@ -208,7 +208,7 @@ function toggleCollapse() {
   }
 }
 
-// When collapsed, register running containers for stats polling so folder header can show averages.
+// When collapsed, register running containers for stats polling so folder header can show totals.
 // When expanded, ContainerCard handles its own registration, so we unregister ours.
 const collapsedRegisteredIds = ref(new Set<string>());
 

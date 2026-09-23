@@ -67,14 +67,21 @@ export function cpuPercentFromDelta(cpuDelta: number, systemDelta: number, onlin
     return 0.0;
 }
 
-/** `DockerClient::calculateCpuPercent`. */
+/**
+ * `DockerClient::calculateCpuPercent`. The online-CPU count comes from
+ * `getHostCpuCount` (below), not a bare `cpu_stats.online_cpus ?? 1` — the
+ * frontend divides a summed `cpuPercent` by the `hostCpus` this same stats
+ * entry reports, so the two must agree on the same fallback chain or the
+ * aggregate comes out scaled wrong on a payload that omits `online_cpus` but
+ * still carries `percpu_usage`.
+ */
 export function calculateCpuPercent(stats: DockerFoldersRawStats): number {
     const cpuStats = stats.cpu_stats ?? {};
     const preCpuStats = stats.precpu_stats ?? {};
 
     const cpuDelta = (cpuStats.cpu_usage?.total_usage ?? 0) - (preCpuStats.cpu_usage?.total_usage ?? 0);
     const systemDelta = (cpuStats.system_cpu_usage ?? 0) - (preCpuStats.system_cpu_usage ?? 0);
-    const onlineCpus = cpuStats.online_cpus ?? 1;
+    const onlineCpus = getHostCpuCount(stats);
 
     return cpuPercentFromDelta(cpuDelta, systemDelta, onlineCpus);
 }
@@ -147,6 +154,28 @@ export function calculatePids(stats: DockerFoldersRawStats): number {
     return stats.pids_stats?.current ?? 0;
 }
 
+/**
+ * `DockerClient::getHostCpuCount`. Docker reports `cpu_stats.online_cpus` on
+ * modern kernels; older ones omit it, so this falls back to the length of the
+ * `percpu_usage` array, and then to 1 if neither is present.
+ */
+export function getHostCpuCount(stats: DockerFoldersRawStats): number {
+    const cpuStats = stats.cpu_stats ?? {};
+    // `!= null` (not `!== undefined`): PHP's `isset()` treats an explicit
+    // `null` as missing too, and a `null` reaching the non-null `hostCpus`
+    // GraphQL `Int` field would fail that entry.
+    if (cpuStats.online_cpus != null) {
+        return cpuStats.online_cpus;
+    }
+
+    const percpu = cpuStats.cpu_usage?.percpu_usage ?? [];
+    if (percpu.length > 0) {
+        return percpu.length;
+    }
+
+    return 1;
+}
+
 /** The shape `stores/stats.ts`'s `ContainerStats` interface expects. */
 export interface DockerFoldersContainerStatsResult {
     cpuPercent: number;
@@ -162,6 +191,8 @@ export interface DockerFoldersContainerStatsResult {
     startedAt: string;
     imageSize: number;
     logSize: number;
+    hostCpus: number;
+    hostMemory: number;
 }
 
 /**
@@ -169,12 +200,16 @@ export interface DockerFoldersContainerStatsResult {
  * `DockerClient::fetchBatchStats` (DockerClient.php:1196-1233). Pure: the
  * I/O — fetching `stats`, `inspect`, image size, and log size — is
  * `ContainerStatsService`'s job, so this can be tested without any of it.
+ * `hostMemory` is likewise supplied by the caller (`readSystemMemoryTotalBytes`
+ * reads `/proc/meminfo`); `hostCpus` is derived from `stats` itself and so is
+ * computed here.
  */
 export function buildContainerStats(
     stats: DockerFoldersRawStats,
     inspect: DockerFoldersRawInspect | null,
     imageSize: number,
-    logSize: number
+    logSize: number,
+    hostMemory: number
 ): DockerFoldersContainerStatsResult {
     const cpu = calculateCpuPercent(stats);
     const mem = calculateMemoryStats(stats);
@@ -196,5 +231,7 @@ export function buildContainerStats(
         startedAt: inspect?.State?.StartedAt ?? '',
         imageSize,
         logSize,
+        hostCpus: getHostCpuCount(stats),
+        hostMemory,
     };
 }
