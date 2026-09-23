@@ -2030,9 +2030,11 @@ class DockerClient
    * @return mixed Response data or false on error
    */
   /**
-   * Every caller builds $path with rawurlencode() on each id or image segment.
-   * An id reaches here from $_GET['id'], and a "/" or "?" in it would select a
-   * different Docker endpoint.
+   * Every caller that puts a container id or image id in $path runs it through
+   * rawurlencode(). An id reaches here from $_GET['id'], and a "/" or "?" in it
+   * would select a different Docker endpoint. getRemoteImageDigest() is the
+   * exception: /distribution/ takes a full image reference, which comes from
+   * Docker's own list or from pull.php's validation, and it is sent as is.
    */
   private function request($method, $path, $data = null, $timeout = 5)
   {
