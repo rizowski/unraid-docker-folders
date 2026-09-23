@@ -40,7 +40,8 @@ if (!in_array($action, ['up', 'pull'], true) || !$project) {
   errorResponse('Missing or invalid action/project', 400);
 }
 
-if (!preg_match('/^[a-zA-Z0-9._-]{1,128}$/', $project)) {
+// The same rule as compose.php. The old pattern accepted "." and "..".
+if (safePathComponent($project) === null || strlen($project) > 128) {
   header('Content-Type: application/json');
   errorResponse('Invalid project name', 400);
 }

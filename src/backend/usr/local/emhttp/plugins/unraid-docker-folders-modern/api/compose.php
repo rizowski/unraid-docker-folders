@@ -17,6 +17,17 @@ header('Content-Type: application/json');
 requireAuth();
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+// One rule for the project name, shared with compose-stream.php. Before, this
+// endpoint checked nothing and compose-stream.php accepted "..". The name is
+// looked up in compose_stacks and passed to "docker compose -p", so it must be
+// one path segment. Dots stay legal, because a stack imported from
+// compose.manager keeps its directory name.
+$projectParam = $_GET['project'] ?? null;
+if ($projectParam !== null && $projectParam !== '' && safePathComponent($projectParam) === null) {
+  errorResponse('Invalid project name', 400);
+}
+
 $composeManager = new ComposeManager();
 
 try {
