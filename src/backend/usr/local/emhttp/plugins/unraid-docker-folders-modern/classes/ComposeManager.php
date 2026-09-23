@@ -1522,6 +1522,14 @@ class ComposeManager
       $projectPath = self::COMPOSE_PLUGIN_PROJECTS . '/' . $dir;
       if (!is_dir($projectPath)) continue;
 
+      // compose.php and compose-stream.php refuse any other name, so a stack
+      // imported under one could never be started, edited, or deleted. This
+      // also keeps hidden directories such as ".git" out.
+      if (safePathComponent($dir) === null) {
+        $result['errors'][] = $dir . ': unsupported project name, skipped';
+        continue;
+      }
+
       $projectName = $dir;
 
       // Check if already imported
@@ -1610,10 +1618,25 @@ class ComposeManager
     $this->db->beginTransaction();
 
     try {
-      foreach ($plans as $plan) {
+      foreach ($plans as $i => $plan) {
         $projectName = $plan['project'];
         $name = $plan['name'];
         $now = time();
+
+        // Checked again inside the transaction. An import that overlapped this one
+        // (a double click) can have committed the same project since the
+        // copy phase. Its row points at the files this run copied over, so
+        // they must not be removed by the rollback below.
+        $taken = $this->db->fetchOne(
+          'SELECT project_name FROM compose_stacks WHERE project_name = ?',
+          [$projectName]
+        );
+        if ($taken) {
+          $plans[$i]['copied'] = [];
+          $plans[$i]['created_dir'] = false;
+          $result['stacks_skipped']++;
+          continue;
+        }
 
         // Insert compose_stacks row
         $this->db->insert('compose_stacks', [
