@@ -1,6 +1,8 @@
 # Changelog
 
 ## 2026.09.23
+- refactor(logs): one timestamp pass, and require the log time zone
+- fix(logs): show Docker's line stamps in the server's time zone
 - feat(dashboard): put the folded tile's summary on one line
 - feat(dashboard): show running count, CPU and RAM on the folded tile
 - test(container-card): stop a stats fetch from replacing seeded stats
