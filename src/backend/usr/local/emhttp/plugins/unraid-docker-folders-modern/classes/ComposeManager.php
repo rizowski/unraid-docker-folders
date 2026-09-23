@@ -37,6 +37,13 @@ class ComposeManager
     'compose.yaml',
   ];
 
+  /**
+   * Seconds that up, down, stop, and pull may run. "up -d" pulls any missing
+   * image first, which takes minutes on a slow link. Matches
+   * execCommandStreaming().
+   */
+  const STACK_COMMAND_TIMEOUT = 600;
+
   // Set once "docker compose version" succeeds. See isComposeAvailable().
   private $composeAvailable = false;
 
@@ -613,7 +620,9 @@ class ComposeManager
         return [
           'success' => false,
           'output' => $stdout,
-          'error' => "Command timed out after {$timeout} seconds",
+          // proc_terminate() signals only the shell. The command it started,
+          // such as docker compose, can still be running.
+          'error' => "Command timed out after {$timeout} seconds. It may still be running.",
           'exit_code' => -1,
         ];
       }
@@ -916,7 +925,7 @@ class ComposeManager
 
     $cmd .= ' 2>&1';
 
-    return $this->execCommand($cmd);
+    return $this->execCommand($cmd, self::STACK_COMMAND_TIMEOUT);
   }
 
   /**
@@ -932,7 +941,7 @@ class ComposeManager
 
     $cmd .= ' down 2>&1';
 
-    return $this->execCommand($cmd);
+    return $this->execCommand($cmd, self::STACK_COMMAND_TIMEOUT);
   }
 
   /**
@@ -948,7 +957,7 @@ class ComposeManager
 
     $cmd .= ' stop 2>&1';
 
-    return $this->execCommand($cmd);
+    return $this->execCommand($cmd, self::STACK_COMMAND_TIMEOUT);
   }
 
   /**
@@ -979,7 +988,7 @@ class ComposeManager
 
     $cmd .= ' pull 2>&1';
 
-    return $this->execCommand($cmd, 300); // 5 min timeout for pulls
+    return $this->execCommand($cmd, self::STACK_COMMAND_TIMEOUT);
   }
 
   /**
