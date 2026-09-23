@@ -2054,8 +2054,7 @@ class DockerClient
    * @param string $path API path
    * @param array|null $data Request body
    * @return mixed Response data or false on error
-   */
-  /**
+   *
    * Every caller that puts a container id or image id in $path runs it through
    * rawurlencode(). An id reaches here from $_GET['id'], and a "/" or "?" in it
    * would select a different Docker endpoint. getRemoteImageDigest() is the
