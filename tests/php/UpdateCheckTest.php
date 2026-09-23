@@ -550,6 +550,18 @@ final class UpdateCheckTest extends TestCase
     }
 
     #[Test]
+    public function toPlainTextKeepsTheUrlOfAnAutolink(): void
+    {
+        // strip_tags() used to run first and delete "<https://...>" whole.
+        $this->assertSame(
+            'Docs at https://example.com/guide now.',
+            ReleaseNotes::toPlainText('Docs at <https://example.com/guide> now.')
+        );
+        // A tag hidden in the URL is still removed.
+        $this->assertStringNotContainsString('<', ReleaseNotes::toPlainText('<https://a.example/<script>x</script>'));
+    }
+
+    #[Test]
     public function toPlainTextStripsBothEndsOfSingleEmphasis(): void
     {
         $this->assertSame('an italic word', ReleaseNotes::toPlainText('an *italic* word'));

@@ -224,13 +224,17 @@ class ReleaseNotes
     $text = preg_replace('/~~~.*?~~~/s', ' ', $text);
     $text = preg_replace('/<!--.*?-->/s', ' ', $text);
 
+    // Autolinks before strip_tags(), which reads "<https://...>" as a tag and
+    // deletes the URL with it. No "<", ">" or space inside, so what is left
+    // cannot open a tag, and strip_tags() still runs over the result.
+    $text = preg_replace('/<(https?:\/\/[^<>\s]+)>/', '$1', $text);
+
     // Note: this also eats prose like "<0.5", which is acceptable for a
     // one-line preview and cheaper than a real HTML parser.
     $text = strip_tags($text);
 
     $text = preg_replace('/!\[[^\]]*\]\([^)]*\)/', ' ', $text);   // images
     $text = preg_replace('/\[([^\]]*)\]\([^)]*\)/', '$1', $text); // links -> text
-    $text = preg_replace('/<(https?:\/\/[^>]+)>/', '$1', $text);  // autolinks
 
     // Line-leading markers: headings, quotes, bullets, ordered list numbers.
     $text = preg_replace('/^[ \t]*(#{1,6}|>|[-*+]|\d+\.)[ \t]+/m', '', $text);
