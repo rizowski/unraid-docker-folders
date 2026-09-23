@@ -1579,11 +1579,16 @@ class ComposeManager
       $envFile = null;
       $copied = [];
 
+      // A file is recorded as copied only when this run created it. One that
+      // was already there is overwritten, but a rollback must not delete it.
       if ($sourceComposeFile && file_exists($sourceComposeFile)) {
         $destFile = $destDir . '/' . basename($sourceComposeFile);
+        $existed = file_exists($destFile);
         if (@copy($sourceComposeFile, $destFile)) {
           $composeFile = $destFile;
-          $copied[] = $destFile;
+          if (!$existed) {
+            $copied[] = $destFile;
+          }
         } else {
           $result['errors'][] = $projectName . ': failed to copy compose file';
         }
@@ -1592,9 +1597,12 @@ class ComposeManager
       // Copy .env if it exists in source
       if ($sourceDir && file_exists($sourceDir . '/.env')) {
         $destEnv = $destDir . '/.env';
+        $existed = file_exists($destEnv);
         if (@copy($sourceDir . '/.env', $destEnv)) {
           $envFile = $destEnv;
-          $copied[] = $destEnv;
+          if (!$existed) {
+            $copied[] = $destEnv;
+          }
         }
       }
 
