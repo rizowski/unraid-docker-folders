@@ -260,7 +260,10 @@ class BackupManager
     // Containment alone is not enough. The destination can be an allowed root
     // itself, such as /mnt, or a broad one such as /mnt/user, and then "inside
     // the destination" means every file on the array.
-    if (dirname($realFile) !== $realDest || !self::isArchiveName(basename($realFile))) {
+    // pathIsWithin() also fails closed on a weak destination such as "/".
+    if (!pathIsWithin($realFile, $realDest)
+      || dirname($realFile) !== $realDest
+      || !self::isArchiveName(basename($realFile))) {
       return false;
     }
 
