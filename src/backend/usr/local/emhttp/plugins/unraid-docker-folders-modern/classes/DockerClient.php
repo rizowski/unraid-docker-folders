@@ -1606,7 +1606,11 @@ class DockerClient
    */
   public function pullImage($imageName, callable $onProgress)
   {
+    // This path does not go through request(), which is what resets it.
+    $this->lastError = '';
+
     if (!file_exists($this->socketPath)) {
+      $this->lastError = "Docker socket not found: {$this->socketPath}";
       return false;
     }
 
@@ -1628,21 +1632,34 @@ class DockerClient
     // line with an "error" key under the same 200. The status alone cannot
     // report it.
     $streamError = '';
+    // A non-2xx answer, such as a 404 for an unknown image, is one
+    // {"message": ...} object instead of a stream.
+    $apiMessage = '';
 
-    // Stream response chunks to the callback
-    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($onProgress, &$streamError) {
-      // Docker sends newline-delimited JSON
-      $lines = explode("\n", $data);
-      foreach ($lines as $line) {
-        $line = trim($line);
-        if (empty($line)) continue;
-        $decoded = json_decode($line, true);
-        if ($decoded !== null) {
-          if (isset($decoded['error']) && $streamError === '') {
-            $streamError = (string) $decoded['error'];
-          }
-          $onProgress($decoded);
-        }
+    // Docker sends newline-delimited JSON, but curl hands over chunks that
+    // can end in the middle of a line. A line split that way decodes as
+    // nothing, and an "error" line lost like that made a failed pull look
+    // like a success. Only whole lines are decoded; the rest waits.
+    $pending = '';
+    $handleLine = function ($line) use ($onProgress, &$streamError, &$apiMessage) {
+      $line = trim($line);
+      if ($line === '') return;
+      $decoded = json_decode($line, true);
+      if (!is_array($decoded)) return;
+      if (isset($decoded['error']) && $streamError === '') {
+        $streamError = (string) $decoded['error'];
+      }
+      if (isset($decoded['message']) && $apiMessage === '') {
+        $apiMessage = (string) $decoded['message'];
+      }
+      $onProgress($decoded);
+    };
+
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $data) use ($handleLine, &$pending) {
+      $pending .= $data;
+      while (($nl = strpos($pending, "\n")) !== false) {
+        $handleLine(substr($pending, 0, $nl));
+        $pending = substr($pending, $nl + 1);
       }
       return strlen($data);
     });
@@ -1651,6 +1668,9 @@ class DockerClient
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $error = curl_error($ch);
     curl_close($ch);
+
+    // The last line may have no newline after it.
+    $handleLine($pending);
 
     if ($error) {
       error_log("Docker pull error: {$error}");
@@ -1664,7 +1684,13 @@ class DockerClient
       return false;
     }
 
-    return $httpCode >= 200 && $httpCode < 300;
+    if ($httpCode < 200 || $httpCode >= 300) {
+      $this->lastError = "Docker API HTTP {$httpCode}" . ($apiMessage !== '' ? ": {$apiMessage}" : '');
+      error_log("Docker pull error: {$this->lastError}");
+      return false;
+    }
+
+    return true;
   }
 
   /**
