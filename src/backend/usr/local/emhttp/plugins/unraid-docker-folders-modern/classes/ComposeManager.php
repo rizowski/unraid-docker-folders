@@ -1493,91 +1493,119 @@ class ComposeManager
       return $result;
     }
 
+    // Two phases. The file copies run first, outside any transaction, and
+    // the rows go in afterwards in one short transaction. Copying inside the
+    // transaction held SQLite's write lock for the whole copy, and a rollback
+    // left the copied files behind with no row pointing at them.
+    $plans = [];
+    foreach ($dirs as $dir) {
+      if ($dir === '.' || $dir === '..') continue;
+
+      $projectPath = self::COMPOSE_PLUGIN_PROJECTS . '/' . $dir;
+      if (!is_dir($projectPath)) continue;
+
+      $projectName = $dir;
+
+      // Check if already imported
+      $existing = $this->db->fetchOne(
+        'SELECT project_name FROM compose_stacks WHERE project_name = ?',
+        [$projectName]
+      );
+      if ($existing) {
+        $result['stacks_skipped']++;
+        continue;
+      }
+
+      // Read metadata files
+      $name = $this->readMetadataFile($projectPath . '/name');
+      $description = $this->readMetadataFile($projectPath . '/description');
+      $autostart = strtolower(trim($this->readMetadataFile($projectPath . '/autostart') ?? '')) === 'true';
+      $isIndirect = file_exists($projectPath . '/indirect');
+
+      // Determine source compose file path and working directory
+      $sourceDir = null;
+      $sourceComposeFile = null;
+
+      if ($isIndirect) {
+        // Indirect: the file contains a path to the actual compose location
+        $indirectPath = $this->readMetadataFile($projectPath . '/indirect');
+        if ($indirectPath && is_dir($indirectPath)) {
+          $sourceDir = $indirectPath;
+        }
+      } else {
+        // Direct: compose file is in the project directory
+        $sourceDir = $projectPath;
+      }
+
+      // Find actual compose file in source
+      if ($sourceDir) {
+        $sourceComposeFile = $this->findComposeFile($sourceDir);
+      }
+
+      // Copy files into our own plugin directory so stacks are self-contained
+      $destDir = COMPOSE_STACKS_DIR . '/' . $projectName;
+      $createdDir = false;
+      if (!is_dir($destDir)) {
+        $createdDir = @mkdir($destDir, 0755, true);
+      }
+
+      $composeFile = null;
+      $envFile = null;
+      $copied = [];
+
+      if ($sourceComposeFile && file_exists($sourceComposeFile)) {
+        $destFile = $destDir . '/' . basename($sourceComposeFile);
+        if (@copy($sourceComposeFile, $destFile)) {
+          $composeFile = $destFile;
+          $copied[] = $destFile;
+        } else {
+          $result['errors'][] = $projectName . ': failed to copy compose file';
+        }
+      }
+
+      // Copy .env if it exists in source
+      if ($sourceDir && file_exists($sourceDir . '/.env')) {
+        $destEnv = $destDir . '/.env';
+        if (@copy($sourceDir . '/.env', $destEnv)) {
+          $envFile = $destEnv;
+          $copied[] = $destEnv;
+        }
+      }
+
+      $plans[] = [
+        'project' => $projectName,
+        'name' => $name,
+        'description' => $description,
+        'autostart' => $autostart,
+        'working_dir' => $destDir,
+        'compose_file' => $composeFile,
+        'env_file' => $envFile,
+        'created_dir' => $createdDir,
+        'copied' => $copied,
+      ];
+    }
+
+    if (empty($plans)) {
+      return $result;
+    }
+
     $this->db->beginTransaction();
 
     try {
-      foreach ($dirs as $dir) {
-        if ($dir === '.' || $dir === '..') continue;
-
-        $projectPath = self::COMPOSE_PLUGIN_PROJECTS . '/' . $dir;
-        if (!is_dir($projectPath)) continue;
-
-        $projectName = $dir;
-
-        // Check if already imported
-        $existing = $this->db->fetchOne(
-          'SELECT project_name FROM compose_stacks WHERE project_name = ?',
-          [$projectName]
-        );
-        if ($existing) {
-          $result['stacks_skipped']++;
-          continue;
-        }
-
-        // Read metadata files
-        $name = $this->readMetadataFile($projectPath . '/name');
-        $description = $this->readMetadataFile($projectPath . '/description');
-        $autostart = strtolower(trim($this->readMetadataFile($projectPath . '/autostart') ?? '')) === 'true';
-        $isIndirect = file_exists($projectPath . '/indirect');
-
-        // Determine source compose file path and working directory
-        $sourceDir = null;
-        $sourceComposeFile = null;
-
-        if ($isIndirect) {
-          // Indirect: the file contains a path to the actual compose location
-          $indirectPath = $this->readMetadataFile($projectPath . '/indirect');
-          if ($indirectPath && is_dir($indirectPath)) {
-            $sourceDir = $indirectPath;
-          }
-        } else {
-          // Direct: compose file is in the project directory
-          $sourceDir = $projectPath;
-        }
-
-        // Find actual compose file in source
-        if ($sourceDir) {
-          $sourceComposeFile = $this->findComposeFile($sourceDir);
-        }
-
-        // Copy files into our own plugin directory so stacks are self-contained
-        $destDir = COMPOSE_STACKS_DIR . '/' . $projectName;
-        if (!is_dir($destDir)) {
-          @mkdir($destDir, 0755, true);
-        }
-
-        $workingDir = $destDir;
-        $composeFile = null;
-        $envFile = null;
-
-        if ($sourceComposeFile && file_exists($sourceComposeFile)) {
-          $destFile = $destDir . '/' . basename($sourceComposeFile);
-          if (@copy($sourceComposeFile, $destFile)) {
-            $composeFile = $destFile;
-          } else {
-            $result['errors'][] = $projectName . ': failed to copy compose file';
-          }
-        }
-
-        // Copy .env if it exists in source
-        if ($sourceDir && file_exists($sourceDir . '/.env')) {
-          $destEnv = $destDir . '/.env';
-          if (@copy($sourceDir . '/.env', $destEnv)) {
-            $envFile = $destEnv;
-          }
-        }
-
+      foreach ($plans as $plan) {
+        $projectName = $plan['project'];
+        $name = $plan['name'];
         $now = time();
 
         // Insert compose_stacks row
         $this->db->insert('compose_stacks', [
           'project_name' => $projectName,
-          'working_dir' => $workingDir,
-          'compose_file' => $composeFile,
-          'env_file' => $envFile,
-          'autostart' => $autostart ? 1 : 0,
+          'working_dir' => $plan['working_dir'],
+          'compose_file' => $plan['compose_file'],
+          'env_file' => $plan['env_file'],
+          'autostart' => $plan['autostart'] ? 1 : 0,
           'autostart_force_recreate' => 0,
-          'description' => $description ?: ($name ?: null),
+          'description' => $plan['description'] ?: ($name ?: null),
           'imported_from' => 'compose_plugin',
           'created_at' => $now,
           'updated_at' => $now,
@@ -1610,7 +1638,19 @@ class ComposeManager
     } catch (Exception $e) {
       $this->db->rollback();
       $result['success'] = false;
+      $result['stacks_imported'] = 0;
       $result['errors'][] = $e->getMessage();
+
+      // No row survived, so remove what this run copied. Only files this run
+      // wrote, and a directory only if this run created it and it is empty.
+      foreach ($plans as $plan) {
+        foreach ($plan['copied'] as $file) {
+          @unlink($file);
+        }
+        if ($plan['created_dir']) {
+          @rmdir($plan['working_dir']);
+        }
+      }
     }
 
     return $result;
