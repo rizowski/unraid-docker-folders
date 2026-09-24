@@ -26,6 +26,13 @@
 # node live under /usr/local.
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH}"
 
+# `unraid-api plugins install` runs npm install in the API's folder. npm's
+# audit and funding notices there report on Unraid's own dependencies, and
+# the audit contacts the npm registry, so both are off. npm reads these from
+# the environment, whatever flags unraid-api passes it.
+export npm_config_audit=false
+export npm_config_fund=false
+
 PLUGIN_NAME="unraid-docker-folders-modern"
 PLUGIN_DIR="/usr/local/emhttp/plugins/${PLUGIN_NAME}"
 CONFIG_DIR="/boot/config/plugins/${PLUGIN_NAME}"
