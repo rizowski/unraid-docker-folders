@@ -1116,8 +1116,7 @@ function startBackendSwitch(select, mode, message) {
       finishBackendSwitch(select, select.getAttribute('data-current') || 'php', 'The switch failed: the server did not accept it.');
       return;
     }
-    // The server's clock, so a browser clock that is off does not matter.
-    setTimeout(function() { pollBackendStatus(select, mode, result.started_at, 0); }, 2000);
+    setTimeout(function() { pollBackendStatus(select, mode, result.run, 0); }, 2000);
   };
   xhr.onerror = function() {
     finishBackendSwitch(select, select.getAttribute('data-current') || 'php', 'The switch failed: the server did not answer.');
@@ -1125,7 +1124,7 @@ function startBackendSwitch(select, mode, message) {
   xhr.send(body);
 }
 
-function pollBackendStatus(select, mode, startedAt, attempt) {
+function pollBackendStatus(select, mode, run, attempt) {
   var progress = document.getElementById('backend-mode-progress');
   var xhr = new XMLHttpRequest();
   xhr.open('GET', '/plugins/unraid-docker-folders-modern/api/settings.php?action=backend-status', true);
@@ -1133,15 +1132,15 @@ function pollBackendStatus(select, mode, startedAt, attempt) {
     var status = null;
     try { status = JSON.parse(xhr.responseText); } catch (e) { status = null; }
     var plugin = status && status.plugin;
-    // A state older than this click belongs to an earlier run.
-    var current = plugin && plugin.at >= startedAt;
+    // Boot and watchdog runs write the same file. Only this click's run counts.
+    var current = plugin && plugin.run === run;
     var done = current && ['ready', 'installed', 'failed', 'removed'].indexOf(plugin.state) !== -1;
     if (!done) {
       if (attempt >= 150) {
         finishBackendSwitch(select, status ? status.mode : 'php', 'No answer after 5 minutes. See /boot/config/plugins/unraid-docker-folders-modern/install.log.');
         return;
       }
-      setTimeout(function() { pollBackendStatus(select, mode, startedAt, attempt + 1); }, 2000);
+      setTimeout(function() { pollBackendStatus(select, mode, run, attempt + 1); }, 2000);
       return;
     }
     if (plugin.state === 'failed') {
@@ -1153,7 +1152,7 @@ function pollBackendStatus(select, mode, startedAt, attempt) {
     }
   };
   // The API restart can drop a request. Keep polling.
-  xhr.onerror = function() { setTimeout(function() { pollBackendStatus(select, mode, startedAt, attempt + 1); }, 2000); };
+  xhr.onerror = function() { setTimeout(function() { pollBackendStatus(select, mode, run, attempt + 1); }, 2000); };
   xhr.send();
 }
 

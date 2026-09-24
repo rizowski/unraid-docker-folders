@@ -829,6 +829,21 @@ function dfmBackendMode()
 }
 
 /**
+ * Insert or replace one settings row. $key must be a fixed string or come
+ * from settings.php's allowlist: it is bound, but the table is keyed on it.
+ *
+ * @param Database $db
+ */
+function dfmUpsertSetting($db, $key, $value)
+{
+  $db->query(
+    'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)'
+      . ' ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at',
+    [$key, $value, time()]
+  );
+}
+
+/**
  * Store backend_mode, then heal the schedule-runner cron line. The plugin
  * never writes root's crontab, so schedules created in GraphQL mode do not
  * add the line PHP needs; without this, switching back to PHP, or PHP taking
@@ -838,13 +853,7 @@ function dfmBackendMode()
  */
 function dfmWriteBackendMode($db, $mode)
 {
-  $mode = dfmNormalizeBackendMode($mode);
-  $now = time();
-  if ($db->fetchOne('SELECT key FROM settings WHERE key = ?', ['backend_mode'])) {
-    $db->query('UPDATE settings SET value = ?, updated_at = ? WHERE key = ?', [$mode, $now, 'backend_mode']);
-  } else {
-    $db->query('INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)', ['backend_mode', $mode, $now]);
-  }
+  dfmUpsertSetting($db, 'backend_mode', dfmNormalizeBackendMode($mode));
   require_once PLUGIN_DIR . '/classes/CronManager.php';
   CronManager::ensureSchedulerCron($db);
 }
@@ -861,17 +870,25 @@ define('DFM_API_PLUGIN_STATE_FILE', '/var/run/' . PLUGIN_NAME . '.api-plugin.sta
 // repeat until the user picks GraphQL again, which deletes it.
 define('DFM_BACKEND_ROLLBACK_MARKER', CONFIG_DIR . '/backend-rollback.json');
 
-/** Start `api-plugin.sh install --activate` or `remove`, detached. */
-function dfmLaunchApiPlugin($verb)
+/**
+ * Start `api-plugin.sh install --activate`, `remove`, or `remove
+ * --no-restart` (verb 'remove-no-restart'), detached. $runId tags the
+ * state file so the settings page can find its own run.
+ */
+function dfmLaunchApiPlugin($verb, $runId = '')
 {
   $args = [
     'install' => ['install', '--activate'],
     'remove' => ['remove'],
+    'remove-no-restart' => ['remove', '--no-restart'],
   ][$verb] ?? null;
   if ($args === null) {
     return false;
   }
-  $cmd = 'setsid nohup /bin/bash ' . escapeshellarg(DFM_API_PLUGIN_SCRIPT);
+  if (preg_match('/^[0-9a-f]{1,32}$/', $runId)) {
+    array_push($args, '--run', $runId);
+  }
+  $cmd = '/usr/bin/setsid /usr/bin/nohup /bin/bash ' . escapeshellarg(DFM_API_PLUGIN_SCRIPT);
   foreach ($args as $arg) {
     $cmd .= ' ' . escapeshellarg($arg);
   }

@@ -173,26 +173,20 @@ function handlePost()
   // stored here: the script stores it once the backend answers, so a failed
   // install leaves the page on PHP. PHP is stored at once, before the removal.
   if ($key === 'backend_mode') {
-    // started_at lets the page ignore a state file from an earlier run.
-    $startedAt = time();
+    // The run id tags the state file, so the page waits for this run and not
+    // for a boot or watchdog run that writes the same file. The rollback
+    // marker stays until the install succeeds; the script deletes it then.
+    $run = bin2hex(random_bytes(8));
     if ($value === 'graphql') {
-      @unlink(DFM_BACKEND_ROLLBACK_MARKER);
-      dfmLaunchApiPlugin('install');
-      jsonResponse(['success' => true, 'key' => $key, 'value' => dfmBackendMode(), 'pending' => 'install', 'started_at' => $startedAt]);
+      dfmLaunchApiPlugin('install', $run);
+      jsonResponse(['success' => true, 'key' => $key, 'value' => dfmBackendMode(), 'pending' => 'install', 'run' => $run]);
     }
     dfmWriteBackendMode($db, 'php');
-    dfmLaunchApiPlugin('remove');
-    jsonResponse(['success' => true, 'key' => $key, 'value' => 'php', 'pending' => 'remove', 'started_at' => $startedAt]);
+    dfmLaunchApiPlugin('remove', $run);
+    jsonResponse(['success' => true, 'key' => $key, 'value' => 'php', 'pending' => 'remove', 'run' => $run]);
   }
 
-  // Upsert: insert or update
-  $existing = $db->fetchOne('SELECT key FROM settings WHERE key = ?', [$key]);
-
-  if ($existing) {
-    $db->update('settings', ['value' => $value, 'updated_at' => $now], 'key = ?', [$key]);
-  } else {
-    $db->insert('settings', ['key' => $key, 'value' => $value, 'updated_at' => $now]);
-  }
+  dfmUpsertSetting($db, $key, $value);
 
   // When update_check_schedule changes, update or remove the cron file
   if ($key === 'update_check_schedule') {

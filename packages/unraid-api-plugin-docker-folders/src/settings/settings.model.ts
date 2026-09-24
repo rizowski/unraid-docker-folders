@@ -42,10 +42,12 @@ export class DockerFoldersSettingInput {
 }
 
 /**
- * The full key allowlist from `settings.php`'s `handlePost()`, in the same
- * order. A key outside this list is rejected, not silently ignored — keep
- * this list byte-for-byte in sync with the PHP one, including entries (like
- * `show_legacy_containers`) that have no per-key validation of their own.
+ * The key allowlist from `settings.php`'s `handlePost()`, in the same order.
+ * A key outside this list is rejected, not silently ignored — keep this list
+ * in sync with the PHP one, including entries (like `show_legacy_containers`)
+ * that have no per-key validation of their own. The one deliberate exception
+ * is `backend_mode`: switching it installs or removes this plugin, which only
+ * the PHP settings page can do.
  */
 export const ALLOWED_SETTING_KEYS = [
     'distinguish_healthy',

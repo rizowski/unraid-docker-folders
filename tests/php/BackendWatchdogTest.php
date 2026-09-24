@@ -70,6 +70,25 @@ final class BackendWatchdogTest extends TestCase
     }
 
     #[Test]
+    public function givesAFreshlyStartedApiTheGrace(): void
+    {
+        // The heartbeat went stale while the API was down. The API has just
+        // started and answers "offline" or has no socket yet.
+        foreach (['offline', 'no-api', 'load-failed'] as $probe) {
+            $this->assertSame('wait', BackendWatchdog::decide($this->brokenInputs([
+                'staleFor' => 3600,
+                'apiUptime' => 20,
+                'probe' => $probe,
+            ])), $probe);
+        }
+        $this->assertSame('rollback-and-remove', BackendWatchdog::decide($this->brokenInputs([
+            'staleFor' => 3600,
+            'apiUptime' => BackendWatchdog::STALE_GRACE,
+            'probe' => 'offline',
+        ])));
+    }
+
+    #[Test]
     public function rollsBackWhenTheApiRunsWithoutTheBackend(): void
     {
         $this->assertSame('rollback', BackendWatchdog::decide($this->brokenInputs(['probe' => 'load-failed'])));

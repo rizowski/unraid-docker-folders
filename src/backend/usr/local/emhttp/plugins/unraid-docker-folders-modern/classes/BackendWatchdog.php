@@ -24,8 +24,15 @@ class BackendWatchdog
   const INSTALL_GRACE = 300;
   /** An install or removal older than this is stuck, not running. */
   const STUCK_RUN = 900;
-  /** When the heartbeat first went stale. In RAM, so a reboot starts over. */
+  /** After a check finds nothing to do, the next one waits this long. */
+  const CHECK_INTERVAL = 300;
+  /**
+   * {since, checked}: when the heartbeat went stale, and when the costly
+   * checks last ran. In RAM, so a reboot starts over.
+   */
   const STALE_SINCE_FILE = '/var/run/' . PLUGIN_NAME . '.backend-stale';
+  /** Cron runs jobs with PATH=/bin:/sbin:/usr/bin:/usr/sbin. */
+  const PATH_ENV = 'PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 
   const NONE = 'none';
   const WAIT = 'wait';
@@ -39,6 +46,7 @@ class BackendWatchdog
    *   sinceInstall  seconds since api-plugin.sh last installed, null if unknown
    *   staleFor      seconds the heartbeat has been stale
    *   apiRunning    the Unraid API process reports online (null: not checked)
+   *   apiUptime     seconds since that process started (null: unknown)
    *   probe         dfmGraphqlPluginState() (null: not checked)
    *   installed     the backend package is in the API's node_modules
    *   marker        an earlier rollback left DFM_BACKEND_ROLLBACK_MARKER
@@ -64,7 +72,19 @@ class BackendWatchdog
     if (empty($in['apiRunning'])) {
       return self::NONE;
     }
+    // The heartbeat was stale while the API was down. A freshly started API
+    // gets the same grace before its answers count, because it answers
+    // "offline", or has no socket at all, while it starts.
+    $uptime = $in['apiUptime'] ?? null;
+    if ($uptime !== null && $uptime < self::STALE_GRACE) {
+      return self::WAIT;
+    }
     $probe = $in['probe'] ?? null;
+    if ($probe === 'ready') {
+      // The field answers, so the pages work. Only the runner is quiet, and
+      // PHP already covers its work while the heartbeat is stale.
+      return self::NONE;
+    }
     if ($probe === 'load-failed' || $probe === 'not-installed') {
       return self::ROLLBACK;
     }
@@ -73,8 +93,6 @@ class BackendWatchdog
     if ($probe === 'offline' || $probe === 'no-api') {
       return (!empty($in['installed']) && empty($in['marker'])) ? self::ROLLBACK_AND_REMOVE : self::ROLLBACK;
     }
-    // The field answers, so the pages work. Only the runner is quiet, and
-    // PHP already covers its work while the heartbeat is stale.
     return self::NONE;
   }
 
@@ -104,28 +122,45 @@ class BackendWatchdog
       $in['sinceInstall'] = null;
     }
 
-    $staleSince = (int) @file_get_contents(self::STALE_SINCE_FILE);
+    $tracked = dfmReadJsonFile(self::STALE_SINCE_FILE) ?? [];
+    $staleSince = (int) ($tracked['since'] ?? 0);
+    $checked = (int) ($tracked['checked'] ?? 0);
     $stale = $in['mode'] === 'graphql'
       && ($in['heartbeatAge'] === null || $in['heartbeatAge'] > DFM_RUNNER_ALIVE_STALE_SECONDS);
     if (!$stale) {
-      if ($staleSince && !$dryRun) {
+      if ($tracked && !$dryRun) {
         @unlink(self::STALE_SINCE_FILE);
       }
       $staleSince = 0;
     } elseif (!$staleSince) {
       $staleSince = $now;
+      $checked = 0;
       if (!$dryRun) {
-        @file_put_contents(self::STALE_SINCE_FILE, (string) $now);
+        self::track($staleSince, $checked);
       }
     }
     $in['staleFor'] = $stale ? $now - $staleSince : 0;
 
-    // The costly checks run only when the answer depends on them.
+    // The costly checks run only when the answer depends on them, and at
+    // most once per CHECK_INTERVAL while nothing needs doing.
     if ($stale && $in['staleFor'] >= self::STALE_GRACE) {
-      $in['apiRunning'] = self::apiRunning();
-      $in['probe'] = $in['apiRunning'] ? dfmGraphqlPluginState() : null;
+      if (!$dryRun && $checked && $now - $checked < self::CHECK_INTERVAL) {
+        return ['decision' => self::WAIT, 'inputs' => $in + ['nextCheckIn' => self::CHECK_INTERVAL - ($now - $checked)]];
+      }
+      // The probe first: it is a short curl call, and "ready" settles it.
+      $in['probe'] = dfmGraphqlPluginState();
+      if ($in['probe'] === 'ready') {
+        $in['apiRunning'] = true;
+      } else {
+        $api = self::apiProcess();
+        $in['apiRunning'] = $api['running'];
+        $in['apiUptime'] = $api['uptime'];
+      }
       $in['installed'] = dfmGraphqlPluginInstalled();
       $in['marker'] = is_file(DFM_BACKEND_ROLLBACK_MARKER);
+      if (!$dryRun) {
+        self::track($staleSince, $now);
+      }
     }
 
     $decision = self::decide($in);
@@ -135,11 +170,28 @@ class BackendWatchdog
     return ['decision' => $decision, 'inputs' => $in];
   }
 
-  private static function apiRunning()
+  private static function track($since, $checked)
+  {
+    @file_put_contents(self::STALE_SINCE_FILE, json_encode(['since' => $since, 'checked' => $checked]));
+  }
+
+  /**
+   * Whether pm2 reports the API online, and how long its process has run.
+   *
+   * @return array{running: bool, uptime: ?int}
+   */
+  private static function apiProcess()
   {
     $out = [];
-    exec('timeout 15 unraid-api status 2>/dev/null', $out);
-    return stripos(implode("\n", $out), 'online') !== false;
+    exec(self::PATH_ENV . ' /usr/bin/timeout 15 unraid-api status 2>/dev/null', $out);
+    $text = implode("\n", $out);
+    $running = (bool) preg_match('/^status\s*:\s*online/mi', $text);
+    $uptime = null;
+    if ($running && preg_match('/^pid\s*:\s*(\d+)/mi', $text, $m)) {
+      $etimes = trim((string) @shell_exec('/bin/ps -o etimes= -p ' . (int) $m[1] . ' 2>/dev/null'));
+      $uptime = ctype_digit($etimes) ? (int) $etimes : null;
+    }
+    return ['running' => $running, 'uptime' => $uptime];
   }
 
   private static function rollBack($decision, array $in)
@@ -147,11 +199,13 @@ class BackendWatchdog
     require_once PLUGIN_DIR . '/classes/Database.php';
     require_once PLUGIN_DIR . '/classes/CronManager.php';
     $db = Database::getInstance();
-    // Only from graphql, so a user who switched in the meantime keeps theirs.
-    $db->query(
-      'UPDATE settings SET value = ?, updated_at = ? WHERE key = ? AND value = ?',
-      ['php', time(), 'backend_mode', 'graphql']
-    );
+    // Only from graphql, so a user who switched in the meantime keeps theirs,
+    // and gets no notification about a switch that did not happen.
+    $changed = $db->update('settings', ['value' => 'php', 'updated_at' => time()], 'key = ? AND value = ?', ['backend_mode', 'graphql']);
+    @unlink(self::STALE_SINCE_FILE);
+    if ($changed === 0) {
+      return;
+    }
     CronManager::ensureSchedulerCron($db);
 
     $reason = [
@@ -161,13 +215,16 @@ class BackendWatchdog
       'no-api' => 'The Unraid API is running, but its GraphQL service does not answer.',
     ][$in['probe'] ?? ''] ?? 'The GraphQL backend stopped answering.';
     $removed = $decision === self::ROLLBACK_AND_REMOVE;
+    // Every rollback takes the package out, because it stays only while the
+    // mode is graphql. A plain rollback leaves the API running: the backend
+    // was not loaded, or it was already removed with a restart once.
+    $removeQuietly = !$removed && !empty($in['installed']);
 
     @file_put_contents(DFM_BACKEND_ROLLBACK_MARKER, json_encode([
       'at' => time(),
       'reason' => $reason,
       'removed' => $removed,
     ]) . "\n");
-    @unlink(self::STALE_SINCE_FILE);
 
     $description = $reason . ' Docker Folders switched back to the PHP backend.'
       . ($removed ? ' It also removed the GraphQL backend and restarted the Unraid API.' : '');
@@ -176,6 +233,8 @@ class BackendWatchdog
 
     if ($removed) {
       dfmLaunchApiPlugin('remove');
+    } elseif ($removeQuietly) {
+      dfmLaunchApiPlugin('remove-no-restart');
     }
   }
 }
