@@ -224,7 +224,11 @@ do_remove() {
 
   if [ "${was_installed}" = "1" ]; then
     echo "Removing the GraphQL backend..."
-    timeout 120 unraid-api plugins remove "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
+    # `plugins remove` restarts the API by default, and restart_api_until
+    # below restarts it again. --no-restart leaves that to this script. An
+    # API without the option fails the command, so it runs again without it.
+    timeout 120 unraid-api plugins remove --no-restart "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 \
+      || timeout 120 unraid-api plugins remove "${API_PLUGIN_PKG}" >> "${LOG_FILE}" 2>&1 || true
   fi
   api_config_plugin remove
 
