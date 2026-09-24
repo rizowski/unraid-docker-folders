@@ -94,6 +94,17 @@ api_online() {
   timeout 15 unraid-api status 2>/dev/null | grep -q 'online'
 }
 
+# Print "<version> <contentHash>" from a package.json file, or "-" for stdin.
+package_id() {
+  node -e '
+    const fs = require("fs");
+    try {
+      const p = JSON.parse(fs.readFileSync(process.argv[1] === "-" ? 0 : process.argv[1], "utf8"));
+      process.stdout.write((p.version || "") + " " + (p.contentHash || "") + "\n");
+    } catch { process.stdout.write("\n"); }
+  ' "$1" 2>/dev/null
+}
+
 backend_in_api() {
   [ -d "${API_DIR}/node_modules/${API_PLUGIN_PKG}" ]
 }
@@ -139,24 +150,30 @@ do_install() {
   # a reboot, and a relative path would resolve inside /usr/local/unraid-api.
   local tgz="${CONFIG_DIR}/api-plugin/$(basename "${src}")"
 
-  # Installed means: the API's node_modules holds the version this package
-  # ships, the API's package.json points at the tarball on /boot, and that
-  # tarball is still there. The install is skipped then, because
-  # `unraid-api plugins install` runs npm and writes a ~22 MB archive of the
-  # API's node_modules to the flash drive every time it runs.
-  local want have
-  want=$(tar -xzOf "${src}" package/package.json 2>/dev/null \
-    | node -e 'let s="";process.stdin.on("data",(d)=>(s+=d)).on("end",()=>{try{process.stdout.write(JSON.parse(s).version||"")}catch{}})' 2>/dev/null)
-  have=$(node -e 'try{process.stdout.write(require(process.argv[1]).version||"")}catch{}' \
-    "${API_DIR}/node_modules/${API_PLUGIN_PKG}/package.json" 2>/dev/null)
+  # The install is skipped when the API already runs this code, because
+  # `unraid-api plugins install` restarts the API, runs npm, and writes a
+  # ~22 MB archive of the API's node_modules to the flash drive every time.
+  # The API's package.json must also point at a tarball that is still on
+  # /boot, or the backend would be gone after a reboot.
+  #
+  # Same code means the same contentHash, which build.sh computes over the
+  # backend's files without its version. Each build has a new version, so a
+  # plugin update that did not change the backend keeps the installed one.
+  local want_version want_hash have_version have_hash linked
+  read -r want_version want_hash < <(tar -xzOf "${src}" package/package.json 2>/dev/null | package_id -)
+  read -r have_version have_hash < <(package_id "${API_DIR}/node_modules/${API_PLUGIN_PKG}/package.json")
+  linked=$(grep -o "${API_PLUGIN_PKG}-[^\"/]*\.tgz" "${API_DIR}/package.json" 2>/dev/null | head -1)
 
-  if [ -n "${want}" ] && [ "${want}" = "${have}" ] \
-    && [ -f "${tgz}" ] && cmp -s "${src}" "${tgz}" \
-    && grep -qF "$(basename "${tgz}")" "${API_DIR}/package.json" 2>/dev/null; then
-    echo "GraphQL backend ${want} is already installed"
-    log "${want} already installed, skipping install"
+  if [ -n "${want_hash}" ] && [ "${want_hash}" = "${have_hash}" ] \
+    && [ -n "${linked}" ] && [ -f "${CONFIG_DIR}/api-plugin/${linked}" ]; then
+    echo "GraphQL mode is on. Its backend in the Unraid API is up to date (${have_version})."
+    log "backend ${have_version} has the same code as ${want_version}, skipping install"
   else
-    echo "Installing the GraphQL backend..."
+    if [ -n "${have_version}" ]; then
+      echo "GraphQL mode is on. Updating its backend in the Unraid API to ${want_version}..."
+    else
+      echo "GraphQL mode is on. Installing its backend in the Unraid API..."
+    fi
     mkdir -p "${CONFIG_DIR}/api-plugin"
     rm -f "${CONFIG_DIR}"/api-plugin/${API_PLUGIN_PKG}-*.tgz
     cp "${src}" "${CONFIG_DIR}/api-plugin/"

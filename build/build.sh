@@ -239,7 +239,28 @@ NPM_VERSION=$(echo "$VERSION" | sed -E 's/^([0-9]+)\.0*([0-9]+)\.0*([0-9]+)/\1.\
 # package.json, which build.sh does not commit.
 PACK_DIR=$(mktemp -d)
 cp -r dist package.json README.md "$PACK_DIR"/
-node -e "const f='$PACK_DIR/package.json';const p=require(f);p.version='$NPM_VERSION';require('fs').writeFileSync(f, JSON.stringify(p,null,2)+'\n')"
+# contentHash covers what the API loads: every file under dist and the
+# committed package.json. It excludes the version, which changes every
+# build, so api-plugin.sh can skip reinstalling a backend whose code did not
+# change. A reinstall restarts the Unraid API.
+node -e "
+const fs = require('fs'), path = require('path'), crypto = require('crypto');
+const [dir, version] = process.argv.slice(1);
+const hash = crypto.createHash('sha256');
+const walk = (d) => fs.readdirSync(d).sort().flatMap((n) => {
+  const f = path.join(d, n);
+  return fs.statSync(f).isDirectory() ? walk(f) : [f];
+});
+for (const f of [path.join(dir, 'package.json'), ...walk(path.join(dir, 'dist'))]) {
+  hash.update(path.relative(dir, f) + '\\0');
+  hash.update(fs.readFileSync(f));
+}
+const f = path.join(dir, 'package.json');
+const p = JSON.parse(fs.readFileSync(f, 'utf8'));
+p.version = version;
+p.contentHash = hash.digest('hex');
+fs.writeFileSync(f, JSON.stringify(p, null, 2) + '\n');
+" "$PACK_DIR" "$NPM_VERSION"
 (cd "$PACK_DIR" && npm pack --silent >/dev/null)
 API_PLUGIN_TARBALL="${API_PLUGIN_NAME}-${NPM_VERSION}.tgz"
 if [ ! -f "${PACK_DIR}/${API_PLUGIN_TARBALL}" ]; then
