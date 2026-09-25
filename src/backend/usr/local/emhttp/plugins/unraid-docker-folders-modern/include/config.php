@@ -282,12 +282,15 @@ function imageCheckResult($image, array $overrides = [])
  * @param array $localRefs Image => local image reference, checked even when no
  *                         container lists that image. A scheduled update keys
  *                         on the tag the container was created from, which
- *                         Docker stops listing once the tag moves.
+ *                         Docker stops listing once the tag moves. When these
+ *                         cover every requested image, no container is listed.
  * @return array ['results' => [...], 'checked' => int, 'skipped' => int, 'errors' => int, 'newUpdates' => int]
  */
 function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = null, array $localRefs = [])
 {
-  $containers = $dockerClient->listContainers(true);
+  $refsOnly = $onlyImages !== null && $localRefs
+    && !array_diff(array_map('strval', $onlyImages), array_keys($localRefs));
+  $containers = $refsOnly ? [] : $dockerClient->listContainers(true);
 
   // Load exclude patterns from settings
   $excludePatterns = [];
@@ -452,6 +455,25 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     'newUpdates' => $newUpdates,
     'containersByImage' => $containersByImage,
   ];
+}
+
+/**
+ * Recreate one container on its image's current build, with the update log
+ * lines that pull.php and a scheduled update share.
+ *
+ * @return array DockerClient::recreateContainer()'s result, error always set on failure
+ */
+function recreateOneContainer($dockerClient, $name, $id)
+{
+  logUpdate("RECREATE Starting recreate for {$name} ({$id})");
+  $result = $dockerClient->recreateContainer($id);
+  if ($result['success']) {
+    logUpdate("RECREATE OK {$name} -> new ID {$result['newId']}");
+  } else {
+    $result['error'] = $result['error'] ?? 'Unknown error';
+    logUpdate("RECREATE FAIL {$name}: {$result['error']}");
+  }
+  return $result;
 }
 
 /**
@@ -931,6 +953,50 @@ function dfmLaunchApiPlugin($verb, $runId = '')
   }
   exec($cmd . ' </dev/null >/dev/null 2>&1 &');
   return true;
+}
+
+define('DFM_SCHEDULE_RUN_SCRIPT', PLUGIN_DIR . '/scripts/run-schedule.php');
+
+/**
+ * Run one schedule in its own process, detached from the caller.
+ *
+ * For an update, whose pull can take minutes. Inline, it would hold the
+ * minute runner's lock, and every schedule that came due meanwhile would run
+ * late or be skipped. A "Run now" request would hold the web request open.
+ */
+function dfmLaunchScheduleRun($id)
+{
+  exec('/usr/bin/setsid /usr/bin/nohup /usr/bin/php ' . escapeshellarg(DFM_SCHEDULE_RUN_SCRIPT)
+    . ' ' . escapeshellarg((string) (int) $id) . ' </dev/null >/dev/null 2>&1 &');
+}
+
+/**
+ * Tell the user about a run that nobody watched: a skip or a failure.
+ *
+ * @param array $result executeSchedule()'s or skipSchedule()'s result
+ */
+function notifyScheduleResult(array $result)
+{
+  $status = $result['status'] ?? '';
+  // A manual "Run now" of this schedule was already running, and it
+  // reports its own result in the UI.
+  if ($status === 'busy' || $status === 'started') {
+    return;
+  }
+  // A skip succeeded at doing nothing, so it has to be tested before the
+  // success check below or it would never be reported at all.
+  if ($status === 'skipped') {
+    $notification = buildScheduleSkipNotification($result, $result['late_by'] ?? 0);
+    sendUnraidNotification($notification['subject'], $notification['description'], 'normal');
+    error_log('Schedule skipped: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
+    return;
+  }
+  if (!empty($result['success'])) {
+    return;
+  }
+  $notification = buildScheduleFailureNotification($result, $result['message'] ?? '');
+  sendUnraidNotification($notification['subject'], $notification['description'], 'warning');
+  error_log('Schedule failed: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
 }
 
 /** Decode a small JSON file this plugin wrote, or null. */

@@ -53,6 +53,34 @@ export function buildScheduleFailureNotification(
     };
 }
 
+/** What `notifyScheduleResult` needs off a run result — `RunResult`'s shape, structurally. */
+export interface ScheduleRunOutcome extends ScheduleAbout {
+    success: boolean;
+    status: string;
+    message: string;
+    late_by?: number;
+}
+
+/**
+ * Tell the user about a run nobody watched: a skip or a failure. Shared by
+ * the automatic tick loop and a detached `update` run's completion, so both
+ * paths report the same way — `notifyScheduleResult()` in `config.php`.
+ */
+export function notifyScheduleResult(result: ScheduleRunOutcome): void {
+    // A manual "Run now" that found the schedule already running reports its
+    // own result in the UI, and so does the 'started' placeholder a detached
+    // update run leaves behind while it is still going — never notify on it.
+    if (result.status === 'busy' || result.status === 'started') return;
+    // A skip succeeded at doing nothing, so it has to be tested before the
+    // success check below or it would never be reported at all.
+    if (result.status === 'skipped') {
+        sendUnraidNotification(buildScheduleSkipNotification(result, result.late_by ?? 0), 'normal');
+        return;
+    }
+    if (result.success) return;
+    sendUnraidNotification(buildScheduleFailureNotification(result, result.message), 'warning');
+}
+
 export function buildScheduleSkipNotification(
     schedule: ScheduleAbout,
     lateBySeconds: number

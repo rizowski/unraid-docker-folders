@@ -58,25 +58,7 @@ try {
   // Automatic runs happen with nobody watching, so tell the user about a
   // failure. A manual "Run now" shows its result in the UI instead.
   foreach ($results as $result) {
-    // A manual "Run now" of this schedule was already running, and it
-    // reports its own result in the UI.
-    if (($result['status'] ?? '') === 'busy') {
-      continue;
-    }
-    // A skip succeeded at doing nothing, so it has to be tested before the
-    // success check below or it would never be reported at all.
-    if (($result['status'] ?? '') === 'skipped') {
-      $notification = buildScheduleSkipNotification($result, $result['late_by'] ?? 0);
-      sendUnraidNotification($notification['subject'], $notification['description'], 'normal');
-      error_log('Schedule skipped: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
-      continue;
-    }
-    if (!empty($result['success'])) {
-      continue;
-    }
-    $notification = buildScheduleFailureNotification($result, $result['message'] ?? '');
-    sendUnraidNotification($notification['subject'], $notification['description'], 'warning');
-    error_log('Schedule failed: ' . $notification['subject'] . ' (' . $notification['description'] . ')');
+    notifyScheduleResult($result);
   }
 } catch (Exception $e) {
   error_log('Schedule runner error: ' . $e->getMessage());

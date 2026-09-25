@@ -288,15 +288,21 @@ describe('ScheduleService', () => {
             ).toThrow('Update is not supported for compose stacks');
         });
 
-        it(
-            'does not catch update+stack from a PUT that changes only one of the two fields (PHP parity — ' +
-                'the runner refuses it at execution time instead, see DockerFoldersScheduleExecutors.stackAction)',
-            () => {
-                const id = seed({ target_type: 'stack', target_id: 'media', action: 'restart' });
-                expect(() => service.update(id, { action: 'update' })).not.toThrow();
-                expect(getRow(id).action).toBe('update');
-            }
-        );
+        it('rejects update+stack from a PUT that changes only the action, using the stored target_type', () => {
+            const id = seed({ target_type: 'stack', target_id: 'media', action: 'restart' });
+            expect(() => service.update(id, { action: 'update' })).toThrow(
+                'Update is not supported for compose stacks'
+            );
+            expect(getRow(id).action).toBe('restart');
+        });
+
+        it('rejects update+stack from a PUT that changes only the target_type, using the stored action', () => {
+            const id = seed({ target_type: 'container', target_id: 'plex', action: 'update' });
+            expect(() => service.update(id, { target_type: 'stack', target_id: 'media' })).toThrow(
+                'Update is not supported for compose stacks'
+            );
+            expect(getRow(id).target_type).toBe('container');
+        });
 
         it('throws NotFoundException for a missing id', () => {
             expect(() => service.update(999_999, { name: 'ghost' })).toThrow(NotFoundException);
@@ -496,6 +502,75 @@ describe('ScheduleService', () => {
             const [history] = temp.rows('SELECT * FROM schedule_history WHERE schedule_id = ?', [id]);
             expect(history.status).toBe('error');
             expect(history.message).toBe('docker socket unreachable');
+        });
+
+        describe('an update schedule', () => {
+            function pendingUpdate(): { id: number; release: () => void } {
+                let release: () => void = () => undefined;
+                exec.state.containerAction = () =>
+                    new Promise((resolve) => {
+                        release = () => resolve({ success: true, message: 'updated' });
+                    });
+                const id = service.create({ ...baseContainer, action: 'update' });
+                // A wrapper, not the variable itself: `containerAction` only
+                // reassigns `release` once `execute()` actually calls it, and
+                // returning the bare (still-default) value here would capture
+                // that assignment too early.
+                return { id, release: () => release() };
+            }
+
+            it('answers "started" at once instead of waiting for the action', async () => {
+                const { id } = pendingUpdate();
+
+                const result = await service.execute(id);
+
+                expect(result).toMatchObject({
+                    success: true,
+                    schedule_id: id,
+                    status: 'started',
+                    message: 'Started in the background',
+                    action: 'update',
+                });
+            });
+
+            it('keeps the per-schedule lock until the background run finishes', async () => {
+                const { id, release } = pendingUpdate();
+
+                await service.execute(id);
+                expect(await service.execute(id)).toMatchObject({ status: 'busy' });
+
+                release();
+                await vi.waitFor(async () => {
+                    expect((await service.execute(id)).status).not.toBe('busy');
+                });
+            });
+
+            it('records the background action\'s own history row, distinct from the "started" placeholder it answers with', async () => {
+                const { id, release } = pendingUpdate();
+
+                await service.execute(id);
+                // The history row goes in as soon as the background run
+                // starts (as any run's does), well before it finishes — the
+                // 'started' result itself is never written to history.
+                const [running] = temp.rows('SELECT * FROM schedule_history WHERE schedule_id = ?', [id]);
+                expect(running.status).toBe('running');
+
+                release();
+                await vi.waitFor(() => expect(getRow(id).last_run_status).toBe('success'));
+                expect(temp.rows('SELECT * FROM schedule_history WHERE schedule_id = ?', [id])).toHaveLength(1);
+                const [history] = temp.rows('SELECT * FROM schedule_history WHERE schedule_id = ?', [id]);
+                expect(history.status).toBe('success');
+            });
+
+            it('announces "schedules executed" again once the background run finishes, like run-schedule.php', async () => {
+                const { id, release } = pendingUpdate();
+
+                await service.execute(id);
+                expect(events.publish).not.toHaveBeenCalledWith('schedules', 'executed');
+
+                release();
+                await vi.waitFor(() => expect(events.publish).toHaveBeenCalledWith('schedules', 'executed'));
+            });
         });
     });
 
@@ -705,25 +780,37 @@ describe('ScheduleService', () => {
             expect(order).toEqual(['start:a', 'end:a', 'start:b', 'end:b']);
         });
 
-        it('runs update schedules last, however they sort in the SELECT, so a quick action behind one never misses its minute', async () => {
+        it('does not block on an update schedule: it answers "started" at once, and a schedule behind it still runs in this tick', async () => {
             const order: string[] = [];
+            let releaseUpdate: () => void = () => undefined;
             exec.state.containerAction = async (name: string, action: string) => {
-                order.push(`${action}:${name}`);
+                order.push(`start:${action}:${name}`);
+                if (action === 'update') {
+                    return new Promise<ActionOutcome>((resolve) => {
+                        releaseUpdate = () => {
+                            order.push(`end:${action}:${name}`);
+                            resolve({ success: true, message: 'ok' });
+                        };
+                    });
+                }
                 return { success: true, message: 'ok' };
             };
 
             const now = nowSeconds();
-            // Created in an order that would otherwise put the update first.
+            // In list order, the update comes first — it must not hold up 'b'.
             dueRow({ target_id: 'a', action: 'update' }, now);
             dueRow({ target_id: 'b', action: 'restart' }, now);
-            dueRow({ target_id: 'c', action: 'update' }, now);
-            dueRow({ target_id: 'd', action: 'stop' }, now);
 
-            await service.runDue(now);
+            const results = await service.runDue(now);
 
-            // Stable: the two updates keep their relative order, moved after
-            // every non-update action.
-            expect(order).toEqual(['restart:b', 'stop:d', 'update:a', 'update:c']);
+            expect(results.map((r) => ({ target_id: r.target_id, status: r.status }))).toEqual([
+                { target_id: 'a', status: 'started' },
+                { target_id: 'b', status: 'success' },
+            ]);
+            expect(order).toEqual(['start:update:a', 'start:restart:b']);
+
+            releaseUpdate();
+            await vi.waitFor(() => expect(order).toContain('end:update:a'));
         });
     });
 });

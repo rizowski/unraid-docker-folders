@@ -26,13 +26,17 @@ vi.mock('node:fs', async (importOriginal) => {
 });
 
 /**
- * Real `buildScheduleFailureNotification`/`buildScheduleSkipNotification`
- * (so the assertions below compare against the actual text), with only
- * `sendUnraidNotification` stubbed so no real process is spawned.
+ * `sendUnraidNotification` stubbed so no real process is spawned, and
+ * `notifyScheduleResult` stubbed too: it is defined in this same module, so
+ * a real `notifyScheduleResult` would call the *real* `sendUnraidNotification`
+ * from its own closure rather than this mock (same-module calls bypass a
+ * `vi.mock` factory's object spread). The skip/failure branch logic inside
+ * `notifyScheduleResult` itself is exercised in `schedule-notifications.spec.ts`
+ * instead; this file only checks that `tick()` forwards every result to it.
  */
 vi.mock('../schedule-notifications.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../schedule-notifications.js')>();
-    return { ...actual, sendUnraidNotification: vi.fn() };
+    return { ...actual, sendUnraidNotification: vi.fn(), notifyScheduleResult: vi.fn() };
 });
 
 import { closeSync, existsSync, openSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
@@ -41,11 +45,7 @@ import { DOCKER_SOCKET_PATH } from '../../containers/docker-client.js';
 import { DatabaseService } from '../../db/database.service.js';
 import type { EventBusService } from '../../events/event-bus.service.js';
 import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
-import {
-    buildScheduleFailureNotification,
-    buildScheduleSkipNotification,
-    sendUnraidNotification,
-} from '../schedule-notifications.js';
+import { notifyScheduleResult, sendUnraidNotification } from '../schedule-notifications.js';
 import type { RunResult, ScheduleService } from '../schedule.service.js';
 import { RUNNER_ALIVE_FILE,
     SCHEDULER_TICK_FILE, SCHEDULER_TICK_STALE_SECONDS, SchedulerService } from '../scheduler.service.js';
@@ -383,32 +383,33 @@ describe('SchedulerService', () => {
             setBackendMode('graphql');
         });
 
-        it('sends a normal-importance notification for a skipped run', async () => {
+        it('forwards a skipped run to notifyScheduleResult', async () => {
             const skipped = result({ status: 'skipped', message: 'Skipped: 10m past scheduled time', late_by: 600 });
             runDue.mockResolvedValue([skipped]);
 
             await service.tick();
 
-            const expected = buildScheduleSkipNotification(skipped, 600);
-            expect(sendUnraidNotification).toHaveBeenCalledWith(expected, 'normal');
+            expect(notifyScheduleResult).toHaveBeenCalledWith(skipped);
         });
 
-        it('sends a warning-importance notification for a failed run', async () => {
+        it('forwards a failed run to notifyScheduleResult', async () => {
             const failed = result({ success: false, status: 'error', message: 'container missing' });
             runDue.mockResolvedValue([failed]);
 
             await service.tick();
 
-            const expected = buildScheduleFailureNotification(failed, 'container missing');
-            expect(sendUnraidNotification).toHaveBeenCalledWith(expected, 'warning');
+            expect(notifyScheduleResult).toHaveBeenCalledWith(failed);
         });
 
-        it('sends no notification for a successful run', async () => {
-            runDue.mockResolvedValue([result({ status: 'success' })]);
+        it('forwards every result from one tick, in order', async () => {
+            const skipped = result({ status: 'skipped', message: 'Skipped: 10m past scheduled time', late_by: 600 });
+            const failed = result({ success: false, status: 'error', message: 'container missing', target_id: 'sonarr' });
+            runDue.mockResolvedValue([skipped, failed]);
 
             await service.tick();
 
-            expect(sendUnraidNotification).not.toHaveBeenCalled();
+            expect(notifyScheduleResult).toHaveBeenNthCalledWith(1, skipped);
+            expect(notifyScheduleResult).toHaveBeenNthCalledWith(2, failed);
         });
 
         it('announces "schedules executed" whenever anything ran', async () => {

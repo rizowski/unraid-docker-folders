@@ -36,7 +36,7 @@ function fakeDocker() {
     const pullFailures = new Map<string, Error>();
     const calls: string[] = [];
     // containerId -> its raw inspect's Config.Image, for updateContainer()'s
-    // tag lookup (docker.getContainer(id).inspect()).
+    // tag lookup (docker.getContainer(name).inspect()).
     const containerConfigImages = new Map<string, string>();
     const containerInspectFailures = new Map<string, Error>();
     // image ref -> the Id a tag-based `getImage(image).inspect()` answers
@@ -49,12 +49,28 @@ function fakeDocker() {
             calls.push('listContainers');
             return containers;
         },
-        getContainer: (id: string) => ({
+        // `updateContainer()` inspects by name (Docker accepts either), so
+        // this answers by looking the name (or id) up in the `containers`
+        // list, the way the real daemon resolves either to the same
+        // container. Not found there means Docker 404s the inspect, which
+        // `updateContainer()` catches and turns into "not found".
+        getContainer: (idOrName: string) => ({
             inspect: async () => {
-                calls.push(`inspectContainer ${id}`);
-                const failure = containerInspectFailures.get(id);
+                calls.push(`inspectContainer ${idOrName}`);
+                const failure = containerInspectFailures.get(idOrName);
                 if (failure) throw failure;
-                return { Config: { Image: containerConfigImages.get(id) ?? '' } };
+                const listed = containers.find(
+                    (c) => (c.Names?.[0] ?? '').replace(/^\//, '') === idOrName || c.Id === idOrName
+                );
+                if (!listed) {
+                    throw Object.assign(new Error(`no such container: ${idOrName}`), { statusCode: 404 });
+                }
+                return {
+                    Id: listed.Id,
+                    Name: listed.Names?.[0] ?? `/${idOrName}`,
+                    Image: listed.ImageID ?? '',
+                    Config: { Image: containerConfigImages.get(listed.Id) ?? '' },
+                };
             },
             start: () => Promise.reject(new Error('not used here')),
             stop: () => Promise.reject(new Error('not used here')),
@@ -414,13 +430,21 @@ describe('UpdatesService', () => {
             ]);
         });
 
-        it('fails generically when the daemon never starts the pull, matching PHP\'s HTTP-status-only success flag', async () => {
+        it('keeps the daemon\'s own error text when the pull never starts, matching PHP\'s curl_error() reason', async () => {
             docker.failPull(PLEX, new Error('no such image'));
 
             const result = await service.pullImage(PLEX);
 
-            expect(result).toEqual({ success: false, image: PLEX, error: 'Pull failed' });
+            expect(result).toEqual({ success: false, image: PLEX, error: 'no such image' });
             expect(events.publish).not.toHaveBeenCalled();
+        });
+
+        it('falls back to the fixed "Pull failed" message only when the daemon error carries no text', async () => {
+            docker.failPull(PLEX, new Error(''));
+
+            const result = await service.pullImage(PLEX);
+
+            expect(result).toEqual({ success: false, image: PLEX, error: 'Pull failed' });
         });
 
         it('fails when the stream reports a mid-pull error, without writing the cache (deliberate PHP divergence)', async () => {
@@ -473,6 +497,37 @@ describe('UpdatesService', () => {
 
             // Only the requested id is recreated, not every container sharing the image.
             expect(recreate.calls).toEqual([CONTAINER_IDS.plex2]);
+        });
+
+        it('aborts a pull stuck past the 10 minute timeout, keeping that as the reason', async () => {
+            vi.useFakeTimers();
+            try {
+                const promise = service.pullImage(PLEX);
+                // Never ends the stream: this is the "stuck" case the timer covers.
+                await vi.advanceTimersByTimeAsync(600_000);
+                const result = await promise;
+
+                expect(result).toEqual({ success: false, image: PLEX, error: 'Pull timed out' });
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('does not time out a pull that finishes well inside the window', async () => {
+            vi.useFakeTimers();
+            try {
+                docker.setRemoteDigest(PLEX, 'sha256:pulled');
+                const promise = service.pullImage(PLEX);
+                await vi.advanceTimersByTimeAsync(0);
+                docker.streamFor(PLEX).end('{"status":"Pull complete"}\n');
+                await vi.advanceTimersByTimeAsync(0);
+
+                const result = await promise;
+
+                expect(result).toEqual({ success: true, image: PLEX, error: null });
+            } finally {
+                vi.useRealTimers();
+            }
         });
     });
 
@@ -614,6 +669,19 @@ describe('UpdatesService', () => {
             expect(result).toEqual({ success: false, message: "Container 'plex' not found" });
         });
 
+        it('inspects the container by name and never lists every container, start to finish', async () => {
+            docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
+            docker.setContainerConfigImage(CONTAINER_IDS.plex, PLEX);
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:same`]);
+            docker.setRemoteDigest(PLEX, 'sha256:same');
+            docker.setImageId(PLEX, PLEX_IMAGE_ID);
+
+            await service.updateContainer('plex');
+
+            expect(docker.calls).toContain('inspectContainer plex');
+            expect(docker.calls).not.toContain('listContainers');
+        });
+
         it.each(['', 'sha256:not-a-tag'])(
             'fails when the container carries no usable image reference (%j)',
             async (configImage) => {
@@ -693,13 +761,16 @@ describe('UpdatesService', () => {
         it('fails when the pull fails, and never reaches the recreate step', async () => {
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             docker.setContainerConfigImage(CONTAINER_IDS.plex, PLEX);
-            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:old`]);
+            // The check that decides `updateAvailable` reads this via
+            // `getImage(<tag>).inspect()`, keyed by the tag itself — see the
+            // `refsOnly` comment on `performCheck()`.
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:old`]);
             docker.setRemoteDigest(PLEX, 'sha256:new');
             docker.failPull(PLEX, new Error('no such image'));
 
             const result = await service.updateContainer('plex');
 
-            expect(result).toEqual({ success: false, message: 'Pull failed for plex: Pull failed' });
+            expect(result).toEqual({ success: false, message: 'Pull failed for plex: no such image' });
             expect(recreate.calls).toEqual([]);
             expect(events.publish).not.toHaveBeenCalled();
         });
@@ -707,7 +778,7 @@ describe('UpdatesService', () => {
         it('reports up to date, without recreating, when the tag id already matches the container', async () => {
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             docker.setContainerConfigImage(CONTAINER_IDS.plex, PLEX);
-            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:same`]);
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:same`]);
             docker.setRemoteDigest(PLEX, 'sha256:same');
             docker.setImageId(PLEX, PLEX_IMAGE_ID);
 
@@ -720,7 +791,7 @@ describe('UpdatesService', () => {
         it('pulls, recreates, and reports success when an update is available', async () => {
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             docker.setContainerConfigImage(CONTAINER_IDS.plex, PLEX);
-            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:old`]);
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:old`]);
             docker.setRemoteDigest(PLEX, 'sha256:new');
             docker.setImageId(PLEX, 'sha256:new-image-id');
 
@@ -741,7 +812,7 @@ describe('UpdatesService', () => {
         it('recreates without pulling when the tag is already current but the container still runs an older image id', async () => {
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             docker.setContainerConfigImage(CONTAINER_IDS.plex, PLEX);
-            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:same`]);
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:same`]);
             docker.setRemoteDigest(PLEX, 'sha256:same'); // no update available
             docker.setImageId(PLEX, 'sha256:already-pulled'); // a prior pull moved the tag already
 
@@ -755,7 +826,7 @@ describe('UpdatesService', () => {
         it('fails when the recreate fails', async () => {
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             docker.setContainerConfigImage(CONTAINER_IDS.plex, PLEX);
-            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:same`]);
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:same`]);
             docker.setRemoteDigest(PLEX, 'sha256:same');
             docker.setImageId(PLEX, 'sha256:new-image-id');
             const failingRecreate = fakeRecreate(

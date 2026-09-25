@@ -3,14 +3,14 @@ import { existsSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import { Observable } from 'rxjs';
 
-import { DOCKER_CLIENT_TOKEN, DOCKER_SOCKET_PATH, type DockerClient } from '../containers/docker-client.js';
+import { DOCKER_CLIENT_TOKEN, DOCKER_SOCKET_PATH, type DockerClient, type DockerInspectInfo } from '../containers/docker-client.js';
 import { DatabaseService, type Row } from '../db/database.service.js';
 import { EventBusService } from '../events/event-bus.service.js';
 import { sendUnraidNotification } from '../schedules/schedule-notifications.js';
 import { nowSeconds } from '../util/time.js';
 import { errorMessage, globMatch, nullableString, resolveImageTag, stripLeadingSlash } from './docker-refs.js';
 import type { DockerFoldersPullEvent } from './pull-events.js';
-import { RecreateService } from './recreate.service.js';
+import { RecreateService, type RecreateResult } from './recreate.service.js';
 import { parseRepo, toReleaseNote } from './release-notes.util.js';
 import { ReleaseNotesService } from './release-notes.service.js';
 import { UpdateLogService } from './update-log.service.js';
@@ -26,6 +26,9 @@ const MAX_IMAGE_NAME_LENGTH = 255;
 
 /** `pull.php`'s validation for each entry of `containers=`. */
 const CONTAINER_ID_PATTERN = /^[a-f0-9]{12,64}$/;
+
+/** `DockerClient::pullImage`'s `CURLOPT_TIMEOUT` — the whole pull, not per chunk. */
+const PULL_TIMEOUT_MS = 600_000;
 
 /** Label PHP reads off the local image to link a container to its GitHub repo. */
 const SOURCE_LABEL = 'org.opencontainers.image.source';
@@ -317,23 +320,31 @@ export class UpdatesService {
      * Unraid notification a failed run sends.
      */
     async updateContainer(containerName: string): Promise<{ success: boolean; message: string }> {
-        const containers = await this.docker.listContainers({ all: true });
-        const container = containers.find((c) => stripLeadingSlash(c.Names?.[0] ?? '') === containerName);
-        if (container === undefined) {
+        // Docker's inspect endpoint takes a name directly, so this never
+        // lists every container just to find one by name. A name lookup also
+        // matches an id prefix, so the answer's own `Name` must match exactly
+        // before it is trusted (`ScheduleManager::executeContainerUpdate`).
+        let inspect: DockerInspectInfo;
+        try {
+            inspect = await this.docker.getContainer(containerName).inspect();
+        } catch (error) {
+            this.logger.warn(`Could not inspect container ${containerName}: ${errorMessage(error)}`);
             return { success: false, message: `Container '${containerName}' not found` };
         }
+        if (stripLeadingSlash(inspect.Name ?? '') !== containerName) {
+            return { success: false, message: `Container '${containerName}' not found` };
+        }
+        const containerId = inspect.Id ?? '';
+        // The image id the container currently runs, read once here rather
+        // than re-inspected after a pull — the same snapshot compared against
+        // the registry lookup's answer below.
+        const containerImageId = inspect.Image ?? '';
 
         // The tag the container was created from, not the container-list
         // `Image` field: once the tag moves to a newer build, Docker lists
         // the container under its image ID, and `resolveImageTag`'s name
         // lookup falls back to another tag or a bare `sha256:` reference.
-        let image = '';
-        try {
-            const inspect = await this.docker.getContainer(container.Id).inspect();
-            image = inspect.Config?.Image ?? '';
-        } catch (error) {
-            this.logger.warn(`Could not inspect container ${containerName} (${container.Id}): ${errorMessage(error)}`);
-        }
+        const image = inspect.Config?.Image ?? '';
         if (image === '' || image.startsWith('sha256:')) {
             return { success: false, message: `Update check failed for ${containerName}: no image reference` };
         }
@@ -371,19 +382,15 @@ export class UpdatesService {
         } catch {
             latestId = '';
         }
-        if (latestId === '' || latestId === (container.ImageID ?? '')) {
+        if (latestId === '' || latestId === containerImageId) {
             return { success: true, message: `${containerName} is up to date` };
         }
 
-        this.updateLog.log(`RECREATE Starting recreate for ${containerName} (${container.Id})`);
-        const recreated = await this.recreate.recreateContainer(container.Id);
+        const recreated = await this.runRecreate(containerName, containerId);
         this.events.publish('container', 'updated');
         if (!recreated.success) {
-            const error = recreated.error ?? 'Unknown error';
-            this.updateLog.log(`RECREATE FAIL ${containerName}: ${error}`);
-            return { success: false, message: `Update failed for ${containerName}: ${error}` };
+            return { success: false, message: `Update failed for ${containerName}: ${recreated.error}` };
         }
-        this.updateLog.log(`RECREATE OK ${containerName} -> new ID ${recreated.newId}`);
         return { success: true, message: `Updated ${containerName} to the latest ${image}` };
     }
 
@@ -412,7 +419,12 @@ export class UpdatesService {
         localRefs: Map<string, string> = new Map(),
         announceChecked = true
     ): Promise<CheckOutcome> {
-        const containers = await this.docker.listContainers({ all: true });
+        // When every requested image already carries a local reference
+        // (`updateContainer()`'s single-tag call), nothing here needs the
+        // container list at all — mirrors `checkAllImageUpdates()`'s $refsOnly.
+        const refsOnly =
+            onlyImages !== null && localRefs.size > 0 && onlyImages.every((image) => localRefs.has(image));
+        const containers = refsOnly ? [] : await this.docker.listContainers({ all: true });
 
         // Read settings and the prior run's rows up front. DatabaseService.write()
         // holds `BEGIN IMMEDIATE` for the life of its callback, and a registry
@@ -671,18 +683,23 @@ export class UpdatesService {
         try {
             stream = await this.docker.pullImage(image);
         } catch (error) {
-            this.logger.warn(`Docker pull error for ${image}: ${errorMessage(error)}`);
+            // Keep the daemon's own text, matching PHP's curl_error(): a
+            // reason belongs in "Pull failed for N: <reason>" history, and
+            // the fixed message is only for when there is no reason to show.
+            const reason = errorMessage(error);
+            this.logger.warn(`Docker pull error for ${image}: ${reason}`);
             this.updateLog.log(`PULL FAIL ${image}`);
-            return { success: false, error: 'Pull failed' };
+            return { success: false, error: reason || 'Pull failed' };
         }
 
         let streamError: string | null;
         try {
-            streamError = await this.consumeChunks(stream, emit);
+            streamError = await this.consumeChunksWithTimeout(stream, emit);
         } catch (error) {
-            this.logger.warn(`Docker pull stream error for ${image}: ${errorMessage(error)}`);
+            const reason = errorMessage(error);
+            this.logger.warn(`Docker pull stream error for ${image}: ${reason}`);
             this.updateLog.log(`PULL FAIL ${image}`);
-            return { success: false, error: 'Pull failed' };
+            return { success: false, error: reason || 'Pull failed' };
         }
 
         if (streamError !== null) {
@@ -803,6 +820,26 @@ export class UpdatesService {
     }
 
     /**
+     * `consumeChunks`, bounded the way `DockerClient::pullImage`'s
+     * `CURLOPT_TIMEOUT` bounds the whole curl handle — not a per-chunk
+     * timeout, but a ceiling on the entire pull. Past it, the stream is
+     * destroyed with an error, which `consumeChunks`' own `'error'` listener
+     * turns into a rejection carrying that error's message. The timer is
+     * cleared as soon as `consumeChunks` settles, on either 'end' or 'error'.
+     */
+    private consumeChunksWithTimeout(
+        stream: NodeJS.ReadableStream,
+        emit: (event: DockerFoldersPullEvent) => void
+    ): Promise<string | null> {
+        const destroyable = stream as NodeJS.ReadableStream & { destroy?: (error?: Error) => void };
+        const timer = setTimeout(() => {
+            destroyable.destroy?.(new Error('Pull timed out'));
+        }, PULL_TIMEOUT_MS);
+
+        return this.consumeChunks(stream, emit).finally(() => clearTimeout(timer));
+    }
+
+    /**
      * `pull.php`'s post-pull cache update. `source_url`/`source_repo` are
      * deliberately left out of the write so a prior check's values survive —
      * PHP's `INSERT OR REPLACE` here nulls both columns instead, which is a
@@ -862,20 +899,16 @@ export class UpdatesService {
                 const name = stripLeadingSlash(container.Names?.[0] ?? '');
                 const id = container.Id;
 
-                this.updateLog.log(`RECREATE Starting recreate for ${name} (${id})`);
                 emit({ type: 'recreating', container: name, message: `Recreating ${name}...` });
 
-                const result = await this.recreate.recreateContainer(id);
+                const result = await this.runRecreate(name, id);
                 if (result.success) {
-                    this.updateLog.log(`RECREATE OK ${name} -> new ID ${result.newId}`);
                     emit({ type: 'recreated', container: name, message: `${name} updated successfully` });
                 } else {
-                    const errMsg = result.error ?? 'Unknown error';
-                    this.updateLog.log(`RECREATE FAIL ${name}: ${errMsg}`);
                     emit({
                         type: 'recreate_error',
                         container: name,
-                        message: `Failed to recreate ${name}: ${errMsg}`,
+                        message: `Failed to recreate ${name}: ${result.error}`,
                     });
                 }
             }
@@ -884,5 +917,24 @@ export class UpdatesService {
             this.updateLog.log(`RECREATE ERROR ${image}: ${message}`);
             emit({ type: 'recreate_error', container: '', message: `Auto-recreate failed: ${message}` });
         }
+    }
+
+    /**
+     * Recreate one container, with the update log lines `autoRecreate()` and
+     * `updateContainer()` share — `recreateOneContainer()` in `config.php`.
+     * `error` is never null on failure: it defaults to 'Unknown error' the
+     * same way PHP's caller-side `$result['error'] ?? 'Unknown error'` did,
+     * so every caller can use it directly in a message.
+     */
+    private async runRecreate(name: string, id: string): Promise<RecreateResult> {
+        this.updateLog.log(`RECREATE Starting recreate for ${name} (${id})`);
+        const result = await this.recreate.recreateContainer(id);
+        if (result.success) {
+            this.updateLog.log(`RECREATE OK ${name} -> new ID ${result.newId}`);
+            return result;
+        }
+        const error = result.error ?? 'Unknown error';
+        this.updateLog.log(`RECREATE FAIL ${name}: ${error}`);
+        return { ...result, error };
     }
 }

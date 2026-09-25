@@ -173,20 +173,16 @@ try {
           $cName = $container['name'];
           $cId = $container['id'];
 
-          logUpdate("RECREATE Starting recreate for {$cName} ({$cId})");
           sendSSE('recreating', ['container' => $cName, 'message' => "Recreating {$cName}..."]);
 
-          $recreateResult = $dockerClient->recreateContainer($cId);
+          $recreateResult = recreateOneContainer($dockerClient, $cName, $cId);
 
           if ($recreateResult['success']) {
-            logUpdate("RECREATE OK {$cName} -> new ID {$recreateResult['newId']}");
             sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
           } else {
-            $errMsg = $recreateResult['error'] ?? 'Unknown error';
-            logUpdate("RECREATE FAIL {$cName}: {$errMsg}");
             sendSSE('recreate_error', [
               'container' => $cName,
-              'message' => "Failed to recreate {$cName}: {$errMsg}",
+              'message' => "Failed to recreate {$cName}: {$recreateResult['error']}",
             ]);
           }
         }

@@ -181,6 +181,17 @@ function handlePost()
     if (!$id) {
       errorResponse('Missing schedule id', 400);
     }
+    $schedule = $manager->getSchedule($id);
+    if (!$schedule) {
+      errorResponse('Schedule not found', 404);
+    }
+    // An update pulls for minutes, longer than a web request should stay
+    // open, and a request cut off in the middle of a recreate leaves the
+    // container renamed or stopped. Its process records the result.
+    if ($schedule['action'] === 'update') {
+      jsonResponse($manager->startDetached($schedule));
+      return;
+    }
     $result = $manager->executeSchedule($id);
     WebSocketPublisher::publish('schedules', 'executed', ['id' => $id]);
     jsonResponse($result);
@@ -242,8 +253,8 @@ function validateScheduleFields($data)
     errorResponse('Invalid action', 400);
   }
 
-  // A stack updates through Compose, which this action does not run. The
-  // runner also refuses it, for a PUT that changes only one of the two.
+  // A stack updates through Compose, which this action does not run. A PUT
+  // passes the stored values for the fields it leaves out.
   if (($data['action'] ?? null) === 'update' && ($data['target_type'] ?? null) === 'stack') {
     errorResponse('Update is not supported for compose stacks', 400);
   }
@@ -261,9 +272,20 @@ function handlePut()
     errorResponse('Invalid request data', 400);
   }
 
-  validateScheduleFields($data);
-
   $manager = new ScheduleManager();
+  $stored = $manager->getSchedule($id);
+  if (!$stored) {
+    errorResponse('Schedule not found', 404);
+  }
+
+  // The stored row fills in what a partial PUT leaves out, so changing only
+  // the action still meets the target type it will run against.
+  // A null counts as left out, as updateSchedule() reads it with isset().
+  validateScheduleFields(array_merge($data, [
+    'action' => $data['action'] ?? $stored['action'],
+    'target_type' => $data['target_type'] ?? $stored['target_type'],
+  ]));
+
   $ok = $manager->updateSchedule($id, $data);
 
   if (!$ok) {

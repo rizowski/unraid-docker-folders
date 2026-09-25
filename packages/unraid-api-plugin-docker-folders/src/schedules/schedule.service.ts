@@ -1,11 +1,11 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { DatabaseService } from '../db/database.service.js';
 import { EventBusService } from '../events/event-bus.service.js';
 import { nowSeconds } from '../util/time.js';
 import { computeNextRun, validateCronExpression } from './cron.js';
-import { formatRunLateness } from './schedule-notifications.js';
+import { formatRunLateness, notifyScheduleResult } from './schedule-notifications.js';
 
 /**
  * Schedules, ported from `ScheduleManager.php` and the validation that
@@ -94,7 +94,7 @@ export const SCHEDULE_EXECUTORS_TOKEN = 'DOCKER_FOLDERS_SCHEDULE_EXECUTORS';
 export interface RunResult {
     success: boolean;
     schedule_id: number;
-    status: 'success' | 'error' | 'skipped' | 'busy';
+    status: 'success' | 'error' | 'skipped' | 'busy' | 'started';
     message: string;
     late_by?: number;
     name?: string;
@@ -134,6 +134,7 @@ export function scheduleQuiesceMode(schedule: Pick<ScheduleRow, 'action' | 'back
 
 @Injectable()
 export class ScheduleService {
+    private readonly logger = new Logger(ScheduleService.name);
     /** Schedules with a run in progress. See `execute`. */
     private readonly runningIds = new Set<number>();
 
@@ -218,8 +219,18 @@ export class ScheduleService {
     update(id: number, data: ScheduleWrite): boolean {
         // Existence first, as updateSchedule() does, so a missing id answers
         // 404 even when the body is also invalid.
-        if (this.get(id) === null) throw new NotFoundException('Schedule not found');
-        validateFields(data);
+        const stored = this.get(id);
+        if (stored === null) throw new NotFoundException('Schedule not found');
+
+        // The stored row fills in whatever a partial PUT leaves out, so
+        // changing only `action` to 'update' on a stack schedule is still
+        // checked against the target_type it will actually run against —
+        // `$data + ['action'=>stored, 'target_type'=>stored]` in PHP.
+        validateFields({
+            ...data,
+            action: data.action ?? stored.action,
+            target_type: data.target_type ?? stored.target_type,
+        });
         if (data.cron_expression != null && !validateCronExpression(data.cron_expression)) {
             throw new BadRequestException('Invalid cron expression');
         }
@@ -348,6 +359,34 @@ export class ScheduleService {
             return { success: false, schedule_id: id, status: 'busy', message: 'This schedule is already running', ...about };
         }
         this.runningIds.add(id);
+
+        if (schedule.action === 'update') {
+            // A pull can take minutes. Neither `runDue()`'s loop nor a "Run
+            // now" request should wait for it, so this starts the run and
+            // answers 'started' at once, keeping the lock above until the
+            // background run actually finishes. Its result then goes through
+            // the same notification path an awaited run's does, and an
+            // 'executed' event announces it — mirroring `run-schedule.php`,
+            // which runs a detached update and does both itself when it ends.
+            this.runSchedule(schedule, id, about)
+                .then((result) => {
+                    this.events.publish('schedules', 'executed');
+                    notifyScheduleResult(result);
+                })
+                .catch((error: unknown) => {
+                    // runSchedule() already turns a thrown action into an
+                    // 'error' result internally; this only guards against
+                    // something failing outside that, so it is at least
+                    // logged rather than silently lost.
+                    this.logger.error(`Background schedule run failed: ${String(error)}`);
+                })
+                .finally(() => {
+                    this.runningIds.delete(id);
+                });
+
+            return { success: true, schedule_id: id, status: 'started', message: 'Started in the background', ...about };
+        }
+
         try {
             return await this.runSchedule(schedule, id, about);
         } finally {
@@ -418,12 +457,6 @@ export class ScheduleService {
                     .all(now) as unknown as ScheduleRow[]
         );
 
-        // Updates last: a pull can take minutes, and the runner works through
-        // the list one at a time, so a quick action queued behind it would
-        // miss its minute. `Array#sort` is stable in every JS engine this
-        // runs on, matching PHP 8's stable `usort`.
-        due.sort((a, b) => Number(a.action === 'update') - Number(b.action === 'update'));
-
         const results: RunResult[] = [];
         for (const schedule of due) {
             if (!this.claim(schedule, now)) continue;
@@ -432,6 +465,9 @@ export class ScheduleService {
                 results.push(this.skip(schedule, lateBy));
                 continue;
             }
+            // `execute()` itself starts an `update` schedule detached and
+            // answers 'started' at once, so this loop never blocks on one —
+            // a pull behind it in the list still runs in its own minute.
             results.push(await this.execute(schedule.id));
         }
         return results;

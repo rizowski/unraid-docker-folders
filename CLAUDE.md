@@ -690,7 +690,10 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
   The `update` action is for containers only. It checks the image, pulls it
   when the registry has a newer build, and recreates the container when the
   tag names a different image than the one it runs. It ignores
-  `post_pull_action`, and the runner runs it after the other due schedules.
+  `post_pull_action`. A pull can take minutes, so the runner and "Run now"
+  start it in its own process. In PHP that is `scripts/run-schedule.php`, and
+  in the plugin an unawaited promise. That run records itself and sends its
+  own notice.
 - `GET /api/paths.php?scope=host|container&path=<partial>&container=<name>` -
   Lists directories for the backup form's path suggestions. Read only. A host
   listing stays inside `BACKUP_ALLOWED_ROOTS`. A container listing stays inside

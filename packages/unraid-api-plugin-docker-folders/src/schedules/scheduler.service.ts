@@ -5,11 +5,7 @@ import { DOCKER_SOCKET_PATH } from '../containers/docker-client.js';
 import { DatabaseService } from '../db/database.service.js';
 import { EventBusService } from '../events/event-bus.service.js';
 import { nowSeconds } from '../util/time.js';
-import {
-    buildScheduleFailureNotification,
-    buildScheduleSkipNotification,
-    sendUnraidNotification,
-} from './schedule-notifications.js';
+import { notifyScheduleResult, sendUnraidNotification } from './schedule-notifications.js';
 import { UPDATE_CHECK_SCHEDULES, UpdatesService } from '../updates/updates.service.js';
 import { computeNextRun } from './cron.js';
 import { ScheduleService } from './schedule.service.js';
@@ -154,15 +150,12 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
             if (results.length > 0) this.events.publish('schedules', 'executed');
 
             // Automatic runs happen with nobody watching, so a failure or a
-            // skip is reported. A manual "Run now" shows its result in the UI.
+            // skip is reported. A manual "Run now" shows its result in the
+            // UI, and a detached `update` run's 'started' placeholder is
+            // covered again when it finishes, from inside ScheduleService
+            // itself — see `notifyScheduleResult`.
             for (const result of results) {
-                if (result.status === 'skipped') {
-                    sendUnraidNotification(buildScheduleSkipNotification(result, result.late_by ?? 0), 'normal');
-                    continue;
-                }
-                // A manual run holds the schedule and reports its own result.
-                if (result.success || result.status === 'busy') continue;
-                sendUnraidNotification(buildScheduleFailureNotification(result, result.message), 'warning');
+                notifyScheduleResult(result);
             }
         } catch (error) {
             this.logger.error(`Schedule runner failed: ${String(error)}`);

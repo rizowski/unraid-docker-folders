@@ -18,6 +18,13 @@ import type { DockerFoldersExtraDockerClient } from './extras-docker-client.js';
 
 /** What `inspect` answers with, narrowed to the fields this plugin reads. */
 export interface DockerInspectInfo {
+    /**
+     * Additive for `UpdatesService.updateContainer()`, which inspects a
+     * container by name (Docker accepts either) and then needs the id for
+     * `RecreateService.recreateContainer()` — the same `Id` PHP's
+     * `DockerClient::inspectContainerRaw` answers with.
+     */
+    Id?: string;
     Name?: string;
     /** The container's image ID (Docker's top-level `Image`), not a tag. */
     Image?: string;

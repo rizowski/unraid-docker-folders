@@ -246,13 +246,21 @@ function onCronInput(value: string) {
 }
 
 // A new schedule defaults to a daily backup time, which makes no sense for an
-// hourly update check. Nudge it to the hourly preset the first time the user
-// picks 'update' — but only while they have not already set their own cron,
-// and never on a saved schedule being edited (seed() already set its cron).
-watch(() => form.action, (action) => {
-  if (action !== 'update' || props.editId || cronTouched.value) return;
+// hourly update check. Picking 'update' moves it to the hourly preset, and
+// leaving 'update' puts the earlier time back, so a backup chosen after a look
+// at Update does not save as hourly. Only while the user has not set their own
+// cron, and never on a saved schedule being edited (seed() set its cron).
+let cronBeforeUpdate: string | null = null;
+watch(() => form.action, (action, previous) => {
+  if (props.editId || cronTouched.value) return;
   const hourly = CRON_PRESETS.every_hour.expression;
-  if (hourly) form.cron_expression = hourly;
+  if (action === 'update' && hourly) {
+    cronBeforeUpdate = form.cron_expression;
+    form.cron_expression = hourly;
+  } else if (previous === 'update' && cronBeforeUpdate !== null) {
+    form.cron_expression = cronBeforeUpdate;
+    cronBeforeUpdate = null;
+  }
 });
 
 const mountPaths = computed(() => containerMounts.value.map(m => m.Destination));

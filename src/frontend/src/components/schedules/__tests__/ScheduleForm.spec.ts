@@ -190,6 +190,16 @@ describe('ScheduleForm update action', () => {
     expect(cronPreset(wrapper)).toBe('every_hour');
   });
 
+  it('puts the earlier time back when the user leaves Update', async () => {
+    const wrapper = mountForm();
+
+    await chooseAction(wrapper, 'update');
+    expect(cronPreset(wrapper)).toBe('every_hour');
+
+    await chooseAction(wrapper, 'backup');
+    expect(cronPreset(wrapper)).toBe('daily_3am');
+  });
+
   it('leaves a cron the user already picked alone when switching to Update', async () => {
     const wrapper = mountForm();
     const preset = wrapper.find('[id$="-cron-preset"]');

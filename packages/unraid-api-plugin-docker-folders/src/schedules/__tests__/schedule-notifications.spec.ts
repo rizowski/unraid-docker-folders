@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     buildScheduleFailureNotification,
     buildScheduleSkipNotification,
     formatRunLateness,
+    notifyScheduleResult,
     sendUnraidNotification,
 } from '../schedule-notifications.js';
 
@@ -116,6 +117,69 @@ describe('buildScheduleSkipNotification', () => {
         expect(n.description).toBe(
             'Did not stop stack media: the run was 1m past its scheduled time.' +
                 ' The schedule runner was not active when it came due.'
+        );
+    });
+});
+
+describe('notifyScheduleResult', () => {
+    const about = { name: 'Nightly restart', target_type: 'container', target_id: 'plex', action: 'restart' };
+
+    beforeEach(async () => {
+        const { execFile } = await import('node:child_process');
+        vi.mocked(execFile).mockClear();
+    });
+
+    it('sends nothing for a busy result', async () => {
+        const { execFile } = await import('node:child_process');
+
+        notifyScheduleResult({ ...about, success: false, status: 'busy', message: 'This schedule is already running' });
+
+        expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing for a "started" result, so a detached update run\'s placeholder never notifies', async () => {
+        const { execFile } = await import('node:child_process');
+
+        notifyScheduleResult({ ...about, success: true, status: 'started', message: 'Started in the background' });
+
+        expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing for a successful run', async () => {
+        const { execFile } = await import('node:child_process');
+
+        notifyScheduleResult({ ...about, success: true, status: 'success', message: 'ok' });
+
+        expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('sends a normal-importance notification for a skipped run', async () => {
+        const { execFile } = await import('node:child_process');
+
+        notifyScheduleResult({
+            ...about,
+            success: true,
+            status: 'skipped',
+            message: 'Skipped: 10m past scheduled time',
+            late_by: 600,
+        });
+
+        expect(execFile).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.arrayContaining(['-s', 'Schedule skipped: Nightly restart', '-i', 'normal']),
+            expect.any(Function)
+        );
+    });
+
+    it('sends a warning-importance notification for a failed run', async () => {
+        const { execFile } = await import('node:child_process');
+
+        notifyScheduleResult({ ...about, success: false, status: 'error', message: 'container missing' });
+
+        expect(execFile).toHaveBeenCalledWith(
+            expect.any(String),
+            expect.arrayContaining(['-s', 'Schedule failed: Nightly restart', '-i', 'warning']),
+            expect.any(Function)
         );
     });
 });

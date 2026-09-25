@@ -361,13 +361,6 @@ class ScheduleManager
       [$now]
     );
 
-    // Updates last: a pull can take minutes, and the runner works through
-    // the list one at a time, so a quick action queued behind it would miss
-    // its minute.
-    usort($due, function ($a, $b) {
-      return ($a['action'] === 'update') <=> ($b['action'] === 'update');
-    });
-
     $results = [];
     foreach ($due as $schedule) {
       if (!$this->claimSlot($schedule, $now)) {
@@ -380,10 +373,39 @@ class ScheduleManager
         continue;
       }
 
+      if ($schedule['action'] === 'update') {
+        $results[] = $this->startDetached($schedule);
+        continue;
+      }
+
       $results[] = $this->executeSchedule($schedule['id']);
     }
 
     return $results;
+  }
+
+  /**
+   * Start a run in its own process, for an update, whose pull can take
+   * minutes. The runner holds one lock for all schedules, so an inline pull
+   * made every schedule due meanwhile late. The process records the run and
+   * sends its own notification. See dfmLaunchScheduleRun().
+   *
+   * @param array $schedule The full schedules row
+   * @return array A result with status 'started'
+   */
+  public function startDetached(array $schedule)
+  {
+    dfmLaunchScheduleRun((int) $schedule['id']);
+    return [
+      'success' => true,
+      'schedule_id' => (int) $schedule['id'],
+      'status' => 'started',
+      'message' => 'Started in the background',
+      'name' => $schedule['name'],
+      'target_type' => $schedule['target_type'],
+      'target_id' => $schedule['target_id'],
+      'action' => $schedule['action'],
+    ];
   }
 
   /**
@@ -692,21 +714,17 @@ class ScheduleManager
   {
     $docker = new DockerClient();
 
-    $container = null;
-    foreach ($docker->listContainers(true) as $c) {
-      if ($c['name'] === $containerName) {
-        $container = $c;
-        break;
-      }
-    }
-    if (!$container) {
+    // Docker takes a name here. The name must match exactly, because Docker
+    // also takes an ID prefix, and a name must never select another container.
+    $inspect = $docker->inspectContainerRaw($containerName);
+    if (!$inspect || ltrim((string) ($inspect['Name'] ?? ''), '/') !== $containerName) {
       return ['success' => false, 'message' => "Container '{$containerName}' not found"];
     }
+    $containerId = (string) $inspect['Id'];
 
     // The tag the container was created from. The list's image is no good
     // here: once the tag moves to a newer build, Docker lists the container
     // under its image ID, and the name lookup falls back to any other tag.
-    $inspect = $docker->inspectContainerRaw($container['id']);
     $image = (string) ($inspect['Config']['Image'] ?? '');
     if ($image === '' || strpos($image, 'sha256:') === 0) {
       return ['success' => false, 'message' => "Update check failed for {$containerName}: no image reference"];
@@ -742,19 +760,15 @@ class ScheduleManager
 
     $latest = $docker->getImageInfo($image);
     $latestId = is_array($latest) ? ($latest['Id'] ?? '') : '';
-    if ($latestId === '' || $latestId === ($container['imageId'] ?? '')) {
+    if ($latestId === '' || $latestId === ($inspect['Image'] ?? '')) {
       return ['success' => true, 'message' => "{$containerName} is up to date"];
     }
 
-    logUpdate("RECREATE Starting recreate for {$containerName} ({$container['id']})");
-    $recreated = $docker->recreateContainer($container['id']);
+    $recreated = recreateOneContainer($docker, $containerName, $containerId);
     WebSocketPublisher::publish('container', 'updated');
     if (!$recreated['success']) {
-      $error = $recreated['error'] ?? 'Unknown error';
-      logUpdate("RECREATE FAIL {$containerName}: {$error}");
-      return ['success' => false, 'message' => "Update failed for {$containerName}: {$error}"];
+      return ['success' => false, 'message' => "Update failed for {$containerName}: {$recreated['error']}"];
     }
-    logUpdate("RECREATE OK {$containerName} -> new ID {$recreated['newId']}");
     return ['success' => true, 'message' => "Updated {$containerName} to the latest {$image}"];
   }
 
