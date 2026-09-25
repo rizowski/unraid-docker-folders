@@ -118,6 +118,17 @@ describe('ScheduleService', () => {
             expect(() => service.create({ ...baseContainer, action: 'delete' })).toThrow('Invalid action');
         });
 
+        it('accepts the update action for a container target', () => {
+            const id = service.create({ ...baseContainer, action: 'update' });
+            expect(getRow(id).action).toBe('update');
+        });
+
+        it('rejects update for a stack target, with the exact PHP message', () => {
+            expect(() =>
+                service.create({ ...baseContainer, target_type: 'stack', target_id: 'media', action: 'update' })
+            ).toThrow('Update is not supported for compose stacks');
+        });
+
         it('rejects a malformed cron expression', () => {
             expect(() => service.create({ ...baseContainer, cron_expression: 'not a cron' })).toThrow(
                 'Invalid cron expression'
@@ -269,6 +280,23 @@ describe('ScheduleService', () => {
             const id = seed();
             expect(() => service.update(id, { cron_expression: 'nope' })).toThrow('Invalid cron expression');
         });
+
+        it('rejects update+stack when a PUT sends both fields together', () => {
+            const id = seed();
+            expect(() =>
+                service.update(id, { target_type: 'stack', target_id: 'media', action: 'update' })
+            ).toThrow('Update is not supported for compose stacks');
+        });
+
+        it(
+            'does not catch update+stack from a PUT that changes only one of the two fields (PHP parity — ' +
+                'the runner refuses it at execution time instead, see DockerFoldersScheduleExecutors.stackAction)',
+            () => {
+                const id = seed({ target_type: 'stack', target_id: 'media', action: 'restart' });
+                expect(() => service.update(id, { action: 'update' })).not.toThrow();
+                expect(getRow(id).action).toBe('update');
+            }
+        );
 
         it('throws NotFoundException for a missing id', () => {
             expect(() => service.update(999_999, { name: 'ghost' })).toThrow(NotFoundException);
@@ -676,6 +704,27 @@ describe('ScheduleService', () => {
             await promise;
             expect(order).toEqual(['start:a', 'end:a', 'start:b', 'end:b']);
         });
+
+        it('runs update schedules last, however they sort in the SELECT, so a quick action behind one never misses its minute', async () => {
+            const order: string[] = [];
+            exec.state.containerAction = async (name: string, action: string) => {
+                order.push(`${action}:${name}`);
+                return { success: true, message: 'ok' };
+            };
+
+            const now = nowSeconds();
+            // Created in an order that would otherwise put the update first.
+            dueRow({ target_id: 'a', action: 'update' }, now);
+            dueRow({ target_id: 'b', action: 'restart' }, now);
+            dueRow({ target_id: 'c', action: 'update' }, now);
+            dueRow({ target_id: 'd', action: 'stop' }, now);
+
+            await service.runDue(now);
+
+            // Stable: the two updates keep their relative order, moved after
+            // every non-update action.
+            expect(order).toEqual(['restart:b', 'stop:d', 'update:a', 'update:c']);
+        });
     });
 });
 
@@ -704,6 +753,12 @@ describe('shouldSkipMissedRun', () => {
         expect(shouldSkipMissedRun('backup', 6 * 3600 + 40 * 60, 'stop')).toBe(true);
         expect(shouldSkipMissedRun('backup', 3600, 'pause')).toBe(true);
         expect(shouldSkipMissedRun('backup', 90, 'pause')).toBe(false);
+    });
+
+    it('treats a late update like any other state change: skipped past the grace window, run inside it', () => {
+        expect(shouldSkipMissedRun('update', MISFIRE_GRACE_SECONDS + 1, 'none')).toBe(true);
+        expect(shouldSkipMissedRun('update', MISFIRE_GRACE_SECONDS, 'none')).toBe(false);
+        expect(shouldSkipMissedRun('update', 0, 'none')).toBe(false);
     });
 });
 

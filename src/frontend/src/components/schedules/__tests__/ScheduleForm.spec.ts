@@ -141,3 +141,72 @@ describe('ScheduleForm quiesce mode', () => {
     expect(sent.backup_config.quiesce).toBe('pause');
   });
 });
+
+/** The cron preset select, found by id suffix because the prefix is generated. */
+function cronPreset(wrapper: VueWrapper): string {
+  return (wrapper.find('[id$="-cron-preset"]').element as HTMLSelectElement).value;
+}
+
+async function chooseAction(wrapper: VueWrapper, action: string) {
+  const select = wrapper.find('[id$="-action"]');
+  await select.setValue(action);
+  await select.trigger('change');
+}
+
+describe('ScheduleForm update action', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    apiFetch.mockReset();
+    apiFetch.mockResolvedValue({ ok: true, json: async () => ({}) });
+  });
+
+  it('offers Update for a container target', () => {
+    const wrapper = mountForm({ targetType: 'container' });
+    expect(wrapper.find('option[value="update"]').exists()).toBe(true);
+  });
+
+  it('does not offer Update for a stack target', () => {
+    const wrapper = mountForm({ targetType: 'stack', targetId: 'my-stack' });
+    expect(wrapper.find('option[value="update"]').exists()).toBe(false);
+  });
+
+  it('shows the help line only once Update is chosen', async () => {
+    const wrapper = mountForm();
+    expect(wrapper.text()).not.toContain('Checks for a newer image');
+
+    await chooseAction(wrapper, 'update');
+    expect(wrapper.text()).toContain('Checks for a newer image');
+    expect(wrapper.text()).toContain('A run more than');
+    expect(wrapper.text()).toContain('5 minutes late is skipped');
+  });
+
+  it('defaults a new schedule to the hourly preset when switched to Update', async () => {
+    const wrapper = mountForm();
+
+    // Untouched, the form still carries its daily-at-3am default.
+    expect(cronPreset(wrapper)).toBe('daily_3am');
+
+    await chooseAction(wrapper, 'update');
+    expect(cronPreset(wrapper)).toBe('every_hour');
+  });
+
+  it('leaves a cron the user already picked alone when switching to Update', async () => {
+    const wrapper = mountForm();
+    const preset = wrapper.find('[id$="-cron-preset"]');
+    await preset.setValue('weekly_custom');
+    await preset.trigger('change');
+
+    await chooseAction(wrapper, 'update');
+    expect(cronPreset(wrapper)).toBe('weekly_custom');
+  });
+
+  it('does not touch cron for a saved schedule already using Update', async () => {
+    const store = useScheduleStore();
+    store.schedules = [makeSchedule({
+      id: 9, action: 'update', target_type: 'container', target_id: 'plex', cron_expression: '0 5 * * *',
+    })];
+
+    const wrapper = await mountEdit(9);
+    expect(cronPreset(wrapper)).toBe('daily_custom');
+  });
+});

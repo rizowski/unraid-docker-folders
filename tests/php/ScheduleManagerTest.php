@@ -146,6 +146,14 @@ final class ScheduleManagerTest extends TestCase
     }
 
     #[Test]
+    public function aLateUpdateIsSkipped(): void
+    {
+        // An update recreates the container, so it is a state change too.
+        $this->assertTrue(ScheduleManager::shouldSkipMissedRun('update', 301));
+        $this->assertFalse(ScheduleManager::shouldSkipMissedRun('update', 60));
+    }
+
+    #[Test]
     public function aRunInsideTheGraceWindowStillGoesAhead(): void
     {
         // The runner fires every minute, so ordinary lateness is seconds. A

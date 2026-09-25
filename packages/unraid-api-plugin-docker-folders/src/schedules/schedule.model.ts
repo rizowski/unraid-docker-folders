@@ -92,7 +92,7 @@ export class DockerFoldersScheduleInput {
 
     @Field(() => String, { nullable: true })
     @IsOptional()
-    @IsIn(['start', 'stop', 'pause', 'resume', 'restart', 'backup'])
+    @IsIn(['start', 'stop', 'pause', 'resume', 'restart', 'backup', 'update'])
     action?: string;
 
     @Field(() => String, { nullable: true })

@@ -21,10 +21,15 @@
         <option value="resume">Resume</option>
         <option value="restart">Restart</option>
         <option value="backup">Backup</option>
+        <option v-if="targetType === 'container'" value="update">Update</option>
       </select>
+      <div v-if="form.action === 'update'" class="text-xs text-text-secondary">
+        Checks for a newer image. If one exists, pulls it and recreates the container. A run more than
+        5 minutes late is skipped.
+      </div>
     </div>
 
-    <CronInput v-model="form.cron_expression" />
+    <CronInput :model-value="form.cron_expression" @update:model-value="onCronInput" />
 
     <!-- Backup config -->
     <template v-if="form.action === 'backup'">
@@ -179,14 +184,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, useId } from 'vue';
+import { ref, reactive, computed, watch, onMounted, useId } from 'vue';
 import CronInput from './CronInput.vue';
 import PathSuggestInput from '@/components/PathSuggestInput.vue';
 import { useScheduleStore } from '@/stores/schedules';
 import { useSettingsStore } from '@/stores/settings';
 import { useDockerStore } from '@/stores/docker';
 import type { ScheduleAction, BackupServiceConfig, TargetType, QuiesceMode } from '@/types/schedule';
-import { SCHEDULE_ACTION_LABELS, QUIESCE_MODES, QUIESCE_LABELS, QUIESCE_HELP } from '@/types/schedule';
+import { SCHEDULE_ACTION_LABELS, QUIESCE_MODES, QUIESCE_LABELS, QUIESCE_HELP, CRON_PRESETS } from '@/types/schedule';
 import type { ContainerMount } from '@/stores/docker';
 
 interface Props {
@@ -229,6 +234,26 @@ const backupRetention = ref<number | null>(null);
 const backupQuiesce = ref<QuiesceMode>('none');
 const quiesceTouched = ref(false);
 const sqliteSeen = ref(false);
+
+// Set only by a genuine edit — CronInput re-detects its preset from a
+// programmatic change to `modelValue` without re-emitting, so this stays
+// false when the 'update' watcher below sets the hourly default itself.
+const cronTouched = ref(false);
+
+function onCronInput(value: string) {
+  cronTouched.value = true;
+  form.cron_expression = value;
+}
+
+// A new schedule defaults to a daily backup time, which makes no sense for an
+// hourly update check. Nudge it to the hourly preset the first time the user
+// picks 'update' — but only while they have not already set their own cron,
+// and never on a saved schedule being edited (seed() already set its cron).
+watch(() => form.action, (action) => {
+  if (action !== 'update' || props.editId || cronTouched.value) return;
+  const hourly = CRON_PRESETS.every_hour.expression;
+  if (hourly) form.cron_expression = hourly;
+});
 
 const mountPaths = computed(() => containerMounts.value.map(m => m.Destination));
 const sqliteWarning = computed(() => sqliteSeen.value && backupQuiesce.value === 'none');

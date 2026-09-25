@@ -19,6 +19,7 @@ final class ScheduleMigrationTest extends TestCase
 {
     private const MIGRATIONS_DIR = __DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/migrations';
     private const REBUILD = '015_schedules_allow_resume.sql';
+    private const REBUILD_UPDATE = '018_schedules_allow_update.sql';
 
     private SQLite3 $db;
 
@@ -114,5 +115,39 @@ final class ScheduleMigrationTest extends TestCase
              ('idx_schedules_enabled_next', 'idx_schedules_target', 'idx_schedule_history_schedule')"
         );
         self::assertSame(3, $indexes);
+    }
+
+    #[Test]
+    public function rebuild018AcceptsUpdateAndKeepsExistingRows(): void
+    {
+        $this->runMigration(self::MIGRATIONS_DIR . '/' . self::REBUILD);
+        foreach ($this->migrationFiles() as $file) {
+            $name = basename($file);
+            if ($name > self::REBUILD && $name < self::REBUILD_UPDATE) {
+                $this->runMigration($file);
+            }
+        }
+
+        $this->insertSchedule(7, 'resume');
+        $this->db->exec(
+            "INSERT INTO schedule_history (id, schedule_id, started_at, finished_at, status, message)
+             VALUES (3, 7, 100, 101, 'success', 'Resume succeeded')"
+        );
+        try {
+            $this->insertSchedule(8, 'update');
+            self::fail('update was accepted before 018');
+        } catch (Exception $e) {
+            self::assertStringContainsString('CHECK constraint failed', $e->getMessage());
+        }
+
+        $this->runMigration(self::MIGRATIONS_DIR . '/' . self::REBUILD_UPDATE);
+
+        self::assertSame('resume', $this->db->querySingle('SELECT action FROM schedules WHERE id = 7'));
+        self::assertSame('Resume succeeded', $this->db->querySingle('SELECT message FROM schedule_history WHERE id = 3'));
+        $this->insertSchedule(8, 'update');
+        self::assertSame('update', $this->db->querySingle('SELECT action FROM schedules WHERE id = 8'));
+
+        $this->db->exec('DELETE FROM schedules WHERE id = 7');
+        self::assertSame(0, $this->db->querySingle('SELECT COUNT(*) FROM schedule_history'));
     }
 }

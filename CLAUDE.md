@@ -687,6 +687,10 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
   crontab, at most once per stale window, and `repaired` reports it.
   A backup's `backup_config.quiesce` is `none`, `pause` or `stop`, and anything
   but `none` makes a late run skip like a state change.
+  The `update` action is for containers only. It checks the image, pulls it
+  when the registry has a newer build, and recreates the container when the
+  tag names a different image than the one it runs. It ignores
+  `post_pull_action`, and the runner runs it after the other due schedules.
 - `GET /api/paths.php?scope=host|container&path=<partial>&container=<name>` -
   Lists directories for the backup form's path suggestions. Read only. A host
   listing stays inside `BACKUP_ALLOWED_ROOTS`. A container listing stays inside

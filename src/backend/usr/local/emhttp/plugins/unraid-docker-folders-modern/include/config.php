@@ -279,9 +279,13 @@ function imageCheckResult($image, array $overrides = [])
  * @param array|null $onlyImages Restrict the check to these image references
  *                               (e.g. one container's image, or a compose
  *                               stack's images). Null checks everything.
+ * @param array $localRefs Image => local image reference, checked even when no
+ *                         container lists that image. A scheduled update keys
+ *                         on the tag the container was created from, which
+ *                         Docker stops listing once the tag moves.
  * @return array ['results' => [...], 'checked' => int, 'skipped' => int, 'errors' => int, 'newUpdates' => int]
  */
-function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = null)
+function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = null, array $localRefs = [])
 {
   $containers = $dockerClient->listContainers(true);
 
@@ -312,6 +316,7 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
   // Targeted check: restrict to the requested images. Only images that
   // actually belong to a container are checked — unknown names are ignored.
   if ($onlyImages !== null) {
+    $uniqueImages += $localRefs;
     $requested = array_fill_keys(array_map('strval', $onlyImages), true);
     $uniqueImages = array_intersect_key($uniqueImages, $requested);
     $log('INFO Targeted check for ' . count($onlyImages) . ' image(s), ' . count($uniqueImages) . ' matched running container image(s)');
@@ -447,6 +452,38 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     'newUpdates' => $newUpdates,
     'containersByImage' => $containersByImage,
   ];
+}
+
+/**
+ * Record a pulled image as current, so the next check does not flag it.
+ *
+ * Stores the remote digest the pull brought in. The update check compares a
+ * later remote digest with this one, which hides the false positive from a
+ * multi-arch image, whose local RepoDigest differs from the distribution
+ * digest. An upsert that names only the columns a pull changes, so the
+ * release-notes columns survive.
+ *
+ * @param DockerClient $dockerClient Docker API client
+ * @param Database $db Database instance
+ * @param string $image Image reference, as the update check keys it
+ */
+function recordImagePulled($dockerClient, $db, $image)
+{
+  $remoteDigest = $dockerClient->getRemoteImageDigest($image);
+  $localDigest = $dockerClient->getImageDigest($image);
+
+  $db->query(
+    'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
+     VALUES (:image, :local, :remote, 0, :now, NULL)
+     ON CONFLICT(image) DO UPDATE SET
+       local_digest = excluded.local_digest,
+       remote_digest = excluded.remote_digest,
+       update_available = 0,
+       checked_at = excluded.checked_at,
+       error = NULL',
+    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
+  );
+  logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
 }
 
 /**

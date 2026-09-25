@@ -229,7 +229,7 @@ function handlePost()
 /**
  * Reject a target_type or action outside the allowlist with a 400. Checks only
  * the fields that are present, so POST (all required) and a partial PUT share it.
- * Must match the CHECK constraints on the schedules table (migration 015).
+ * Must match the CHECK constraints on the schedules table (migration 018).
  */
 function validateScheduleFields($data)
 {
@@ -237,9 +237,15 @@ function validateScheduleFields($data)
     errorResponse('Invalid target_type', 400);
   }
 
-  $validActions = ['start', 'stop', 'pause', 'resume', 'restart', 'backup'];
+  $validActions = ['start', 'stop', 'pause', 'resume', 'restart', 'backup', 'update'];
   if (isset($data['action']) && !in_array($data['action'], $validActions, true)) {
     errorResponse('Invalid action', 400);
+  }
+
+  // A stack updates through Compose, which this action does not run. The
+  // runner also refuses it, for a PUT that changes only one of the two.
+  if (($data['action'] ?? null) === 'update' && ($data['target_type'] ?? null) === 'stack') {
+    errorResponse('Update is not supported for compose stacks', 400);
   }
 }
 

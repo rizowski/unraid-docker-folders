@@ -3,12 +3,16 @@ import { Inject, Injectable } from '@nestjs/common';
 import { BackupService, quiesceModeFor as backupQuiesceMode } from '../backups/backup.service.js';
 import { ContainerService } from '../containers/container.service.js';
 import { DOCKER_CLIENT_TOKEN } from '../containers/docker-client.js';
+import { UpdatesService } from '../updates/updates.service.js';
 import type { ActionOutcome, ScheduleExecutors, ScheduleRow } from './schedule.service.js';
 
 /**
  * What a schedule does when it fires, ported from `ScheduleManager`'s
- * `dispatchAction`, `executeContainerAction`, `executeStackAction` and
- * `executeBackup`.
+ * `dispatchAction`, `executeContainerAction`, `executeContainerUpdate`,
+ * `executeStackAction` and `executeBackup`. The `update` action delegates
+ * straight to `UpdatesService.updateContainer()`, which is not supported for
+ * a stack target (`api/schedules.php`'s `validateScheduleFields` refuses that
+ * combination before a schedule can even be saved).
  *
  * The messages are PHP's, word for word, because they land in the schedule's
  * history and in the Unraid notification a failed run sends.
@@ -35,10 +39,18 @@ export class DockerFoldersScheduleExecutors implements ScheduleExecutors {
         private readonly containers: ContainerService,
         private readonly backups: BackupService,
         @Inject(DOCKER_CLIENT_TOKEN) private readonly docker: ExecutorDockerClient,
-        @Inject(STACK_ACTION_RUNNER_TOKEN) private readonly stacks: StackActionRunner
+        @Inject(STACK_ACTION_RUNNER_TOKEN) private readonly stacks: StackActionRunner,
+        private readonly updates: UpdatesService
     ) {}
 
     async containerAction(containerName: string, action: string): Promise<ActionOutcome> {
+        // `updateContainer()` does its own container lookup (by the tag it
+        // was created from, not the list's `Image` field — see its doc
+        // comment), so this delegates before the generic lookup below runs.
+        if (action === 'update') {
+            return this.updates.updateContainer(containerName);
+        }
+
         const list = await this.docker.listContainers({ all: true });
         const container = list.find((c) => (c.Names?.[0] ?? '').replace(/^\//, '') === containerName);
         if (container === undefined) {
@@ -98,6 +110,8 @@ export class DockerFoldersScheduleExecutors implements ScheduleExecutors {
                 return { success: false, message: 'Pause is not supported for compose stacks' };
             case 'resume':
                 return { success: false, message: 'Resume is not supported for compose stacks' };
+            case 'update':
+                return { success: false, message: 'Update is not supported for compose stacks' };
             default:
                 return { success: false, message: `Unknown action: ${action}` };
         }

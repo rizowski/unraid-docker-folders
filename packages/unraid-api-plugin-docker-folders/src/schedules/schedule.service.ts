@@ -22,7 +22,7 @@ import { formatRunLateness } from './schedule-notifications.js';
  * never writes root's crontab.
  */
 
-export const SCHEDULE_ACTIONS = ['start', 'stop', 'pause', 'resume', 'restart', 'backup'] as const;
+export const SCHEDULE_ACTIONS = ['start', 'stop', 'pause', 'resume', 'restart', 'backup', 'update'] as const;
 export const TARGET_TYPES = ['container', 'stack'] as const;
 
 /** A run that is this late is skipped rather than fired, unless it is safe. */
@@ -418,6 +418,12 @@ export class ScheduleService {
                     .all(now) as unknown as ScheduleRow[]
         );
 
+        // Updates last: a pull can take minutes, and the runner works through
+        // the list one at a time, so a quick action queued behind it would
+        // miss its minute. `Array#sort` is stable in every JS engine this
+        // runs on, matching PHP 8's stable `usort`.
+        due.sort((a, b) => Number(a.action === 'update') - Number(b.action === 'update'));
+
         const results: RunResult[] = [];
         for (const schedule of due) {
             if (!this.claim(schedule, now)) continue;
@@ -488,13 +494,22 @@ export class ScheduleService {
     }
 }
 
-/** The allowlist `api/schedules.php` applies. Must match the CHECK constraints. */
+/**
+ * The allowlist `api/schedules.php`'s `validateScheduleFields` applies. Must
+ * match the CHECK constraints, and checks only the fields present in `data`
+ * so a partial PUT is validated the same way a full POST is.
+ */
 function validateFields(data: ScheduleWrite): void {
     if (data.target_type !== undefined && !(TARGET_TYPES as readonly string[]).includes(data.target_type)) {
         throw new BadRequestException('Invalid target_type');
     }
     if (data.action !== undefined && !(SCHEDULE_ACTIONS as readonly string[]).includes(data.action)) {
         throw new BadRequestException('Invalid action');
+    }
+
+    // A stack updates through Compose, which this action does not run.
+    if (data.action === 'update' && data.target_type === 'stack') {
+        throw new BadRequestException('Update is not supported for compose stacks');
     }
 }
 

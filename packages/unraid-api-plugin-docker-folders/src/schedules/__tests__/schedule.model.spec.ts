@@ -81,6 +81,12 @@ describe('DockerFoldersScheduleInput, against the API validation pipe', () => {
         expect((await reasons({ action: 'delete' }, DockerFoldersScheduleInput)).join(' ')).toMatch(/action/);
     });
 
+    it('accepts the update action', async () => {
+        await expect(apiPipe().transform({ action: 'update' }, meta(DockerFoldersScheduleInput))).resolves.toEqual({
+            action: 'update',
+        });
+    });
+
     it('refuses a name of the wrong type', async () => {
         expect((await reasons({ name: 42 }, DockerFoldersScheduleInput)).join(' ')).toMatch(/name/);
     });

@@ -153,6 +153,13 @@ interface CheckOutcome {
  * only the terminal result; the Observable wants every event `pull.php`
  * streams over SSE along the way. Both take the same `PullOptions`
  * (`containers`/`recreate`), matching PHP where there is only one endpoint.
+ *
+ * `updateContainer()`, ported from `ScheduleManager::executeContainerUpdate()`,
+ * is a fourth pull path with its own rules: it calls `performCheck()` for a
+ * single tag and `pullOnly()` (the part of `runPull()` shared with it) for
+ * the pull itself, but never `runPull()` as a whole — it recreates only its
+ * one container and ignores `post_pull_action` completely, where `runPull()`
+ * always applies the setting.
  */
 @Injectable()
 export class UpdatesService {
@@ -294,10 +301,117 @@ export class UpdatesService {
     }
 
     /**
-     * `checkAllImageUpdates()`. Shared by `checkForUpdates()` and
-     * `runScheduledCheck()` — see the class doc for the split.
+     * `ScheduleManager::executeContainerUpdate()`: update one container to
+     * the newest build of its image tag. Checks the tag against its
+     * registry, pulls it when the registry has a newer build, then recreates
+     * the container when the tag now names a different image than the one
+     * the container runs. The last test runs even without a pull, because a
+     * manual pull or another container's update can bring the tag up to
+     * date while this container still runs the old image.
+     *
+     * Recreates only this container, ignoring `post_pull_action` entirely —
+     * unlike `pullImage()`/`autoRecreate()`, this never goes through
+     * `runPull()`. `DockerFoldersScheduleExecutors.containerAction()` is the
+     * only caller, for the schedule action `update`. The messages are PHP's,
+     * word for word, because they land in the schedule's history and in the
+     * Unraid notification a failed run sends.
      */
-    private async performCheck(onlyImages: string[] | null): Promise<CheckOutcome> {
+    async updateContainer(containerName: string): Promise<{ success: boolean; message: string }> {
+        const containers = await this.docker.listContainers({ all: true });
+        const container = containers.find((c) => stripLeadingSlash(c.Names?.[0] ?? '') === containerName);
+        if (container === undefined) {
+            return { success: false, message: `Container '${containerName}' not found` };
+        }
+
+        // The tag the container was created from, not the container-list
+        // `Image` field: once the tag moves to a newer build, Docker lists
+        // the container under its image ID, and `resolveImageTag`'s name
+        // lookup falls back to another tag or a bare `sha256:` reference.
+        let image = '';
+        try {
+            const inspect = await this.docker.getContainer(container.Id).inspect();
+            image = inspect.Config?.Image ?? '';
+        } catch (error) {
+            this.logger.warn(`Could not inspect container ${containerName} (${container.Id}): ${errorMessage(error)}`);
+        }
+        if (image === '' || image.startsWith('sha256:')) {
+            return { success: false, message: `Update check failed for ${containerName}: no image reference` };
+        }
+
+        this.updateLog.log(`SCHEDULE Update check for ${containerName} (${image})`);
+        const outcome = await this.performCheck([image], new Map([[image, image]]), false);
+        const result = outcome.results.find((r) => r.image === image);
+        if (result === undefined) {
+            // Left out only when an exclude pattern matches. Success, so an
+            // hourly schedule does not send a failure notice every hour.
+            return { success: true, message: `${containerName} is excluded from update checks. Nothing to do` };
+        }
+        if (result.error) {
+            return { success: false, message: `Update check failed for ${containerName}: ${result.error}` };
+        }
+
+        if (result.updateAvailable) {
+            const pulled = await this.pullOnly(image, () => {});
+            if (!pulled.success) {
+                return { success: false, message: `Pull failed for ${containerName}: ${pulled.error ?? ''}` };
+            }
+            this.updateLog.log(`PULL OK ${image}`);
+            try {
+                await this.recordPulled(image);
+            } catch (error) {
+                this.updateLog.log(`PULL WARN ${image}: DB update failed: ${errorMessage(error)}`);
+            }
+            this.events.publish('updates', 'pulled');
+        }
+
+        let latestId = '';
+        try {
+            const info = await this.docker.getImage(image).inspect();
+            latestId = info.Id ?? '';
+        } catch {
+            latestId = '';
+        }
+        if (latestId === '' || latestId === (container.ImageID ?? '')) {
+            return { success: true, message: `${containerName} is up to date` };
+        }
+
+        this.updateLog.log(`RECREATE Starting recreate for ${containerName} (${container.Id})`);
+        const recreated = await this.recreate.recreateContainer(container.Id);
+        this.events.publish('container', 'updated');
+        if (!recreated.success) {
+            const error = recreated.error ?? 'Unknown error';
+            this.updateLog.log(`RECREATE FAIL ${containerName}: ${error}`);
+            return { success: false, message: `Update failed for ${containerName}: ${error}` };
+        }
+        this.updateLog.log(`RECREATE OK ${containerName} -> new ID ${recreated.newId}`);
+        return { success: true, message: `Updated ${containerName} to the latest ${image}` };
+    }
+
+    /**
+     * `checkAllImageUpdates()`. Shared by `checkForUpdates()`,
+     * `runScheduledCheck()`, and `updateContainer()` — see the class doc for
+     * the split.
+     *
+     * `localRefs` is `checkAllImageUpdates()`'s 5th parameter: image ->
+     * local image reference, checked even when no container currently lists
+     * that image. Only used in targeted mode (`onlyImages !== null`), merged
+     * into the container-derived map with existing entries winning, exactly
+     * as PHP's `$uniqueImages += $localRefs` does. `updateContainer()` is the
+     * only caller that supplies one, keyed on the tag a container was
+     * created from, which Docker stops listing once the tag moves to a newer
+     * build.
+     *
+     * `announceChecked` gates the `('updates', 'checked')` event at the end.
+     * PHP never sends it from `executeContainerUpdate()` — only
+     * `updates.php`'s own `handlePost()` and `check-updates.php` send it,
+     * outside `checkAllImageUpdates()` itself — so `updateContainer()` is the
+     * one caller that passes `false`.
+     */
+    private async performCheck(
+        onlyImages: string[] | null,
+        localRefs: Map<string, string> = new Map(),
+        announceChecked = true
+    ): Promise<CheckOutcome> {
         const containers = await this.docker.listContainers({ all: true });
 
         // Read settings and the prior run's rows up front. DatabaseService.write()
@@ -326,8 +440,12 @@ export class UpdatesService {
 
         let checkSet = uniqueImages;
         if (onlyImages !== null) {
+            const merged = new Map(uniqueImages);
+            for (const [image, ref] of localRefs) {
+                if (!merged.has(image)) merged.set(image, ref);
+            }
             const requested = new Set(onlyImages);
-            checkSet = new Map([...uniqueImages].filter(([image]) => requested.has(image)));
+            checkSet = new Map([...merged].filter(([image]) => requested.has(image)));
             this.updateLog.log(
                 `INFO Targeted check for ${onlyImages.length} image(s), ${checkSet.size} matched running container image(s)`
             );
@@ -451,7 +569,7 @@ export class UpdatesService {
             this.updateLog.log(`NOTES FATAL ${errorMessage(error)}`);
         }
 
-        this.events.publish('updates', 'checked');
+        if (announceChecked) this.events.publish('updates', 'checked');
 
         return { results, containersByImage, existingBefore: existing, checked, skipped, errors, newUpdates };
     }
@@ -535,22 +653,27 @@ export class UpdatesService {
         return { onlyContainerIds, forceRecreate };
     }
 
-    /** `pull.php`'s whole body, minus SSE framing — `emit` takes its place. */
-    private async runPull(
+    /**
+     * The pull-and-consume half of `pull.php`'s body: fetch the layer stream
+     * and read it to completion, reporting failure the way `runPull()` does —
+     * a fixed `'Pull failed'` for a transport-level failure, or the stream's
+     * own error line when Docker's response carries one.
+     *
+     * Shared by `runPull()` (which layers the cache update, events, and
+     * `post_pull_action` on top) and `updateContainer()` (which pulls the
+     * same way but skips all of that — see that method's doc comment).
+     */
+    private async pullOnly(
         image: string,
-        onlyContainerIds: Set<string> | null,
-        forceRecreate: boolean,
         emit: (event: DockerFoldersPullEvent) => void
-    ): Promise<DockerFoldersImagePullResult> {
-        emit({ type: 'status', message: `Pulling ${image}...` });
-
+    ): Promise<{ success: boolean; error: string | null }> {
         let stream: NodeJS.ReadableStream;
         try {
             stream = await this.docker.pullImage(image);
         } catch (error) {
             this.logger.warn(`Docker pull error for ${image}: ${errorMessage(error)}`);
             this.updateLog.log(`PULL FAIL ${image}`);
-            return { success: false, image, error: 'Pull failed' };
+            return { success: false, error: 'Pull failed' };
         }
 
         let streamError: string | null;
@@ -559,7 +682,7 @@ export class UpdatesService {
         } catch (error) {
             this.logger.warn(`Docker pull stream error for ${image}: ${errorMessage(error)}`);
             this.updateLog.log(`PULL FAIL ${image}`);
-            return { success: false, image, error: 'Pull failed' };
+            return { success: false, error: 'Pull failed' };
         }
 
         if (streamError !== null) {
@@ -569,7 +692,24 @@ export class UpdatesService {
             // response itself was 200 still reports success. This treats that
             // line as the failure it describes instead.
             this.updateLog.log(`PULL FAIL ${image}: ${streamError}`);
-            return { success: false, image, error: streamError };
+            return { success: false, error: streamError };
+        }
+
+        return { success: true, error: null };
+    }
+
+    /** `pull.php`'s whole body, minus SSE framing — `emit` takes its place. */
+    private async runPull(
+        image: string,
+        onlyContainerIds: Set<string> | null,
+        forceRecreate: boolean,
+        emit: (event: DockerFoldersPullEvent) => void
+    ): Promise<DockerFoldersImagePullResult> {
+        emit({ type: 'status', message: `Pulling ${image}...` });
+
+        const pulled = await this.pullOnly(image, emit);
+        if (!pulled.success) {
+            return { success: false, image, error: pulled.error };
         }
 
         this.updateLog.log(`PULL OK ${image}`);

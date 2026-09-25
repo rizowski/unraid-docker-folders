@@ -361,6 +361,13 @@ class ScheduleManager
       [$now]
     );
 
+    // Updates last: a pull can take minutes, and the runner works through
+    // the list one at a time, so a quick action queued behind it would miss
+    // its minute.
+    usort($due, function ($a, $b) {
+      return ($a['action'] === 'update') <=> ($b['action'] === 'update');
+    });
+
     $results = [];
     foreach ($due as $schedule) {
       if (!$this->claimSlot($schedule, $now)) {
@@ -589,6 +596,9 @@ class ScheduleManager
     }
 
     if ($schedule['target_type'] === 'container') {
+      if ($schedule['action'] === 'update') {
+        return $this->executeContainerUpdate($schedule['target_id']);
+      }
       return $this->executeContainerAction($schedule['target_id'], $schedule['action']);
     }
 
@@ -665,6 +675,89 @@ class ScheduleManager
     return ['success' => $ok, 'message' => $msg];
   }
 
+  /**
+   * Update one container to the newest build of its image tag.
+   *
+   * Checks the tag against its registry, pulls it when the registry has a
+   * newer build, then recreates the container when the tag now names a
+   * different image than the one the container runs. The last test runs even
+   * without a pull, because a manual pull or another container's update can
+   * bring the tag up to date while this container still runs the old image.
+   *
+   * Recreates only this container, whatever post_pull_action says. The
+   * GraphQL plugin's UpdatesService.updateContainer() is the same steps with
+   * the same messages.
+   */
+  private function executeContainerUpdate($containerName)
+  {
+    $docker = new DockerClient();
+
+    $container = null;
+    foreach ($docker->listContainers(true) as $c) {
+      if ($c['name'] === $containerName) {
+        $container = $c;
+        break;
+      }
+    }
+    if (!$container) {
+      return ['success' => false, 'message' => "Container '{$containerName}' not found"];
+    }
+
+    // The tag the container was created from. The list's image is no good
+    // here: once the tag moves to a newer build, Docker lists the container
+    // under its image ID, and the name lookup falls back to any other tag.
+    $inspect = $docker->inspectContainerRaw($container['id']);
+    $image = (string) ($inspect['Config']['Image'] ?? '');
+    if ($image === '' || strpos($image, 'sha256:') === 0) {
+      return ['success' => false, 'message' => "Update check failed for {$containerName}: no image reference"];
+    }
+
+    logUpdate("SCHEDULE Update check for {$containerName} ({$image})");
+    $check = checkAllImageUpdates($docker, $this->db, 'logUpdate', [$image], [$image => $image]);
+    if (!isset($check['results'][$image])) {
+      // Left out only when an exclude pattern matches. Success, so an hourly
+      // schedule does not send a failure notice every hour.
+      return ['success' => true, 'message' => "{$containerName} is excluded from update checks. Nothing to do"];
+    }
+    $result = $check['results'][$image];
+    if (!empty($result['error'])) {
+      return ['success' => false, 'message' => "Update check failed for {$containerName}: {$result['error']}"];
+    }
+
+    if (!empty($result['update_available'])) {
+      if (!$docker->pullImage($image, function () {})) {
+        $reason = $docker->getLastError();
+        logUpdate("PULL FAIL {$image}" . ($reason !== '' ? ": {$reason}" : ''));
+        $shown = $reason !== '' ? $reason : 'Pull failed';
+        return ['success' => false, 'message' => "Pull failed for {$containerName}: {$shown}"];
+      }
+      logUpdate("PULL OK {$image}");
+      try {
+        recordImagePulled($docker, $this->db, $image);
+      } catch (\Throwable $e) {
+        logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
+      }
+      WebSocketPublisher::publish('updates', 'pulled', ['image' => $image]);
+    }
+
+    $latest = $docker->getImageInfo($image);
+    $latestId = is_array($latest) ? ($latest['Id'] ?? '') : '';
+    if ($latestId === '' || $latestId === ($container['imageId'] ?? '')) {
+      return ['success' => true, 'message' => "{$containerName} is up to date"];
+    }
+
+    logUpdate("RECREATE Starting recreate for {$containerName} ({$container['id']})");
+    $recreated = $docker->recreateContainer($container['id']);
+    WebSocketPublisher::publish('container', 'updated');
+    if (!$recreated['success']) {
+      $error = $recreated['error'] ?? 'Unknown error';
+      logUpdate("RECREATE FAIL {$containerName}: {$error}");
+      return ['success' => false, 'message' => "Update failed for {$containerName}: {$error}"];
+    }
+    logUpdate("RECREATE OK {$containerName} -> new ID {$recreated['newId']}");
+    return ['success' => true, 'message' => "Updated {$containerName} to the latest {$image}"];
+  }
+
   private function executeStackAction($projectName, $action)
   {
     require_once __DIR__ . '/ComposeManager.php';
@@ -681,6 +774,8 @@ class ScheduleManager
         return ['success' => false, 'message' => 'Pause is not supported for compose stacks'];
       case 'resume':
         return ['success' => false, 'message' => 'Resume is not supported for compose stacks'];
+      case 'update':
+        return ['success' => false, 'message' => 'Update is not supported for compose stacks'];
       case 'restart':
         $result = $compose->stackRestart($projectName);
         break;

@@ -19,10 +19,25 @@ import type { DockerFoldersExtraDockerClient } from './extras-docker-client.js';
 /** What `inspect` answers with, narrowed to the fields this plugin reads. */
 export interface DockerInspectInfo {
     Name?: string;
+    /** The container's image ID (Docker's top-level `Image`), not a tag. */
     Image?: string;
     State?: { Paused?: boolean };
     HostConfig?: { PortBindings?: unknown; Privileged?: unknown; CapAdd?: unknown } | null;
-    Config?: { ExposedPorts?: unknown; User?: unknown; Env?: unknown } | null;
+    Config?: {
+        ExposedPorts?: unknown;
+        User?: unknown;
+        Env?: unknown;
+        /**
+         * The tag reference the container was created from. Additive for
+         * `UpdatesService.updateContainer()`, which reads this instead of the
+         * container-list `Image` field: once the tag moves to a newer build,
+         * Docker lists the container under its image ID and
+         * `resolveImageTag`'s name lookup falls back to another tag or a bare
+         * `sha256:` reference, same as `DockerClient::inspectContainerRaw`'s
+         * `Config.Image` in PHP.
+         */
+        Image?: string;
+    } | null;
 }
 
 export interface DockerContainerHandle {
@@ -41,8 +56,14 @@ export interface DockerImageHandle {
      * use of this same handle (which only reads `Config.User`): image update
      * checking needs the local digest (`DockerClient::getImageDigest`) and the
      * `org.opencontainers.image.source` label (`DockerClient::checkImageUpdate`).
+     *
+     * `Id` is additive again for `UpdatesService.updateContainer()`, which
+     * inspects an image by tag to get the id `DockerClient::getImageInfo`
+     * would answer with — the same `Id` field PHP reads off `getImageInfo()`'s
+     * response to decide whether a container is already on the latest build.
      */
     inspect(): Promise<{
+        Id?: string;
         Config?: { User?: unknown; Labels?: Record<string, string> | null } | null;
         RepoDigests?: string[];
     }>;
