@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026.09.28
+- feat(schedules): add a Postgres backup mode for backup schedules
+- fix(schedules): run updates in the background, and other review fixes
+- feat(schedules): add an update action that pulls and recreates a container
+- feat(backend): skip the backend reinstall when its code did not change
+
 ## 2026.09.24
 - chore(backend): turn off npm's audit and funding notices for the backend install
 - fix(backend): restart the Unraid API once when the backend is removed
