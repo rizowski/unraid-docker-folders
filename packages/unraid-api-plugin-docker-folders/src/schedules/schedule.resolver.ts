@@ -1,10 +1,14 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Args, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 
 import { AuthAction, Resource } from '@unraid/shared/graphql.model.js';
 import { UsePermissions } from '@unraid/shared/use-permissions.directive.js';
 
 import {
+    DockerFoldersPostgresDatabases,
+    DockerFoldersPostgresDatabasesInput,
+    DockerFoldersPostgresInfo,
+    DockerFoldersPostgresTargetInput,
     DockerFoldersSchedule,
     DockerFoldersScheduleHistoryEntry,
     DockerFoldersScheduleInput,
@@ -14,6 +18,25 @@ import {
 } from './schedule.model.js';
 import { ScheduleService, type ScheduleHistoryRow, type ScheduleRow, type ScheduleWrite } from './schedule.service.js';
 import { SchedulerService } from './scheduler.service.js';
+import {
+    CREDENTIALS_CUSTOM,
+    MODE_POSTGRES,
+    PostgresBackupService,
+    credentialsOf,
+    isValidServiceName,
+    isValidUser,
+    mergeStoredPassword,
+    redactConfigJson,
+} from '../backups/postgres-backup.js';
+
+function storedServiceOf(json: string | null): string | null {
+    try {
+        const service = (JSON.parse(json ?? 'null') as { postgres?: { service?: unknown } } | null)?.postgres?.service;
+        return typeof service === 'string' ? service : null;
+    } catch {
+        return null;
+    }
+}
 
 /**
  * The schedules screen, ported from `api/schedules.php`.
@@ -27,8 +50,78 @@ import { SchedulerService } from './scheduler.service.js';
 export class ScheduleResolver {
     constructor(
         private readonly schedules: ScheduleService,
-        private readonly scheduler: SchedulerService
+        private readonly scheduler: SchedulerService,
+        private readonly postgres: PostgresBackupService
     ) {}
+
+    /**
+     * `postgres_info` in api/schedules.php. A mutation to match its POST.
+     *
+     * UPDATE_ANY, not READ_ANY, on both Postgres mutations: they run commands
+     * inside a container, and the databases one can use a saved password.
+     */
+    @UsePermissions({ action: AuthAction.UPDATE_ANY, resource: Resource.DOCKER })
+    @Mutation(() => DockerFoldersPostgresInfo)
+    public async dockerFoldersPostgresInfo(
+        @Args('input') input: DockerFoldersPostgresTargetInput
+    ): Promise<DockerFoldersPostgresInfo> {
+        const target = await this.requirePostgresTarget(input);
+        const info = await this.postgres.info(target.id);
+        if (info === null) throw new NotFoundException('Container not found');
+        return {
+            isPostgres: info.is_postgres,
+            running: info.running,
+            envUser: info.env_user,
+            hasEnvPassword: info.has_env_password,
+        };
+    }
+
+    /** `postgres_databases` in api/schedules.php. */
+    @UsePermissions({ action: AuthAction.UPDATE_ANY, resource: Resource.DOCKER })
+    @Mutation(() => DockerFoldersPostgresDatabases)
+    public async dockerFoldersPostgresDatabases(
+        @Args('input') input: DockerFoldersPostgresDatabasesInput
+    ): Promise<DockerFoldersPostgresDatabases> {
+        const target = await this.requirePostgresTarget(input);
+
+        let pg: Record<string, unknown> = {
+            credentials: credentialsOf(input),
+            user: input.user ?? '',
+            password: input.password ?? '',
+        };
+        if (pg.credentials === CREDENTIALS_CUSTOM) {
+            if (!isValidUser(pg.user)) throw new BadRequestException('Invalid Postgres user');
+            if (pg.password === '' && input.scheduleId) {
+                // Only a schedule with this same target lends its password.
+                const stored = this.schedules.get(input.scheduleId);
+                if (stored && stored.target_type === input.targetType && stored.target_id === input.targetId) {
+                    const storedService = storedServiceOf(stored.backup_config);
+                    if (input.targetType === 'container' || storedService === (input.service ?? null)) {
+                        pg = mergeStoredPassword({ mode: MODE_POSTGRES, postgres: pg }, stored.backup_config)
+                            .postgres as Record<string, unknown>;
+                    }
+                }
+            }
+        }
+
+        const credentials = await this.postgres.resolveCredentials(target.id, pg);
+        return this.postgres.listDatabases(target.id, credentials.user, credentials.password);
+    }
+
+    /** `requirePostgresTarget()` in api/schedules.php. */
+    private async requirePostgresTarget(input: DockerFoldersPostgresTargetInput) {
+        if (!isValidServiceName(input.targetId)) throw new BadRequestException('Invalid target');
+        if (input.targetType === 'stack' && !isValidServiceName(input.service)) {
+            throw new BadRequestException('Invalid service name');
+        }
+        const target = await this.postgres.resolveTarget(
+            input.targetType,
+            input.targetId,
+            input.targetType === 'stack' ? (input.service ?? null) : null
+        );
+        if (target === null) throw new NotFoundException('Container not found');
+        return target;
+    }
 
     @UsePermissions({ action: AuthAction.READ_ANY, resource: Resource.DOCKER })
     @Query(() => [DockerFoldersSchedule])
@@ -145,7 +238,8 @@ function toSchedule(row: ScheduleRow): DockerFoldersSchedule {
         action: row.action,
         cronExpression: row.cron_expression,
         enabled: Boolean(row.enabled),
-        backupConfigJson: row.backup_config ?? null,
+        // The password is write-only, as in PHP's formatSchedule().
+        backupConfigJson: redactConfigJson(row.backup_config ?? null),
         lastRunAt: row.last_run_at ?? null,
         lastRunStatus: row.last_run_status ?? null,
         lastRunMessage: row.last_run_message ?? null,

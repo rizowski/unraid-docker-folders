@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { DatabaseSync } from 'node:sqlite';
 
+import { MODE_POSTGRES, modeOf, prepareBackupConfig } from '../backups/postgres-backup.js';
 import { DatabaseService } from '../db/database.service.js';
 import { EventBusService } from '../events/event-bus.service.js';
 import { nowSeconds } from '../util/time.js';
@@ -126,9 +127,21 @@ export function scheduleQuiesceMode(schedule: Pick<ScheduleRow, 'action' | 'back
     if (schedule.action !== 'backup' || schedule.backup_config === null) return 'none';
     try {
         const config = JSON.parse(schedule.backup_config) as { quiesce?: unknown } | null;
+        // pg_dump never pauses or stops the container, so a late Postgres
+        // backup catches up like quiesce 'none'.
+        if (modeOf(config) === MODE_POSTGRES) return 'none';
         return quiesceModeFor(config?.quiesce);
     } catch {
         return 'none';
+    }
+}
+
+/** `ScheduleManager::prepareBackupConfig`, with its errors as a 400. */
+function toStoredBackupConfig(json: string, targetType: string, storedJson: string | null): string {
+    try {
+        return prepareBackupConfig(json, targetType, storedJson);
+    } catch (error) {
+        throw new BadRequestException((error as Error).message);
     }
 }
 
@@ -187,6 +200,8 @@ export class ScheduleService {
         if (!validateCronExpression(data.cron_expression as string)) {
             throw new BadRequestException('Invalid cron expression');
         }
+        const backupConfig =
+            data.action === 'backup' ? toStoredBackupConfig(data.backup_config as string, data.target_type as string, null) : null;
 
         const now = nowSeconds();
         const id = this.db.write((db) => {
@@ -204,7 +219,7 @@ export class ScheduleService {
                     data.action as string,
                     data.cron_expression as string,
                     data.enabled == null ? 1 : data.enabled ? 1 : 0,
-                    data.action === 'backup' ? (data.backup_config ?? null) : null,
+                    backupConfig,
                     computeNextRun(data.cron_expression as string, now),
                     now,
                     now
@@ -264,7 +279,15 @@ export class ScheduleService {
             }
 
             if (data.backup_config !== undefined && data.backup_config !== null) {
-                update.backup_config = data.backup_config;
+                const targetType = data.target_type ?? schedule.target_type;
+                const targetId = data.target_id ?? schedule.target_id;
+                // A saved password never follows the schedule to a different target.
+                const sameTarget = targetType === schedule.target_type && targetId === schedule.target_id;
+                update.backup_config = toStoredBackupConfig(
+                    data.backup_config,
+                    targetType,
+                    sameTarget ? schedule.backup_config : null
+                );
             }
 
             // Column names come from the fixed list above, never from input.

@@ -39,6 +39,7 @@ require_once $backend . '/classes/Database.php';
 require_once $backend . '/classes/CronManager.php';
 require_once $backend . '/classes/DockerClient.php';
 require_once $backend . '/classes/BackupManager.php';
+require_once $backend . '/classes/PostgresBackup.php';
 require_once $backend . '/classes/WebSocketPublisher.php';
 require_once $backend . '/classes/ScheduleManager.php';
 
@@ -179,6 +180,47 @@ function runSequence(string $migrationsDir): array
 
     $capture('update_A_backup_config_only', fn () => $manager->updateSchedule($idA, [
         'backup_config' => '{"paths":["/config","/data"],"quiesce":"pause"}',
+    ]));
+
+    // Postgres mode: the stored config is normalized, and an update that
+    // leaves the password out keeps the saved one.
+    $idE = $capture('create_E_postgres', fn () => $manager->createSchedule([
+        'name' => 'Postgres dump',
+        'target_type' => 'container',
+        'target_id' => 'db',
+        'action' => 'backup',
+        'cron_expression' => '0 4 * * *',
+        'backup_config' => '{"mode":"postgres","paths":["/ignored"],"quiesce":"stop","destination":"/mnt/user/backups/pg","retention_count":"5","postgres":{"credentials":"custom","user":"app","password":"s3cret/é","databases":["app","../odd name"],"extra":1}}',
+    ]));
+
+    $capture('update_E_keep_password', fn () => $manager->updateSchedule($idE, [
+        'backup_config' => '{"mode":"postgres","paths":[],"postgres":{"credentials":"custom","user":"app","password":"","databases":["app"]}}',
+    ]));
+
+    // Moved to another container with the password left out: the saved one
+    // must not follow, so the update is refused.
+    $capture('update_E_new_target_refused', function () use ($manager, $idE) {
+        try {
+            return $manager->updateSchedule($idE, [
+                'target_id' => 'db2',
+                'backup_config' => '{"mode":"postgres","paths":[],"postgres":{"credentials":"custom","user":"app","password":"","databases":["app"]}}',
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return 'refused: ' . $e->getMessage();
+        }
+    });
+
+    // What the API answers for that row: the password is gone.
+    $capture('get_E_redacted', fn () => $manager->getSchedule($idE)['backup_config']);
+
+    // A stack with env credentials: only the service and databases are kept.
+    $capture('create_F_stack_postgres_env', fn () => $manager->createSchedule([
+        'name' => 'Immich database',
+        'target_type' => 'stack',
+        'target_id' => 'immich',
+        'action' => 'backup',
+        'cron_expression' => '0 5 * * *',
+        'backup_config' => '{"mode":"postgres","paths":[],"postgres":{"service":"database","credentials":"env","user":"ignored","password":"ignored","databases":["immich"]}}',
     ]));
 
     $t1 = time();

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 
 import { BackupService, quiesceModeFor as backupQuiesceMode } from '../backups/backup.service.js';
+import { MODE_POSTGRES, modeOf, type PostgresConfig, validateConfig as validatePostgresConfig } from '../backups/postgres-backup.js';
 import { ContainerService } from '../containers/container.service.js';
 import { DOCKER_CLIENT_TOKEN } from '../containers/docker-client.js';
 import { UpdatesService } from '../updates/updates.service.js';
@@ -132,13 +133,36 @@ export class DockerFoldersScheduleExecutors implements ScheduleExecutors {
         } catch {
             config = null;
         }
+        // PHP's `!empty()`: null, '', 0 and '0' all mean "use the default".
+        const destination =
+            config === null || typeof config !== 'object' || phpEmpty(config.destination) ? null : String(config.destination);
+        const retention =
+            config === null || typeof config !== 'object' || phpEmpty(config.retention_count)
+                ? null
+                : Math.trunc(Number(config.retention_count));
+
+        if (modeOf(config) === MODE_POSTGRES) {
+            if (validatePostgresConfig(config, schedule.target_type, false) !== null) {
+                return { success: false, message: 'Invalid Postgres backup configuration' };
+            }
+            const pg = (config as { postgres: PostgresConfig }).postgres;
+            const result = await this.backups.backupPostgres(
+                schedule.target_type,
+                schedule.target_id,
+                pg,
+                destination,
+                retention
+            );
+            return {
+                success: result.success,
+                message: result.message,
+                ...(result.backupFile ? { backup_file: result.backupFile, backup_size: result.backupSize ?? 0 } : {}),
+            };
+        }
+
         if (config === null || typeof config !== 'object' || !nonEmpty(config.paths)) {
             return { success: false, message: 'Invalid backup configuration' };
         }
-
-        // PHP's `!empty()`: null, '', 0 and '0' all mean "use the default".
-        const destination = phpEmpty(config.destination) ? null : String(config.destination);
-        const retention = phpEmpty(config.retention_count) ? null : Math.trunc(Number(config.retention_count));
         // Coerced to one of three known strings. An unknown value leaves the
         // container alone rather than failing a run nobody is watching.
         const quiesce = backupQuiesceMode(config.quiesce);

@@ -7,6 +7,8 @@
  * @package UnraidDockerModern
  */
 
+require_once __DIR__ . '/DockerStreamDemuxer.php';
+
 class DockerClient
 {
   private $socketPath;
@@ -313,7 +315,7 @@ class DockerClient
    * @param string $key
    * @return string
    */
-  private static function envValue($env, $key)
+  public static function envValue($env, $key)
   {
     $prefix = $key . '=';
     $len = strlen($prefix);
@@ -1405,6 +1407,161 @@ class DockerClient
   public function inspectContainerRaw($id)
   {
     return $this->request('GET', "/containers/" . rawurlencode($id) . "/json") ?: null;
+  }
+
+  /**
+   * The ids and names of the containers that carry every one of $labels,
+   * straight from the list endpoint. listContainers() also builds the
+   * autostart and facts maps, which a lookup by label does not need.
+   *
+   * @param array $labels label => value
+   * @return array[] ['id' => string, 'name' => string]
+   */
+  public function findContainersByLabels(array $labels)
+  {
+    $filter = [];
+    foreach ($labels as $key => $value) {
+      $filter[] = "{$key}={$value}";
+    }
+    $response = $this->request('GET', '/containers/json?all=1&filters=' . rawurlencode(json_encode(['label' => $filter])));
+
+    $found = [];
+    foreach (is_array($response) ? $response : [] as $c) {
+      $found[] = ['id' => $c['Id'], 'name' => ltrim($c['Names'][0] ?? '', '/')];
+    }
+    return $found;
+  }
+
+  // The most stderr execRun() keeps. pg_dump can print a warning per table,
+  // and only the first lines explain a failure.
+  const EXEC_STDERR_CAP = 65536;
+
+  /**
+   * Run a command inside a running container, with no shell and no TTY.
+   *
+   * $cmd is an argv array, so no argument is ever parsed by a shell. $env
+   * holds "NAME=value" strings. They travel in the request body, so a
+   * password in them never appears on a command line or in a process list.
+   *
+   * Stdout goes to $onStdout chunk by chunk, so a dump of any size streams to
+   * disk without being held in memory. Stderr is kept, up to
+   * EXEC_STDERR_CAP bytes.
+   *
+   * @param string $id Container ID or name
+   * @param string[] $cmd The command and its arguments
+   * @param string[] $env Extra environment, as NAME=value
+   * @param callable $onStdout Receives each stdout chunk
+   * @param int $timeout Seconds before the request is cut off, 0 for none
+   * @return array ['ok' => bool, 'exit_code' => int|null, 'stderr' => string, 'error' => string]
+   */
+  public function execRun($id, array $cmd, array $env, callable $onStdout, $timeout = 60)
+  {
+    $result = ['ok' => false, 'exit_code' => null, 'stderr' => '', 'error' => ''];
+
+    $created = $this->request('POST', '/containers/' . rawurlencode($id) . '/exec', [
+      'AttachStdin' => false,
+      'AttachStdout' => true,
+      'AttachStderr' => true,
+      'Tty' => false,
+      'Cmd' => array_values($cmd),
+      'Env' => array_values($env),
+    ]);
+    if (!is_array($created) || empty($created['Id'])) {
+      $result['error'] = $this->lastError !== '' ? $this->lastError : 'Could not create the exec';
+      return $result;
+    }
+    $execId = $created['Id'];
+
+    $stderr = '';
+    $demuxer = new DockerStreamDemuxer($onStdout, function ($payload) use (&$stderr) {
+      if (strlen($stderr) < self::EXEC_STDERR_CAP) {
+        $stderr .= substr($payload, 0, self::EXEC_STDERR_CAP - strlen($stderr));
+      }
+    });
+
+    if (!file_exists($this->socketPath)) {
+      $result['error'] = "Docker socket not found: {$this->socketPath}";
+      return $result;
+    }
+
+    $body = json_encode(['Detach' => false, 'Tty' => false]);
+    $status = 0;
+    $errorBody = '';
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, $this->socketPath);
+    curl_setopt($ch, CURLOPT_URL, "http://localhost/{$this->apiVersion}/exec/" . rawurlencode($execId) . '/start');
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+    curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json', 'Content-Length: ' . strlen($body)]);
+    curl_setopt($ch, CURLOPT_TIMEOUT, (int) $timeout);
+    // A failed start answers with a JSON error, not a frame stream. Read the
+    // status before the first body chunk to tell the two apart.
+    curl_setopt($ch, CURLOPT_WRITEFUNCTION, function ($ch, $chunk) use ($demuxer, &$status, &$errorBody) {
+      if ($status === 0) {
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+      }
+      if ($status < 200 || $status >= 300) {
+        $errorBody .= $chunk;
+        return strlen($chunk);
+      }
+      return $demuxer->feed($chunk);
+    });
+    curl_exec($ch);
+    $curlError = curl_error($ch);
+    if ($status === 0) {
+      $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    }
+    curl_close($ch);
+
+    $result['stderr'] = $stderr;
+
+    if ($curlError !== '') {
+      $result['error'] = "Docker API error: {$curlError}";
+      return $result;
+    }
+    if ($status < 200 || $status >= 300) {
+      $decoded = json_decode($errorBody, true);
+      $result['error'] = "Docker API HTTP {$status}"
+        . (is_array($decoded) && isset($decoded['message']) ? ': ' . $decoded['message'] : '');
+      return $result;
+    }
+    if ($demuxer->hasPartialFrame()) {
+      $result['error'] = 'The output stream ended early';
+      return $result;
+    }
+
+    // Docker can report Running with no ExitCode for a moment after the
+    // stream ends. Wait a few seconds for the real code.
+    $inspect = $this->request('GET', '/exec/' . rawurlencode($execId) . '/json');
+    for ($i = 0; $i < 50 && is_array($inspect) && !empty($inspect['Running']); $i++) {
+      usleep(100000);
+      $inspect = $this->request('GET', '/exec/' . rawurlencode($execId) . '/json');
+    }
+    if (!is_array($inspect) || !array_key_exists('ExitCode', $inspect)) {
+      $result['error'] = 'Could not read the exit code';
+      return $result;
+    }
+
+    $result['exit_code'] = $inspect['ExitCode'] === null ? null : (int) $inspect['ExitCode'];
+    $result['ok'] = $result['exit_code'] === 0;
+    return $result;
+  }
+
+  /**
+   * execRun() for a command with small output, returned as a string.
+   *
+   * @return array execRun()'s result plus 'stdout'
+   */
+  public function execCapture($id, array $cmd, array $env = [], $timeout = 30)
+  {
+    $stdout = '';
+    $result = $this->execRun($id, $cmd, $env, function ($payload) use (&$stdout) {
+      if (strlen($stdout) < 4 * 1024 * 1024) {
+        $stdout .= $payload;
+      }
+    }, $timeout);
+    $result['stdout'] = $stdout;
+    return $result;
   }
 
   /**

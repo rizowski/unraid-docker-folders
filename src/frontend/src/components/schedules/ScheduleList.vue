@@ -67,6 +67,14 @@
             <div class="flex items-center gap-2">
               <span class="text-sm font-medium text-text truncate">{{ schedule.name }}</span>
               <span class="text-xs px-1.5 py-0.5 rounded bg-bg-card text-text-secondary shrink-0">{{ SCHEDULE_ACTION_LABELS[schedule.action] }}</span>
+              <span
+                v-if="schedule.action === 'backup' && schedule.backup_config?.mode === 'postgres'"
+                class="text-xs text-text-secondary shrink-0"
+              >
+                Postgres<template v-if="schedule.backup_config.postgres?.service"> ({{ schedule.backup_config.postgres.service }})</template>:
+                {{ schedule.backup_config.postgres?.databases.length ?? 0 }}
+                database{{ schedule.backup_config.postgres?.databases.length === 1 ? '' : 's' }}
+              </span>
             </div>
             <div class="text-xs text-text-secondary mt-0.5">
               <span v-if="schedule.next_run_at">Next: {{ formatTime(schedule.next_run_at) }}</span>

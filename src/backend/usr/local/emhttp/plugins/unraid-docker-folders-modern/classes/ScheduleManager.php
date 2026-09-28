@@ -4,6 +4,7 @@ require_once dirname(__DIR__) . '/include/config.php';
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/DockerClient.php';
 require_once __DIR__ . '/BackupManager.php';
+require_once __DIR__ . '/PostgresBackup.php';
 require_once __DIR__ . '/WebSocketPublisher.php';
 
 class ScheduleManager
@@ -73,9 +74,7 @@ class ScheduleManager
       if (empty($data['backup_config'])) {
         throw new InvalidArgumentException('Backup config required for backup action');
       }
-      $backupConfig = is_string($data['backup_config'])
-        ? $data['backup_config']
-        : json_encode($data['backup_config']);
+      $backupConfig = self::prepareBackupConfig($data['backup_config'], $data['target_type'], null);
     }
 
     $id = $this->db->insert('schedules', [
@@ -133,9 +132,15 @@ class ScheduleManager
     }
 
     if (isset($data['backup_config'])) {
-      $update['backup_config'] = is_string($data['backup_config'])
-        ? $data['backup_config']
-        : json_encode($data['backup_config']);
+      $targetType = isset($data['target_type']) ? $data['target_type'] : $schedule['target_type'];
+      $targetId = isset($data['target_id']) ? $data['target_id'] : $schedule['target_id'];
+      // A saved password never follows the schedule to a different target.
+      $sameTarget = $targetType === $schedule['target_type'] && $targetId === $schedule['target_id'];
+      $update['backup_config'] = self::prepareBackupConfig(
+        $data['backup_config'],
+        $targetType,
+        $sameTarget ? $schedule['backup_config'] : null
+      );
     }
 
     $this->db->update('schedules', $update, 'id = ?', [$id]);
@@ -143,6 +148,61 @@ class ScheduleManager
     CronManager::ensureSchedulerCron($this->db);
 
     return true;
+  }
+
+  /**
+   * Turn a backup_config from a request into the JSON string to store.
+   *
+   * File mode passes through as before. Postgres mode fills in the stored
+   * password when the request leaves it out, is checked, and keeps only the
+   * keys it uses. Throws InvalidArgumentException, which the API answers
+   * with a 400.
+   *
+   * @param mixed $config Array, or a JSON string
+   * @param string $targetType
+   * @param string|null $storedJson The row's current backup_config
+   * @return string
+   */
+  public static function prepareBackupConfig($config, $targetType, $storedJson)
+  {
+    $decoded = is_string($config) ? json_decode($config, true) : $config;
+    if (!is_array($decoded)) {
+      throw new InvalidArgumentException('Invalid backup_config');
+    }
+
+    if (PostgresBackup::modeOf($decoded) !== PostgresBackup::MODE_POSTGRES) {
+      return is_string($config) ? $config : json_encode($config);
+    }
+
+    $decoded = PostgresBackup::mergeStoredPassword($decoded, $storedJson);
+    $error = PostgresBackup::validateConfig($decoded, $targetType);
+    if ($error !== null) {
+      throw new InvalidArgumentException($error);
+    }
+
+    // Unescaped, so the stored text is byte for byte what the Unraid API
+    // plugin's JSON.stringify() writes for the same config.
+    return json_encode(
+      PostgresBackup::normalizeConfig($decoded, $targetType),
+      JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+    );
+  }
+
+  /**
+   * The stored backup_config with its password, for server-side use only.
+   * Never return this to a client.
+   *
+   * @param int $id
+   * @return array|null
+   */
+  public function getStoredBackupConfig($id)
+  {
+    $row = $this->db->fetchOne('SELECT backup_config FROM schedules WHERE id = ?', [$id]);
+    if (!$row || !$row['backup_config']) {
+      return null;
+    }
+    $config = json_decode($row['backup_config'], true);
+    return is_array($config) ? $config : null;
   }
 
   public function deleteSchedule($id)
@@ -346,6 +406,12 @@ class ScheduleManager
     $config = isset($schedule['backup_config']) ? $schedule['backup_config'] : null;
     if (is_string($config)) {
       $config = json_decode($config, true);
+    }
+
+    // pg_dump never pauses or stops the container, so a late Postgres
+    // backup is not a state change and catches up like quiesce 'none'.
+    if (PostgresBackup::modeOf($config) === PostgresBackup::MODE_POSTGRES) {
+      return BackupManager::QUIESCE_NONE;
     }
 
     return BackupManager::quiesceModeFor(
@@ -806,13 +872,26 @@ class ScheduleManager
   private function executeBackup($schedule)
   {
     $config = json_decode($schedule['backup_config'], true);
+    $backup = new BackupManager();
+    $destination = is_array($config) && !empty($config['destination']) ? $config['destination'] : null;
+    $retention = is_array($config) && !empty($config['retention_count']) ? (int) $config['retention_count'] : null;
+
+    if (PostgresBackup::modeOf($config) === PostgresBackup::MODE_POSTGRES) {
+      if (PostgresBackup::validateConfig($config, $schedule['target_type'], false) !== null) {
+        return ['success' => false, 'message' => 'Invalid Postgres backup configuration'];
+      }
+      return $backup->backupPostgres(
+        $schedule['target_type'],
+        $schedule['target_id'],
+        $config['postgres'],
+        $destination,
+        $retention
+      );
+    }
+
     if (!$config || empty($config['paths'])) {
       return ['success' => false, 'message' => 'Invalid backup configuration'];
     }
-
-    $backup = new BackupManager();
-    $destination = !empty($config['destination']) ? $config['destination'] : null;
-    $retention = !empty($config['retention_count']) ? (int) $config['retention_count'] : null;
 
     // Coerced to one of three known strings. It never reaches a shell, but an
     // unknown value must mean "leave the container alone", not a fatal error
@@ -830,7 +909,9 @@ class ScheduleManager
   {
     $row['enabled'] = (bool) $row['enabled'];
     if ($row['backup_config']) {
-      $row['backup_config'] = json_decode($row['backup_config'], true);
+      // The password is write-only. Every schedule the API returns comes
+      // through here, so this is the one place it is removed.
+      $row['backup_config'] = PostgresBackup::redactConfig(json_decode($row['backup_config'], true));
     }
     return $row;
   }

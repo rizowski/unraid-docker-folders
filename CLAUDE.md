@@ -694,6 +694,20 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
   start it in its own process. In PHP that is `scripts/run-schedule.php`, and
   in the plugin an unawaited promise. That run records itself and sends its
   own notice.
+- `POST /api/schedules.php?action=postgres_info` and `?action=postgres_databases`
+  - Postgres backup mode. Both take `{target_type, target_id, service?}`, where
+  `service` names the compose service of a stack. `postgres_databases` also
+  takes `{credentials, user?, password?, schedule_id?}`. A backup whose
+  `backup_config.mode` is `postgres` runs `pg_dump -Fc` inside that container
+  through Docker's exec API (`DockerClient::execRun`, no shell), one numbered
+  `NN.dump` per database plus `manifest.json`, tarred under the normal archive
+  name (`<container>` or `<project>.<service>`). `postgres.credentials` is
+  `env` by default: every run reads `POSTGRES_USER` and `POSTGRES_PASSWORD`
+  from the container, and nothing is stored. `custom` stores a user and
+  password. `backup_config.postgres.password` is write-only:
+  `formatSchedule()` (and `redactConfigJson()` in the plugin) replace it with
+  `password_set`, and an update that sends it empty keeps the saved one.
+  Never return it.
 - `GET /api/paths.php?scope=host|container&path=<partial>&container=<name>` -
   Lists directories for the backup form's path suggestions. Read only. A host
   listing stays inside `BACKUP_ALLOWED_ROOTS`. A container listing stays inside

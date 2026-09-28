@@ -146,6 +146,9 @@ export const phpBackend: Backend = {
         `${API_BASE}/schedules.php?action=backups&target_type=${enc(targetType)}&target_id=${enc(targetId)}`,
       ),
     deleteBackup: (body) => post(`${API_BASE}/schedules.php?action=delete_backup`, body),
+    // POST, because the body can carry a password.
+    postgresInfo: (target) => post(`${API_BASE}/schedules.php?action=postgres_info`, target),
+    postgresDatabases: (body) => post(`${API_BASE}/schedules.php?action=postgres_databases`, body),
   },
 
   compose: {

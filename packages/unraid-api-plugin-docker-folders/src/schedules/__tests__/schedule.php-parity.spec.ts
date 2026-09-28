@@ -3,6 +3,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { DatabaseService } from '../../db/database.service.js';
 import type { EventBusService } from '../../events/event-bus.service.js';
 import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
+import { redactConfigJson } from '../../backups/postgres-backup.js';
 import { ScheduleService, type ScheduleExecutors } from '../schedule.service.js';
 import fixture from './php-schedule-sequence.fixture.json' with { type: 'json' };
 
@@ -95,6 +96,11 @@ describe("ScheduleService, against ScheduleManager.php's own recorded output", (
             'bulk_set_enabled',
             'bulk_delete',
             'update_A_backup_config_only',
+            'create_E_postgres',
+            'update_E_keep_password',
+            'update_E_new_target_refused',
+            'get_E_redacted',
+            'create_F_stack_postgres_env',
         ]);
         // Straddling a leap second/minute during generation would make the
         // fixture worthless (see schedule-oracle.php); this is a floor on how
@@ -184,6 +190,54 @@ describe("ScheduleService, against ScheduleManager.php's own recorded output", (
         step(9, () =>
             service.update(idA, {
                 backup_config: '{"paths":["/config","/data"],"quiesce":"pause"}',
+            })
+        );
+
+        let idE = 0;
+        step(10, () => {
+            idE = service.create({
+                name: 'Postgres dump',
+                target_type: 'container',
+                target_id: 'db',
+                action: 'backup',
+                cron_expression: '0 4 * * *',
+                backup_config:
+                    '{"mode":"postgres","paths":["/ignored"],"quiesce":"stop","destination":"/mnt/user/backups/pg","retention_count":"5","postgres":{"credentials":"custom","user":"app","password":"s3cret/é","databases":["app","../odd name"],"extra":1}}',
+            });
+            return idE;
+        });
+
+        step(11, () =>
+            service.update(idE, {
+                backup_config:
+                    '{"mode":"postgres","paths":[],"postgres":{"credentials":"custom","user":"app","password":"","databases":["app"]}}',
+            })
+        );
+
+        step(12, () => {
+            try {
+                return service.update(idE, {
+                    target_id: 'db2',
+                    backup_config:
+                        '{"mode":"postgres","paths":[],"postgres":{"credentials":"custom","user":"app","password":"","databases":["app"]}}',
+                });
+            } catch (error) {
+                return `refused: ${(error as Error).message}`;
+            }
+        });
+
+        // The resolver answers backupConfigJson through redactConfigJson().
+        step(13, () => JSON.parse(redactConfigJson(service.get(idE)?.backup_config ?? null) as string));
+
+        step(14, () =>
+            service.create({
+                name: 'Immich database',
+                target_type: 'stack',
+                target_id: 'immich',
+                action: 'backup',
+                cron_expression: '0 5 * * *',
+                backup_config:
+                    '{"mode":"postgres","paths":[],"postgres":{"service":"database","credentials":"env","user":"ignored","password":"ignored","databases":["immich"]}}',
             })
         );
     });

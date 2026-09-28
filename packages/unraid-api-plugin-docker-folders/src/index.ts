@@ -3,6 +3,7 @@ import { Module } from '@nestjs/common';
 import { StatusCommand } from './cli/status.command.js';
 import { BackupResolver } from './backups/backup.resolver.js';
 import { BACKUP_DOCKER_CLIENT_TOKEN, BackupService, createBackupDockerClient } from './backups/backup.service.js';
+import { PG_EXEC_CLIENT_TOKEN, PostgresBackupService, createPgExecClient } from './backups/postgres-backup.js';
 import { COMPOSE_RUNNER_TOKEN, createComposeRunner } from './compose/compose-runner.js';
 import { ComposeResolver } from './compose/compose.resolver.js';
 import { ComposeService } from './compose/compose.service.js';
@@ -65,6 +66,11 @@ const backupDockerClientProvider = {
     useFactory: createBackupDockerClient,
 };
 
+const pgExecClientProvider = {
+    provide: PG_EXEC_CLIENT_TOKEN,
+    useFactory: createPgExecClient,
+};
+
 /** A scheduled stack action is a Compose action, run by the compose service. */
 const stackActionRunnerProvider = {
     provide: STACK_ACTION_RUNNER_TOKEN,
@@ -103,6 +109,8 @@ const scheduleExecutorsProvider = {
         ComposeService,
         ComposeResolver,
         backupDockerClientProvider,
+        pgExecClientProvider,
+        PostgresBackupService,
         BackupService,
         BackupResolver,
         stackActionRunnerProvider,

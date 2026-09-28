@@ -35,11 +35,71 @@ export const QUIESCE_HELP: Record<QuiesceMode, string> = {
   stop: 'Safest. The container is down for the length of the backup.',
 };
 
+/**
+ * 'files' archives mounted folders. 'postgres' runs pg_dump inside the
+ * container, one dump per database. A config with no mode is 'files'.
+ */
+export type BackupMode = 'files' | 'postgres';
+
+/**
+ * Where a Postgres backup gets its login. 'env' reads POSTGRES_USER and
+ * POSTGRES_PASSWORD from the container on every run and stores nothing.
+ * 'custom' stores the user and password the form was given.
+ */
+export type PostgresCredentials = 'env' | 'custom';
+
+export interface PostgresBackupConfig {
+  /** The compose service that runs Postgres, for a stack schedule. */
+  service?: string;
+  /** Absent means 'env'. */
+  credentials?: PostgresCredentials;
+  /** Custom credentials only. */
+  user?: string;
+  /** Write only. The server never returns it. Empty on an update keeps the saved one. */
+  password?: string;
+  /** Response only: whether a password is saved. */
+  password_set?: boolean;
+  databases: string[];
+}
+
 export interface BackupConfig {
+  mode?: BackupMode;
   paths: string[] | BackupServiceConfig[];
+  postgres?: PostgresBackupConfig;
   destination?: string | null;
   retention_count?: number | null;
+  /** Ignored in postgres mode: pg_dump never pauses or stops the container. */
   quiesce?: QuiesceMode;
+}
+
+/** What the form needs to offer Postgres mode. Never carries a password. */
+export interface PostgresInfo {
+  is_postgres: boolean;
+  running: boolean;
+  /** POSTGRES_USER, or 'postgres' when the container sets none. */
+  env_user: string;
+  has_env_password: boolean;
+}
+
+/** A container, or one compose service of a stack. */
+export interface PostgresTarget {
+  target_type: TargetType;
+  target_id: string;
+  service?: string;
+}
+
+export interface PostgresDatabasesRequest extends PostgresTarget {
+  credentials: PostgresCredentials;
+  user?: string;
+  password?: string;
+  /** Use this schedule's saved password when `password` is empty. */
+  schedule_id?: number;
+}
+
+export interface PostgresDatabasesResult {
+  success: boolean;
+  databases: string[];
+  message: string;
 }
 
 /** One directory offered by api/paths.php while the user types. */

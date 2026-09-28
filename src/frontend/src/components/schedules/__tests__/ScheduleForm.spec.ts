@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import ScheduleForm from '../ScheduleForm.vue';
 import PathSuggestInput from '@/components/PathSuggestInput.vue';
 import { useScheduleStore } from '@/stores/schedules';
 import type { Schedule, QuiesceMode } from '@/types/schedule';
-import { makeSchedule } from '@/test/fixtures';
+import { makeContainer, makeSchedule } from '@/test/fixtures';
+import { useDockerStore } from '@/stores/docker';
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock('@/utils/csrf', () => ({ apiFetch, getCsrfToken: () => 'token' }));
@@ -218,5 +219,180 @@ describe('ScheduleForm update action', () => {
 
     const wrapper = await mountEdit(9);
     expect(cronPreset(wrapper)).toBe('daily_custom');
+  });
+});
+
+/** Answer the two Postgres calls; everything else gets an empty body. */
+function routePostgres(info: Record<string, unknown>, databases: string[] = ['app', 'postgres']) {
+  apiFetch.mockImplementation(async (url: string) => ({
+    ok: true,
+    status: 200,
+    json: async () => {
+      if (url.includes('action=postgres_info')) return info;
+      if (url.includes('action=postgres_databases')) return { success: true, databases, message: '' };
+      return {};
+    },
+  }));
+}
+
+/** The JSON body the form posted to an action. apiFetch is mocked, so it is still JSON. */
+function sentTo(action: string): Record<string, unknown> {
+  const call = apiFetch.mock.calls.find(([url]) => String(url).includes(`action=${action}`));
+  return JSON.parse(String((call?.[1] as RequestInit | undefined)?.body ?? '{}'));
+}
+
+const PG_INFO = { is_postgres: true, running: true, env_user: 'app', has_env_password: true };
+
+function pgMode(wrapper: VueWrapper): boolean {
+  return (wrapper.find('[id$="-pg-mode"]').element as HTMLInputElement).checked;
+}
+
+function button(wrapper: VueWrapper, text: string) {
+  return wrapper.findAll('button').filter((b) => b.text() === text)[0];
+}
+
+async function loadAndCreate(wrapper: VueWrapper) {
+  await button(wrapper, 'Load databases').trigger('click');
+  await flushPromises();
+  await button(wrapper, 'Create').trigger('click');
+  await flushPromises();
+}
+
+describe('ScheduleForm Postgres mode', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    apiFetch.mockReset();
+  });
+
+  it('turns on for a container the server says runs Postgres, and hides paths and quiesce', async () => {
+    routePostgres(PG_INFO);
+    const wrapper = mountForm({ targetId: 'db' });
+    await flushPromises();
+
+    expect(pgMode(wrapper)).toBe(true);
+    expect(wrapper.text()).toContain('Postgres detected');
+    expect(wrapper.find('[id$="-quiesce"]').exists()).toBe(false);
+    expect(wrapper.findAllComponents(PathSuggestInput)).toHaveLength(1); // destination only
+    expect(wrapper.text()).toContain('POSTGRES_USER (app)');
+  });
+
+  it('stays off for other containers', async () => {
+    routePostgres({ ...PG_INFO, is_postgres: false });
+    const wrapper = mountForm();
+    await flushPromises();
+
+    expect(pgMode(wrapper)).toBe(false);
+    expect(wrapper.find('[id$="-quiesce"]').exists()).toBe(true);
+  });
+
+  it('uses the container env by default and saves no credentials', async () => {
+    routePostgres(PG_INFO);
+    const store = useScheduleStore();
+    const create = vi.spyOn(store, 'createSchedule').mockResolvedValue({ success: true, id: 1 });
+    const wrapper = mountForm({ targetId: 'db' });
+    await flushPromises();
+
+    expect(wrapper.find('[id$="-pg-user"]').exists()).toBe(false);
+    expect(button(wrapper, 'Create').attributes('disabled')).toBeDefined();
+
+    await button(wrapper, 'Load databases').trigger('click');
+    await flushPromises();
+    expect(sentTo('postgres_databases')).toEqual({ target_type: 'container', target_id: 'db', credentials: 'env' });
+    expect(wrapper.text()).toContain('Found 2 databases');
+
+    // Untick "postgres", keep "app".
+    await wrapper.find('[id$="-pg-db-postgres"]').setValue(false);
+    await button(wrapper, 'Create').trigger('click');
+    await flushPromises();
+
+    const sent = create.mock.calls[0][0] as unknown as { backup_config: Record<string, unknown> };
+    expect(sent.backup_config).toEqual({
+      mode: 'postgres',
+      paths: [],
+      postgres: { credentials: 'env', databases: ['app'] },
+    });
+  });
+
+  it('sends a custom user and password when chosen', async () => {
+    routePostgres(PG_INFO, ['app']);
+    const store = useScheduleStore();
+    const create = vi.spyOn(store, 'createSchedule').mockResolvedValue({ success: true, id: 1 });
+    const wrapper = mountForm({ targetId: 'db' });
+    await flushPromises();
+
+    await wrapper.find('[id$="-pg-credentials"]').setValue('custom');
+    await wrapper.find('[id$="-pg-user"]').setValue('backup');
+    await wrapper.find('[id$="-pg-password"]').setValue('pw');
+    await loadAndCreate(wrapper);
+
+    expect(sentTo('postgres_databases')).toMatchObject({ credentials: 'custom', user: 'backup', password: 'pw' });
+    const sent = create.mock.calls[0][0] as unknown as { backup_config: { postgres: Record<string, unknown> } };
+    expect(sent.backup_config.postgres).toEqual({
+      credentials: 'custom',
+      user: 'backup',
+      password: 'pw',
+      databases: ['app'],
+    });
+  });
+
+  it('keeps the saved password on edit by sending it empty', async () => {
+    routePostgres(PG_INFO);
+    const store = useScheduleStore();
+    store.schedules = [
+      makeSchedule({
+        id: 7,
+        target_id: 'db',
+        action: 'backup',
+        backup_config: {
+          mode: 'postgres',
+          paths: [],
+          postgres: { credentials: 'custom', user: 'backup', password_set: true, databases: ['app'] },
+        },
+      }),
+    ];
+    const update = vi.spyOn(store, 'updateSchedule').mockResolvedValue(true);
+    const wrapper = mountForm({ targetId: 'db', editId: 7 });
+    await flushPromises();
+
+    expect(wrapper.find('[id$="-pg-password"]').attributes('placeholder')).toContain('Saved');
+    await button(wrapper, 'Update').trigger('click');
+    await flushPromises();
+
+    const sent = update.mock.calls[0][1] as unknown as { backup_config: { postgres: Record<string, unknown> } };
+    expect(sent.backup_config.postgres).toEqual({
+      credentials: 'custom',
+      user: 'backup',
+      password: '',
+      databases: ['app'],
+    });
+  });
+
+  it('picks the Postgres service of a stack and sends it', async () => {
+    routePostgres(PG_INFO, ['immich']);
+    const docker = useDockerStore();
+    docker.containers = [
+      makeContainer({
+        name: 'immich-server-1',
+        image: 'ghcr.io/immich-app/immich-server:release',
+        labels: { 'com.docker.compose.project': 'immich', 'com.docker.compose.service': 'server' },
+      }),
+      makeContainer({
+        name: 'immich-database-1',
+        image: 'ghcr.io/immich-app/postgres:14-vectorchord0.3.0',
+        labels: { 'com.docker.compose.project': 'immich', 'com.docker.compose.service': 'database' },
+      }),
+    ];
+    const store = useScheduleStore();
+    const create = vi.spyOn(store, 'createSchedule').mockResolvedValue({ success: true, id: 1 });
+    const wrapper = mountForm({ targetType: 'stack', targetId: 'immich' });
+    await flushPromises();
+
+    expect(pgMode(wrapper)).toBe(true);
+    expect((wrapper.find('[id$="-pg-service"]').element as HTMLSelectElement).value).toBe('database');
+    expect(sentTo('postgres_info')).toEqual({ target_type: 'stack', target_id: 'immich', service: 'database' });
+
+    await loadAndCreate(wrapper);
+    const sent = create.mock.calls[0][0] as unknown as { backup_config: { postgres: Record<string, unknown> } };
+    expect(sent.backup_config.postgres).toEqual({ service: 'database', credentials: 'env', databases: ['immich'] });
   });
 });

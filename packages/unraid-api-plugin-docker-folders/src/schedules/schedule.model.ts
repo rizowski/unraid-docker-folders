@@ -123,3 +123,68 @@ export class DockerFoldersScheduleToggle {
     @IsBoolean()
     enabled!: boolean;
 }
+
+/** What the backup form needs to offer Postgres mode. Never carries a password. */
+@ObjectType()
+export class DockerFoldersPostgresInfo {
+    @Field(() => Boolean) isPostgres!: boolean;
+    @Field(() => Boolean) running!: boolean;
+    @Field(() => String) envUser!: string;
+    @Field(() => Boolean) hasEnvPassword!: boolean;
+}
+
+@ObjectType()
+export class DockerFoldersPostgresDatabases {
+    @Field(() => Boolean) success!: boolean;
+    @Field(() => [String]) databases!: string[];
+    @Field(() => String) message!: string;
+}
+
+/** A container, or one compose service of a stack. */
+@InputType()
+export class DockerFoldersPostgresTargetInput {
+    @Field(() => String)
+    @IsIn(['container', 'stack'])
+    targetType!: string;
+
+    @Field(() => String)
+    @IsString()
+    @MaxLength(255)
+    targetId!: string;
+
+    @Field(() => String, { nullable: true })
+    @IsOptional()
+    @IsString()
+    @MaxLength(255)
+    service?: string;
+}
+
+/**
+ * A mutation, not a query, because it can carry a password. With custom
+ * credentials, scheduleId and no password, that schedule's saved password
+ * is used.
+ */
+@InputType()
+export class DockerFoldersPostgresDatabasesInput extends DockerFoldersPostgresTargetInput {
+    @Field(() => String, { nullable: true })
+    @IsOptional()
+    @IsIn(['env', 'custom'])
+    credentials?: string;
+
+    @Field(() => String, { nullable: true })
+    @IsOptional()
+    @IsString()
+    @MaxLength(63)
+    user?: string;
+
+    @Field(() => String, { nullable: true })
+    @IsOptional()
+    @IsString()
+    @MaxLength(1024)
+    password?: string;
+
+    @Field(() => Int, { nullable: true })
+    @IsOptional()
+    @IsInt()
+    scheduleId?: number;
+}

@@ -382,6 +382,9 @@ function fakeTar(opts: { writeFile?: boolean; fail?: boolean; output?: string } 
             }
             return { success: !fail, output };
         },
+        async createArchiveFromDir(archivePath): Promise<ArchiveOutcome> {
+            return { success: !fail && existsSync(dirname(archivePath)), output };
+        },
     };
 
     return { tar, calls };

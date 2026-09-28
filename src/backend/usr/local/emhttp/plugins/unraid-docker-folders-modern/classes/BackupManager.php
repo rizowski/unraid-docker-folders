@@ -3,6 +3,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/DockerClient.php';
+require_once __DIR__ . '/PostgresBackup.php';
 
 class BackupManager
 {
@@ -104,6 +105,107 @@ class BackupManager
       'backup_file' => $archivePath,
       'backup_size' => $size,
     ];
+  }
+
+  /**
+   * Back up a Postgres container with pg_dump, one dump per database.
+   *
+   * The dumps land in a staging directory inside the destination, not in
+   * /tmp, because /tmp is RAM on Unraid and a large dump would fill it. The
+   * archive gets the same name a file backup would, so listing, deleting and
+   * retention treat both modes alike. The container is never paused or
+   * stopped: pg_dump reads a consistent snapshot of a running database.
+   *
+   * A stack runs the dump in the container of postgres.service, and names
+   * the archive "<project>.<service>", as backupStack() does, so the stack's
+   * backup list shows it.
+   *
+   * @param string $targetType 'container' or 'stack'
+   * @param string $targetId A container name, or a compose project
+   * @param array $pg The postgres block of a backup_config
+   * @param string|null $destination
+   * @param int|null $retention
+   * @return array
+   */
+  public function backupPostgres($targetType, $targetId, array $pg, $destination = null, $retention = null)
+  {
+    $destination = $this->resolveDestination($destination);
+    $retention = $this->resolveRetention($retention);
+
+    if (!$this->ensureDirectory($destination)) {
+      return ['success' => false, 'message' => "Cannot create backup directory: {$destination}"];
+    }
+
+    $postgres = new PostgresBackup($this->dockerClient);
+    $service = isset($pg['service']) ? $pg['service'] : null;
+    $target = $postgres->resolveTarget($targetType, $targetId, $service);
+    if (!$target) {
+      return [
+        'success' => false,
+        'message' => $targetType === 'stack'
+          ? "Service '{$service}' not found in stack '{$targetId}'"
+          : "Container '{$targetId}' not found",
+      ];
+    }
+
+    $staging = rtrim($destination, '/') . '/.dfm-staging-' . getmypid() . '-' . time();
+    if (!mkdir($staging, 0700)) {
+      return ['success' => false, 'message' => "Cannot create staging directory in {$destination}"];
+    }
+
+    $archiveName = $this->generateArchiveName($target['prefix']);
+    $archivePath = rtrim($destination, '/') . '/' . $archiveName;
+
+    try {
+      $dump = $postgres->dumpAll($target['id'], $pg, $staging);
+      if (!$dump['success']) {
+        return ['success' => false, 'message' => 'Postgres backup failed: ' . $dump['message']];
+      }
+
+      $archive = $this->createArchiveFromDir($archivePath, $staging);
+      if (!$archive['success']) {
+        return [
+          'success' => false,
+          'message' => "Failed to create archive: {$archiveName}" . ($archive['output'] !== '' ? ': ' . $archive['output'] : ''),
+        ];
+      }
+    } finally {
+      self::removeStaging($staging);
+    }
+
+    $size = file_exists($archivePath) ? filesize($archivePath) : 0;
+    $pruned = $this->pruneOldBackups($destination, $target['prefix'], $retention);
+    $count = count($pg['databases']);
+    $message = "Backup created: {$archiveName} ({$count} database" . ($count === 1 ? '' : 's') . ')'
+      . ($pruned ? ", pruned {$pruned} old backup(s)" : '');
+
+    return [
+      'success' => true,
+      'message' => $message,
+      'backup_file' => $archivePath,
+      'backup_size' => $size,
+    ];
+  }
+
+  /**
+   * Remove a staging directory and the flat files in it. It holds only the
+   * numbered dumps and manifest.json that dumpAll() wrote, so no recursion.
+   */
+  private static function removeStaging($dir)
+  {
+    if (!is_dir($dir) || is_link($dir)) {
+      return;
+    }
+    foreach (scandir($dir) ?: [] as $name) {
+      if ($name === '.' || $name === '..') {
+        continue;
+      }
+      $path = $dir . '/' . $name;
+      if (is_file($path) || is_link($path)) {
+        @unlink($path);
+      }
+    }
+    @rmdir($dir);
   }
 
   public function backupStack(
@@ -689,12 +791,19 @@ class BackupManager
 
   private function createArchive($archivePath, $hostPaths)
   {
-    $pathArgs = [];
-    foreach ($hostPaths as $p) {
-      $pathArgs[] = escapeshellarg($p);
-    }
+    return $this->runTar($archivePath, implode(' ', array_map('escapeshellarg', $hostPaths)));
+  }
 
-    $cmd = 'tar czf ' . escapeshellarg($archivePath) . ' ' . implode(' ', $pathArgs) . ' 2>&1';
+  /**
+   * Write one archive with tar, and delete it again if tar fails.
+   *
+   * @param string $archivePath
+   * @param string $sources The tar arguments after the archive, already escaped
+   * @return array ['success' => bool, 'output' => string]
+   */
+  private function runTar($archivePath, $sources)
+  {
+    $cmd = 'tar czf ' . escapeshellarg($archivePath) . ' ' . $sources . ' 2>&1';
     exec($cmd, $output, $exitCode);
 
     // A failed archive is reported as a failure, so it must not stay on disk.
@@ -713,6 +822,17 @@ class BackupManager
       'output' => implode('; ', array_slice($output, -3)),
     ];
   }
+
+
+  /**
+   * Archive the contents of $dir with paths relative to it, so the archive
+   * holds "./01.dump" rather than the full host path of the staging dir.
+   */
+  private function createArchiveFromDir($archivePath, $dir)
+  {
+    return $this->runTar($archivePath, '-C ' . escapeshellarg($dir) . ' .');
+  }
+
 
   private function pruneOldBackups($destination, $prefix, $retention)
   {

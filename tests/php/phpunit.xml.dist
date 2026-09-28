@@ -64,6 +64,10 @@
     <testsuite name="BackupSafety">
       <file>BackupSafetyTest.php</file>
     </testsuite>
+    <testsuite name="PostgresBackup">
+      <file>DockerExecDemuxTest.php</file>
+      <file>PostgresBackupTest.php</file>
+    </testsuite>
     <testsuite name="SecurityAdvisor">
       <file>SecurityAdvisorTest.php</file>
     </testsuite>

@@ -767,6 +767,22 @@ const DELETE_BACKUP = `
   }
 `;
 
+const POSTGRES_INFO = `
+  mutation DockerFoldersPostgresInfo($input: DockerFoldersPostgresTargetInput!) {
+    dockerFoldersPostgresInfo(input: $input) {
+      isPostgres running envUser hasEnvPassword
+    }
+  }
+`;
+
+const POSTGRES_DATABASES = `
+  mutation DockerFoldersPostgresDatabases($input: DockerFoldersPostgresDatabasesInput!) {
+    dockerFoldersPostgresDatabases(input: $input) {
+      success databases message
+    }
+  }
+`;
+
 function toSchedule(row: GqlSchedule): Schedule {
   return {
     id: row.id,
@@ -1339,6 +1355,45 @@ export const graphqlBackend: Backend = {
 
     deleteBackup: async (body) =>
       mapResult(await gql<{ deleteDockerFoldersBackup: boolean }>(DELETE_BACKUP, { path: body.path }), () => ({})),
+
+    postgresInfo: async (target) =>
+      mapResult(
+        await gql<{
+          dockerFoldersPostgresInfo: {
+            isPostgres: boolean;
+            running: boolean;
+            envUser: string;
+            hasEnvPassword: boolean;
+          };
+        }>(POSTGRES_INFO, {
+          input: { targetType: target.target_type, targetId: target.target_id, service: target.service },
+        }),
+        ({ dockerFoldersPostgresInfo: info }) => ({
+          is_postgres: info.isPostgres,
+          running: info.running,
+          env_user: info.envUser,
+          has_env_password: info.hasEnvPassword,
+        }),
+      ),
+
+    postgresDatabases: async (body) =>
+      mapResult(
+        await gql<{ dockerFoldersPostgresDatabases: { success: boolean; databases: string[]; message: string } }>(
+          POSTGRES_DATABASES,
+          {
+            input: {
+              targetType: body.target_type,
+              targetId: body.target_id,
+              service: body.service,
+              credentials: body.credentials,
+              user: body.user,
+              password: body.password,
+              scheduleId: body.schedule_id,
+            },
+          },
+        ),
+        (data) => data.dockerFoldersPostgresDatabases,
+      ),
   },
 
   compose: {

@@ -10,6 +10,7 @@ import {
     readdirSync,
     readSync,
     realpathSync,
+    rmSync,
     statSync,
     unlinkSync,
 } from 'node:fs';
@@ -19,6 +20,7 @@ import Dockerode from 'dockerode';
 import { DOCKER_SOCKET_PATH } from '../containers/docker-client.js';
 import { DatabaseService } from '../db/database.service.js';
 import { normalizePath, pathIsWithin, pathIsWithinAny, sanitizeArchivePrefix } from '../paths/paths.js';
+import { type PostgresConfig, PostgresBackupService } from './postgres-backup.js';
 
 /**
  * Container filesystem backups, ported from `classes/BackupManager.php`.
@@ -275,6 +277,8 @@ export interface ArchiveOutcome {
  */
 export interface TarRunner {
     createArchive(archivePath: string, hostPaths: string[]): Promise<ArchiveOutcome>;
+    /** Archive the contents of `dir` with paths relative to it (`tar -C dir .`). */
+    createArchiveFromDir(archivePath: string, dir: string): Promise<ArchiveOutcome>;
 }
 
 export const TAR_RUNNER_TOKEN = 'DOCKER_FOLDERS_TAR_RUNNER';
@@ -317,38 +321,54 @@ function tailLines(text: string, count: number): string {
 export function createTarRunner(): TarRunner {
     return {
         createArchive(archivePath, hostPaths) {
-            return new Promise((resolve) => {
-                let tail = '';
-                let settled = false;
-
-                const append = (chunk: Buffer) => {
-                    tail += chunk.toString('utf8');
-                    if (tail.length > OUTPUT_TAIL_CAP) tail = tail.slice(-OUTPUT_TAIL_CAP);
-                };
-
-                const finish = (success: boolean) => {
-                    if (settled) return;
-                    settled = true;
-                    resolve({ success, output: tailLines(tail, 3) });
-                };
-
+            return runTar(['czf', archivePath, ...hostPaths]);
+        },
+        async createArchiveFromDir(archivePath, dir) {
+            const outcome = await runTar(['czf', archivePath, '-C', dir, '.']);
+            // A failed archive must not stay on disk, as in PHP's createArchiveFromDir().
+            if (!outcome.success) {
                 try {
-                    const child = spawn('tar', ['czf', archivePath, ...hostPaths], {
-                        stdio: ['ignore', 'pipe', 'pipe'],
-                    });
-                    child.stdout?.on('data', append);
-                    child.stderr?.on('data', append);
-                    child.on('error', (error) => {
-                        append(Buffer.from(String(error.message ?? error)));
-                        finish(false);
-                    });
-                    child.on('close', (code) => finish(code === 0));
-                } catch (error) {
-                    resolve({ success: false, output: String((error as Error)?.message ?? error) });
+                    unlinkSync(archivePath);
+                } catch {
+                    // Not there.
                 }
-            });
+            }
+            return outcome;
         },
     };
+}
+
+function runTar(args: string[]): Promise<ArchiveOutcome> {
+    return new Promise((resolve) => {
+        let tail = '';
+        let settled = false;
+
+        const append = (chunk: Buffer) => {
+            tail += chunk.toString('utf8');
+            if (tail.length > OUTPUT_TAIL_CAP) tail = tail.slice(-OUTPUT_TAIL_CAP);
+        };
+
+        const finish = (success: boolean) => {
+            if (settled) return;
+            settled = true;
+            resolve({ success, output: tailLines(tail, 3) });
+        };
+
+        try {
+            const child = spawn('tar', args, {
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            child.stdout?.on('data', append);
+            child.stderr?.on('data', append);
+            child.on('error', (error) => {
+                append(Buffer.from(String(error.message ?? error)));
+                finish(false);
+            });
+            child.on('close', (code) => finish(code === 0));
+        } catch (error) {
+            resolve({ success: false, output: String((error as Error)?.message ?? error) });
+        }
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -526,8 +546,88 @@ export class BackupService {
         private readonly tar: TarRunner = createTarRunner(),
         @Optional()
         @Inject(BACKUP_ALLOWED_ROOTS_TOKEN)
-        private readonly allowedRoots: readonly string[] = DEFAULT_BACKUP_ALLOWED_ROOTS
+        private readonly allowedRoots: readonly string[] = DEFAULT_BACKUP_ALLOWED_ROOTS,
+        // Named explicitly: a `| null` type emits Object as its metadata,
+        // which Nest cannot resolve, and @Optional() would then quietly
+        // pass nothing.
+        @Optional()
+        @Inject(PostgresBackupService)
+        private readonly postgres: PostgresBackupService | null = null
     ) {}
+
+    /**
+     * Back up a Postgres container with pg_dump, one dump per database.
+     * `BackupManager::backupPostgres`.
+     *
+     * The dumps land in a staging directory inside the destination, not in
+     * /tmp, because /tmp is RAM on Unraid. The archive gets the name a file
+     * backup would, so listing, deleting and retention treat both modes
+     * alike. The container is never paused or stopped.
+     */
+    async backupPostgres(
+        targetType: string,
+        targetId: string,
+        pg: PostgresConfig,
+        destination: string | null = null,
+        retention: number | null = null
+    ): Promise<BackupResult> {
+        if (this.postgres === null) {
+            return { success: false, message: 'Postgres backup is not available' };
+        }
+        const resolvedDestination = this.resolveDestination(destination);
+        const resolvedRetention = this.resolveRetention(retention);
+
+        if (!this.ensureDirectory(resolvedDestination)) {
+            return { success: false, message: `Cannot create backup directory: ${resolvedDestination}` };
+        }
+
+        const service = pg.service ?? null;
+        const target = await this.postgres.resolveTarget(targetType, targetId, service);
+        if (!target) {
+            return {
+                success: false,
+                message:
+                    targetType === 'stack'
+                        ? `Service '${service}' not found in stack '${targetId}'`
+                        : `Container '${targetId}' not found`,
+            };
+        }
+
+        const base = stripTrailingSlashes(resolvedDestination);
+        const staging = `${base}/.dfm-staging-${process.pid}-${Math.floor(Date.now() / 1000)}`;
+        try {
+            mkdirSync(staging, { mode: 0o700 });
+        } catch {
+            return { success: false, message: `Cannot create staging directory in ${resolvedDestination}` };
+        }
+
+        const archiveName = generateArchiveName(target.prefix);
+        const archivePath = `${base}/${archiveName}`;
+
+        try {
+            const dump = await this.postgres.dumpAll(target.id, pg, staging);
+            if (!dump.success) {
+                return { success: false, message: `Postgres backup failed: ${dump.message}` };
+            }
+            const archive = await this.tar.createArchiveFromDir(archivePath, staging);
+            if (!archive.success) {
+                return {
+                    success: false,
+                    message: `Failed to create archive: ${archiveName}${archive.output !== '' ? `: ${archive.output}` : ''}`,
+                };
+            }
+        } finally {
+            removeStaging(staging);
+        }
+
+        const size = statOrNull(archivePath)?.size ?? 0;
+        const pruned = this.pruneOldBackups(resolvedDestination, target.prefix, resolvedRetention);
+        const count = pg.databases.length;
+        const message =
+            `Backup created: ${archiveName} (${count} database${count === 1 ? '' : 's'})` +
+            (pruned ? `, pruned ${pruned} old backup(s)` : '');
+        return { success: true, message, backupFile: archivePath, backupSize: size };
+    }
 
     /**
      * Archive one container's matched paths, quiescing it first if asked.
@@ -1137,6 +1237,11 @@ export class BackupService {
 
         return deleted;
     }
+}
+
+/** Remove a staging dir and the dumps in it. rmSync does not follow symlinks. */
+function removeStaging(dir: string): void {
+    rmSync(dir, { recursive: true, force: true });
 }
 
 // ---------------------------------------------------------------------------

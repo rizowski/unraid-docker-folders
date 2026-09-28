@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/classes/Database.php';
 require_once dirname(__DIR__) . '/classes/CronManager.php';
 require_once dirname(__DIR__) . '/classes/ScheduleManager.php';
 require_once dirname(__DIR__) . '/classes/BackupManager.php';
+require_once dirname(__DIR__) . '/classes/PostgresBackup.php';
 require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 header('Content-Type: application/json');
@@ -198,6 +199,65 @@ function handlePost()
     return;
   }
 
+  // What the backup form needs to offer Postgres mode. Body: { target_type,
+  // target_id, service? }, where service names the compose service of a
+  // stack. Never returns a password.
+  if ($action === 'postgres_info') {
+    $postgres = new PostgresBackup();
+    $target = requirePostgresTarget($postgres, getRequestData());
+    $info = $postgres->info($target['id']);
+    if ($info === null) {
+      errorResponse('Container not found', 404);
+    }
+    jsonResponse($info);
+    return;
+  }
+
+  // List the databases. POST, because the body can carry a password. Body:
+  // { target_type, target_id, service?, credentials, user?, password?,
+  // schedule_id? }. With custom credentials, schedule_id and no password,
+  // the saved password of that schedule is used, so the edit form can reload
+  // the list without asking for it again.
+  if ($action === 'postgres_databases') {
+    $data = getRequestData();
+    $postgres = new PostgresBackup();
+    $target = requirePostgresTarget($postgres, $data);
+
+    $pg = [
+      'credentials' => PostgresBackup::credentialsOf($data),
+      'user' => isset($data['user']) ? $data['user'] : '',
+      'password' => isset($data['password']) && is_string($data['password']) ? $data['password'] : '',
+    ];
+    if ($pg['credentials'] === PostgresBackup::CREDENTIALS_CUSTOM) {
+      if (!PostgresBackup::isValidUser($pg['user'])) {
+        errorResponse('Invalid Postgres user', 400);
+      }
+      if (strlen($pg['password']) > PostgresBackup::MAX_PASSWORD_LENGTH) {
+        errorResponse('Postgres password is too long', 400);
+      }
+      if ($pg['password'] === '' && !empty($data['schedule_id'])) {
+        // Only a schedule with this same target lends its password.
+        $id = (int) $data['schedule_id'];
+        $stored = $manager->getSchedule($id);
+        $storedService = $stored['backup_config']['postgres']['service'] ?? null;
+        if ($stored
+          && $stored['target_type'] === $data['target_type']
+          && $stored['target_id'] === $data['target_id']
+          && ($data['target_type'] === 'container' || $storedService === ($data['service'] ?? null))
+        ) {
+          $pg = PostgresBackup::mergeStoredPassword(
+            ['mode' => PostgresBackup::MODE_POSTGRES, 'postgres' => $pg],
+            $manager->getStoredBackupConfig($id)
+          )['postgres'];
+        }
+      }
+    }
+
+    $credentials = $postgres->resolveCredentials($target['id'], $pg);
+    jsonResponse($postgres->listDatabases($target['id'], $credentials['user'], $credentials['password']));
+    return;
+  }
+
   if ($action === 'delete_backup') {
     $data = getRequestData();
     if (empty($data['path'])) {
@@ -258,6 +318,28 @@ function validateScheduleFields($data)
   if (($data['action'] ?? null) === 'update' && ($data['target_type'] ?? null) === 'stack') {
     errorResponse('Update is not supported for compose stacks', 400);
   }
+}
+
+/**
+ * The container a Postgres request names, or a 400 or 404. A stack names its
+ * compose service, which resolves through the compose labels.
+ */
+function requirePostgresTarget(PostgresBackup $postgres, $data)
+{
+  $type = is_array($data) && isset($data['target_type']) ? $data['target_type'] : '';
+  $id = is_array($data) && isset($data['target_id']) ? $data['target_id'] : '';
+  $service = is_array($data) && isset($data['service']) ? $data['service'] : null;
+  if (!in_array($type, ['container', 'stack'], true) || !PostgresBackup::isValidServiceName($id)) {
+    errorResponse('Invalid target', 400);
+  }
+  if ($type === 'stack' && !PostgresBackup::isValidServiceName($service)) {
+    errorResponse('Invalid service name', 400);
+  }
+  $target = $postgres->resolveTarget($type, $id, $type === 'stack' ? $service : null);
+  if (!$target) {
+    errorResponse('Container not found', 404);
+  }
+  return $target;
 }
 
 function handlePut()

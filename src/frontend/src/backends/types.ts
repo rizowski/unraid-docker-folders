@@ -23,6 +23,10 @@ import type { ContainerStats } from '@/stores/stats';
 import type { ImageUpdateStatus } from '@/stores/updates';
 import type {
   BackupEntry,
+  PostgresDatabasesRequest,
+  PostgresDatabasesResult,
+  PostgresInfo,
+  PostgresTarget,
   PathSuggestion,
   Schedule,
   ScheduleHistoryEntry,
@@ -202,6 +206,10 @@ export interface Backend {
     history(id: number, limit: number): Promise<BackendResult<{ history?: ScheduleHistoryEntry[] }>>;
     backups(targetType: string, targetId: string): Promise<BackendResult<{ backups?: BackupEntry[] }>>;
     deleteBackup(body: { path: string }): Promise<BackendResult<ErrorBody>>;
+    postgresInfo(target: PostgresTarget): Promise<BackendResult<ErrorBody & Partial<PostgresInfo>>>;
+    postgresDatabases(
+      body: PostgresDatabasesRequest,
+    ): Promise<BackendResult<ErrorBody & Partial<PostgresDatabasesResult>>>;
   };
 
   compose: {
