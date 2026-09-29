@@ -5,7 +5,7 @@ import { finished } from 'node:stream/promises';
 import Dockerode from 'dockerode';
 
 import { DOCKER_SOCKET_PATH } from '../containers/docker-client.js';
-import { safePathComponent } from '../paths/paths.js';
+import { safePathComponent, sanitizeArchivePrefix } from '../paths/paths.js';
 
 /**
  * Postgres backup mode, ported from `classes/PostgresBackup.php` and
@@ -130,12 +130,64 @@ export function validateConfig(config: unknown, targetType: string, passwordRequ
     if (!Array.isArray(databases) || databases.length === 0) return 'Pick at least one database';
     if (databases.length > MAX_DATABASES) return `Too many databases (limit ${MAX_DATABASES})`;
     const seen = new Set<string>();
+    const files = new Map<string, string>();
     for (const db of databases) {
         if (!isValidDatabaseName(db)) return 'Invalid database name';
         if (seen.has(db)) return `Database listed twice: ${db}`;
         seen.add(db);
+
+        // Each database gets its own archive, named after it. Two names that
+        // sanitize to the same file name would share one archive series, and
+        // each run would prune the other's backups.
+        const file = fileNameOf(db);
+        if (file === null) return `Database ${db} has no letters or digits to name its backup file`;
+        const other = files.get(file);
+        if (other !== undefined) return `Databases ${other} and ${db} map to the same file name`;
+        files.set(file, db);
     }
     return null;
+}
+
+/**
+ * The name of a database's backup files: its archive is
+ * `<target>.<file name>.<stamp>.tar.gz` and holds `<file name>.dump`.
+ * Mirrors `PostgresBackup::fileNameOf`.
+ */
+export function fileNameOf(database: string): string | null {
+    return sanitizeArchivePrefix(database);
+}
+
+/**
+ * The archive prefixes, `<prefix>.<file name>`, that the Postgres schedules
+ * of one target write, for the backup list. A stack's own scope already
+ * matches them, so only a container needs these. Mirrors
+ * `PostgresBackup::archivePrefixesFor`.
+ */
+export function archivePrefixesFor(
+    schedules: { target_id: string; backup_config: string | null }[],
+    targetType: string,
+    targetId: string
+): string[] {
+    if (targetType !== 'container') return [];
+
+    const prefixes = new Set<string>();
+    for (const schedule of schedules) {
+        if (schedule.target_id !== targetId || !schedule.backup_config) continue;
+        let config: unknown;
+        try {
+            config = JSON.parse(schedule.backup_config);
+        } catch {
+            continue;
+        }
+        if (modeOf(config) !== MODE_POSTGRES) continue;
+        const databases = (config as { postgres?: { databases?: unknown } }).postgres?.databases;
+        if (!Array.isArray(databases)) continue;
+        for (const database of databases) {
+            const file = typeof database === 'string' ? fileNameOf(database) : null;
+            if (file !== null) prefixes.add(`${targetId}.${file}`);
+        }
+    }
+    return [...prefixes];
 }
 
 /** `PostgresBackup::normalizeConfig`. Key order matches PHP's JSON output. */
@@ -493,6 +545,16 @@ export interface DatabaseList {
     message: string;
 }
 
+/** What `prepareDump` found: the login and pg_dump's version, or why not. */
+export interface ReadyDump {
+    success: true;
+    message: string;
+    user: string;
+    env: string[];
+    version: string;
+}
+export type PreparedDump = ReadyDump | { success: false; message: string };
+
 @Injectable()
 export class PostgresBackupService {
     constructor(@Inject(PG_EXEC_CLIENT_TOKEN) private readonly docker: PgExecClient) {}
@@ -559,58 +621,72 @@ export class PostgresBackupService {
         return { success: true, databases: run.stdout.split(/\r?\n/).filter((line) => line !== ''), message: '' };
     }
 
-    /** Dump each database into `stagingDir` as 01.dump, 02.dump, ..., plus manifest.json. */
-    async dumpAll(container: string, pg: PostgresConfig, stagingDir: string): Promise<{ success: boolean; message: string }> {
+    /**
+     * Resolve the login and read pg_dump's version, once per run. `dumpOne`
+     * takes the result for each database.
+     */
+    async prepareDump(container: string, pg: Partial<PostgresConfig>): Promise<PreparedDump> {
         const credentials = await this.resolveCredentials(container, pg);
         if (!isValidUser(credentials.user)) {
             return { success: false, message: 'The container env holds an invalid Postgres user' };
         }
-        const env = connectionEnv(credentials.password);
 
         const version = await this.capture(container, ['pg_dump', '--version'], [], QUERY_TIMEOUT_MS);
         if (!version.ok) return { success: false, message: describeFailure(version, 'pg_dump') };
 
+        return {
+            success: true,
+            message: '',
+            user: credentials.user,
+            env: connectionEnv(credentials.password),
+            version: version.stdout.trim(),
+        };
+    }
+
+    /**
+     * Dump one database into `stagingDir` as `<file name>.dump`, with a
+     * manifest.json that names the database, because the file name is the
+     * sanitized form of it.
+     */
+    async dumpOne(
+        container: string,
+        prepared: ReadyDump,
+        database: string,
+        stagingDir: string
+    ): Promise<{ success: boolean; message: string }> {
         const dir = stagingDir.replace(/\/+$/, '');
+        const file = `${fileNameOf(database)}.dump`;
+        const path = `${dir}/${file}`;
+        const out = createWriteStream(path, { mode: 0o600 });
+        let writeError = '';
+        out.on('error', (error) => {
+            writeError = error.message;
+        });
+
+        const run = await this.docker.exec(
+            container,
+            ['pg_dump', '-U', prepared.user, '-Fc', '-d', database],
+            prepared.env,
+            out,
+            DUMP_TIMEOUT_MS
+        );
+        out.end();
+        // Rejects when the write stream failed, which writeError already holds.
+        await finished(out).catch(() => undefined);
+
+        if (writeError !== '') return { success: false, message: 'could not write the dump (disk full?)' };
+        if (!run.ok) return { success: false, message: describeFailure(run, 'pg_dump') };
+
         const manifest = {
             format: 'pg_dump custom (-Fc), restore with pg_restore',
             container,
-            user: credentials.user,
-            pg_dump_version: version.stdout.trim(),
+            database,
+            file,
+            size: statSync(path).size,
+            user: prepared.user,
+            pg_dump_version: prepared.version,
             created_at: new Date().toISOString(),
-            databases: [] as { file: string; database: string; size: number }[],
         };
-
-        let i = 0;
-        for (const database of pg.databases) {
-            i++;
-            const file = `${String(i).padStart(2, '0')}.dump`;
-            const path = `${dir}/${file}`;
-            const out = createWriteStream(path, { mode: 0o600 });
-            let writeError = '';
-            out.on('error', (error) => {
-                writeError = error.message;
-            });
-
-            const run = await this.docker.exec(
-                container,
-                ['pg_dump', '-U', credentials.user, '-Fc', '-d', database],
-                env,
-                out,
-                DUMP_TIMEOUT_MS
-            );
-            out.end();
-            // Rejects when the write stream failed, which writeError already holds.
-            await finished(out).catch(() => undefined);
-
-            if (writeError !== '') {
-                return { success: false, message: `Database ${database}: could not write the dump (disk full?)` };
-            }
-            if (!run.ok) {
-                return { success: false, message: `Database ${database}: ${describeFailure(run, 'pg_dump')}` };
-            }
-            manifest.databases.push({ file, database, size: statSync(path).size });
-        }
-
         try {
             writeFileSync(`${dir}/manifest.json`, `${JSON.stringify(manifest, null, 4)}\n`);
         } catch {

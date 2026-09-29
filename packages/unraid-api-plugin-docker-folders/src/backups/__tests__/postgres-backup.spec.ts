@@ -1,17 +1,19 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough, Writable } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DatabaseService } from '../../db/database.service.js';
-import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
+import { createMigratedDatabase, seedSetting, type TempDatabase } from '../../folders/__tests__/migrate.js';
 import { BackupService, createTarRunner, type BackupDockerClient } from '../backup.service.js';
 import {
     DockerStreamDemuxer,
     type ExecResult,
+    archivePrefixesFor,
     envLooksLikePostgres,
+    fileNameOf,
     mergeStoredPassword,
     normalizeConfig,
     type PgExecClient,
@@ -168,8 +170,29 @@ describe('config rules', () => {
         }
     );
 
-    it('allows a slash in a database name, because dump files are numbered', () => {
+    it('allows a slash in a database name, because the file name is sanitized', () => {
         expect(validateConfig(config({ databases: ['../etc/x'] }), 'container')).toBeNull();
+        expect(fileNameOf('../etc/x')).toBe('etc-x');
+    });
+
+    it('refuses databases that share a file name, as PHP does', () => {
+        expect(validateConfig(config({ databases: ['my db', 'my-db'] }), 'container')).toBe(
+            'Databases my db and my-db map to the same file name'
+        );
+        expect(validateConfig(config({ databases: ['___'] }), 'container')).toBe(
+            'Database ___ has no letters or digits to name its backup file'
+        );
+    });
+
+    it("lists the archive prefixes of a container's Postgres schedules", () => {
+        const schedules = [
+            { target_id: 'db', backup_config: JSON.stringify(config({ databases: ['app', 'my db'] })) },
+            { target_id: 'db', backup_config: JSON.stringify({ paths: ['/config'] }) },
+            { target_id: 'other', backup_config: JSON.stringify(config({ databases: ['x'] })) },
+            { target_id: 'db', backup_config: null },
+        ];
+        expect(archivePrefixesFor(schedules, 'container', 'db')).toEqual(['db.app', 'db.my-db']);
+        expect(archivePrefixesFor(schedules, 'stack', 'db')).toEqual([]);
     });
 
     it('rejects bad users, duplicates and a missing password', () => {
@@ -345,43 +368,47 @@ describe('PostgresBackupService', () => {
         expect(calls[0].cmd).not.toContain('pw');
     });
 
-    it('writes numbered files and a manifest', async () => {
+    it('writes a sanitized file and a manifest for one database', async () => {
         const { client, calls } = fakeExec();
-        const result = await new PostgresBackupService(client).dumpAll(
-            'db',
-            { credentials: 'env', databases: ['../evil', 'app'] },
-            dir
-        );
+        const svc = new PostgresBackupService(client);
+        const prepared = await svc.prepareDump('db', { credentials: 'env', databases: ['../evil'] });
+        if (!prepared.success) throw new Error(prepared.message);
+
+        const result = await svc.dumpOne('db', prepared, '../evil', dir);
         expect(result).toEqual({ success: true, message: '' });
-        expect(readFileSync(join(dir, '01.dump'), 'utf8')).toBe('PGDMP-../evil');
-        expect(readFileSync(join(dir, '02.dump'), 'utf8')).toBe('PGDMP-app');
+        expect(readFileSync(join(dir, 'evil.dump'), 'utf8')).toBe('PGDMP-../evil');
         const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
-        expect(manifest.databases[0].database).toBe('../evil');
+        expect(manifest).toMatchObject({
+            database: '../evil',
+            file: 'evil.dump',
+            user: 'app',
+            pg_dump_version: 'pg_dump (PostgreSQL) 16.4',
+        });
         expect(calls[1].cmd).toEqual(['pg_dump', '-U', 'app', '-Fc', '-d', '../evil']);
         expect(calls[1].env).toEqual(['PGPASSWORD=from-env']);
-        expect(readdirSync(dir).sort()).toEqual(['01.dump', '02.dump', 'manifest.json']);
+        expect(readdirSync(dir).sort()).toEqual(['evil.dump', 'manifest.json']);
     });
 
-    it('names the database that failed, without the password', async () => {
+    it('reports why a database failed, without the password', async () => {
         const { client } = fakeExec({
             missing: { ok: false, exitCode: 1, error: '', stderr: 'pg_dump: error: database "missing" does not exist\nmore' },
         });
-        const result = await new PostgresBackupService(client).dumpAll(
-            'db',
-            { credentials: 'custom', user: 'app', password: 'pw', databases: ['missing'] },
-            dir
-        );
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Database missing: pg_dump: error: database "missing" does not exist');
+        const svc = new PostgresBackupService(client);
+        const prepared = await svc.prepareDump('db', { credentials: 'custom', user: 'app', password: 'pw' });
+        if (!prepared.success) throw new Error(prepared.message);
+
+        const result = await svc.dumpOne('db', prepared, 'missing', dir);
+        expect(result).toEqual({ success: false, message: 'pg_dump: error: database "missing" does not exist' });
     });
 
     it('explains a missing pg_dump', async () => {
         const { client } = fakeExec({ version: { ok: false, exitCode: 127, stderr: '', error: '' } });
-        const result = await new PostgresBackupService(client).dumpAll(
-            'db',
-            { credentials: 'custom', user: 'a', password: 'p', databases: ['x'] },
-            dir
-        );
+        const result = await new PostgresBackupService(client).prepareDump('db', {
+            credentials: 'custom',
+            user: 'a',
+            password: 'p',
+        });
+        expect(result.success).toBe(false);
         expect(result.message).toContain('pg_dump was not found');
     });
 });
@@ -415,38 +442,84 @@ describe('BackupService.backupPostgres', () => {
         );
     }
 
-    it('archives only the dumps and the manifest, and removes the staging dir', async () => {
-        const result = await service().backupPostgres('container', 'db', { databases: ['app'] }, root, 3);
+    const stamp = '\\d{4}-\\d{2}-\\d{2}_\\d{6}';
+
+    it('writes one archive per database, each with its dump and manifest', async () => {
+        const result = await service().backupPostgres('container', 'db', { databases: ['app', 'my db'] }, root, 3);
 
         expect(result.success).toBe(true);
-        expect(result.message).toMatch(/^Backup created: db\.\d{4}-\d{2}-\d{2}_\d{6}\.tar\.gz \(1 database\)$/);
-        expect(readdirSync(root).filter((n) => n.startsWith('.dfm-staging'))).toEqual([]);
-        const listing = execFileSync('tar', ['tzf', result.backupFile as string], { encoding: 'utf8' })
+        expect(result.message).toMatch(
+            new RegExp(`^Backup created: db\\.app\\.${stamp}\\.tar\\.gz, db\\.my-db\\.${stamp}\\.tar\\.gz$`)
+        );
+        const names = readdirSync(root).sort();
+        expect(names).toHaveLength(2);
+        expect(names.filter((n) => n.startsWith('.dfm-staging'))).toEqual([]);
+        const listing = execFileSync('tar', ['tzf', join(root, names[1])], { encoding: 'utf8' })
             .split('\n')
             .filter((l) => l !== '' && l !== './')
             .sort();
-        expect(listing).toEqual(['./01.dump', './manifest.json']);
+        expect(listing).toEqual(['./manifest.json', './my-db.dump']);
     });
 
-    it('names a stack archive after the project and service', async () => {
+    it('names a stack archive after the project, service and database', async () => {
         const result = await service().backupPostgres('stack', 'immich', { service: 'database', databases: ['app'] }, root, 3);
-        expect(result.message).toMatch(/^Backup created: immich\.database\.\d{4}-\d{2}-\d{2}_\d{6}\.tar\.gz/);
+        expect(result.message).toMatch(new RegExp(`^Backup created: immich\\.database\\.app\\.${stamp}\\.tar\\.gz$`));
 
         const missing = await service().backupPostgres('stack', 'immich', { service: 'redis', databases: ['app'] }, root, 3);
         expect(missing).toEqual({ success: false, message: "Service 'redis' not found in stack 'immich'" });
     });
 
-    it('leaves no archive and no staging dir when a dump fails', async () => {
-        const result = await service({ app: { ok: false, exitCode: 1, error: '', stderr: 'boom' } }).backupPostgres(
+    it('backs up the other databases when one fails, and fails the run', async () => {
+        const result = await service({ missing: { ok: false, exitCode: 1, error: '', stderr: 'boom' } }).backupPostgres(
             'container',
             'db',
-            { databases: ['app'] },
+            { databases: ['missing', 'app'] },
             root,
             3
         );
 
-        expect(result).toEqual({ success: false, message: 'Postgres backup failed: Database app: boom' });
-        expect(readdirSync(root)).toEqual([]);
-        expect(existsSync(join(root, 'db'))).toBe(false);
+        expect(result.success).toBe(false);
+        expect(result.message).toMatch(
+            new RegExp(`^Postgres backup failed for 1 of 2 databases: missing: boom\\. Created: db\\.app\\.${stamp}\\.tar\\.gz$`)
+        );
+        const names = readdirSync(root);
+        expect(names).toHaveLength(1);
+        expect(names[0]).toMatch(/^db\.app\./);
+    });
+
+    it('keeps Keep per database, apart from other series and file-mode archives', async () => {
+        const old = ['db.app.2020-01-01_000000.tar.gz', 'db.app.2020-01-02_000000.tar.gz', 'db.other.2020-01-01_000000.tar.gz', 'db.2020-01-01_000000.tar.gz'];
+        old.forEach((name, i) => {
+            writeFileSync(join(root, name), 'x');
+            const at = new Date(Date.UTC(2020, 0, 1 + i));
+            utimesSync(join(root, name), at, at);
+        });
+
+        const result = await service().backupPostgres('container', 'db', { databases: ['app'] }, root, 2);
+
+        expect(result.success).toBe(true);
+        expect(result.message).toMatch(/, pruned 1 old backup\(s\)$/);
+        const names = readdirSync(root);
+        expect(names).not.toContain('db.app.2020-01-01_000000.tar.gz');
+        expect(names).toEqual(expect.arrayContaining(old.slice(1)));
+    });
+
+    it('lists the database series of a container only when asked by prefix', async () => {
+        seedSetting(temp.path, 'backup_destination', root);
+        await service().backupPostgres('container', 'db', { databases: ['app'] }, root, 3);
+        writeFileSync(join(root, 'db.web.2020-01-01_000000.tar.gz'), 'x');
+
+        await service().backupPostgres('stack', 'immich', { service: 'database', databases: ['app'] }, root, 3);
+
+        const svc = service();
+        // A stack's own scope already takes the extra database segment.
+        const stack = svc.listBackups('stack', 'immich').map((b) => b.filename);
+        expect(stack).toHaveLength(1);
+        expect(stack[0]).toMatch(/^immich\.database\.app\./);
+
+        expect(svc.listBackups('container', 'db')).toEqual([]);
+        const listed = svc.listBackups('container', 'db', ['db.app']).map((b) => b.filename);
+        expect(listed).toHaveLength(1);
+        expect(listed[0]).toMatch(/^db\.app\./);
     });
 });

@@ -108,17 +108,25 @@ class BackupManager
   }
 
   /**
-   * Back up a Postgres container with pg_dump, one dump per database.
+   * Back up a Postgres container with pg_dump, one archive per database.
+   *
+   * Each database gets "<prefix>.<file name>.<stamp>.tar.gz", holding
+   * "<file name>.dump" and a manifest.json, where the file name is the
+   * sanitized database name. Keep counts per database, because each database
+   * is its own archive series, and a file-mode backup of the same container
+   * keeps its own count too.
    *
    * The dumps land in a staging directory inside the destination, not in
    * /tmp, because /tmp is RAM on Unraid and a large dump would fill it. The
-   * archive gets the same name a file backup would, so listing, deleting and
-   * retention treat both modes alike. The container is never paused or
-   * stopped: pg_dump reads a consistent snapshot of a running database.
+   * container is never paused or stopped: pg_dump reads a consistent
+   * snapshot of a running database.
    *
-   * A stack runs the dump in the container of postgres.service, and names
-   * the archive "<project>.<service>", as backupStack() does, so the stack's
-   * backup list shows it.
+   * A stack runs the dump in the container of postgres.service, and uses
+   * "<project>.<service>" as the prefix, as backupStack() does, so the
+   * stack's backup list shows the archives.
+   *
+   * A database that fails does not stop the others. The run fails when any
+   * database failed.
    *
    * @param string $targetType 'container' or 'stack'
    * @param string $targetId A container name, or a compose project
@@ -148,48 +156,91 @@ class BackupManager
       ];
     }
 
-    $staging = rtrim($destination, '/') . '/.dfm-staging-' . getmypid() . '-' . time();
-    if (!mkdir($staging, 0700)) {
-      return ['success' => false, 'message' => "Cannot create staging directory in {$destination}"];
+    $prepared = $postgres->prepareDump($target['id'], $pg);
+    if (!$prepared['success']) {
+      return ['success' => false, 'message' => 'Postgres backup failed: ' . $prepared['message']];
     }
 
-    $archiveName = $this->generateArchiveName($target['prefix']);
-    $archivePath = rtrim($destination, '/') . '/' . $archiveName;
+    $created = [];
+    $failed = [];
+    $firstArchive = null;
+    $totalSize = 0;
+    $pruned = 0;
+    $n = 0;
 
-    try {
-      $dump = $postgres->dumpAll($target['id'], $pg, $staging);
-      if (!$dump['success']) {
-        return ['success' => false, 'message' => 'Postgres backup failed: ' . $dump['message']];
+    foreach ($pg['databases'] as $database) {
+      $n++;
+      $file = PostgresBackup::fileNameOf($database);
+      if ($file === null) {
+        $failed[] = "{$database}: no file name";
+        continue;
       }
 
-      $archive = $this->createArchiveFromDir($archivePath, $staging);
-      if (!$archive['success']) {
-        return [
-          'success' => false,
-          'message' => "Failed to create archive: {$archiveName}" . ($archive['output'] !== '' ? ': ' . $archive['output'] : ''),
-        ];
+      $staging = rtrim($destination, '/') . '/.dfm-staging-' . getmypid() . '-' . time() . '-' . $n;
+      if (!mkdir($staging, 0700)) {
+        $failed[] = "{$database}: cannot create a staging directory in {$destination}";
+        continue;
       }
-    } finally {
-      self::removeStaging($staging);
+
+      // Known clash, left as is on purpose: this "<container>.<database>"
+      // series has the same names as the file backups of service <database>
+      // in a stack named <container>. If both share a destination, each
+      // prunes the other. See archivesFor().
+      $prefix = $target['prefix'] . '.' . $file;
+      $archiveName = $this->generateArchiveName($prefix);
+      $archivePath = rtrim($destination, '/') . '/' . $archiveName;
+
+      try {
+        $dump = $postgres->dumpOne($target['id'], $prepared, $database, $staging);
+        if (!$dump['success']) {
+          $failed[] = "{$database}: {$dump['message']}";
+          continue;
+        }
+
+        $archive = $this->createArchiveFromDir($archivePath, $staging);
+        if (!$archive['success']) {
+          $failed[] = "{$database}: failed to create {$archiveName}"
+            . ($archive['output'] !== '' ? ': ' . $archive['output'] : '');
+          continue;
+        }
+      } finally {
+        self::removeStaging($staging);
+      }
+
+      $created[] = $archiveName;
+      $firstArchive = $firstArchive === null ? $archivePath : $firstArchive;
+      $totalSize += file_exists($archivePath) ? filesize($archivePath) : 0;
+      $pruned += $this->pruneOldBackups($destination, $prefix, $retention);
     }
-
-    $size = file_exists($archivePath) ? filesize($archivePath) : 0;
-    $pruned = $this->pruneOldBackups($destination, $target['prefix'], $retention);
-    $count = count($pg['databases']);
-    $message = "Backup created: {$archiveName} ({$count} database" . ($count === 1 ? '' : 's') . ')'
-      . ($pruned ? ", pruned {$pruned} old backup(s)" : '');
 
     return [
-      'success' => true,
-      'message' => $message,
-      'backup_file' => $archivePath,
-      'backup_size' => $size,
+      'success' => empty($failed),
+      'message' => self::postgresRunMessage($created, $failed, $pruned),
+      'backup_file' => $firstArchive,
+      'backup_size' => $totalSize,
     ];
   }
 
   /**
+   * "Backup created: a, b" when every database worked, otherwise
+   * "Postgres backup failed for 1 of 3 databases: c: <reason>. Created: a, b".
+   * The prune count follows either one.
+   */
+  private static function postgresRunMessage(array $created, array $failed, $pruned)
+  {
+    $total = count($created) + count($failed);
+    $message = empty($failed)
+      ? 'Backup created: ' . implode(', ', $created)
+      : 'Postgres backup failed for ' . count($failed) . ' of ' . $total . ' database'
+        . ($total === 1 ? '' : 's') . ': ' . implode('; ', $failed)
+        . (empty($created) ? '' : '. Created: ' . implode(', ', $created));
+
+    return $message . ($pruned ? ", pruned {$pruned} old backup(s)" : '');
+  }
+
+  /**
    * Remove a staging directory and the flat files in it. It holds only the
-   * numbered dumps and manifest.json that dumpAll() wrote, so no recursion.
+   * dump and manifest.json that dumpOne() wrote, so no recursion.
    */
   private static function removeStaging($dir)
   {
@@ -320,7 +371,15 @@ class BackupManager
     ];
   }
 
-  public function listBackups($targetType, $targetId)
+  /**
+   * @param string $targetType
+   * @param string $targetId
+   * @param string[] $extraPrefixes More exact prefixes to list, such as the
+   *   "<container>.<database>" series of a Postgres schedule. A container's
+   *   own scope cannot match those without also matching a stack of the same
+   *   name. See PostgresBackup::archivePrefixesFor().
+   */
+  public function listBackups($targetType, $targetId, array $extraPrefixes = [])
   {
     $destination = $this->resolveDestination(null);
     if (!is_dir($destination)) {
@@ -334,6 +393,12 @@ class BackupManager
     // stack with the same name.
     $scope = $targetType === 'stack' ? self::ARCHIVES_STACK : self::ARCHIVES_EXACT;
     $files = self::archivesFor($destination, $targetId, $scope);
+    if (!empty($extraPrefixes)) {
+      foreach ($extraPrefixes as $prefix) {
+        $files = array_merge($files, self::archivesFor($destination, $prefix, self::ARCHIVES_EXACT));
+      }
+      $files = self::newestFirst(array_values(array_unique($files)));
+    }
 
     $backups = [];
     foreach ($files as $file) {
@@ -826,7 +891,7 @@ class BackupManager
 
   /**
    * Archive the contents of $dir with paths relative to it, so the archive
-   * holds "./01.dump" rather than the full host path of the staging dir.
+   * holds "./<file name>.dump" rather than the full host path of the staging dir.
    */
   private function createArchiveFromDir($archivePath, $dir)
   {
@@ -868,6 +933,8 @@ class BackupManager
    *
    * One collision remains that no name rule can separate. A container named
    * "blog.web" and service "web" of a stack named "blog" write the same name.
+   * So does database "web" of a Postgres backup of container "blog". Nothing
+   * refuses these. They are rare, and the user named the targets.
    *
    * @param string $dir The backup destination
    * @param string $prefix A container name, "project.service", or a project
@@ -899,7 +966,18 @@ class BackupManager
       }
     }
 
-    // Newest first. The name breaks a tie, since its stamp sorts in time order.
+    return self::newestFirst($files);
+  }
+
+  /**
+   * Sort archive paths newest first. The name breaks a tie, since its stamp
+   * sorts in time order.
+   *
+   * @param string[] $files
+   * @return string[]
+   */
+  private static function newestFirst(array $files)
+  {
     usort($files, function ($a, $b) {
       return (filemtime($b) - filemtime($a)) ?: strcmp(basename($b), basename($a));
     });

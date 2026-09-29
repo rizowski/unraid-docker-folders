@@ -699,9 +699,21 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
   `service` names the compose service of a stack. `postgres_databases` also
   takes `{credentials, user?, password?, schedule_id?}`. A backup whose
   `backup_config.mode` is `postgres` runs `pg_dump -Fc` inside that container
-  through Docker's exec API (`DockerClient::execRun`, no shell), one numbered
-  `NN.dump` per database plus `manifest.json`, tarred under the normal archive
-  name (`<container>` or `<project>.<service>`). `postgres.credentials` is
+  through Docker's exec API (`DockerClient::execRun`, no shell). Each database
+  gets its own archive, `<prefix>.<file name>.<stamp>.tar.gz`, that holds
+  `<file name>.dump` and `manifest.json`. The prefix is `<container>` or
+  `<project>.<service>`, and the file name is the database name through
+  `sanitizeArchivePrefix()`. A config with two databases that give the same
+  file name is refused. Keep counts per database. A failed database does not
+  stop the others, but the run fails. The backup list of a container adds
+  these series by the prefixes its Postgres schedules name
+  (`PostgresBackup::archivePrefixesFor`). Two behaviors are deliberate.
+  When a database leaves a schedule, or the schedule is deleted, its old
+  archives stay on disk, unlisted and unpruned: the plugin does not guess
+  that the user wants them gone. And the series of database `D` in
+  container `X` has the same names as the file backups of service `D` in a
+  stack `X`. Nothing refuses that, and if both use one destination, each
+  prunes the other. `postgres.credentials` is
   `env` by default: every run reads `POSTGRES_USER` and `POSTGRES_PASSWORD`
   from the container, and nothing is stored. `custom` stores a user and
   password. `backup_config.postgres.password` is write-only:

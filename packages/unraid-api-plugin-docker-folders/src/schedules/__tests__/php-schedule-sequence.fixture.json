@@ -1,7 +1,7 @@
 [
     {
         "step": "create_A_backup",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 1,
         "schedules": [
             {
@@ -17,14 +17,14 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790650800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "create_B_restart_disabled",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 2,
         "schedules": [
             {
@@ -40,8 +40,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790650800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -56,14 +56,14 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "create_C_resume",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 3,
         "schedules": [
             {
@@ -79,8 +79,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790650800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -95,8 +95,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -110,15 +110,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "create_D_to_delete",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 4,
         "schedules": [
             {
@@ -134,8 +134,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790650800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -150,8 +150,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -165,9 +165,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 4,
@@ -181,15 +181,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790639700,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "update_A_name_and_cron",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": true,
         "schedules": [
             {
@@ -205,8 +205,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -221,8 +221,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -236,9 +236,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 4,
@@ -252,15 +252,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790639700,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "update_B_enable_only",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": true,
         "schedules": [
             {
@@ -276,8 +276,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -292,8 +292,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -307,9 +307,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 4,
@@ -323,15 +323,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790639700,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "toggle_C_off",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": true,
         "schedules": [
             {
@@ -347,8 +347,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -363,8 +363,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -378,9 +378,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 4,
@@ -394,15 +394,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790639700,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "bulk_set_enabled",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 2,
         "schedules": [
             {
@@ -418,8 +418,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -434,8 +434,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -449,9 +449,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 4,
@@ -465,15 +465,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790639700,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "bulk_delete",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 2,
         "schedules": [
             {
@@ -489,8 +489,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -505,8 +505,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -520,15 +520,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "update_A_backup_config_only",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": true,
         "schedules": [
             {
@@ -544,8 +544,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -560,8 +560,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -575,15 +575,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "create_E_postgres",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 5,
         "schedules": [
             {
@@ -599,8 +599,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -615,8 +615,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -630,9 +630,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 5,
@@ -646,15 +646,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790568000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790654400,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "update_E_keep_password",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": true,
         "schedules": [
             {
@@ -670,8 +670,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -686,8 +686,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -701,9 +701,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 5,
@@ -717,15 +717,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790568000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790654400,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "update_E_new_target_refused",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": "refused: Postgres password is required",
         "schedules": [
             {
@@ -741,8 +741,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -757,8 +757,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -772,9 +772,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 5,
@@ -788,15 +788,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790568000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790654400,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "get_E_redacted",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": {
             "mode": "postgres",
             "paths": [],
@@ -823,8 +823,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -839,8 +839,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -854,9 +854,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 5,
@@ -870,15 +870,15 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790568000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790654400,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     },
     {
         "step": "create_F_stack_postgres_env",
-        "anchor": 1790565921,
+        "anchor": 1790639646,
         "result": 6,
         "schedules": [
             {
@@ -894,8 +894,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1790649000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 2,
@@ -910,8 +910,8 @@
                 "last_run_status": null,
                 "last_run_message": null,
                 "next_run_at": 1791082800,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 3,
@@ -925,9 +925,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790566200,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 5,
@@ -941,9 +941,9 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790568000,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790654400,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             },
             {
                 "id": 6,
@@ -957,9 +957,96 @@
                 "last_run_at": null,
                 "last_run_status": null,
                 "last_run_message": null,
-                "next_run_at": 1790571600,
-                "created_at": 1790565921,
-                "updated_at": 1790565921
+                "next_run_at": 1790658000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
+            }
+        ]
+    },
+    {
+        "step": "create_G_postgres_same_file_refused",
+        "anchor": 1790639646,
+        "result": "refused: Databases my db and my-db map to the same file name",
+        "schedules": [
+            {
+                "id": 1,
+                "name": "Nightly backup v2",
+                "target_type": "container",
+                "target_id": "plex",
+                "action": "backup",
+                "cron_expression": "30 2 * * *",
+                "enabled": 1,
+                "backup_config": "{\"paths\":[\"\/config\",\"\/data\"],\"quiesce\":\"pause\"}",
+                "last_run_at": null,
+                "last_run_status": null,
+                "last_run_message": null,
+                "next_run_at": 1790649000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
+            },
+            {
+                "id": 2,
+                "name": "Weekly restart",
+                "target_type": "stack",
+                "target_id": "media",
+                "action": "restart",
+                "cron_expression": "0 3 * * 0",
+                "enabled": 0,
+                "backup_config": null,
+                "last_run_at": null,
+                "last_run_status": null,
+                "last_run_message": null,
+                "next_run_at": 1791082800,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
+            },
+            {
+                "id": 3,
+                "name": "Resume plex",
+                "target_type": "container",
+                "target_id": "plex",
+                "action": "resume",
+                "cron_expression": "*\/15 * * * *",
+                "enabled": 1,
+                "backup_config": null,
+                "last_run_at": null,
+                "last_run_status": null,
+                "last_run_message": null,
+                "next_run_at": 1790640000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
+            },
+            {
+                "id": 5,
+                "name": "Postgres dump",
+                "target_type": "container",
+                "target_id": "db",
+                "action": "backup",
+                "cron_expression": "0 4 * * *",
+                "enabled": 1,
+                "backup_config": "{\"mode\":\"postgres\",\"paths\":[],\"postgres\":{\"credentials\":\"custom\",\"user\":\"app\",\"password\":\"s3cret\/\u00e9\",\"databases\":[\"app\"]}}",
+                "last_run_at": null,
+                "last_run_status": null,
+                "last_run_message": null,
+                "next_run_at": 1790654400,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
+            },
+            {
+                "id": 6,
+                "name": "Immich database",
+                "target_type": "stack",
+                "target_id": "immich",
+                "action": "backup",
+                "cron_expression": "0 5 * * *",
+                "enabled": 1,
+                "backup_config": "{\"mode\":\"postgres\",\"paths\":[],\"postgres\":{\"service\":\"database\",\"credentials\":\"env\",\"databases\":[\"immich\"]}}",
+                "last_run_at": null,
+                "last_run_status": null,
+                "last_run_message": null,
+                "next_run_at": 1790658000,
+                "created_at": 1790639646,
+                "updated_at": 1790639646
             }
         ]
     }

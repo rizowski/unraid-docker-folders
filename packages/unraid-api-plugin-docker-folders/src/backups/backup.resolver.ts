@@ -4,7 +4,9 @@ import { Args, Field, Int, Mutation, ObjectType, Query, Resolver } from '@nestjs
 import { AuthAction, Resource } from '@unraid/shared/graphql.model.js';
 import { UsePermissions } from '@unraid/shared/use-permissions.directive.js';
 
+import { ScheduleService } from '../schedules/schedule.service.js';
 import { BackupService } from './backup.service.js';
+import { archivePrefixesFor } from './postgres-backup.js';
 
 @ObjectType()
 export class DockerFoldersBackupEntry {
@@ -21,7 +23,10 @@ export class DockerFoldersBackupEntry {
  */
 @Resolver()
 export class BackupResolver {
-    constructor(private readonly backups: BackupService) {}
+    constructor(
+        private readonly backups: BackupService,
+        private readonly schedules: ScheduleService
+    ) {}
 
     @UsePermissions({ action: AuthAction.READ_ANY, resource: Resource.DOCKER })
     @Query(() => [DockerFoldersBackupEntry], { description: "A target's archives, newest first." })
@@ -32,7 +37,12 @@ export class BackupResolver {
         if (targetType === '' || targetId === '') {
             throw new BadRequestException('Missing target_type or target_id');
         }
-        return this.backups.listBackups(targetType, targetId);
+        const prefixes = archivePrefixesFor(
+            this.schedules.list({ target_type: targetType, target_id: targetId }),
+            targetType,
+            targetId
+        );
+        return this.backups.listBackups(targetType, targetId, prefixes);
     }
 
     @UsePermissions({ action: AuthAction.DELETE_ANY, resource: Resource.DOCKER })

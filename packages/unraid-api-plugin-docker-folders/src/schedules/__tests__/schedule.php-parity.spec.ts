@@ -101,6 +101,7 @@ describe("ScheduleService, against ScheduleManager.php's own recorded output", (
             'update_E_new_target_refused',
             'get_E_redacted',
             'create_F_stack_postgres_env',
+            'create_G_postgres_same_file_refused',
         ]);
         // Straddling a leap second/minute during generation would make the
         // fixture worthless (see schedule-oracle.php); this is a floor on how
@@ -240,5 +241,21 @@ describe("ScheduleService, against ScheduleManager.php's own recorded output", (
                     '{"mode":"postgres","paths":[],"postgres":{"service":"database","credentials":"env","user":"ignored","password":"ignored","databases":["immich"]}}',
             })
         );
+
+        step(15, () => {
+            try {
+                return service.create({
+                    name: 'Clash',
+                    target_type: 'container',
+                    target_id: 'db',
+                    action: 'backup',
+                    cron_expression: '0 6 * * *',
+                    backup_config:
+                        '{"mode":"postgres","paths":[],"postgres":{"credentials":"env","databases":["my db","my-db"]}}',
+                });
+            } catch (error) {
+                return `refused: ${(error as Error).message}`;
+            }
+        });
     });
 });

@@ -347,46 +347,79 @@ final class PostgresBackupTest extends TestCase
     }
 
     #[Test]
-    public function dumpAllWritesNumberedFilesAndAManifest(): void
+    public function dumpOneWritesASanitizedFileAndAManifest(): void
     {
         $docker = new FakePostgresDocker();
-        $pg = ['credentials' => 'env', 'databases' => ['../evil', 'app']];
-        $result = (new PostgresBackup($docker))->dumpAll('db', $pg, $this->dir);
+        $pg = new PostgresBackup($docker);
+        $prepared = $pg->prepareDump('db', ['credentials' => 'env', 'databases' => ['../evil']]);
+        $this->assertTrue($prepared['success'], $prepared['message']);
+
+        $result = $pg->dumpOne('db', $prepared, '../evil', $this->dir);
 
         $this->assertTrue($result['success'], $result['message']);
-        $this->assertSame('PGDMP-../evil', file_get_contents($this->dir . '/01.dump'));
-        $this->assertSame('PGDMP-app', file_get_contents($this->dir . '/02.dump'));
+        $this->assertSame('PGDMP-../evil', file_get_contents($this->dir . '/evil.dump'));
         $manifest = json_decode(file_get_contents($this->dir . '/manifest.json'), true);
-        $this->assertSame('../evil', $manifest['databases'][0]['database']);
+        $this->assertSame('../evil', $manifest['database']);
+        $this->assertSame('evil.dump', $manifest['file']);
         $this->assertSame('app', $manifest['user']);
+        $this->assertSame('pg_dump (PostgreSQL) 16.4', $manifest['pg_dump_version']);
         $this->assertSame(['pg_dump', '-U', 'app', '-Fc', '-d', '../evil'], $docker->calls[1]['cmd']);
         $this->assertSame(['PGPASSWORD=from-env'], $docker->calls[1]['env']);
-        $this->assertSame(['01.dump', '02.dump', 'manifest.json'], array_values(array_diff(scandir($this->dir), ['.', '..'])));
+        $this->assertSame(['evil.dump', 'manifest.json'], array_values(array_diff(scandir($this->dir), ['.', '..'])));
     }
 
     #[Test]
-    public function dumpAllNamesTheDatabaseThatFailed(): void
+    public function dumpOneReportsWhyTheDatabaseFailed(): void
     {
         $docker = new FakePostgresDocker();
         $docker->answers['missing'] = ['ok' => false, 'exit_code' => 1, 'error' => '',
             'stderr' => "pg_dump: error: database \"missing\" does not exist\nmore"];
-        $pg = ['credentials' => 'custom', 'user' => 'app', 'password' => 'pw', 'databases' => ['missing']];
-        $result = (new PostgresBackup($docker))->dumpAll('db', $pg, $this->dir);
+        $pg = new PostgresBackup($docker);
+        $config = ['credentials' => 'custom', 'user' => 'app', 'password' => 'pw', 'databases' => ['missing']];
+        $result = $pg->dumpOne('db', $pg->prepareDump('db', $config), 'missing', $this->dir);
 
         $this->assertFalse($result['success']);
-        $this->assertSame('Database missing: pg_dump: error: database "missing" does not exist', $result['message']);
+        $this->assertSame('pg_dump: error: database "missing" does not exist', $result['message']);
         $this->assertStringNotContainsString('pw', $result['message']);
     }
 
     #[Test]
-    public function dumpAllExplainsAMissingPgDump(): void
+    public function prepareDumpExplainsAMissingPgDump(): void
     {
         $docker = new FakePostgresDocker();
         $docker->answers['version'] = ['ok' => false, 'exit_code' => 127, 'stderr' => '', 'error' => '', 'stdout' => ''];
         $pg = ['credentials' => 'custom', 'user' => 'a', 'password' => 'p', 'databases' => ['x']];
-        $result = (new PostgresBackup($docker))->dumpAll('db', $pg, $this->dir);
+        $result = (new PostgresBackup($docker))->prepareDump('db', $pg);
 
         $this->assertFalse($result['success']);
         $this->assertStringContainsString('pg_dump was not found', $result['message']);
+    }
+
+    #[Test]
+    public function refusesDatabasesThatShareAFileName(): void
+    {
+        $config = self::config(['databases' => ['my db', 'my-db']]);
+        $this->assertSame(
+            'Databases my db and my-db map to the same file name',
+            PostgresBackup::validateConfig($config, 'container')
+        );
+        $this->assertSame(
+            'Database ___ has no letters or digits to name its backup file',
+            PostgresBackup::validateConfig(self::config(['databases' => ['___']]), 'container')
+        );
+    }
+
+    #[Test]
+    public function listsTheArchivePrefixesOfAContainersPostgresSchedules(): void
+    {
+        $schedules = [
+            ['target_id' => 'db', 'backup_config' => self::config(['databases' => ['app', 'my db']])],
+            ['target_id' => 'db', 'backup_config' => ['paths' => ['/config']]],
+            ['target_id' => 'other', 'backup_config' => self::config(['databases' => ['x']])],
+        ];
+
+        $this->assertSame(['db.app', 'db.my-db'], PostgresBackup::archivePrefixesFor($schedules, 'container', 'db'));
+        // A stack's own scope already lists "<project>.<service>.<db>".
+        $this->assertSame([], PostgresBackup::archivePrefixesFor($schedules, 'stack', 'db'));
     }
 }

@@ -66,7 +66,12 @@ function handleGet()
       errorResponse('Missing target_type or target_id', 400);
     }
     $backup = new BackupManager();
-    jsonResponse(['backups' => $backup->listBackups($targetType, $targetId)]);
+    $prefixes = PostgresBackup::archivePrefixesFor(
+      $manager->listSchedules(['target_type' => $targetType, 'target_id' => $targetId]),
+      $targetType,
+      $targetId
+    );
+    jsonResponse(['backups' => $backup->listBackups($targetType, $targetId, $prefixes)]);
     return;
   }
 

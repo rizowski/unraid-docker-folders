@@ -93,7 +93,7 @@ class PostgresBackup
    * would read as an option. libpq reads the -d value as a connection string
    * when it contains "=" or starts with "postgresql://" or "postgres://",
    * which could send PGPASSWORD to another host, so those are refused too.
-   * The name never becomes a file name: dump files are numbered.
+   * The name becomes a file name only through fileNameOf().
    *
    * @param mixed $config Decoded backup_config
    * @param string $targetType 'container' or 'stack'
@@ -140,6 +140,7 @@ class PostgresBackup
       return 'Too many databases (limit ' . self::MAX_DATABASES . ')';
     }
     $seen = [];
+    $files = [];
     foreach ($databases as $db) {
       if (!self::isValidDatabaseName($db)) {
         return 'Invalid database name';
@@ -148,6 +149,18 @@ class PostgresBackup
         return "Database listed twice: {$db}";
       }
       $seen[$db] = true;
+
+      // Each database gets its own archive, named after it. Two names that
+      // sanitize to the same file name would share one archive series, and
+      // each run would prune the other's backups.
+      $file = self::fileNameOf($db);
+      if ($file === null) {
+        return "Database {$db} has no letters or digits to name its backup file";
+      }
+      if (isset($files[$file])) {
+        return "Databases {$files[$file]} and {$db} map to the same file name";
+      }
+      $files[$file] = $db;
     }
 
     return null;
@@ -164,6 +177,56 @@ class PostgresBackup
   {
     return is_string($user)
       && preg_match('/^[A-Za-z0-9_.@][A-Za-z0-9_.@-]{0,62}$/', $user) === 1;
+  }
+
+  /**
+   * The name of a database's backup files: its archive is
+   * "<target>.<file name>.<stamp>.tar.gz" and holds "<file name>.dump".
+   * Postgres names can hold "/" and "..", so they go through the same
+   * sanitizer as every archive prefix.
+   *
+   * @param string $database
+   * @return string|null Null when nothing safe is left
+   */
+  public static function fileNameOf($database)
+  {
+    return sanitizeArchivePrefix($database);
+  }
+
+  /**
+   * The archive prefixes, "<prefix>.<file name>", that the Postgres
+   * schedules of one target write, for the backup list. A stack's own scope
+   * already matches them, so only a container needs these.
+   *
+   * @param array $schedules Rows from ScheduleManager::listSchedules(), with
+   *   backup_config decoded
+   * @param string $targetType
+   * @param string $targetId
+   * @return string[]
+   */
+  public static function archivePrefixesFor(array $schedules, $targetType, $targetId)
+  {
+    if ($targetType !== 'container') {
+      return [];
+    }
+
+    $prefixes = [];
+    foreach ($schedules as $schedule) {
+      $config = isset($schedule['backup_config']) ? $schedule['backup_config'] : null;
+      if (($schedule['target_id'] ?? null) !== $targetId || self::modeOf($config) !== self::MODE_POSTGRES) {
+        continue;
+      }
+      $databases = isset($config['postgres']['databases']) && is_array($config['postgres']['databases'])
+        ? $config['postgres']['databases'] : [];
+      foreach ($databases as $database) {
+        $file = is_string($database) ? self::fileNameOf($database) : null;
+        if ($file !== null) {
+          $prefixes[$targetId . '.' . $file] = true;
+        }
+      }
+    }
+
+    return array_keys($prefixes);
   }
 
   /** @param mixed $name */
@@ -433,74 +496,90 @@ class PostgresBackup
   }
 
   /**
-   * Dump each database into $stagingDir as 01.dump, 02.dump, ..., with a
-   * manifest.json that maps each file to its database.
+   * Resolve the login and read pg_dump's version, once per run. dumpOne()
+   * takes the result for each database.
    *
    * @param string $container
    * @param array $pg The postgres block of a backup_config
-   * @param string $stagingDir An existing, empty directory
-   * @return array ['success' => bool, 'message' => string]
+   * @return array ['success' => bool, 'message' => string, 'user' => string,
+   *   'env' => string[], 'version' => string]
    */
-  public function dumpAll($container, array $pg, $stagingDir)
+  public function prepareDump($container, array $pg)
   {
     $credentials = $this->resolveCredentials($container, $pg);
     if (!self::isValidUser($credentials['user'])) {
       return ['success' => false, 'message' => 'The container env holds an invalid Postgres user'];
     }
-    $env = self::connectionEnv($credentials['password']);
 
     $version = $this->docker->execCapture($container, ['pg_dump', '--version'], [], self::QUERY_TIMEOUT);
     if (!$version['ok']) {
       return ['success' => false, 'message' => self::describeFailure($version, 'pg_dump')];
     }
 
+    return [
+      'success' => true,
+      'message' => '',
+      'user' => $credentials['user'],
+      'env' => self::connectionEnv($credentials['password']),
+      'version' => trim($version['stdout']),
+    ];
+  }
+
+  /**
+   * Dump one database into $stagingDir as "<file name>.dump", with a
+   * manifest.json that names the database, because the file name is the
+   * sanitized form of it.
+   *
+   * @param string $container
+   * @param array $prepared The result of prepareDump()
+   * @param string $database
+   * @param string $stagingDir An existing, empty directory
+   * @return array ['success' => bool, 'message' => string]
+   */
+  public function dumpOne($container, array $prepared, $database, $stagingDir)
+  {
+    $file = self::fileNameOf($database) . '.dump';
+    $path = rtrim($stagingDir, '/') . '/' . $file;
+    $handle = fopen($path, 'wb');
+    if ($handle === false) {
+      return ['success' => false, 'message' => "Cannot write {$path}"];
+    }
+
+    $writeFailed = false;
+    $run = $this->docker->execRun(
+      $container,
+      ['pg_dump', '-U', $prepared['user'], '-Fc', '-d', $database],
+      $prepared['env'],
+      function ($payload) use ($handle, &$writeFailed) {
+        if (fwrite($handle, $payload) !== strlen($payload)) {
+          // Stop the stream now. Reading on would run pg_dump to its end
+          // and throw its output away.
+          $writeFailed = true;
+          return false;
+        }
+        return true;
+      },
+      self::DUMP_TIMEOUT
+    );
+    fclose($handle);
+
+    if ($writeFailed) {
+      return ['success' => false, 'message' => 'could not write the dump (disk full?)'];
+    }
+    if (!$run['ok']) {
+      return ['success' => false, 'message' => self::describeFailure($run, 'pg_dump')];
+    }
+
     $manifest = [
       'format' => 'pg_dump custom (-Fc), restore with pg_restore',
       'container' => $container,
-      'user' => $credentials['user'],
-      'pg_dump_version' => trim($version['stdout']),
+      'database' => $database,
+      'file' => $file,
+      'size' => filesize($path),
+      'user' => $prepared['user'],
+      'pg_dump_version' => $prepared['version'],
       'created_at' => date('c'),
-      'databases' => [],
     ];
-
-    $i = 0;
-    foreach ($pg['databases'] as $database) {
-      $i++;
-      $file = sprintf('%02d.dump', $i);
-      $path = rtrim($stagingDir, '/') . '/' . $file;
-      $handle = fopen($path, 'wb');
-      if ($handle === false) {
-        return ['success' => false, 'message' => "Cannot write {$path}"];
-      }
-
-      $writeFailed = false;
-      $run = $this->docker->execRun(
-        $container,
-        ['pg_dump', '-U', $credentials['user'], '-Fc', '-d', $database],
-        $env,
-        function ($payload) use ($handle, &$writeFailed) {
-          if (fwrite($handle, $payload) !== strlen($payload)) {
-            // Stop the stream now. Reading on would run pg_dump to its end
-            // and throw its output away.
-            $writeFailed = true;
-            return false;
-          }
-          return true;
-        },
-        self::DUMP_TIMEOUT
-      );
-      fclose($handle);
-
-      if ($writeFailed) {
-        return ['success' => false, 'message' => "Database {$database}: could not write the dump (disk full?)"];
-      }
-      if (!$run['ok']) {
-        return ['success' => false, 'message' => "Database {$database}: " . self::describeFailure($run, 'pg_dump')];
-      }
-
-      $manifest['databases'][] = ['file' => $file, 'database' => $database, 'size' => filesize($path)];
-    }
-
     $written = file_put_contents(
       rtrim($stagingDir, '/') . '/manifest.json',
       json_encode($manifest, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n"

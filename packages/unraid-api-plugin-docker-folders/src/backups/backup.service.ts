@@ -20,7 +20,7 @@ import Dockerode from 'dockerode';
 import { DOCKER_SOCKET_PATH } from '../containers/docker-client.js';
 import { DatabaseService } from '../db/database.service.js';
 import { normalizePath, pathIsWithin, pathIsWithinAny, sanitizeArchivePrefix } from '../paths/paths.js';
-import { type PostgresConfig, PostgresBackupService } from './postgres-backup.js';
+import { fileNameOf, type PostgresConfig, PostgresBackupService } from './postgres-backup.js';
 
 /**
  * Container filesystem backups, ported from `classes/BackupManager.php`.
@@ -556,13 +556,15 @@ export class BackupService {
     ) {}
 
     /**
-     * Back up a Postgres container with pg_dump, one dump per database.
-     * `BackupManager::backupPostgres`.
+     * Back up a Postgres container with pg_dump, one archive per database.
+     * Ported from `BackupManager::backupPostgres`.
      *
-     * The dumps land in a staging directory inside the destination, not in
-     * /tmp, because /tmp is RAM on Unraid. The archive gets the name a file
-     * backup would, so listing, deleting and retention treat both modes
-     * alike. The container is never paused or stopped.
+     * Each database gets `<prefix>.<file name>.<stamp>.tar.gz`, holding
+     * `<file name>.dump` and a manifest.json. Keep counts per database. The
+     * dumps land in a staging directory inside the destination, not in
+     * /tmp, because /tmp is RAM on Unraid. The container is never paused or
+     * stopped. A database that fails does not stop the others, and the run
+     * fails when any database failed.
      */
     async backupPostgres(
         targetType: string,
@@ -593,40 +595,72 @@ export class BackupService {
             };
         }
 
+        const prepared = await this.postgres.prepareDump(target.id, pg);
+        if (!prepared.success) {
+            return { success: false, message: `Postgres backup failed: ${prepared.message}` };
+        }
+
         const base = stripTrailingSlashes(resolvedDestination);
-        const staging = `${base}/.dfm-staging-${process.pid}-${Math.floor(Date.now() / 1000)}`;
-        try {
-            mkdirSync(staging, { mode: 0o700 });
-        } catch {
-            return { success: false, message: `Cannot create staging directory in ${resolvedDestination}` };
+        const created: string[] = [];
+        const failed: string[] = [];
+        let firstArchive: string | undefined;
+        let totalSize = 0;
+        let pruned = 0;
+        let n = 0;
+
+        for (const database of pg.databases) {
+            n++;
+            const file = fileNameOf(database);
+            if (file === null) {
+                failed.push(`${database}: no file name`);
+                continue;
+            }
+
+            const staging = `${base}/.dfm-staging-${process.pid}-${Math.floor(Date.now() / 1000)}-${n}`;
+            try {
+                mkdirSync(staging, { mode: 0o700 });
+            } catch {
+                failed.push(`${database}: cannot create a staging directory in ${resolvedDestination}`);
+                continue;
+            }
+
+            // Known clash, left as is on purpose: this `<container>.<database>`
+            // series has the same names as the file backups of service
+            // <database> in a stack named <container>. If both share a
+            // destination, each prunes the other. Mirrors PHP.
+            const prefix = `${target.prefix}.${file}`;
+            const archiveName = generateArchiveName(prefix);
+            const archivePath = `${base}/${archiveName}`;
+
+            try {
+                const dump = await this.postgres.dumpOne(target.id, prepared, database, staging);
+                if (!dump.success) {
+                    failed.push(`${database}: ${dump.message}`);
+                    continue;
+                }
+                const archive = await this.tar.createArchiveFromDir(archivePath, staging);
+                if (!archive.success) {
+                    failed.push(
+                        `${database}: failed to create ${archiveName}${archive.output !== '' ? `: ${archive.output}` : ''}`
+                    );
+                    continue;
+                }
+            } finally {
+                removeStaging(staging);
+            }
+
+            created.push(archiveName);
+            firstArchive ??= archivePath;
+            totalSize += statOrNull(archivePath)?.size ?? 0;
+            pruned += this.pruneOldBackups(resolvedDestination, prefix, resolvedRetention);
         }
 
-        const archiveName = generateArchiveName(target.prefix);
-        const archivePath = `${base}/${archiveName}`;
-
-        try {
-            const dump = await this.postgres.dumpAll(target.id, pg, staging);
-            if (!dump.success) {
-                return { success: false, message: `Postgres backup failed: ${dump.message}` };
-            }
-            const archive = await this.tar.createArchiveFromDir(archivePath, staging);
-            if (!archive.success) {
-                return {
-                    success: false,
-                    message: `Failed to create archive: ${archiveName}${archive.output !== '' ? `: ${archive.output}` : ''}`,
-                };
-            }
-        } finally {
-            removeStaging(staging);
-        }
-
-        const size = statOrNull(archivePath)?.size ?? 0;
-        const pruned = this.pruneOldBackups(resolvedDestination, target.prefix, resolvedRetention);
-        const count = pg.databases.length;
-        const message =
-            `Backup created: ${archiveName} (${count} database${count === 1 ? '' : 's'})` +
-            (pruned ? `, pruned ${pruned} old backup(s)` : '');
-        return { success: true, message, backupFile: archivePath, backupSize: size };
+        return {
+            success: failed.length === 0,
+            message: postgresRunMessage(created, failed, pruned),
+            backupFile: firstArchive,
+            backupSize: totalSize,
+        };
     }
 
     /**
@@ -829,7 +863,7 @@ export class BackupService {
      * never reads `$targetType` either. Kept for signature parity with the
      * method it mirrors; see the port's handoff report.
      */
-    listBackups(targetType: string, targetId: string): BackupFileInfo[] {
+    listBackups(targetType: string, targetId: string, extraPrefixes: string[] = []): BackupFileInfo[] {
         const destination = this.resolveDestination(null);
         const destStat = statOrNull(destination);
         if (!destStat?.isDirectory()) return [];
@@ -840,7 +874,18 @@ export class BackupService {
         // widen the match to a sibling directory or list anything outside
         // `destination`, and it excludes symlinks.
         const scope = targetType === 'stack' ? 'services' : 'exact';
-        const files = archivesFor(destination, targetId, scope);
+        // `extraPrefixes` adds exact series, such as the `<container>.<database>`
+        // archives of a Postgres schedule. See `archivePrefixesFor`.
+        const own = archivesFor(destination, targetId, scope);
+        const files =
+            extraPrefixes.length === 0
+                ? own
+                : [
+                      ...new Set([
+                          ...own,
+                          ...extraPrefixes.flatMap((prefix) => archivesFor(destination, prefix, 'exact')),
+                      ]),
+                  ].sort(compareArchivesNewestFirst);
         if (files.length === 0) return [];
 
         return files.map((file) => {
@@ -1365,6 +1410,18 @@ function formatLocalTimestamp(date: Date): string {
         `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` +
         `_${pad2(date.getHours())}${pad2(date.getMinutes())}${pad2(date.getSeconds())}`
     );
+}
+
+/** Mirrors `BackupManager::postgresRunMessage`. */
+function postgresRunMessage(created: string[], failed: string[], pruned: number): string {
+    const total = created.length + failed.length;
+    const message =
+        failed.length === 0
+            ? `Backup created: ${created.join(', ')}`
+            : `Postgres backup failed for ${failed.length} of ${total} database${total === 1 ? '' : 's'}: ` +
+              failed.join('; ') +
+              (created.length === 0 ? '' : `. Created: ${created.join(', ')}`);
+    return message + (pruned ? `, pruned ${pruned} old backup(s)` : '');
 }
 
 /**

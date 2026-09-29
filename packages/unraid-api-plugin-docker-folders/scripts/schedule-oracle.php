@@ -223,6 +223,22 @@ function runSequence(string $migrationsDir): array
         'backup_config' => '{"mode":"postgres","paths":[],"postgres":{"service":"database","credentials":"env","user":"ignored","password":"ignored","databases":["immich"]}}',
     ]));
 
+    // Two databases whose names sanitize to the same archive name.
+    $capture('create_G_postgres_same_file_refused', function () use ($manager) {
+        try {
+            return $manager->createSchedule([
+                'name' => 'Clash',
+                'target_type' => 'container',
+                'target_id' => 'db',
+                'action' => 'backup',
+                'cron_expression' => '0 6 * * *',
+                'backup_config' => '{"mode":"postgres","paths":[],"postgres":{"credentials":"env","databases":["my db","my-db"]}}',
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return 'refused: ' . $e->getMessage();
+        }
+    });
+
     $t1 = time();
     $crossedMinute = intdiv($t0, 60) !== intdiv($t1, 60);
 

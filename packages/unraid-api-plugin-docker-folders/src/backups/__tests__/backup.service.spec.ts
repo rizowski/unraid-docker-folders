@@ -13,11 +13,10 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DatabaseService } from '../../db/database.service.js';
-import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
+import { createMigratedDatabase, seedSetting, type TempDatabase } from '../../folders/__tests__/migrate.js';
 import {
     type ArchiveOutcome,
     type BackupContainerHandle,
@@ -393,20 +392,6 @@ function fakeTar(opts: { writeFile?: boolean; fail?: boolean; output?: string } 
 /** A 304-shaped error, the way dockerode raises "already in that state". */
 function notModified(): Error {
     return Object.assign(new Error('not modified'), { statusCode: 304 });
-}
-
-/**
- * Upsert, not insert: migration 009 already seeds a default `backup_destination`
- * row (and others), so a plain INSERT collides with it.
- */
-function seedSetting(dbPath: string, key: string, value: string): void {
-    const db = new DatabaseSync(dbPath);
-    db.exec('PRAGMA journal_mode = WAL');
-    db.prepare(
-        'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ' +
-            'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
-    ).run(key, value, Math.floor(Date.now() / 1000));
-    db.close();
 }
 
 describe('BackupService', () => {

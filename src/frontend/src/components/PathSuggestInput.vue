@@ -110,13 +110,17 @@ function cancelTimer() {
   }
 }
 
-async function load() {
+// The path is passed in rather than read from props.modelValue. An emit
+// reaches the parent at once, but the new value comes back down as a prop
+// only on the next render, so a load() in the same tick would list the text
+// from before the keystroke or the accepted folder.
+async function load(path: string = props.modelValue) {
   if (props.scope === 'container' && !props.container) {
     return;
   }
 
   const mine = ++requestId;
-  const params = new URLSearchParams({ scope: props.scope, path: props.modelValue });
+  const params = new URLSearchParams({ scope: props.scope, path });
   if (props.scope === 'container') {
     params.set('container', props.container);
     if (props.project) {
@@ -144,19 +148,20 @@ async function load() {
   }
 }
 
-function schedule() {
+function schedule(path: string) {
   cancelTimer();
   timer = setTimeout(() => {
     timer = null;
-    load();
+    load(path);
   }, KEYSTROKE_DELAY_MS);
 }
 
 function onInput(event: Event) {
-  emit('update:modelValue', (event.target as HTMLInputElement).value);
+  const value = (event.target as HTMLInputElement).value;
+  emit('update:modelValue', value);
   fetched.value = false;
   isOpen.value = true;
-  schedule();
+  schedule(value);
 }
 
 function onFocus() {
@@ -180,12 +185,13 @@ function onBlur() {
 function accept(entry: PathSuggestion) {
   // A trailing slash both commits the folder and asks for its contents, so one
   // key walks down the tree the way Unraid's own field does.
-  emit('update:modelValue', `${entry.path}/`);
+  const next = `${entry.path}/`;
+  emit('update:modelValue', next);
   fetched.value = false;
   active.value = -1;
   inputEl.value?.focus();
   cancelTimer();
-  load();
+  load(next);
 }
 
 function move(step: number) {

@@ -148,6 +148,35 @@ describe('PathSuggestInput', () => {
     expect(apiFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('asks for the accepted folder, not the text the parent has not passed down yet', async () => {
+    // A mounted input with no parent keeps its old modelValue prop, as a real
+    // form does until its next render. The request must not read the prop.
+    const wrapper = mountInput({ modelValue: '/config/da' });
+    const input = wrapper.find('input');
+
+    await input.trigger('focus');
+    await settle(wrapper);
+    apiFetch.mockClear();
+
+    await input.trigger('keydown', { key: 'ArrowDown' });
+    await input.trigger('keydown', { key: 'Enter' });
+    await wrapper.vm.$nextTick();
+
+    const url = apiFetch.mock.calls[0][0] as string;
+    expect(url).toContain('path=%2Fconfig%2Fdatabases%2F');
+  });
+
+  it('asks for the folder contents when a slash is typed after its name', async () => {
+    const wrapper = mountInput({ modelValue: '/config/databases' });
+    const input = wrapper.find('input');
+
+    await input.setValue('/config/databases/');
+    await settle(wrapper);
+
+    const url = apiFetch.mock.calls[0][0] as string;
+    expect(url).toContain('path=%2Fconfig%2Fdatabases%2F');
+  });
+
   it('does not ask again when the same field is refocused', async () => {
     const wrapper = mountInput();
     const input = wrapper.find('input');

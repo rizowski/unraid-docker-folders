@@ -67,6 +67,7 @@
     <testsuite name="PostgresBackup">
       <file>DockerExecDemuxTest.php</file>
       <file>PostgresBackupTest.php</file>
+      <file>PostgresBackupRunTest.php</file>
     </testsuite>
     <testsuite name="SecurityAdvisor">
       <file>SecurityAdvisorTest.php</file>

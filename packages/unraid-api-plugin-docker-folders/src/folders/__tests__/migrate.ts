@@ -55,3 +55,16 @@ export function createMigratedDatabase(): TempDatabase {
     };
 }
 
+/**
+ * Upsert, not insert: migration 009 already seeds a default `backup_destination`
+ * row (and others), so a plain INSERT collides with it.
+ */
+export function seedSetting(dbPath: string, key: string, value: string): void {
+    const db = new DatabaseSync(dbPath);
+    db.exec('PRAGMA journal_mode = WAL');
+    db.prepare(
+        'INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?) ' +
+            'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+    ).run(key, value, Math.floor(Date.now() / 1000));
+    db.close();
+}
