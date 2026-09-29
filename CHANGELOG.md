@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026.09.29
+- feat(schedules): write one Postgres backup per database
+
 ## 2026.09.28
 - feat(schedules): add a Postgres backup mode for backup schedules
 - fix(schedules): run updates in the background, and other review fixes
