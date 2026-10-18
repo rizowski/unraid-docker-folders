@@ -2,12 +2,12 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.09.20">
-<!ENTITY md5 "7ebcbd858620ecd3f8d1c0420e39cd30">
+<!ENTITY version "2026.10.18-dev1">
+<!ENTITY md5 "16c59d7c83bf2c1d48d8cb4547a0ea2f">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
-<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+<!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/dev/&name;.plg">
 ]>
 
 <PLUGIN name="&name;" author="&author;" version="&version;"
@@ -145,6 +145,11 @@
 
 
 
+
+###2026.10.18-dev1
+- New: A new memory calculation setting under Settings &gt; Docker Folders &gt; Display lets you switch container memory usage back to the raw cgroup number. (#19)
+- Fixed: Container memory usage now matches what docker stats shows, instead of reading higher because page cache was counted. (#19)
+- Internal fixes and performance improvements.
 ###2026.10.11-dev4
 - Fixed: A collapsed folder now shows its CPU as the sum of its containers, so one container using a full core no longer shows as about 1% on large hosts.
 - Fixed: Copying the restore steps in the GraphQL warning dialog in Settings no longer closes the dialog, so the install button can be reached.

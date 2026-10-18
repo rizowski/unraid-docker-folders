@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026.10.18-dev1
+### New
+- A new memory calculation setting under Settings > Docker Folders > Display lets you switch container memory usage back to the raw cgroup number. (#19)
+
+### Fixed
+- Container memory usage now matches what docker stats shows, instead of reading higher because page cache was counted. (#19)
+
+### Internal
+- Internal fixes and performance improvements.
+
 ## 2026.10.11-dev4
 ### Fixed
 - A collapsed folder now shows its CPU as the sum of its containers, so one container using a full core no longer shows as about 1% on large hosts.
