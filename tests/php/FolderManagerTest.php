@@ -240,6 +240,28 @@ final class FolderManagerTest extends TestCase
     }
 
     #[Test]
+    public function composeSyncMakesNoFolderWhenTheStackAlreadyLivesInAnotherFolder(): void
+    {
+        $games = $this->manager->createFolder(['name' => 'Games']);
+        $this->manager->addContainerToFolder($games['id'], 'id-valheim', 'valheim');
+
+        $this->manager->syncComposeStacks([self::composeContainer('valheim', 'valheim')]);
+
+        self::assertSame(0, (int) $this->db->fetchValue('SELECT COUNT(*) FROM folders WHERE compose_project = ?', ['valheim']));
+        self::assertSame(['valheim'], $this->folderMembers((int) $games['id']));
+    }
+
+    #[Test]
+    public function composeSyncMakesNoFolderForAStackWhoseContainersTheUserRemoved(): void
+    {
+        $this->manager->excludeFromComposeSync('db');
+
+        $this->manager->syncComposeStacks([self::composeContainer('db', 'app')]);
+
+        self::assertSame(0, (int) $this->db->fetchValue('SELECT COUNT(*) FROM folders WHERE compose_project = ?', ['app']));
+    }
+
+    #[Test]
     public function addingTheContainerBackLetsComposeSyncManageItAgain(): void
     {
         $containers = [self::composeContainer('db', 'app')];

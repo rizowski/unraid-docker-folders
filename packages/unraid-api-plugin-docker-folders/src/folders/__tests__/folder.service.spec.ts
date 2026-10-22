@@ -299,6 +299,26 @@ describe('FolderService writes', () => {
             expect(service.getUnfolderedOrder()).toEqual(['App1', 'app01', 'app2', 'app10', 'app-db', 'app.db', 'app_db', 'appdb']);
         });
 
+        it('makes no stack folder when the stack already lives in another folder', () => {
+            const games = service.createFolder({ name: 'Games' });
+            service.addContainerToFolder(games.id, 'id-valheim', 'valheim');
+
+            service.syncWithContainers([container('valheim', { 'com.docker.compose.project': 'valheim' })]);
+
+            expect(temp.rows("SELECT id FROM folders WHERE compose_project = 'valheim'")).toEqual([]);
+            expect(service.getFolder(games.id)?.containers.map((c) => c.containerName)).toEqual(['valheim']);
+        });
+
+        it('makes no stack folder for a stack whose containers the user removed', () => {
+            const folder = service.createFolder({ name: 'Media' });
+            service.addContainerToFolder(folder.id, 'id-db', 'db');
+            service.removeContainerFromFolder('db');
+
+            service.syncWithContainers([container('db', { 'com.docker.compose.project': 'app' })]);
+
+            expect(temp.rows("SELECT id FROM folders WHERE compose_project = 'app'")).toEqual([]);
+        });
+
         it('keeps the id reconcile and Compose sync when priming fails', () => {
             const handle = new DatabaseSync(temp.path);
             handle.exec('DROP TABLE unfoldered_order');

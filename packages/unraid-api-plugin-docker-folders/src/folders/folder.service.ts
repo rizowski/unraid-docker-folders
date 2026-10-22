@@ -658,6 +658,16 @@ function syncComposeProjects(db: DatabaseSync, containers: readonly SyncContaine
     const now = nowSeconds();
 
     for (const [project, members] of byProject) {
+        upsertComposeStack(db, project, members[0].labels, now);
+
+        const pending = members.filter((container) => {
+            const name = container.name.replace(/^\//, '');
+            return !assigned.has(name) && !excluded.has(name);
+        });
+        // Every container already has a home, so a stack folder would sit
+        // empty, and deleting it would only bring it back on the next sync.
+        if (pending.length === 0) continue;
+
         let folderId = folderByProject.get(project);
         if (folderId === undefined) {
             const position = nextPosition(db, 'SELECT MAX(position) AS value FROM folders');
@@ -673,11 +683,8 @@ function syncComposeProjects(db: DatabaseSync, containers: readonly SyncContaine
             changed = true;
         }
 
-        upsertComposeStack(db, project, members[0].labels, now);
-
-        for (const container of members) {
+        for (const container of pending) {
             const name = container.name.replace(/^\//, '');
-            if (assigned.has(name) || excluded.has(name)) continue;
 
             const position = nextPosition(
                 db,
