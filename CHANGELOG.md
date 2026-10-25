@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.10.25-dev2
+### Fixed
+- A container dragged to another folder no longer shows up in both folders until the page is reloaded.
+- Reordering containers within a folder no longer makes the card snap back while the new order saves.
+
 ## 2026.10.25-dev1
 ### Improved
 - The folders column now slides smoothly when the stacks pane opens or closes, unless reduced motion is turned on.
