@@ -281,6 +281,14 @@ no stamps today because they load no external files.
 
 **API version**: v1.41 (configurable in `config.php`)
 
+**Unraid's own update flags**: Unraid's Docker tab and the Unraid API read
+`/var/lib/docker/unraid-update-status.json` (keyed by `ensureImageTag()`) and
+the tab's cache `docker.json`, not the plugin's `image_update_checks`. Every
+pull goes through `recordImagePulled()` (PHP) or `recordPulled()` (plugin),
+which write both, and a full update check repairs stale entries. See
+`include/unraidUpdateStatus.php` (issue #23). Do not load Unraid's
+`DockerUpdate`: its file declares a global `DockerClient`, as the plugin does.
+
 **Key operations**:
 - List containers: `GET /containers.php`
 - Start/stop/restart: `POST /containers.php?action=<action>&id=<id>`

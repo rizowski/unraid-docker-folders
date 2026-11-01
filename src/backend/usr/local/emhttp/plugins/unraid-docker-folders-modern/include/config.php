@@ -160,6 +160,7 @@ function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime =
 date_default_timezone_set(detectServerTimezone());
 
 require_once __DIR__ . '/paths.php';
+require_once __DIR__ . '/unraidUpdateStatus.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
 
 /**
@@ -441,6 +442,18 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     }
   }
 
+  // Clear Unraid flags that pulls made before issue #23's fix left stale.
+  // Full checks only, like the cleanup above.
+  if ($onlyImages === null) {
+    try {
+      foreach (repairUnraidUpdateStatus($dockerClient, $containers) as $key) {
+        $log('UNRAID Repaired stale update flag for ' . $key);
+      }
+    } catch (\Throwable $e) {
+      $log('UNRAID WARN repair failed: ' . $e->getMessage());
+    }
+  }
+
   // Release notes are a nice-to-have layered on top of a complete check. Any
   // failure here — network, schema, anything — must leave the digest results
   // and the counters below exactly as they are.
@@ -529,7 +542,10 @@ function recreateOneContainer($dockerClient, $name, $id)
  * digest. An upsert that names only the columns a pull changes, so the
  * release-notes columns survive.
  *
- * @param DockerClient $dockerClient Docker API client
+ * Then tells Unraid's Docker manager, which reads its own files, not this
+ * table (issue #23). That part never stops the DB write or the caller.
+ *
+ * @param DockerClient $dockerClient Docker API client, after its pullImage()
  * @param Database $db Database instance
  * @param string $image Image reference, as the update check keys it
  */
@@ -537,6 +553,22 @@ function recordImagePulled($dockerClient, $db, $image)
 {
   $remoteDigest = $dockerClient->getRemoteImageDigest($image);
   $localDigest = $dockerClient->getImageDigest($image);
+
+  try {
+    // The digest the pull itself reported is what Unraid's updater records.
+    // /distribution names the same manifest, and covers a stream without
+    // the line.
+    $digest = bareImageDigest($dockerClient->getLastPullDigest()) ?? bareImageDigest($remoteDigest);
+    $names = containerNamesForImage($dockerClient->listContainers(true), $image);
+    if (markUnraidImageCurrent($image, $digest, $names)) {
+      logUpdate("PULL UNRAID status updated " . unraidImageKey($image) . ": {$digest}"
+        . (empty($names) ? '' : ' (' . implode(', ', $names) . ')'));
+    } else {
+      logUpdate("PULL UNRAID status not updated for {$image}: no digest, or the file could not be read");
+    }
+  } catch (\Throwable $e) {
+    logUpdate("PULL WARN {$image}: Unraid status update failed: " . $e->getMessage());
+  }
 
   $db->query(
     'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)

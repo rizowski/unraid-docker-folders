@@ -18,6 +18,8 @@ class DockerClient
   private $lastErrorCode = 0;
   /** The daemon's own message behind the last HTTP failure, or ''. */
   private $lastErrorReason = '';
+  // The "Digest: sha256:..." line of the last pullImage() stream, or null.
+  private $lastPullDigest = null;
   private $imageInfoCache = [];
   /** Cached result of readHostMemoryTotal(), null until first read. */
   private $hostMemoryTotal = null;
@@ -86,6 +88,16 @@ class DockerClient
   public function getLastError()
   {
     return $this->lastError;
+  }
+
+  /**
+   * The digest the last pullImage() reported in its "Digest:" status line.
+   *
+   * @return string|null Bare `sha256:...`, or null when the stream had none
+   */
+  public function getLastPullDigest()
+  {
+    return $this->lastPullDigest;
   }
 
   /**
@@ -2066,6 +2078,7 @@ class DockerClient
     // This path does not go through request(), which is what resets it.
     $this->lastError = '';
     $this->lastErrorReason = '';
+    $this->lastPullDigest = null;
 
     if (!file_exists($this->socketPath)) {
       $this->lastError = "Docker socket not found: {$this->socketPath}";
@@ -2104,6 +2117,10 @@ class DockerClient
       if ($line === '') return;
       $decoded = json_decode($line, true);
       if (!is_array($decoded)) return;
+      $digest = pullDigestFromStatus($decoded['status'] ?? null);
+      if ($digest !== null) {
+        $this->lastPullDigest = $digest;
+      }
       if (isset($decoded['error']) && $streamError === '') {
         $streamError = (string) $decoded['error'];
       }
