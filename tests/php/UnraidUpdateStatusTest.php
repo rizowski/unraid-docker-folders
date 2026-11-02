@@ -11,13 +11,16 @@ ini_set('display_errors', '1');
 use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 
-/** Answers getImageInfo() from a map, so the repair needs no Docker. */
+/** Answers from maps, so the repair and the sync need no Docker. */
 class ImageInfoDockerClient extends DockerClient
 {
     /** @var array<string, array> */
     public array $images = [];
     /** @var string[] */
     public array $asked = [];
+    public array $containers = [];
+    public ?string $remote = null;
+    public ?string $pulled = null;
 
     public function __construct()
     {
@@ -27,6 +30,32 @@ class ImageInfoDockerClient extends DockerClient
     {
         $this->asked[] = (string) $imageId;
         return $this->images[$imageId] ?? null;
+    }
+
+    public function listContainers($all = true, $withOomCheck = false): array
+    {
+        return $this->containers;
+    }
+
+    public function getRemoteImageDigest($imageName)
+    {
+        return $this->remote;
+    }
+
+    public function getLastPullDigest()
+    {
+        return $this->pulled;
+    }
+}
+
+/** fetchOne() for the stored remote digest. */
+class DigestRowDatabase
+{
+    public ?string $stored = null;
+
+    public function fetchOne(string $sql, array $params = []): array|false
+    {
+        return $this->stored === null ? false : ['remote_digest' => $this->stored];
     }
 }
 
@@ -48,6 +77,11 @@ final class UnraidUpdateStatusTest extends TestCase
         mkdir($this->dir);
         $this->status = $this->dir . '/unraid-update-status.json';
         $this->webui = $this->dir . '/docker.json';
+        // syncUnraidStatusAfterRecreate() logs through logUpdate(), whose path
+        // is a constant on /boot. The suite runs in a throwaway container.
+        if (!is_dir(dirname(UPDATE_LOG_PATH))) {
+            @mkdir(dirname(UPDATE_LOG_PATH), 0777, true);
+        }
     }
 
     protected function tearDown(): void
@@ -209,11 +243,11 @@ final class UnraidUpdateStatusTest extends TestCase
         $this->writeJson($this->webui, ['sonarr' => ['updated' => 'false'], 'radarr' => ['updated' => 'false']]);
 
         $client = new ImageInfoDockerClient();
-        $client->images['lscr.io/linuxserver/sonarr:latest'] = ['RepoDigests' => ['lscr.io/linuxserver/sonarr@' . self::D1]];
-        $client->images['lscr.io/linuxserver/radarr:latest'] = ['RepoDigests' => ['lscr.io/linuxserver/radarr@' . self::D2]];
+        $client->images['lscr.io/linuxserver/sonarr:latest'] = ['Id' => 'sha256:s', 'RepoDigests' => ['lscr.io/linuxserver/sonarr@' . self::D1]];
+        $client->images['lscr.io/linuxserver/radarr:latest'] = ['Id' => 'sha256:r', 'RepoDigests' => ['lscr.io/linuxserver/radarr@' . self::D2]];
         $containers = [
-            ['name' => 'sonarr', 'image' => 'lscr.io/linuxserver/sonarr'],
-            ['name' => 'radarr', 'image' => 'lscr.io/linuxserver/radarr'],
+            ['name' => 'sonarr', 'image' => 'lscr.io/linuxserver/sonarr', 'imageId' => 'sha256:s'],
+            ['name' => 'radarr', 'image' => 'lscr.io/linuxserver/radarr', 'imageId' => 'sha256:r'],
         ];
 
         $repaired = repairUnraidUpdateStatus($client, $containers, $this->status, $this->webui);
@@ -225,6 +259,95 @@ final class UnraidUpdateStatusTest extends TestCase
         $this->assertSame('false', $data['lscr.io/linuxserver/radarr:latest']['status']);
         $this->assertNotContains('library/redis:7', $client->asked, 'a current entry is not inspected');
         $this->assertSame(['radarr'], array_keys($this->readJson($this->webui)));
+    }
+
+    #[Test]
+    public function repairWaitsWhileAContainerRunsAnOlderImage(): void
+    {
+        $content = json_encode(['library/nginx:latest' => ['local' => self::D2, 'remote' => self::D1, 'status' => 'false']]);
+        file_put_contents($this->status, $content);
+        $client = new ImageInfoDockerClient();
+        $client->images['library/nginx:latest'] = ['Id' => 'sha256:new', 'RepoDigests' => ['nginx@' . self::D1]];
+
+        $repaired = repairUnraidUpdateStatus(
+            $client,
+            [['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:old']],
+            $this->status,
+            $this->webui
+        );
+
+        $this->assertSame([], $repaired);
+        $this->assertSame($content, file_get_contents($this->status));
+    }
+
+    #[Test]
+    public function behindListsContainersOnTheTagRunningAnotherImage(): void
+    {
+        $containers = [
+            ['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:new'],
+            ['name' => 'web2', 'image' => 'nginx:latest', 'imageId' => 'sha256:old'],
+            ['name' => 'other', 'image' => 'nginx:1.25', 'imageId' => 'sha256:old'],
+        ];
+        $this->assertSame(['web2'], containersBehindImage($containers, 'nginx', 'sha256:new'));
+    }
+
+    #[Test]
+    public function digestIsThePullsElseACandidateOnDisk(): void
+    {
+        $this->assertSame(self::D1, pickUnraidDigest(self::D1, [], [self::D2]));
+        $this->assertSame(self::D2, pickUnraidDigest(null, ['repo@' . self::D2], [self::D1, self::D2]));
+        $this->assertNull(pickUnraidDigest(null, ['repo@' . self::D2], [self::D1, null]));
+    }
+
+    #[Test]
+    public function syncAfterRecreateMarksTheTagWhenEveryContainerIsCurrent(): void
+    {
+        $client = new ImageInfoDockerClient();
+        $client->images['lscr.io/linuxserver/sonarr'] = ['Id' => 'sha256:new', 'RepoDigests' => []];
+        $client->containers = [['name' => 'sonarr', 'image' => 'lscr.io/linuxserver/sonarr', 'imageId' => 'sha256:new']];
+        $client->pulled = self::D1;
+        $this->writeJson($this->webui, ['sonarr' => ['updated' => 'false']]);
+
+        syncUnraidStatusAfterRecreate($client, new DigestRowDatabase(), 'lscr.io/linuxserver/sonarr', $this->status, $this->webui);
+
+        $this->assertSame(
+            ['lscr.io/linuxserver/sonarr:latest' => ['local' => self::D1, 'remote' => self::D1, 'status' => 'true']],
+            $this->readJson($this->status)
+        );
+        $this->assertSame([], $this->readJson($this->webui));
+    }
+
+    #[Test]
+    public function syncAfterRecreateWaitsForEveryContainerOnTheTag(): void
+    {
+        $client = new ImageInfoDockerClient();
+        $client->images['nginx'] = ['Id' => 'sha256:new', 'RepoDigests' => ['nginx@' . self::D1]];
+        $client->containers = [
+            ['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:new'],
+            ['name' => 'web2', 'image' => 'nginx', 'imageId' => 'sha256:old'],
+        ];
+        $client->pulled = self::D1;
+
+        syncUnraidStatusAfterRecreate($client, new DigestRowDatabase(), 'nginx', $this->status, $this->webui);
+
+        $this->assertFileDoesNotExist($this->status);
+    }
+
+    #[Test]
+    public function syncWithoutAPullNeverRecordsANewerRegistryBuild(): void
+    {
+        $client = new ImageInfoDockerClient();
+        $client->images['nginx'] = ['Id' => 'sha256:new', 'RepoDigests' => ['nginx@' . self::D1]];
+        $client->containers = [['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:new']];
+        $client->remote = self::D2;
+        $db = new DigestRowDatabase();
+
+        syncUnraidStatusAfterRecreate($client, $db, 'nginx', $this->status, $this->webui);
+        $this->assertFileDoesNotExist($this->status);
+
+        $db->stored = self::D1;
+        syncUnraidStatusAfterRecreate($client, $db, 'nginx', $this->status, $this->webui);
+        $this->assertSame(self::D1, $this->readJson($this->status)['library/nginx:latest']['local']);
     }
 
     #[Test]

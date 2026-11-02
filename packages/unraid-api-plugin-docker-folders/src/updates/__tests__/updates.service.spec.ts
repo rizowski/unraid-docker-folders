@@ -942,18 +942,31 @@ describe('UpdatesService and Unraid’s update status (issue #23)', () => {
     const D_PULLED = `sha256:${'a'.repeat(64)}`;
     const D_REMOTE = `sha256:${'b'.repeat(64)}`;
     const D_OLD = `sha256:${'c'.repeat(64)}`;
+    const NEW_PLEX_ID = 'sha256:image-plex-new';
 
     let temp: TempDatabase;
     let docker: ReturnType<typeof fakeDocker>;
     let dir: string;
     let paths: UnraidStatusPaths;
     let service: UpdatesService;
+    // Container name -> the image id it runs once recreated.
+    let recreatedOnto: Map<string, string>;
+    let listed: DockerListContainer[];
 
     beforeEach(() => {
         temp = createMigratedDatabase();
         docker = fakeDocker();
         dir = mkdtempSync(join(tmpdir(), 'dfm-unraid-svc-'));
         paths = { status: join(dir, 'unraid-update-status.json'), webui: join(dir, 'docker.json') };
+        recreatedOnto = new Map();
+        listed = [];
+        const recreate = {
+            recreateContainer: async (id: string) => {
+                listed = listed.map((c) => (c.Id === id ? { ...c, ImageID: recreatedOnto.get(c.Id) ?? c.ImageID } : c));
+                docker.setContainers(listed);
+                return { success: true, newId: id, error: null };
+            },
+        } as unknown as RecreateService;
         const updateLog = fakeUpdateLog();
         service = new UpdatesService(
             docker.client,
@@ -961,7 +974,7 @@ describe('UpdatesService and Unraid’s update status (issue #23)', () => {
             fakeEvents(),
             updateLog,
             releaseNotesServiceThatNeverFetches(temp.path, updateLog),
-            fakeRecreate().service,
+            recreate,
             undefined,
             paths
         );
@@ -972,61 +985,90 @@ describe('UpdatesService and Unraid’s update status (issue #23)', () => {
         rmSync(dir, { recursive: true, force: true });
     });
 
+    const setListed = (value: DockerListContainer[]) => {
+        listed = value;
+        docker.setContainers(value);
+    };
     const readStatus = () => JSON.parse(readFileSync(paths.status, 'utf8')) as Record<string, unknown>;
+    const STALE = JSON.stringify({ [PLEX]: { local: D_OLD, remote: D_REMOTE, status: 'false' } });
+    const digestLine = JSON.stringify({ status: `Digest: ${D_PULLED}` });
 
-    it('records the pull stream’s Digest line, even split across chunks, and drops the Docker tab cache', async () => {
-        docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID), container('sonarr', SONARR, SONARR_IMAGE_ID)]);
+    it('leaves Unraid alone after a pull with no recreate', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
         docker.setRemoteDigest(PLEX, D_REMOTE);
-        writeFileSync(
-            paths.status,
-            JSON.stringify({ [PLEX]: { local: D_OLD, remote: D_REMOTE, status: 'false' } })
-        );
-        writeFileSync(paths.webui, JSON.stringify({ plex: { updated: 'false' }, sonarr: { updated: 'true' } }));
+        writeFileSync(paths.status, STALE);
+        writeFileSync(paths.webui, JSON.stringify({ plex: { updated: 'false' } }));
 
         const promise = service.pullImage(PLEX);
-        const stream = docker.streamFor(PLEX);
-        const line = JSON.stringify({ status: `Digest: ${D_PULLED}` });
-        stream.write(`{"status":"Pull complete"}\n${line.slice(0, 20)}`);
-        stream.write(`${line.slice(20)}\n`);
-        stream.end(`{"status":"Status: Downloaded newer image for ${PLEX}"}\n`);
-        const result = await promise;
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
+        expect((await promise).success).toBe(true);
 
-        expect(result.success).toBe(true);
+        expect(readFileSync(paths.status, 'utf8')).toBe(STALE);
+        expect(Object.keys(JSON.parse(readFileSync(paths.webui, 'utf8')))).toEqual(['plex']);
+    });
+
+    it('records the pull’s Digest line, split across chunks, once the container is recreated', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID), container('sonarr', SONARR, SONARR_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+        writeFileSync(paths.status, STALE);
+        writeFileSync(paths.webui, JSON.stringify({ plex: { updated: 'false' }, sonarr: { updated: 'true' } }));
+
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        const stream = docker.streamFor(PLEX);
+        stream.write(`{"status":"Pull complete"}\n${digestLine.slice(0, 20)}`);
+        stream.write(`${digestLine.slice(20)}\n`);
+        stream.end(`{"status":"Status: Downloaded newer image for ${PLEX}"}\n`);
+        expect((await promise).success).toBe(true);
+
         expect(readStatus()[PLEX]).toEqual({ local: D_PULLED, remote: D_PULLED, status: 'true' });
         expect(Object.keys(JSON.parse(readFileSync(paths.webui, 'utf8')))).toEqual(['sonarr']);
     });
 
-    it('falls back to the /distribution digest when the stream has no Digest line', async () => {
-        docker.setRemoteDigest(PLEX, D_REMOTE);
+    it('leaves Unraid alone while another container on the tag still runs the old image', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID), container('plex2', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        writeFileSync(paths.status, STALE);
 
-        const promise = service.pullImage(PLEX);
-        docker.streamFor(PLEX).end('{"status":"Pull complete"}\n');
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
         await promise;
 
+        expect(readFileSync(paths.status, 'utf8')).toBe(STALE);
+    });
+
+    it('on a recreate without a pull, records the registry digest only if it is the image on disk', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+
+        // The registry has moved on past the build on disk: record nothing.
+        docker.setLocalDigests(PLEX, [`linuxserver/plex@${D_PULLED}`]);
+        await service.pullImage(PLEX, { containers: [CONTAINER_IDS.plex], recreateOnly: true });
+        expect(existsSync(paths.status)).toBe(false);
+
+        docker.setLocalDigests(PLEX, [`linuxserver/plex@${D_REMOTE}`]);
+        await service.pullImage(PLEX, { containers: [CONTAINER_IDS.plex], recreateOnly: true });
         expect(readStatus()[PLEX]).toEqual({ local: D_REMOTE, remote: D_REMOTE, status: 'true' });
     });
 
-    it('writes nothing for Unraid when no digest is known', async () => {
-        const promise = service.pullImage(PLEX);
-        docker.streamFor(PLEX).end('{"status":"Pull complete"}\n');
-        const result = await promise;
-
-        expect(result.success).toBe(true);
-        expect(existsSync(paths.status)).toBe(false);
-    });
-
-    it('repairs a stale flag during a full check', async () => {
-        docker.setContainers([container('sonarr', SONARR, SONARR_IMAGE_ID)]);
+    it('repairs a stale flag during a full check, but not while a container is behind', async () => {
+        const stale = JSON.stringify({ [SONARR]: { local: D_OLD, remote: D_REMOTE, status: 'false' } });
         docker.setRemoteDigest(SONARR, D_REMOTE);
         docker.setLocalDigests(SONARR_IMAGE_ID, [`linuxserver/sonarr@${D_REMOTE}`]);
         docker.setLocalDigests(SONARR, [`linuxserver/sonarr@${D_REMOTE}`]);
-        writeFileSync(
-            paths.status,
-            JSON.stringify({ [SONARR]: { local: D_OLD, remote: D_REMOTE, status: 'false' } })
-        );
+        writeFileSync(paths.status, stale);
 
+        docker.setImageId(SONARR, 'sha256:image-sonarr-newer');
+        setListed([container('sonarr', SONARR, SONARR_IMAGE_ID)]);
         await service.checkForUpdates();
+        expect(readFileSync(paths.status, 'utf8')).toBe(stale);
 
+        docker.setImageId(SONARR, SONARR_IMAGE_ID);
+        await service.checkForUpdates();
         expect(readStatus()[SONARR]).toEqual({ local: D_REMOTE, remote: D_REMOTE, status: 'true' });
     });
 });

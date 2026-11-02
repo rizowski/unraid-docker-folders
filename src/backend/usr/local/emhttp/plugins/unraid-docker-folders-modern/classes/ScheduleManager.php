@@ -835,6 +835,7 @@ class ScheduleManager
     if (!$recreated['success']) {
       return ['success' => false, 'message' => "Update failed for {$containerName}: {$recreated['error']}"];
     }
+    syncUnraidStatusAfterRecreate($docker, $this->db, $image);
     return ['success' => true, 'message' => "Updated {$containerName} to the latest {$image}"];
   }
 

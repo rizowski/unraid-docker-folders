@@ -7,7 +7,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
     bareImageDigest,
     containerNamesForImage,
+    containersBehindImage,
     markUnraidImageCurrent,
+    pickUnraidDigest,
     pullDigestFromStatus,
     repairUnraidUpdateStatus,
     unraidImageKey,
@@ -117,6 +119,22 @@ describe('unraid-update-status (issue #23)', () => {
         expect(containerNamesForImage(containers, 'nginx:latest')).toEqual(['web', 'web2']);
     });
 
+    it('finds containers on the tag that run another image', () => {
+        const containers = [
+            { name: 'web', image: 'nginx', imageId: 'sha256:new' },
+            { name: 'web2', image: 'nginx:latest', imageId: 'sha256:old' },
+            { name: 'other', image: 'nginx:1.25', imageId: 'sha256:old' },
+            { name: 'unknown', image: 'nginx' },
+        ];
+        expect(containersBehindImage(containers, 'nginx', 'sha256:new')).toEqual(['web2', 'unknown']);
+    });
+
+    it('picks the pull digest, else a candidate that is on disk', () => {
+        expect(pickUnraidDigest(D1, [], [D2])).toBe(D1);
+        expect(pickUnraidDigest(null, [`repo@${D2}`], [D1, D2])).toBe(D2);
+        expect(pickUnraidDigest(null, [`repo@${D2}`], [D1, null])).toBeNull();
+    });
+
     it('repairs only a flag whose remote digest is already on disk', async () => {
         write(paths.status, {
             'lscr.io/linuxserver/sonarr:latest': { local: D2, remote: D1, status: 'false' },
@@ -125,19 +143,19 @@ describe('unraid-update-status (issue #23)', () => {
         });
         write(paths.webui, { sonarr: { updated: 'false' }, radarr: { updated: 'false' } });
         const asked: string[] = [];
-        const digests: Record<string, string[]> = {
-            'lscr.io/linuxserver/sonarr:latest': [`lscr.io/linuxserver/sonarr@${D1}`],
-            'lscr.io/linuxserver/radarr:latest': [`lscr.io/linuxserver/radarr@${D2}`],
+        const images: Record<string, { id: string; repoDigests: string[] }> = {
+            'lscr.io/linuxserver/sonarr:latest': { id: 'sha256:s', repoDigests: [`lscr.io/linuxserver/sonarr@${D1}`] },
+            'lscr.io/linuxserver/radarr:latest': { id: 'sha256:r', repoDigests: [`lscr.io/linuxserver/radarr@${D2}`] },
         };
 
         const repaired = await repairUnraidUpdateStatus(
             async (key) => {
                 asked.push(key);
-                return digests[key] ?? null;
+                return images[key] ?? null;
             },
             [
-                { name: 'sonarr', image: 'lscr.io/linuxserver/sonarr' },
-                { name: 'radarr', image: 'lscr.io/linuxserver/radarr' },
+                { name: 'sonarr', image: 'lscr.io/linuxserver/sonarr', imageId: 'sha256:s' },
+                { name: 'radarr', image: 'lscr.io/linuxserver/radarr', imageId: 'sha256:r' },
             ],
             paths
         );
@@ -148,6 +166,18 @@ describe('unraid-update-status (issue #23)', () => {
         expect((data['lscr.io/linuxserver/radarr:latest'] as { status: string }).status).toBe('false');
         expect(asked).not.toContain('library/redis:7');
         expect(Object.keys(read(paths.webui))).toEqual(['radarr']);
+    });
+
+    it('does not repair while a container on the tag runs an older image', async () => {
+        const content = JSON.stringify({ 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        writeFileSync(paths.status, content);
+        const repaired = await repairUnraidUpdateStatus(
+            async () => ({ id: 'sha256:new', repoDigests: [`nginx@${D1}`] }),
+            [{ name: 'web', image: 'nginx', imageId: 'sha256:old' }],
+            paths
+        );
+        expect(repaired).toEqual([]);
+        expect(readFileSync(paths.status, 'utf8')).toBe(content);
     });
 
     it('writes nothing when nothing is stale', async () => {

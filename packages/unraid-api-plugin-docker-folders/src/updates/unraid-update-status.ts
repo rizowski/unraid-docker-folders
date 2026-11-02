@@ -2,8 +2,8 @@ import { chmodSync, existsSync, readFileSync, renameSync, statSync, unlinkSync, 
 import { basename, dirname, join } from 'node:path';
 
 /**
- * Tell Unraid's own Docker manager that a pull made an image current (issue
- * #23). The port of PHP's `include/unraidUpdateStatus.php`; that file's
+ * Tell Unraid's own Docker manager that a recreate made an image current
+ * (issue #23). The port of PHP's `include/unraidUpdateStatus.php`; that file's
  * header explains the two files and why each write looks the way it does.
  */
 
@@ -165,22 +165,58 @@ export function markUnraidImageCurrent(
 }
 
 /** Containers whose resolved image has Unraid key `image`'s key. */
-export function containerNamesForImage(containers: { name: string; image: string }[], image: string): string[] {
+export function containerNamesForImage(containers: StatusContainer[], image: string): string[] {
     const key = unraidImageKey(image);
     if (key === null) return [];
     return containers.filter((c) => c.name !== '' && unraidImageKey(c.image) === key).map((c) => c.name);
 }
 
+export interface StatusContainer {
+    name: string;
+    /** The resolved image reference, not Docker's raw one. */
+    image: string;
+    /** Missing counts as behind, so the tag is never marked current by mistake. */
+    imageId?: string;
+}
+
+/** Containers created from `image`'s tag that run some other image. */
+export function containersBehindImage(containers: StatusContainer[], image: string, imageId: string): string[] {
+    const key = unraidImageKey(image);
+    if (key === null) return [];
+    return containers.filter((c) => unraidImageKey(c.image) === key && (c.imageId ?? '') !== imageId).map((c) => c.name);
+}
+
+/**
+ * The pull's own `Digest:` line when this request pulled. Otherwise the
+ * first candidate that is one of the image's RepoDigests, so a newer build
+ * on the registry is never recorded as the one on disk.
+ */
+export function pickUnraidDigest(
+    pullDigest: string | null,
+    repoDigests: string[],
+    candidates: (string | null)[]
+): string | null {
+    const pulled = bareImageDigest(pullDigest);
+    if (pulled !== null) return pulled;
+    const local = repoDigests.map(bareImageDigest).filter((d): d is string => d !== null);
+    for (const candidate of candidates) {
+        const bare = bareImageDigest(candidate);
+        if (bare !== null && local.includes(bare)) return bare;
+    }
+    return null;
+}
+
 /**
  * Clear flags left by pulls made before this fix. Touches only an entry with
- * status "false" whose `remote` digest is one of the image's RepoDigests.
+ * status "false" whose `remote` digest is one of the image's RepoDigests, and
+ * only when every container on that tag runs that image.
  *
- * @param repoDigests The tag's local RepoDigests, or null when it is not on disk
+ * @param inspect The tag's image id and RepoDigests, or null when it is not on disk
  * @returns Keys that were repaired
  */
 export async function repairUnraidUpdateStatus(
-    repoDigests: (key: string) => Promise<string[] | null>,
-    containers: { name: string; image: string }[],
+    inspect: (key: string) => Promise<{ id: string; repoDigests: string[] } | null>,
+    containers: StatusContainer[],
     paths: UnraidStatusPaths = UNRAID_STATUS_PATHS
 ): Promise<string[]> {
     const status = readUnraidJson(paths.status);
@@ -193,9 +229,12 @@ export async function repairUnraidUpdateStatus(
         if (entry.status !== 'false') continue;
         const remote = bareImageDigest(entry.remote);
         if (remote === null || entry.local === remote) continue;
-        const digests = await repoDigests(key);
-        if (digests === null) continue;
-        if (digests.map(bareImageDigest).includes(remote)) {
+        const image = await inspect(key);
+        if (image === null) continue;
+        if (
+            image.repoDigests.map(bareImageDigest).includes(remote) &&
+            containersBehindImage(containers, key, image.id).length === 0
+        ) {
             status[key] = { local: remote, remote, status: 'true' } satisfies StatusEntry;
             repaired.push(key);
         }

@@ -1,6 +1,6 @@
 <?php
 /**
- * Tell Unraid's own Docker manager that a pull made an image current.
+ * Tell Unraid's own Docker manager that a recreate made an image current.
  *
  * Unraid keeps its "update ready" flags in two files the plugin's pulls never
  * touched (issue #23):
@@ -246,11 +246,64 @@ function containerNamesForImage(array $containers, $image)
 }
 
 /**
+ * Containers created from $image's tag that run some other image.
+ *
+ * @param array $containers DockerClient::listContainers() output
+ * @param string $image
+ * @param string $imageId The tag's current image ID
+ * @return string[] Their names
+ */
+function containersBehindImage(array $containers, $image, $imageId)
+{
+  $key = unraidImageKey($image);
+  if ($key === null) {
+    return [];
+  }
+  $behind = [];
+  foreach ($containers as $container) {
+    if (unraidImageKey($container['image'] ?? '') === $key && ($container['imageId'] ?? '') !== $imageId) {
+      $behind[] = (string) ($container['name'] ?? '');
+    }
+  }
+  return $behind;
+}
+
+/**
+ * The digest to record for the tag's image on disk.
+ *
+ * The pull's own "Digest:" line when this request pulled. Otherwise the first
+ * candidate (the registry's digest now, then the one stored at the last pull)
+ * that is one of the image's RepoDigests, so a newer build on the registry is
+ * never recorded as the one on disk.
+ *
+ * @param string|null $pullDigest
+ * @param string[] $repoDigests The image's RepoDigests
+ * @param array $candidates
+ * @return string|null
+ */
+function pickUnraidDigest($pullDigest, array $repoDigests, array $candidates)
+{
+  $pulled = bareImageDigest($pullDigest);
+  if ($pulled !== null) {
+    return $pulled;
+  }
+  $local = array_filter(array_map('bareImageDigest', $repoDigests));
+  foreach ($candidates as $candidate) {
+    $bare = bareImageDigest($candidate);
+    if ($bare !== null && in_array($bare, $local, true)) {
+      return $bare;
+    }
+  }
+  return null;
+}
+
+/**
  * Clear "update ready" flags left by pulls made before this fix.
  *
  * Touches only an entry with status "false" whose `remote` digest is one of
- * the local image's RepoDigests. Then the image on disk is the one the
- * registry serves, and Unraid would agree had it pulled it itself.
+ * the local image's RepoDigests, and only when every container on that tag
+ * runs that image. Then the containers run the build the registry serves,
+ * the state a recreate would have recorded.
  *
  * @param DockerClient $dockerClient
  * @param array $containers DockerClient::listContainers() output
@@ -283,7 +336,8 @@ function repairUnraidUpdateStatus(
       continue;
     }
     $local = array_map('bareImageDigest', $info['RepoDigests'] ?? []);
-    if (in_array($remote, $local, true)) {
+    if (in_array($remote, $local, true)
+        && empty(containersBehindImage($containers, (string) $key, (string) ($info['Id'] ?? '')))) {
       $status[$key] = ['local' => $remote, 'remote' => $remote, 'status' => 'true'];
       $repaired[] = (string) $key;
     }
