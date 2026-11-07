@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.07-dev1
+### Fixed
+- After the plugin updates and recreates a container, Unraid's Docker tab no longer keeps showing "update ready" for that image. (#23, #24)
+
 ## 2026.10.25-dev2
 ### Fixed
 - A container dragged to another folder no longer shows up in both folders until the page is reloaded.
