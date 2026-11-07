@@ -160,6 +160,7 @@ function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime =
 date_default_timezone_set(detectServerTimezone());
 
 require_once __DIR__ . '/paths.php';
+require_once __DIR__ . '/unraidUpdateStatus.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
 
 /**
@@ -441,6 +442,18 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     }
   }
 
+  // Clear Unraid flags that pulls made before issue #23's fix left stale.
+  // Full checks only, like the cleanup above.
+  if ($onlyImages === null) {
+    try {
+      foreach (repairUnraidUpdateStatus($dockerClient, $containers) as $key) {
+        $log('UNRAID Repaired stale update flag for ' . $key);
+      }
+    } catch (\Throwable $e) {
+      $log('UNRAID WARN repair failed: ' . $e->getMessage());
+    }
+  }
+
   // Release notes are a nice-to-have layered on top of a complete check. Any
   // failure here — network, schema, anything — must leave the digest results
   // and the counters below exactly as they are.
@@ -529,6 +542,9 @@ function recreateOneContainer($dockerClient, $name, $id)
  * digest. An upsert that names only the columns a pull changes, so the
  * release-notes columns survive.
  *
+ * Unraid's own flags are left alone here: a pull alone does not change the
+ * build a container runs. See syncUnraidStatusAfterRecreate().
+ *
  * @param DockerClient $dockerClient Docker API client
  * @param Database $db Database instance
  * @param string $image Image reference, as the update check keys it
@@ -537,6 +553,7 @@ function recordImagePulled($dockerClient, $db, $image)
 {
   $remoteDigest = $dockerClient->getRemoteImageDigest($image);
   $localDigest = $dockerClient->getImageDigest($image);
+
 
   $db->query(
     'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
@@ -550,6 +567,61 @@ function recordImagePulled($dockerClient, $db, $image)
     [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
   );
   logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
+}
+
+/**
+ * After a recreate, tell Unraid's Docker manager the image is current (#23).
+ *
+ * Unraid tracks updates per tag. It is marked current only once every
+ * container created from the tag runs the tag's image, so a pull-only run, or
+ * a recreate of some of the containers, still shows "update ready" in
+ * Unraid's Docker tab. Never throws.
+ *
+ * @param DockerClient $dockerClient The client that pulled, when this request
+ *   pulled: its "Digest:" line is the digest Unraid's updater records
+ * @param Database $db
+ * @param string $image Image reference the containers were recreated on
+ * @param string $statusPath
+ * @param string $webuiPath
+ */
+function syncUnraidStatusAfterRecreate(
+  $dockerClient,
+  $db,
+  $image,
+  $statusPath = UNRAID_UPDATE_STATUS_PATH,
+  $webuiPath = UNRAID_DOCKER_WEBUI_INFO_PATH
+) {
+  try {
+    $info = $dockerClient->getImageInfo($image);
+    if (!is_array($info) || empty($info['Id'])) {
+      logUpdate("RECREATE UNRAID skip {$image}: image not found");
+      return;
+    }
+
+    $containers = $dockerClient->listContainers(true);
+    $behind = containersBehindImage($containers, $image, $info['Id']);
+    if (!empty($behind)) {
+      logUpdate("RECREATE UNRAID skip {$image}: still on the old image: " . implode(', ', $behind));
+      return;
+    }
+
+    $candidates = [$dockerClient->getRemoteImageDigest($image)];
+    $row = $db->fetchOne('SELECT remote_digest FROM image_update_checks WHERE image = ?', [$image]);
+    if ($row) {
+      $candidates[] = $row['remote_digest'] ?? null;
+    }
+    $digest = pickUnraidDigest($dockerClient->getLastPullDigest(), $info['RepoDigests'] ?? [], $candidates);
+
+    $names = containerNamesForImage($containers, $image);
+    if (markUnraidImageCurrent($image, $digest, $names, $statusPath, $webuiPath)) {
+      logUpdate('RECREATE UNRAID status updated ' . unraidImageKey($image) . ": {$digest}"
+        . (empty($names) ? '' : ' (' . implode(', ', $names) . ')'));
+    } else {
+      logUpdate("RECREATE UNRAID status not updated for {$image}: no digest, or the file could not be read");
+    }
+  } catch (\Throwable $e) {
+    logUpdate("RECREATE WARN {$image}: Unraid status update failed: " . $e->getMessage());
+  }
 }
 
 /**

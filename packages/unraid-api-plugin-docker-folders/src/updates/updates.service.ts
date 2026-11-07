@@ -28,6 +28,17 @@ import { RecreateService, type RecreateResult } from './recreate.service.js';
 import { parseRepo, toReleaseNote } from './release-notes.util.js';
 import { ReleaseNotesService } from './release-notes.service.js';
 import { UpdateLogService } from './update-log.service.js';
+import {
+    UNRAID_STATUS_PATHS,
+    containerNamesForImage,
+    containersBehindImage,
+    markUnraidImageCurrent,
+    pickUnraidDigest,
+    pullDigestFromStatus,
+    repairUnraidUpdateStatus,
+    unraidImageKey,
+    type UnraidStatusPaths,
+} from './unraid-update-status.js';
 import { buildUpdateNotification } from './update-notifications.js';
 import type { DockerFoldersImagePullResult, DockerFoldersImageUpdateStatus } from './updates.model.js';
 
@@ -44,11 +55,20 @@ const CONTAINER_ID_PATTERN = /^[a-f0-9]{12,64}$/;
 /** `DockerClient::pullImage`'s `CURLOPT_TIMEOUT` — the whole pull, not per chunk. */
 const PULL_TIMEOUT_MS = 600_000;
 
+/** What a pull stream ended with: its last `error` line, and its `Digest:` line. */
+interface PullStreamOutcome {
+    error: string | null;
+    digest: string | null;
+}
+
 /** Label PHP reads off the local image to link a container to its GitHub repo. */
 const SOURCE_LABEL = 'org.opencontainers.image.source';
 
 /** Overrides the Docker socket path `runScheduledCheck` checks for. Only the tests supply one. */
 export const DOCKER_SOCKET_PATH_TOKEN = 'DOCKER_FOLDERS_UPDATE_SOCKET_PATH';
+
+/** Overrides where Unraid's update-status files live. Only the tests supply one. */
+export const UNRAID_STATUS_PATHS_TOKEN = 'DOCKER_FOLDERS_UNRAID_STATUS_PATHS';
 
 /**
  * `CronManager::$schedules`, byte-for-byte. The coordinator's scheduler reads
@@ -198,7 +218,10 @@ export class UpdatesService {
         private readonly recreate: RecreateService,
         @Optional()
         @Inject(DOCKER_SOCKET_PATH_TOKEN)
-        private readonly socketPath: string = DOCKER_SOCKET_PATH
+        private readonly socketPath: string = DOCKER_SOCKET_PATH,
+        @Optional()
+        @Inject(UNRAID_STATUS_PATHS_TOKEN)
+        private readonly unraidPaths: UnraidStatusPaths = UNRAID_STATUS_PATHS
     ) {}
 
     /** `GET /api/updates.php`: cached results, joined with cached release notes. */
@@ -392,11 +415,13 @@ export class UpdatesService {
             return { success: false, message: `Update check failed for ${containerName}: ${result.error}` };
         }
 
+        let pullDigest: string | null = null;
         if (result.updateAvailable) {
             const pulled = await this.pullOnly(image, () => {});
             if (!pulled.success) {
                 return { success: false, message: `Pull failed for ${containerName}: ${pulled.error ?? ''}` };
             }
+            pullDigest = pulled.digest;
             this.updateLog.log(`PULL OK ${image}`);
             try {
                 await this.recordPulled(image);
@@ -422,6 +447,7 @@ export class UpdatesService {
         if (!recreated.success) {
             return { success: false, message: `Update failed for ${containerName}: ${recreated.error}` };
         }
+        await this.syncUnraidStatusAfterRecreate(image, pullDigest);
         return { success: true, message: `Updated ${containerName} to the latest ${image}` };
     }
 
@@ -604,6 +630,33 @@ export class UpdatesService {
             }
         });
 
+        // Clear Unraid flags that pulls made before issue #23's fix left
+        // stale. Full checks only, like the cleanup above.
+        if (onlyImages === null) {
+            try {
+                const candidates = containers.map((c) => ({
+                    name: stripLeadingSlash(c.Names?.[0] ?? ''),
+                    image: resolved.get(c.Id) ?? c.Image ?? '',
+                    imageId: c.ImageID ?? '',
+                }));
+                const repaired = await repairUnraidUpdateStatus(
+                    async (key) => {
+                        try {
+                            const info = await this.docker.getImage(key).inspect();
+                            return { id: info.Id ?? '', repoDigests: info.RepoDigests ?? [] };
+                        } catch {
+                            return null;
+                        }
+                    },
+                    candidates,
+                    this.unraidPaths
+                );
+                for (const key of repaired) this.updateLog.log(`UNRAID Repaired stale update flag for ${key}`);
+            } catch (error) {
+                this.updateLog.log(`UNRAID WARN repair failed: ${errorMessage(error)}`);
+            }
+        }
+
         // Release notes are a nice-to-have layered on top of a complete check.
         // Any failure here must leave the digest results and counters above
         // exactly as they are.
@@ -715,7 +768,7 @@ export class UpdatesService {
     private async pullOnly(
         image: string,
         emit: (event: DockerFoldersPullEvent) => void
-    ): Promise<{ success: boolean; error: string | null }> {
+    ): Promise<{ success: boolean; error: string | null; digest: string | null }> {
         let stream: NodeJS.ReadableStream;
         try {
             stream = await this.docker.pullImage(image);
@@ -726,17 +779,18 @@ export class UpdatesService {
             const reason = errorMessage(error);
             this.logger.warn(`Docker pull error for ${image}: ${reason}`);
             this.updateLog.log(`PULL FAIL ${image}`);
-            return { success: false, error: reason || 'Pull failed' };
+            return { success: false, error: reason || 'Pull failed', digest: null };
         }
 
         let streamError: string | null;
+        let digest: string | null;
         try {
-            streamError = await this.consumeChunksWithTimeout(stream, emit);
+            ({ error: streamError, digest } = await this.consumeChunksWithTimeout(stream, emit));
         } catch (error) {
             const reason = errorMessage(error);
             this.logger.warn(`Docker pull stream error for ${image}: ${reason}`);
             this.updateLog.log(`PULL FAIL ${image}`);
-            return { success: false, error: reason || 'Pull failed' };
+            return { success: false, error: reason || 'Pull failed', digest: null };
         }
 
         if (streamError !== null) {
@@ -746,10 +800,10 @@ export class UpdatesService {
             // response itself was 200 still reports success. This treats that
             // line as the failure it describes instead.
             this.updateLog.log(`PULL FAIL ${image}: ${streamError}`);
-            return { success: false, error: streamError };
+            return { success: false, error: streamError, digest: null };
         }
 
-        return { success: true, error: null };
+        return { success: true, error: null, digest };
     }
 
     /** `pull.php`'s whole body, minus SSE framing — `emit` takes its place. */
@@ -761,7 +815,7 @@ export class UpdatesService {
     ): Promise<DockerFoldersImagePullResult> {
         this.updateLog.log(`RECREATE ONLY ${image}`);
         emit({ type: 'status', message: 'Recreating...' });
-        await this.autoRecreate(image, onlyContainerIds, emit);
+        await this.autoRecreate(image, onlyContainerIds, emit, null);
         this.events.publish('container', 'updated');
         return { success: true, image, error: null };
     }
@@ -802,7 +856,7 @@ export class UpdatesService {
         this.updateLog.log(`PULL post_pull_action=${postPullAction} for ${image}`);
 
         if (postPullAction === 'pull_and_auto_recreate' || forceRecreate) {
-            await this.autoRecreate(image, onlyContainerIds, emit);
+            await this.autoRecreate(image, onlyContainerIds, emit, pulled.digest);
         }
 
         return { success: true, image, error: null };
@@ -819,10 +873,12 @@ export class UpdatesService {
     private consumeChunks(
         stream: NodeJS.ReadableStream,
         emit: (event: DockerFoldersPullEvent) => void
-    ): Promise<string | null> {
+    ): Promise<PullStreamOutcome> {
         return new Promise((resolve, reject) => {
             let buffer = '';
             let lastError: string | null = null;
+            // The "Digest: sha256:..." line, the digest Unraid's updater records.
+            let digest: string | null = null;
 
             stream.on('data', (chunk: Buffer) => {
                 buffer += chunk.toString('utf8');
@@ -848,6 +904,8 @@ export class UpdatesService {
                         continue;
                     }
 
+                    digest = pullDigestFromStatus(parsed.status) ?? digest;
+
                     if (typeof parsed.error === 'string' && parsed.error !== '') {
                         lastError = parsed.error;
                         emit({ type: 'error', message: parsed.error });
@@ -865,7 +923,7 @@ export class UpdatesService {
             });
 
             stream.on('error', (error: Error) => reject(error));
-            stream.on('end', () => resolve(lastError));
+            stream.on('end', () => resolve({ error: lastError, digest }));
         });
     }
 
@@ -880,7 +938,7 @@ export class UpdatesService {
     private consumeChunksWithTimeout(
         stream: NodeJS.ReadableStream,
         emit: (event: DockerFoldersPullEvent) => void
-    ): Promise<string | null> {
+    ): Promise<PullStreamOutcome> {
         const destroyable = stream as NodeJS.ReadableStream & { destroy?: (error?: Error) => void };
         const timer = setTimeout(() => {
             destroyable.destroy?.(new Error('Pull timed out'));
@@ -928,11 +986,70 @@ export class UpdatesService {
         this.updateLog.log(`PULL DB updated ${image}: local=${localDigest ?? ''}, remote=${remoteDigest ?? ''}`);
     }
 
+    /**
+     * `syncUnraidStatusAfterRecreate()` in `config.php` (issue #23): after a
+     * recreate, mark the tag current in Unraid's own files, but only once
+     * every container on the tag runs its image. A pull alone never does.
+     * Never throws.
+     *
+     * @param pullDigest The pull stream's `Digest:` line when this request pulled
+     */
+    private async syncUnraidStatusAfterRecreate(image: string, pullDigest: string | null): Promise<void> {
+        try {
+            let info: { Id?: string; RepoDigests?: string[] };
+            try {
+                info = await this.docker.getImage(image).inspect();
+            } catch {
+                this.updateLog.log(`RECREATE UNRAID skip ${image}: image not found`);
+                return;
+            }
+            const imageId = info.Id ?? '';
+            if (imageId === '') {
+                this.updateLog.log(`RECREATE UNRAID skip ${image}: image not found`);
+                return;
+            }
+
+            const containers = await this.recreateCandidates();
+            const behind = containersBehindImage(containers, image, imageId);
+            if (behind.length > 0) {
+                this.updateLog.log(`RECREATE UNRAID skip ${image}: still on the old image: ${behind.join(', ')}`);
+                return;
+            }
+
+            const remote = await this.docker
+                .distributionInspect(image)
+                .then((d) => d.Descriptor?.digest ?? null)
+                .catch(() => null);
+            const stored = this.db.read(
+                (db) =>
+                    db.prepare('SELECT remote_digest FROM image_update_checks WHERE image = ?').get(image) as
+                        | { remote_digest: string | null }
+                        | undefined
+            );
+            const digest = pickUnraidDigest(pullDigest, info.RepoDigests ?? [], [remote, stored?.remote_digest ?? null]);
+
+            const names = containerNamesForImage(containers, image);
+            if (markUnraidImageCurrent(image, digest, names, this.unraidPaths)) {
+                this.updateLog.log(
+                    `RECREATE UNRAID status updated ${unraidImageKey(image) ?? image}: ${digest ?? ''}` +
+                        (names.length > 0 ? ` (${names.join(', ')})` : '')
+                );
+            } else {
+                this.updateLog.log(
+                    `RECREATE UNRAID status not updated for ${image}: no digest, or the file could not be read`
+                );
+            }
+        } catch (error) {
+            this.updateLog.log(`RECREATE WARN ${image}: Unraid status update failed: ${errorMessage(error)}`);
+        }
+    }
+
     /** The `post_pull_action`/`forceRecreate` block of `pull.php`. */
     private async autoRecreate(
         image: string,
         onlyContainerIds: Set<string> | null,
-        emit: (event: DockerFoldersPullEvent) => void
+        emit: (event: DockerFoldersPullEvent) => void,
+        pullDigest: string | null
     ): Promise<void> {
         try {
             const selection = selectRecreateTargets(await this.recreateCandidates(), image, onlyContainerIds);
@@ -950,6 +1067,7 @@ export class UpdatesService {
                 });
             }
 
+            let anyRecreated = false;
             for (const container of matching) {
                 const { name, id } = container;
 
@@ -957,6 +1075,7 @@ export class UpdatesService {
 
                 const result = await this.runRecreate(name, id);
                 if (result.success) {
+                    anyRecreated = true;
                     emit({ type: 'recreated', container: name, message: `${name} updated successfully` });
                 } else {
                     emit({
@@ -966,6 +1085,8 @@ export class UpdatesService {
                     });
                 }
             }
+
+            if (anyRecreated) await this.syncUnraidStatusAfterRecreate(image, pullDigest);
         } catch (error) {
             const message = errorMessage(error);
             this.updateLog.log(`RECREATE ERROR ${image}: ${message}`);
@@ -1009,6 +1130,7 @@ export class UpdatesService {
             id: container.Id,
             name: stripLeadingSlash(container.Names?.[0] ?? ''),
             image: resolved.get(container.Id) ?? container.Image ?? '',
+            imageId: container.ImageID ?? '',
         }));
     }
 

@@ -30,6 +30,7 @@
     </testsuite>
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>
+      <file>UnraidUpdateStatusTest.php</file>
     </testsuite>
     <testsuite name="PathSafety">
       <file>PathSafetyTest.php</file>
