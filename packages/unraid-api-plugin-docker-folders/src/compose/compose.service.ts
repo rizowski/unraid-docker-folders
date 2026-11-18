@@ -170,6 +170,10 @@ const LOG_STREAM_COALESCE_MS = 150;
  * does, regardless of caller. That is `FolderService`'s existing contract,
  * not something this class opts into.
  */
+/** `ComposeManager::FLASH_COPY_WARNING`. */
+const FLASH_COPY_WARNING =
+    'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
 @Injectable()
 export class ComposeService {
     private readonly logger = new Logger(ComposeService.name);
@@ -210,7 +214,7 @@ export class ComposeService {
      * button): a success then turns on `compose_auto_install`, so the flash
      * copy is kept and restored at boot. The default leaves the setting alone.
      */
-    async installComposeBinary(options: { persist?: boolean } = {}): Promise<{ success: boolean; error: string | null }> {
+    async installComposeBinary(options: { persist?: boolean } = {}): Promise<{ success: boolean; error: string | null; warning?: string }> {
         const url = `https://github.com/docker/compose/releases/download/v${this.paths.binaryVersion}/docker-compose-linux-x86_64`;
         const dir = dirname(this.paths.binaryPath);
 
@@ -270,6 +274,9 @@ export class ComposeService {
             const cached = await this.cacheComposeBinary({ sourceVerified: true });
             if (!cached.success) {
                 this.logger.warn(`No flash copy of Docker Compose: ${cached.error}`);
+                // The install worked. Say that the copy did not (same wording
+                // as `ComposeManager::FLASH_COPY_WARNING`).
+                return { success: true, error: null, warning: FLASH_COPY_WARNING };
             }
         }
 

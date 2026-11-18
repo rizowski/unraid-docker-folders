@@ -148,10 +148,14 @@ function handlePost($composeManager)
     if (!$result['success']) {
       errorResponse($result['error'], 500);
     }
-    jsonResponse([
+    $body = [
       'success' => true,
       'status' => $composeManager->getStatus(),
-    ]);
+    ];
+    if (!empty($result['warning'])) {
+      $body['warning'] = $result['warning'];
+    }
+    jsonResponse($body);
   }
 
   // Export compose configs to directory

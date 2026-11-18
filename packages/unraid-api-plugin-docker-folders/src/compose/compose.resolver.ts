@@ -243,6 +243,7 @@ export class ComposeResolver {
     public async installDockerFoldersComposeBinary(): Promise<{
         success: boolean;
         error: string | null;
+        warning?: string;
         status: DockerFoldersComposeStatus | null;
     }> {
         const result = await this.compose.installComposeBinary({ persist: true });

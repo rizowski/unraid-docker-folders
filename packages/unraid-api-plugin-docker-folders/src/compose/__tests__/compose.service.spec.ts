@@ -1349,6 +1349,26 @@ describe('ComposeService', () => {
             expect(autoInstall()).toBe('1');
         });
 
+        it('warns, and still succeeds, when the flash copy cannot be written', async () => {
+            const broken = new ComposeService(db, folders, fake.runner, {
+                ...paths,
+                binarySha256: sha,
+                cachePath: join(rootDir, 'no-such-dir', 'docker-compose'),
+            });
+            stubDownload(content);
+            const result = await broken.installComposeBinary({ persist: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeNull();
+            expect(result.warning).toContain('copy on the flash drive failed');
+            expect(autoInstall()).toBe('1');
+        });
+
+        it('has no warning when the copy is written', async () => {
+            stubDownload(content);
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.warning).toBeUndefined();
+        });
+
         it('a failed download does not turn the option on', async () => {
             stubDownload(null);
             const result = await pinned.installComposeBinary({ persist: true });

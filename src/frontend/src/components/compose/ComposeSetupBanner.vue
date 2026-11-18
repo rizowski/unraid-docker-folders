@@ -6,10 +6,10 @@
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
-    <span class="text-text flex-1">
-      Docker Compose is not installed. Install it to manage compose stacks.
-      <span data-testid="compose-reboot-note" class="block text-xs text-text-secondary">Compose is reinstalled after a reboot. You can turn this off in Settings.</span>
-    </span>
+    <div class="text-text flex-1">
+      <p>Docker Compose is not installed. Install it to manage compose stacks.</p>
+      <p data-testid="compose-reboot-note" class="text-xs text-text-secondary">Installing also keeps a copy on the flash drive (about 65 MB) and reinstalls Compose after a reboot. You can turn this off in Settings.</p>
+    </div>
     <button
       @click="install"
       :disabled="composeStore.installingBinary"
@@ -65,6 +65,11 @@
     <template v-else>
       Import failed: {{ importResult.errors?.join(', ') || 'Unknown error' }}
     </template>
+  </div>
+
+  <!-- Installed, but the flash copy failed -->
+  <div v-if="composeStore.installWarning" data-testid="compose-install-warning" class="flex items-center gap-2 px-4 py-2 mb-4 rounded bg-warning/10 border border-warning/30 text-sm text-text">
+    {{ composeStore.installWarning }}
   </div>
 
   <!-- Install error -->

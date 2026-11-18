@@ -103,25 +103,93 @@ class ComposeManager
    *   the flash copy is kept and restored at boot. The boot hook leaves it
    *   false, so a restore never switches the setting on by itself, and a user
    *   who turned it off keeps it off until they install again.
-   * @return array ['success' => bool, 'error' => string|null]
+   * @return array ['success' => bool, 'error' => string|null, 'warning' => string (only when the flash copy failed)]
    */
   public function installComposeBinary($persist = false)
   {
     $url = 'https://github.com/docker/compose/releases/download/v'
       . self::COMPOSE_VERSION . '/docker-compose-linux-x86_64';
 
-    $dir = dirname(self::COMPOSE_BINARY_PATH);
+    $binary = $this->binaryPath();
+    $sha = $this->binarySha256();
+
+    $dir = dirname($binary);
     if (!is_dir($dir)) {
       if (!@mkdir($dir, 0755, true)) {
         return ['success' => false, 'error' => 'Failed to create directory: ' . $dir];
       }
     }
 
-    $tmpPath = self::COMPOSE_BINARY_PATH . '.tmp';
+    $tmpPath = $binary . '.tmp';
 
-    // Download
+    $download = $this->downloadFile($url, $tmpPath);
+    if (!$download['success']) {
+      return $download;
+    }
+
+    // Verify SHA256
+    $hash = hash_file('sha256', $tmpPath);
+    if ($hash !== $sha) {
+      @unlink($tmpPath);
+      return ['success' => false, 'error' => 'SHA256 verification failed. Expected: ' . $sha . ', got: ' . $hash];
+    }
+
+    // Move into place and set permissions
+    if (!@rename($tmpPath, $binary)) {
+      @unlink($tmpPath);
+      return ['success' => false, 'error' => 'Failed to move binary into place'];
+    }
+
+    @chmod($binary, 0755);
+    $this->composeAvailable = null;
+
+    if ($persist) {
+      $this->enableAutoInstall();
+    }
+
+    $result = ['success' => true, 'error' => null];
+    if ($this->isAutoInstallEnabled()) {
+      $cached = $this->cacheComposeBinary($binary, $this->cachePath(), $sha, true);
+      if (!$cached['success']) {
+        error_log('Docker Folders: no flash copy of Docker Compose: ' . $cached['error']);
+        // The install worked. Say that the copy did not, so the user is not
+        // told Compose survives a reboot when it only does by a new download.
+        $result['warning'] = self::FLASH_COPY_WARNING;
+      }
+    }
+
+    return $result;
+  }
+
+  /** Shown when Compose installed but the copy on flash could not be written. */
+  const FLASH_COPY_WARNING = 'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
+  // Seams for the install: the tests replace them, the plugin never does.
+
+  protected function binaryPath()
+  {
+    return self::COMPOSE_BINARY_PATH;
+  }
+
+  protected function cachePath()
+  {
+    return self::COMPOSE_CACHE_PATH;
+  }
+
+  protected function binarySha256()
+  {
+    return self::COMPOSE_SHA256;
+  }
+
+  /**
+   * Download $url to $dest.
+   *
+   * @return array ['success' => bool, 'error' => string|null]
+   */
+  protected function downloadFile($url, $dest)
+  {
     $ch = curl_init($url);
-    $fp = fopen($tmpPath, 'w');
+    $fp = fopen($dest, 'w');
     if (!$fp) {
       return ['success' => false, 'error' => 'Failed to open temp file for writing'];
     }
@@ -141,35 +209,8 @@ class ComposeManager
     fclose($fp);
 
     if (!$result || $httpCode >= 400) {
-      @unlink($tmpPath);
+      @unlink($dest);
       return ['success' => false, 'error' => 'Download failed: ' . $curlError . ' (HTTP ' . $httpCode . ')'];
-    }
-
-    // Verify SHA256
-    $hash = hash_file('sha256', $tmpPath);
-    if ($hash !== self::COMPOSE_SHA256) {
-      @unlink($tmpPath);
-      return ['success' => false, 'error' => 'SHA256 verification failed. Expected: ' . self::COMPOSE_SHA256 . ', got: ' . $hash];
-    }
-
-    // Move into place and set permissions
-    if (!@rename($tmpPath, self::COMPOSE_BINARY_PATH)) {
-      @unlink($tmpPath);
-      return ['success' => false, 'error' => 'Failed to move binary into place'];
-    }
-
-    @chmod(self::COMPOSE_BINARY_PATH, 0755);
-    $this->composeAvailable = null;
-
-    if ($persist) {
-      $this->enableAutoInstall();
-    }
-
-    if ($this->isAutoInstallEnabled()) {
-      $cached = $this->cacheComposeBinary(self::COMPOSE_BINARY_PATH, self::COMPOSE_CACHE_PATH, self::COMPOSE_SHA256, true);
-      if (!$cached['success']) {
-        error_log('Docker Folders: no flash copy of Docker Compose: ' . $cached['error']);
-      }
     }
 
     return ['success' => true, 'error' => null];

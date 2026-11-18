@@ -217,6 +217,10 @@ export class DockerFoldersComposeInstallResult {
 
     @Field(() => DockerFoldersComposeStatus, { nullable: true })
     status!: DockerFoldersComposeStatus | null;
+
+    /** Set when the install worked but the flash copy did not. */
+    @Field(() => String, { nullable: true })
+    warning?: string | null;
 }
 
 /**

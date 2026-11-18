@@ -904,7 +904,7 @@ const COMPOSE_STACKS = `
 
 const INSTALL_COMPOSE_BINARY = `
   mutation InstallDockerFoldersComposeBinary {
-    installDockerFoldersComposeBinary { success error status { ${COMPOSE_STATUS_FIELDS} } }
+    installDockerFoldersComposeBinary { success error warning status { ${COMPOSE_STATUS_FIELDS} } }
   }
 `;
 
@@ -1409,7 +1409,7 @@ export const graphqlBackend: Backend = {
 
     installBinary: async () => {
       const result = await gql<{
-        installDockerFoldersComposeBinary: { success: boolean; error: string | null; status: GqlComposeStatus | null };
+        installDockerFoldersComposeBinary: { success: boolean; error: string | null; warning?: string | null; status: GqlComposeStatus | null };
       }>(INSTALL_COMPOSE_BINARY);
       if (!result.ok) return { ok: false, status: result.status, data: toErrorBody(result), error: result.error };
       const install = result.data.installDockerFoldersComposeBinary;
@@ -1423,7 +1423,10 @@ export const graphqlBackend: Backend = {
       return {
         ok: true,
         status: result.status,
-        data: { status: install.status ? toComposeStatus(install.status) : undefined },
+        data: {
+          status: install.status ? toComposeStatus(install.status) : undefined,
+          ...(install.warning ? { warning: install.warning } : {}),
+        },
       };
     },
 
