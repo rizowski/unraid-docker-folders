@@ -335,6 +335,12 @@ describe('ComposeResolver', () => {
 
             expect(events.publish).not.toHaveBeenCalled();
         });
+
+        it('the install mutation asks the service to persist compose_auto_install', async () => {
+            const compose = fakeComposeService();
+            await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
+            expect(compose.installComposeBinary).toHaveBeenCalledWith({ persist: true });
+        });
     });
 
     describe('setDockerFoldersComposeEnvPath boundary validation', () => {

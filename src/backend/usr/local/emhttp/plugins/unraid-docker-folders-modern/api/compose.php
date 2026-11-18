@@ -144,7 +144,7 @@ function handlePost($composeManager)
 
   // Install docker compose binary
   if ($action === 'install_binary') {
-    $result = $composeManager->installComposeBinary();
+    $result = $composeManager->installComposeBinary(true);
     if (!$result['success']) {
       errorResponse($result['error'], 500);
     }

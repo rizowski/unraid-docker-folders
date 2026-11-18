@@ -6,7 +6,10 @@
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
-    <span class="text-text flex-1">Docker Compose is not installed. Install it to manage compose stacks.</span>
+    <span class="text-text flex-1">
+      Docker Compose is not installed. Install it to manage compose stacks.
+      <span data-testid="compose-reboot-note" class="block text-xs text-text-secondary">Compose is reinstalled after a reboot. You can turn this off in Settings.</span>
+    </span>
     <button
       @click="install"
       :disabled="composeStore.installingBinary"

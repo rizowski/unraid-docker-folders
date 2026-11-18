@@ -98,9 +98,14 @@ class ComposeManager
   /**
    * Download and install Docker Compose CLI plugin binary
    *
+   * @param bool $persist true for an install the user started (the banner's
+   *   button): a successful install then turns on compose_auto_install, so
+   *   the flash copy is kept and restored at boot. The boot hook leaves it
+   *   false, so a restore never switches the setting on by itself, and a user
+   *   who turned it off keeps it off until they install again.
    * @return array ['success' => bool, 'error' => string|null]
    */
-  public function installComposeBinary()
+  public function installComposeBinary($persist = false)
   {
     $url = 'https://github.com/docker/compose/releases/download/v'
       . self::COMPOSE_VERSION . '/docker-compose-linux-x86_64';
@@ -156,6 +161,10 @@ class ComposeManager
     @chmod(self::COMPOSE_BINARY_PATH, 0755);
     $this->composeAvailable = null;
 
+    if ($persist) {
+      $this->enableAutoInstall();
+    }
+
     if ($this->isAutoInstallEnabled()) {
       $cached = $this->cacheComposeBinary(self::COMPOSE_BINARY_PATH, self::COMPOSE_CACHE_PATH, self::COMPOSE_SHA256, true);
       if (!$cached['success']) {
@@ -175,6 +184,15 @@ class ComposeManager
   {
     $row = $this->db->fetchOne("SELECT value FROM settings WHERE key = 'compose_auto_install'");
     return $row && $row['value'] === '1';
+  }
+
+  /**
+   * Turn compose_auto_install on. Only a successful user-started install
+   * calls this.
+   */
+  public function enableAutoInstall()
+  {
+    dfmUpsertSetting($this->db, 'compose_auto_install', '1');
   }
 
   /**

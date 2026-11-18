@@ -893,7 +893,7 @@ if (file_exists($changelogPath)) {
     <div class="setting-row">
       <div class="setting-info">
         <label for="compose-auto-install">Reinstall Docker Compose after a reboot</label>
-        <div class="description">Unraid keeps the Docker CLI plugins in RAM, so <code>docker compose</code> disappears at every reboot and compose stacks cannot autostart. When enabled, a verified copy of the Compose binary is kept on the flash drive (about 65 MB) and put back each time Docker starts, before stacks autostart. If no copy exists yet, it is downloaded once. <strong>Default: Off</strong></div>
+        <div class="description">Unraid keeps the Docker CLI plugins in RAM, so <code>docker compose</code> disappears at every reboot and compose stacks cannot autostart. When enabled, a verified copy of the Compose binary is kept on the flash drive (about 65 MB) and put back each time Docker starts, before stacks autostart. If no copy exists yet, it is downloaded once. Installing Compose from the setup banner on the Folders tab turns this on; turn it off here to keep Compose in RAM only. <strong>Default: Off</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="compose-auto-install" <?= $composeAutoInstall ? 'checked' : '' ?> onchange="saveSetting('compose_auto_install', this.checked ? '1' : '0')" />

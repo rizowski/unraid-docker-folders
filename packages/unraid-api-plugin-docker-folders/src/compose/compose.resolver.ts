@@ -245,7 +245,7 @@ export class ComposeResolver {
         error: string | null;
         status: DockerFoldersComposeStatus | null;
     }> {
-        const result = await this.compose.installComposeBinary();
+        const result = await this.compose.installComposeBinary({ persist: true });
         return { ...result, status: result.success ? await this.compose.getStatus() : null };
     }
 

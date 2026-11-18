@@ -82,6 +82,9 @@
     <testsuite name="SecurityAdvisor">
       <file>SecurityAdvisorTest.php</file>
     </testsuite>
+    <testsuite name="ComposeAutoInstall">
+      <file>ComposeAutoInstallTest.php</file>
+    </testsuite>
     <testsuite name="ComposeRestore">
       <file>ComposeRestoreTest.php</file>
     </testsuite>

@@ -1290,4 +1290,78 @@ describe('ComposeService', () => {
             expect(existsSync(paths.cachePath)).toBe(false);
         });
     });
+
+    describe('installComposeBinary and compose_auto_install', () => {
+        const content = 'compose-bytes';
+        const sha = createHash('sha256').update(content).digest('hex');
+        let pinned: ComposeService;
+
+        function autoInstall(): string | undefined {
+            const row = db.read(
+                (d) => d.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get() as { value: string } | undefined
+            );
+            return row?.value;
+        }
+
+        function stubDownload(body: string | null): void {
+            vi.stubGlobal(
+                'fetch',
+                vi.fn(async () =>
+                    body === null ? new Response('nope', { status: 500 }) : new Response(body, { status: 200 })
+                )
+            );
+        }
+
+        beforeEach(() => {
+            mkdirSync(paths.configDir, { recursive: true });
+            pinned = new ComposeService(db, folders, fake.runner, { ...paths, binarySha256: sha });
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('a user-started install turns the option on and leaves a flash copy', async () => {
+            stubDownload(content);
+            await expect(pinned.installComposeBinary({ persist: true })).resolves.toEqual({ success: true, error: null });
+            expect(autoInstall()).toBe('1');
+            expect(readFileSync(paths.cachePath, 'utf8')).toBe(content);
+        });
+
+        it('an install that does not ask to persist (the boot path) leaves the option alone', async () => {
+            stubDownload(content);
+            await pinned.installComposeBinary();
+            expect(autoInstall()).toBeUndefined();
+            expect(existsSync(paths.cachePath)).toBe(false);
+        });
+
+        it('keeps an option the user turned off when the boot path installs', async () => {
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            stubDownload(content);
+            await pinned.installComposeBinary();
+            expect(autoInstall()).toBe('0');
+        });
+
+        it('a user-started install turns an option that was off back on', async () => {
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            stubDownload(content);
+            await pinned.installComposeBinary({ persist: true });
+            expect(autoInstall()).toBe('1');
+        });
+
+        it('a failed download does not turn the option on', async () => {
+            stubDownload(null);
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.success).toBe(false);
+            expect(autoInstall()).toBeUndefined();
+        });
+
+        it('a download that fails the hash check does not turn the option on', async () => {
+            stubDownload('tampered');
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('SHA256');
+            expect(autoInstall()).toBeUndefined();
+        });
+    });
 });

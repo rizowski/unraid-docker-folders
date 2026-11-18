@@ -205,8 +205,12 @@ export class ComposeService {
      * child process), but the binary it produces is later executed by every
      * other method in this class, so the hash check is the security boundary
      * for this one method.
+     *
+     * `persist` is true for an install the user started (the banner's
+     * button): a success then turns on `compose_auto_install`, so the flash
+     * copy is kept and restored at boot. The default leaves the setting alone.
      */
-    async installComposeBinary(): Promise<{ success: boolean; error: string | null }> {
+    async installComposeBinary(options: { persist?: boolean } = {}): Promise<{ success: boolean; error: string | null }> {
         const url = `https://github.com/docker/compose/releases/download/v${this.paths.binaryVersion}/docker-compose-linux-x86_64`;
         const dir = dirname(this.paths.binaryPath);
 
@@ -258,6 +262,10 @@ export class ComposeService {
             return { success: false, error: 'Failed to move binary into place' };
         }
 
+        if (options.persist) {
+            this.enableAutoInstall();
+        }
+
         if (this.isAutoInstallEnabled()) {
             const cached = await this.cacheComposeBinary({ sourceVerified: true });
             if (!cached.success) {
@@ -283,6 +291,18 @@ export class ComposeService {
                     | undefined
         );
         return row?.value === '1';
+    }
+
+    /** `ComposeManager::enableAutoInstall`. */
+    enableAutoInstall(): void {
+        this.db.write((db) =>
+            db
+                .prepare(
+                    "INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', ?) " +
+                        'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+                )
+                .run(nowSeconds())
+        );
     }
 
     /**
