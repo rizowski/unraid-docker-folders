@@ -8,6 +8,8 @@
  */
 
 import type { Plugin } from 'vite';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // --- Mock data ---
 
@@ -1431,6 +1433,18 @@ export function mockApiPlugin(): Plugin {
     name: 'mock-api',
     configureServer(server) {
       const API_PREFIX = '/plugins/unraid-docker-folders-modern/api';
+
+      // The real include/frameSrc.js, so dev/iframe-test.html exercises the file
+      // that ships instead of a copy of it.
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?')[0] !== '/include/frameSrc.js') return next();
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(
+          readFileSync(
+            resolve(__dirname, '../../backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/frameSrc.js'),
+          ),
+        );
+      });
 
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith(API_PREFIX)) return next();

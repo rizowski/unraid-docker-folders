@@ -17,8 +17,11 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
     <p>Expected path: <code><?= DB_PATH ?></code></p>
 </div>
 <?php else: ?>
+<!-- color-scheme:normal: keeps the frame's canvas from turning opaque white when
+     the theme sets color-scheme:dark on <html> (CSS Color Adjustment 1, section 2.4).
+     The app root paints its own background today, this keeps it from depending on that. -->
 <iframe id="docker-folders-frame"
-        style="width:100%;min-height:600px;border:none;"
+        style="width:100%;min-height:600px;border:none;color-scheme:normal;"
         scrolling="no"
         allowfullscreen></iframe>
 
@@ -141,6 +144,12 @@ $dbStatus = file_exists(DB_PATH) ? 'exists' : 'missing';
 (function() {
   var frame = document.getElementById('docker-folders-frame');
   frame.src = window.dockerFoldersFrameSrc('index.html');
+
+  // The URL carries the theme at load time. A theme that switches in place (a
+  // day/night toggle) needs a message, and a frame that has just loaded gets one
+  // regardless, in case the theme moved while it was loading.
+  var sendTheme = window.dockerFoldersWatchTheme(function() { return frame; });
+  frame.addEventListener('load', function() { sendTheme(true); });
 
   // ============================================================
   // Generic parent-page modal shell

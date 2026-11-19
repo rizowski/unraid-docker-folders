@@ -296,9 +296,23 @@
   display: block;
 }
 
-/* Neutralize Unraid's link color override */
+/* Neutralize Unraid's link color override.
+   The colour half sits in `@layer base`, below Tailwind's `@layer utilities`.
+   Unlayered, the id selector beat every `text-*` utility, so an <a> with
+   `text-warning` rendered in the inherited text colour while the identical
+   <span> stayed orange (the Update tag). In the layer, a link with a colour
+   utility keeps it and a link with none still inherits. Only layering works
+   here: `:where()` lowers specificity, but an unlayered rule beats a layered
+   one at any specificity. The frames never load Unraid's own stylesheet, and
+   no page renders this app inline, so there is no Unraid link rule left for
+   this to lose to. */
+@layer base {
+  #unraid-docker-folders-modern a {
+    color: inherit;
+  }
+}
+
 #unraid-docker-folders-modern a {
-  color: inherit;
   text-decoration: none;
 }
 
