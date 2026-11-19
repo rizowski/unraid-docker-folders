@@ -122,11 +122,38 @@ final class ComposeAutoInstallTest extends TestCase
     }
 
     #[Test]
-    public function aUserStartedInstallTurnsAnExplicitOffBackOn(): void
+    public function aUserStartedInstallKeepsAnExplicitOffAndWritesNoFlashCopy(): void
     {
         dfmUpsertSetting($this->db, 'compose_auto_install', '0');
+        $this->assertSame(['success' => true, 'error' => null], $this->manager->installComposeBinary(true));
+        $this->assertSame('0', $this->setting());
+        $this->assertFalse($this->manager->isAutoInstallEnabled());
+        $this->assertFileDoesNotExist($this->manager->cache);
+        $this->assertFileExists($this->manager->binary);
+    }
+
+    #[Test]
+    public function aUserStartedInstallLeavesAnAlreadyOnSettingOnAndKeepsTheCopy(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
         $this->manager->installComposeBinary(true);
         $this->assertSame('1', $this->setting());
+        $this->assertSame(self::CONTENT, file_get_contents($this->manager->cache));
+    }
+
+    #[Test]
+    public function aChoiceIsOnlyRecordedOnceARowExists(): void
+    {
+        $this->assertFalse($this->manager->hasAutoInstallChoice());
+        dfmUpsertSetting($this->db, 'compose_auto_install', '0');
+        $this->assertTrue($this->manager->hasAutoInstallChoice());
+    }
+
+    #[Test]
+    public function theInstallEndpointReportsWhetherAutoInstallIsOn(): void
+    {
+        $src = file_get_contents(__DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/api/compose.php');
+        $this->assertStringContainsString("'auto_install' => \$composeManager->isAutoInstallEnabled()", $src);
     }
 
     #[Test]

@@ -8,7 +8,7 @@
     </svg>
     <div class="text-text flex-1">
       <p>Docker Compose is not installed. Install it to manage compose stacks.</p>
-      <p data-testid="compose-reboot-note" class="text-xs text-text-secondary">Installing also keeps a copy on the flash drive (about 65 MB) and reinstalls Compose after a reboot. You can turn this off in Settings.</p>
+      <p data-testid="compose-reboot-note" class="text-xs text-text-secondary">Installing also keeps a copy on the flash drive (about 65 MB) and reinstalls Compose after a reboot, unless you turned that off in Settings.</p>
     </div>
     <button
       @click="install"
@@ -65,6 +65,12 @@
     <template v-else>
       Import failed: {{ importResult.errors?.join(', ') || 'Unknown error' }}
     </template>
+  </div>
+
+  <!-- What the install did about reinstalling after a reboot. Shown only once the backend has said. -->
+  <div v-if="composeStore.installAutoInstall !== null" data-testid="compose-install-note" class="px-4 py-2 mb-4 rounded bg-info/10 border border-info/30 text-xs text-text-secondary">
+    <template v-if="composeStore.installAutoInstall">Compose is reinstalled after a reboot, and a copy (about 65 MB) is kept on the flash drive. You can turn this off in Settings.</template>
+    <template v-else>Compose is not reinstalled after a reboot, as you set in Settings. After a reboot, install it again from here.</template>
   </div>
 
   <!-- Installed, but the flash copy failed -->

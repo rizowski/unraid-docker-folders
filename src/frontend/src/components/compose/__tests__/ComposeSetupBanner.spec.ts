@@ -21,7 +21,7 @@ describe('ComposeSetupBanner', () => {
     const note = wrapper.find('[data-testid="compose-reboot-note"]');
     expect(note.exists()).toBe(true);
     expect(note.text()).toBe(
-      'Installing also keeps a copy on the flash drive (about 65 MB) and reinstalls Compose after a reboot. You can turn this off in Settings.'
+      'Installing also keeps a copy on the flash drive (about 65 MB) and reinstalls Compose after a reboot, unless you turned that off in Settings.'
     );
   });
 
@@ -33,6 +33,22 @@ describe('ComposeSetupBanner', () => {
 
     const wrapper = mount(ComposeSetupBanner, { global: { plugins: [pinia] } });
     expect(wrapper.find('[data-testid="compose-install-warning"]').text()).toContain('flash drive failed');
+  });
+
+  it.each([
+    ['never set, so the install turned it on', true, 'reinstalled after a reboot, and a copy'],
+    ['already on', true, 'reinstalled after a reboot, and a copy'],
+    ['explicitly off', false, 'not reinstalled after a reboot'],
+  ])('says what the install did when the setting was %s', (_name, autoInstall, text) => {
+    const compose = useComposeStore();
+    compose.installAutoInstall = autoInstall;
+    const wrapper = mount(ComposeSetupBanner, { global: { plugins: [pinia] } });
+    expect(wrapper.find('[data-testid="compose-install-note"]').text()).toContain(text);
+  });
+
+  it('shows no install note before an install', () => {
+    const wrapper = mount(ComposeSetupBanner, { global: { plugins: [pinia] } });
+    expect(wrapper.find('[data-testid="compose-install-note"]').exists()).toBe(false);
   });
 
   it('shows no warning when there is none', () => {

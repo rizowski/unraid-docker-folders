@@ -1342,11 +1342,27 @@ describe('ComposeService', () => {
             expect(autoInstall()).toBe('0');
         });
 
-        it('a user-started install turns an option that was off back on', async () => {
+        it('a user-started install keeps an option that was off, and writes no flash copy', async () => {
             db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            stubDownload(content);
+            await expect(pinned.installComposeBinary({ persist: true })).resolves.toEqual({ success: true, error: null });
+            expect(autoInstall()).toBe('0');
+            expect(pinned.isAutoInstallEnabled()).toBe(false);
+            expect(existsSync(paths.cachePath)).toBe(false);
+        });
+
+        it('a user-started install leaves an option that was already on, and keeps the copy', async () => {
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', 0)").run());
             stubDownload(content);
             await pinned.installComposeBinary({ persist: true });
             expect(autoInstall()).toBe('1');
+            expect(readFileSync(paths.cachePath, 'utf8')).toBe(content);
+        });
+
+        it('tells a stored choice from none', () => {
+            expect(pinned.hasAutoInstallChoice()).toBe(false);
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            expect(pinned.hasAutoInstallChoice()).toBe(true);
         });
 
         it('warns, and still succeeds, when the flash copy cannot be written', async () => {

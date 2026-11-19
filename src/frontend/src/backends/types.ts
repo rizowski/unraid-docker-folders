@@ -215,7 +215,7 @@ export interface Backend {
   compose: {
     status(): Promise<BackendResult<ComposeStatus>>;
     list(): Promise<BackendResult<{ stacks?: ComposeStack[] }>>;
-    installBinary(): Promise<BackendResult<ErrorBody & { status?: ComposeStatus; warning?: string }>>;
+    installBinary(): Promise<BackendResult<ErrorBody & { status?: ComposeStatus; warning?: string; auto_install?: boolean }>>;
     stackAction(
       project: string,
       action: 'up' | 'down' | 'stop' | 'restart' | 'pull',

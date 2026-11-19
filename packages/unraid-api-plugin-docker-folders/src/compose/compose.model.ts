@@ -218,6 +218,10 @@ export class DockerFoldersComposeInstallResult {
     @Field(() => DockerFoldersComposeStatus, { nullable: true })
     status!: DockerFoldersComposeStatus | null;
 
+    /** Whether Compose is reinstalled after a reboot once this install is done. */
+    @Field(() => Boolean)
+    autoInstall!: boolean;
+
     /** Set when the install worked but the flash copy did not. */
     @Field(() => String, { nullable: true })
     warning?: string | null;

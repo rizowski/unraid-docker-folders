@@ -33,6 +33,13 @@ describe('compose store – installBinary', () => {
     expect(store.installWarning).toBeNull();
   });
 
+  it.each([[true], [false]])('keeps auto_install=%s from the reply', async (value) => {
+    mockApiFetch.mockResolvedValue(reply(true, { success: true, status: {}, auto_install: value }));
+    const store = useComposeStore();
+    await store.installBinary();
+    expect(store.installAutoInstall).toBe(value);
+  });
+
   it('has no warning after a failed install', async () => {
     mockApiFetch.mockResolvedValue(reply(false, { message: 'Download failed' }));
     const store = useComposeStore();

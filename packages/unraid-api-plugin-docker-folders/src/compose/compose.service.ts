@@ -211,8 +211,10 @@ export class ComposeService {
      * for this one method.
      *
      * `persist` is true for an install the user started (the banner's
-     * button): a success then turns on `compose_auto_install`, so the flash
-     * copy is kept and restored at boot. The default leaves the setting alone.
+     * button): a success then turns on `compose_auto_install` when the user
+     * never chose a value (no stored row), so the flash copy is kept and
+     * restored at boot. A stored off stays off and no flash copy is written.
+     * The default leaves the setting alone.
      */
     async installComposeBinary(options: { persist?: boolean } = {}): Promise<{ success: boolean; error: string | null; warning?: string }> {
         const url = `https://github.com/docker/compose/releases/download/v${this.paths.binaryVersion}/docker-compose-linux-x86_64`;
@@ -266,7 +268,8 @@ export class ComposeService {
             return { success: false, error: 'Failed to move binary into place' };
         }
 
-        if (options.persist) {
+        // Only when the user never chose: a stored value, on or off, stays.
+        if (options.persist && !this.hasAutoInstallChoice()) {
             this.enableAutoInstall();
         }
 
@@ -298,6 +301,13 @@ export class ComposeService {
                     | undefined
         );
         return row?.value === '1';
+    }
+
+    /** `ComposeManager::hasAutoInstallChoice`: a stored row, on or off. */
+    hasAutoInstallChoice(): boolean {
+        return (
+            this.db.read((db) => db.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get()) !== undefined
+        );
     }
 
     /** `ComposeManager::enableAutoInstall`. */

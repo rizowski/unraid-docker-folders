@@ -99,8 +99,10 @@ class ComposeManager
    * Download and install Docker Compose CLI plugin binary
    *
    * @param bool $persist true for an install the user started (the banner's
-   *   button): a successful install then turns on compose_auto_install, so
-   *   the flash copy is kept and restored at boot. The boot hook leaves it
+   *   button): a successful install then turns on compose_auto_install when
+   *   the user never chose a value (no stored row), so the flash copy is kept
+   *   and restored at boot. A stored off stays off, and then no flash copy is
+   *   written. The boot hook leaves it
    *   false, so a restore never switches the setting on by itself, and a user
    *   who turned it off keeps it off until they install again.
    * @return array ['success' => bool, 'error' => string|null, 'warning' => string (only when the flash copy failed)]
@@ -143,7 +145,9 @@ class ComposeManager
     @chmod($binary, 0755);
     $this->composeAvailable = null;
 
-    if ($persist) {
+    // Turn the setting on only when the user never chose. A stored value,
+    // on or off, is their choice, and an install must not override it.
+    if ($persist && !$this->hasAutoInstallChoice()) {
       $this->enableAutoInstall();
     }
 
@@ -225,6 +229,16 @@ class ComposeManager
   {
     $row = $this->db->fetchOne("SELECT value FROM settings WHERE key = 'compose_auto_install'");
     return $row && $row['value'] === '1';
+  }
+
+  /**
+   * Whether the user ever chose a value for compose_auto_install. No
+   * migration or default seeds the row, so a row exists only after the
+   * Settings checkbox or a banner install wrote it.
+   */
+  public function hasAutoInstallChoice()
+  {
+    return (bool) $this->db->fetchOne("SELECT value FROM settings WHERE key = 'compose_auto_install'");
   }
 
   /**

@@ -71,6 +71,7 @@ function fakeComposeService(overrides: Partial<Record<keyof ComposeService, unkn
         getStack: vi.fn(async () => null),
         stackLogs: vi.fn(async () => ({ success: true, output: '', error: null, exitCode: 0 })),
         installComposeBinary: vi.fn(async () => ({ success: true, error: null })),
+        isAutoInstallEnabled: vi.fn(() => false),
         exportConfigs: vi.fn(() => ({ success: true, error: null, exported: 0, errors: [], path: '/mnt' })),
         validateComposeContent: vi.fn(async () => ({ success: true, output: '', errors: [] })),
         streamStackUp: vi.fn((project: string) => fakeStream(project)),
@@ -340,6 +341,13 @@ describe('ComposeResolver', () => {
             const compose = fakeComposeService();
             await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
             expect(compose.installComposeBinary).toHaveBeenCalledWith({ persist: true });
+        });
+
+        it.each([[true], [false]])('the install mutation reports autoInstall=%s from the service', async (on) => {
+            const compose = fakeComposeService();
+            vi.mocked(compose.isAutoInstallEnabled).mockReturnValue(on);
+            const result = await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
+            expect(result.autoInstall).toBe(on);
         });
     });
 

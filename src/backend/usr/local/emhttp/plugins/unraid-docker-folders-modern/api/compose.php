@@ -151,6 +151,9 @@ function handlePost($composeManager)
     $body = [
       'success' => true,
       'status' => $composeManager->getStatus(),
+      // Whether Compose is reinstalled after a reboot. The banner says so only
+      // when this is true.
+      'auto_install' => $composeManager->isAutoInstallEnabled(),
     ];
     if (!empty($result['warning'])) {
       $body['warning'] = $result['warning'];

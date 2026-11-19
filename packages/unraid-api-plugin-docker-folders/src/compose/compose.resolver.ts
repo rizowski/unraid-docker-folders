@@ -244,10 +244,11 @@ export class ComposeResolver {
         success: boolean;
         error: string | null;
         warning?: string;
+        autoInstall: boolean;
         status: DockerFoldersComposeStatus | null;
     }> {
         const result = await this.compose.installComposeBinary({ persist: true });
-        return { ...result, status: result.success ? await this.compose.getStatus() : null };
+        return { ...result, autoInstall: this.compose.isAutoInstallEnabled(), status: result.success ? await this.compose.getStatus() : null };
     }
 
     @UsePermissions({ action: AuthAction.UPDATE_ANY, resource: Resource.DOCKER })
