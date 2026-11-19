@@ -1379,6 +1379,49 @@ describe('ComposeService', () => {
             expect(autoInstall()).toBe('1');
         });
 
+        it('succeeds with a setting warning when the option cannot be saved', async () => {
+            stubDownload(content);
+            vi.spyOn(pinned, 'enableAutoInstall').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result).toEqual({
+                success: true,
+                error: null,
+                warning: 'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.',
+            });
+            expect(existsSync(paths.binaryPath)).toBe(true);
+            expect(existsSync(paths.cachePath)).toBe(false);
+        });
+
+        it('succeeds with a setting warning when the option cannot be read', async () => {
+            stubDownload(content);
+            vi.spyOn(pinned, 'isAutoInstallEnabled').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeNull();
+            expect(result.warning).toContain('could not be saved');
+        });
+
+        it('shows both facts when the option and the flash copy both fail', async () => {
+            const broken = new ComposeService(db, folders, fake.runner, {
+                ...paths,
+                binarySha256: sha,
+                cachePath: join(rootDir, 'no-such-dir', 'docker-compose'),
+            });
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', 0)").run());
+            vi.spyOn(broken, 'hasAutoInstallChoice').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            stubDownload(content);
+            const result = await broken.installComposeBinary({ persist: true });
+            expect(result.success).toBe(true);
+            expect(result.warning).toContain('could not be saved');
+            expect(result.warning).toContain('copy on the flash drive failed');
+        });
+
         it('has no warning when the copy is written', async () => {
             stubDownload(content);
             const result = await pinned.installComposeBinary({ persist: true });

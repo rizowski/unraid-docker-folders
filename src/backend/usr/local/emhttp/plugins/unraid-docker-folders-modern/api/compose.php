@@ -148,12 +148,19 @@ function handlePost($composeManager)
     if (!$result['success']) {
       errorResponse($result['error'], 500);
     }
+    // The install worked, so an unreadable setting must not turn it into an
+    // error. installComposeBinary() already put the warning in the result.
+    try {
+      $autoInstall = $composeManager->isAutoInstallEnabled();
+    } catch (\Throwable $e) {
+      $autoInstall = false;
+    }
     $body = [
       'success' => true,
       'status' => $composeManager->getStatus(),
       // Whether Compose is reinstalled after a reboot. The banner says so only
       // when this is true.
-      'auto_install' => $composeManager->isAutoInstallEnabled(),
+      'auto_install' => $autoInstall,
     ];
     if (!empty($result['warning'])) {
       $body['warning'] = $result['warning'];

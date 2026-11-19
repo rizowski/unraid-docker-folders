@@ -349,6 +349,15 @@ describe('ComposeResolver', () => {
             const result = await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
             expect(result.autoInstall).toBe(on);
         });
+
+        it('the install mutation still answers when the setting cannot be read', async () => {
+            const compose = fakeComposeService();
+            vi.mocked(compose.isAutoInstallEnabled).mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            const result = await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
+            expect(result.autoInstall).toBe(false);
+        });
     });
 
     describe('setDockerFoldersComposeEnvPath boundary validation', () => {

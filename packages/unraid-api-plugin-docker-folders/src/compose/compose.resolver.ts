@@ -248,9 +248,17 @@ export class ComposeResolver {
         status: DockerFoldersComposeStatus | null;
     }> {
         const result = await this.compose.installComposeBinary({ persist: true });
+        // The install worked, so an unreadable setting must not turn it into an
+        // error; the service already put the warning in the result.
+        let autoInstall = false;
+        try {
+            autoInstall = this.compose.isAutoInstallEnabled();
+        } catch {
+            // unknown: reported as off, and the banner makes no claim
+        }
         return {
             ...result,
-            autoInstall: this.compose.isAutoInstallEnabled(),
+            autoInstall,
             status: result.success ? await this.compose.getStatus() : null,
         };
     }

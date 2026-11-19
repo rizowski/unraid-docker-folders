@@ -105,7 +105,7 @@ class ComposeManager
    *   written. The boot hook leaves it
    *   false, so a restore never switches the setting on by itself, and a user
    *   who turned it off keeps it off until they install again.
-   * @return array ['success' => bool, 'error' => string|null, 'warning' => string (only when the flash copy failed)]
+   * @return array ['success' => bool, 'error' => string|null, 'warning' => string (only when the flash copy or the setting failed; both facts when both did)]
    */
   public function installComposeBinary($persist = false)
   {
@@ -147,26 +147,50 @@ class ComposeManager
 
     // Turn the setting on only when the user never chose. A stored value,
     // on or off, is their choice, and an install must not override it.
-    if ($persist && !$this->hasAutoInstallChoice()) {
-      $this->enableAutoInstall();
+    // The binary is already in place, so a settings failure here must not
+    // fail the install: it becomes a warning.
+    $warnings = [];
+    $autoInstall = false;
+    try {
+      if ($persist && !$this->hasAutoInstallChoice()) {
+        $this->enableAutoInstall();
+      }
+    } catch (\Throwable $e) {
+      error_log('Docker Folders: could not save compose_auto_install: ' . $e->getMessage());
+      $warnings[] = self::SETTING_SAVE_WARNING;
+    }
+    try {
+      $autoInstall = $this->isAutoInstallEnabled();
+    } catch (\Throwable $e) {
+      error_log('Docker Folders: could not read compose_auto_install: ' . $e->getMessage());
+      if (!in_array(self::SETTING_SAVE_WARNING, $warnings, true)) {
+        $warnings[] = self::SETTING_SAVE_WARNING;
+      }
     }
 
-    $result = ['success' => true, 'error' => null];
-    if ($this->isAutoInstallEnabled()) {
+    if ($autoInstall) {
       $cached = $this->cacheComposeBinary($binary, $this->cachePath(), $sha, true);
       if (!$cached['success']) {
         error_log('Docker Folders: no flash copy of Docker Compose: ' . $cached['error']);
         // The install worked. Say that the copy did not, so the user is not
         // told Compose survives a reboot when it only does by a new download.
-        $result['warning'] = self::FLASH_COPY_WARNING;
+        $warnings[] = self::FLASH_COPY_WARNING;
       }
+    }
+
+    $result = ['success' => true, 'error' => null];
+    if ($warnings) {
+      $result['warning'] = implode(' ', $warnings);
     }
 
     return $result;
   }
 
-  /** Shown when Compose installed but the copy on flash could not be written. */
+  /** Shown when Compose installed but the copy on the flash drive could not be written. */
   const FLASH_COPY_WARNING = 'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
+  /** Shown when Compose installed but the reinstall-after-reboot setting could not be saved or read. */
+  const SETTING_SAVE_WARNING = 'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.';
 
   // Seams for the install: the tests replace them, the plugin never does.
 

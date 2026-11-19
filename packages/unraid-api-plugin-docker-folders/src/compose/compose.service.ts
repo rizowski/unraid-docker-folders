@@ -142,6 +142,10 @@ const LOG_STREAM_COALESCE_MS = 150;
 const FLASH_COPY_WARNING =
     'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
 
+/** `ComposeManager::SETTING_SAVE_WARNING`. */
+const SETTING_SAVE_WARNING =
+    'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.';
+
 /**
  * The Compose read/write and process-execution path, ported from
  * `ComposeManager.php` (~1640 lines).
@@ -269,18 +273,37 @@ export class ComposeService {
         }
 
         // Only when the user never chose: a stored value, on or off, stays.
-        if (options.persist && !this.hasAutoInstallChoice()) {
-            this.enableAutoInstall();
+        // The binary is already in place, so a settings failure must not fail
+        // the install: it becomes a warning (same as PHP).
+        const warnings: string[] = [];
+        let autoInstall = false;
+        try {
+            if (options.persist && !this.hasAutoInstallChoice()) {
+                this.enableAutoInstall();
+            }
+        } catch (error) {
+            this.logger.warn(`Could not save compose_auto_install: ${errorMessage(error)}`);
+            warnings.push(SETTING_SAVE_WARNING);
+        }
+        try {
+            autoInstall = this.isAutoInstallEnabled();
+        } catch (error) {
+            this.logger.warn(`Could not read compose_auto_install: ${errorMessage(error)}`);
+            if (!warnings.includes(SETTING_SAVE_WARNING)) warnings.push(SETTING_SAVE_WARNING);
         }
 
-        if (this.isAutoInstallEnabled()) {
+        if (autoInstall) {
             const cached = await this.cacheComposeBinary({ sourceVerified: true });
             if (!cached.success) {
                 this.logger.warn(`No flash copy of Docker Compose: ${cached.error}`);
                 // The install worked. Say that the copy did not (same wording
                 // as `ComposeManager::FLASH_COPY_WARNING`).
-                return { success: true, error: null, warning: FLASH_COPY_WARNING };
+                warnings.push(FLASH_COPY_WARNING);
             }
+        }
+
+        if (warnings.length > 0) {
+            return { success: true, error: null, warning: warnings.join(' ') };
         }
 
         return { success: true, error: null };

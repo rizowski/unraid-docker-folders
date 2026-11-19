@@ -28,6 +28,34 @@ class StubbedComposeManager extends ComposeManager
     public string $cache = '';
     public string $sha = '';
 
+    public bool $failWrite = false;
+    public bool $failRead = false;
+    public bool $failChoice = false;
+
+    public function enableAutoInstall()
+    {
+        if ($this->failWrite) {
+            throw new RuntimeException('database is locked');
+        }
+        parent::enableAutoInstall();
+    }
+
+    public function isAutoInstallEnabled()
+    {
+        if ($this->failRead) {
+            throw new RuntimeException('database is locked');
+        }
+        return parent::isAutoInstallEnabled();
+    }
+
+    public function hasAutoInstallChoice()
+    {
+        if ($this->failChoice) {
+            throw new RuntimeException('database is locked');
+        }
+        return parent::hasAutoInstallChoice();
+    }
+
     protected function binaryPath() { return $this->binary; }
     protected function cachePath() { return $this->cache; }
     protected function binarySha256() { return $this->sha; }
@@ -167,7 +195,8 @@ final class ComposeAutoInstallTest extends TestCase
     public function theInstallEndpointReportsWhetherAutoInstallIsOn(): void
     {
         $src = file_get_contents(__DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/api/compose.php');
-        $this->assertStringContainsString("'auto_install' => \$composeManager->isAutoInstallEnabled()", $src);
+        $this->assertStringContainsString("\$autoInstall = \$composeManager->isAutoInstallEnabled();", $src);
+        $this->assertStringContainsString("'auto_install' => \$autoInstall", $src);
     }
 
     #[Test]
@@ -201,6 +230,49 @@ final class ComposeAutoInstallTest extends TestCase
         $this->assertSame(ComposeManager::FLASH_COPY_WARNING, $result['warning']);
         $this->assertSame('1', $this->setting());
         $this->assertFileExists($this->manager->binary);
+    }
+
+    #[Test]
+    public function aFailedSettingWriteStillSucceedsAndReturnsTheSettingWarning(): void
+    {
+        $this->manager->failWrite = true;
+        $result = $this->manager->installComposeBinary(true);
+
+        $this->assertTrue($result['success']);
+        $this->assertNull($result['error']);
+        $this->assertSame(ComposeManager::SETTING_SAVE_WARNING, $result['warning']);
+        $this->assertStringContainsString('could not be saved', $result['warning']);
+        $this->assertFileExists($this->manager->binary);
+        // Auto-install never turned on, so no flash copy was tried.
+        $this->assertFileDoesNotExist($this->manager->cache);
+    }
+
+    #[Test]
+    public function aFailedSettingReadStillSucceedsAndReturnsTheSettingWarning(): void
+    {
+        $this->manager->failRead = true;
+        $result = $this->manager->installComposeBinary(true);
+
+        $this->assertTrue($result['success']);
+        $this->assertNull($result['error']);
+        $this->assertSame(ComposeManager::SETTING_SAVE_WARNING, $result['warning']);
+        $this->assertFileExists($this->manager->binary);
+    }
+
+    #[Test]
+    public function whenTheSettingAndTheFlashCopyBothFailTheUserSeesBoth(): void
+    {
+        // The write throws, but the setting reads as on (a stored 1), so the
+        // flash copy is tried and fails too.
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        $this->manager->failChoice = true;
+        $this->manager->cache = $this->dir . '/no-such-dir/docker-compose';
+        $result = $this->manager->installComposeBinary(true);
+
+        $this->assertTrue($result['success']);
+        $this->assertNull($result['error']);
+        $this->assertStringContainsString(ComposeManager::SETTING_SAVE_WARNING, $result['warning']);
+        $this->assertStringContainsString(ComposeManager::FLASH_COPY_WARNING, $result['warning']);
     }
 
     #[Test]
