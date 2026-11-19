@@ -54,6 +54,21 @@ describe('memoryPercentView', () => {
       expect(view.title).toContain('32.0 GB host memory');
     });
 
+    it('treats a limit above host memory as a limit, not as none', () => {
+      const over = makeContainerStats({
+        memoryUsage: 16 * GB,
+        memoryLimit: 64 * GB,
+        memoryPercent: 25,
+        hostMemory: 32 * GB,
+      });
+      const view = memoryPercentView(over, 'limit');
+      expect(view.capped).toBe(true);
+      expect(view.percent).toBe(25);
+      expect(view.suffix).toBe('of limit');
+      expect(view.title).toBe('16.0 GB of the 64.0 GB container limit.');
+      expect(view.title).not.toContain('No container limit');
+    });
+
     it('treats a limit as capped when host memory is unknown', () => {
       const view = memoryPercentView(
         makeContainerStats({ memoryUsage: GB, memoryLimit: 4 * GB, memoryPercent: 25, hostMemory: undefined }),
@@ -96,6 +111,28 @@ describe('memoryPercentView', () => {
         'host',
       );
       expect(view.level).toBeCloseTo(93.75, 2);
+    });
+
+    it('says the limit is set for a limit above host memory', () => {
+      const view = memoryPercentView(
+        makeContainerStats({ memoryUsage: 16 * GB, memoryLimit: 64 * GB, memoryPercent: 25, hostMemory: 32 * GB }),
+        'host',
+      );
+      expect(view.percent).toBe(50);
+      expect(view.capped).toBe(true);
+      expect(view.suffix).toBe('of host');
+      expect(view.title).toContain('container limit is 64.0 GB');
+      expect(view.title).not.toContain('No container limit');
+      expect(view.level).toBe(50);
+    });
+
+    it('treats a zero limit as no limit', () => {
+      const view = memoryPercentView(
+        makeContainerStats({ memoryUsage: GB, memoryLimit: 0, memoryPercent: 3, hostMemory: 32 * GB }),
+        'host',
+      );
+      expect(view.capped).toBe(false);
+      expect(view.title).toContain('No container limit is set');
     });
 
     it('falls back to the limit, and says so, when host memory is missing', () => {

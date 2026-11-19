@@ -30,7 +30,7 @@ export interface MemoryPercentView {
   level: number;
   /** What `percent` is really of. 'limit' when the host basis was asked for but host memory is unknown. */
   basis: MemoryPercentBasis;
-  /** True when the container has its own limit below host memory. */
+  /** True when the container has its own limit: set, and not equal to host memory (it may be above it). */
   capped: boolean;
   /** Short label after the percent, e.g. "of limit". */
   suffix: string;
@@ -42,8 +42,10 @@ export function memoryPercentView(stats: ContainerStats, requested: MemoryPercen
   const host = stats.hostMemory ?? 0;
   const limit = stats.memoryLimit;
   // Docker, and both backends, report host memory as the limit of a container
-  // without one. Without the host figure there is no telling, so call it capped.
-  const capped = limit > 0 && (host <= 0 || limit < host);
+  // without one, so only a limit equal to host memory (or 0, or missing) means
+  // none. A limit above host memory (`--memory 64g` on a 32 GB host) is the
+  // user's own. Without the host figure there is no telling, so call it capped.
+  const capped = limit > 0 && (host <= 0 || limit !== host);
   const used = formatBytes(stats.memoryUsage);
   const limitPercent = stats.memoryPercent;
 
