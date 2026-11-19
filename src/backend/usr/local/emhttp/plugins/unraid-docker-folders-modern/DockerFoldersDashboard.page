@@ -96,6 +96,11 @@ $tile = <<<'EOT'
 
     var frameRow = frame.closest('tr');
 
+    // Set once src is built, below. The frame's theme comes from the URL at first
+    // and from a docker-folders-theme message after that, so a theme that switches
+    // in place (a day/night toggle) reaches it without a reload.
+    var sendTheme = null;
+
     // The folded-tile summary. Same load thresholds as the widget's own bars.
     function loadBar(name, percent) {
       var label = document.querySelector('.dfm-summary-' + name);
@@ -118,7 +123,10 @@ $tile = <<<'EOT'
       if (e.data.type === 'docker-folders-resize') {
         frame.style.height = e.data.height + 'px';
       }
-      if (e.data.type === 'docker-folders-widget-ready' && e.origin === location.origin) sendCollapsed();
+      if (e.data.type === 'docker-folders-widget-ready' && e.origin === location.origin) {
+        sendCollapsed();
+        if (sendTheme) sendTheme(true);
+      }
       if (e.data.type === 'docker-folders-summary' && e.origin === location.origin) {
         document.getElementById('dfm-summary-count').textContent = e.data.running + ' / ' + e.data.total + ' running';
         var crashed = document.getElementById('dfm-summary-crashed');
@@ -145,6 +153,7 @@ $tile = <<<'EOT'
     // later in the page than this one, so the timeout queues after it.
     $(function() { setTimeout(function() {
       frame.src = window.dockerFoldersFrameSrc('widget.html');
+      sendTheme = window.dockerFoldersWatchTheme(function() { return frame; });
     }, 0); });
   })();
   </script>

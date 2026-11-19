@@ -395,6 +395,35 @@ Note `apiFetch()` replaces `options.headers` wholesale, so callers cannot add an
 `DockerFolders.page` is a native Unraid page, not an iframe — it reads
 `window.csrf_token` directly and hand-builds the same body format.
 
+### Theme transport (URL first, then messages)
+
+The URL `theme` param is only the theme at load time. A theme that switches in
+place, such as the Neoraid plugin's day/night toggle (it flips `nr-dark` /
+`nr-light` on `<html>`, and `html.nr:root` maps the stock variables onto its
+palette), never reloads the frame, so the frame would keep the old colours.
+
+- `frameSrc.js` has one reader, `dockerFoldersReadTheme()`, used for the URL and
+  for updates. `dockerFoldersWatchTheme(getFrame)` observes `<html>` and
+  `<body>` (class, style, data-theme attributes) and the OS colour-scheme
+  preference, debounces, and posts `{type: 'docker-folders-theme', theme}` to
+  the frame only when the values changed. It returns a function; call it with
+  `true` on the frame's load or `docker-folders-widget-ready` so a frame that
+  missed an update catches up.
+- `utils/iframeHost.ts` `listenForThemeUpdates()` (wired in `main.ts` and
+  `widget/main.ts`) accepts the message only from `window.parent` on the page's
+  own origin, and applies it through `applyTheme()` (same path as
+  `applyThemeParam()`): known variable names only, string values up to 200
+  characters. A replacing update removes a known variable the parent no longer
+  defines. The variable list lives in two places, `DFM_THEME_VARS` in
+  `frameSrc.js` and `THEME_VARS` in `iframeHost.ts`. Keep them equal.
+- Four of the ten names (`--header-background`, `--button-hover`,
+  `--input-background`, `--input-border`) are defined by no stock Unraid theme
+  nor by Neoraid, so they stay empty and the app's fallbacks (the orange accent)
+  apply. That is intended. A stock theme change (Display Settings) reloads the
+  page, so only in-place switches need the messages.
+- `dev/iframe-test.html` (`MOCK_API=1 yarn dev`) simulates the Neoraid switch.
+
+
 ### SQL
 
 `Database::query()` (`Database.php:96-124`) always prepares and binds. Route all

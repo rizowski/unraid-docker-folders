@@ -1,81 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html class="nr">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Iframe Test - Unraid Simulation</title>
+  <!--
+    Parent-page harness for the Docker Folders iframe apps. Run with
+    `MOCK_API=1 yarn dev`, then open /dev/iframe-test.html.
+
+      ?frame=index   the Folders app (default)
+      ?frame=widget  the dashboard widget
+
+    It loads the real include/frameSrc.js (served by the mock API plugin) and
+    wires it the way Folders.page does, so the frame gets its theme from the URL
+    and then from docker-folders-theme messages.
+
+    The theme mechanism copies the Neoraid plugin: a class on <html> picks the
+    palette (html.nr-dark or html.nr-light), and `html.nr:root` maps the
+    stock Unraid variables onto it. The buttons below flip that class in place,
+    with no reload, which is the case that left the frame on day colours.
+  -->
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: sans-serif;
-      background: #1a1a1a;
-      color: #f2f2f2;
-      --text-color: #f2f2f2;
-      --background-color: #1a1a1a;
-      --border-color: #333;
-      --header-background: #ff8c2f;
-      --header-text-color: #fff;
+
+    /* Palette, as in Neoraid's sheets/Neoraid.css */
+    html.nr {
+      --nr-bg: #f5f5f4;
+      --nr-surface: #ffffff;
+      --nr-border: #d6d3d1;
+      --nr-text: #1c1917;
+      --nr-muted: #57534e;
+    }
+    html.nr.nr-dark {
+      --nr-bg: #111110;
+      --nr-surface: #1a1918;
+      --nr-border: #2c2b29;
+      --nr-text: #eeedeb;
+      --nr-muted: #b4b0ab;
+    }
+    /* The bridge: stock Unraid variable names pointed at the palette */
+    html.nr:root {
+      --text-color: var(--nr-text);
+      --background-color: var(--nr-bg);
+      --border-color: var(--nr-border);
+      --header-text-color: #ffffff;
+      --button-background: var(--nr-surface);
+      --button-text-color: var(--nr-text);
     }
 
-    /* Simulate Unraid top nav */
+    body {
+      font-family: sans-serif;
+      font-size: 14px;
+      background: var(--background-color);
+      color: var(--text-color);
+    }
+
     .fake-nav {
       position: sticky;
       top: 0;
       z-index: 100;
-      background: #262626;
+      background: var(--nr-surface);
       padding: 12px 20px;
-      border-bottom: 1px solid #333;
+      border-bottom: 1px solid var(--border-color);
       display: flex;
+      align-items: center;
       gap: 20px;
       font-size: 13px;
       text-transform: uppercase;
       letter-spacing: 1px;
     }
     .fake-nav span { cursor: pointer; }
-    .fake-nav span.active { color: #ff8c2f; }
+    .fake-nav span.active { color: #b45309; font-weight: bold; }
+    .fake-nav .spacer { flex: 1; }
+    .fake-nav button {
+      padding: 6px 14px;
+      border: 1px solid var(--border-color);
+      background: var(--nr-surface);
+      color: var(--text-color);
+      border-radius: 4px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .fake-nav button[aria-pressed="true"] { border-color: #b45309; font-weight: bold; }
 
-    /* Simulate content above/around the iframe */
     .fake-container-row {
       display: flex;
       align-items: center;
       gap: 12px;
       padding: 12px 20px;
-      border-bottom: 1px solid #333;
-      background: #222;
-      position: relative;
-      z-index: 10;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--nr-surface);
     }
     .fake-container-row .icon {
       width: 40px; height: 40px;
-      background: #444; border-radius: 6px;
+      background: var(--border-color); border-radius: 6px;
     }
     .fake-container-row .info { flex: 1; }
     .fake-container-row .name { font-weight: bold; font-size: 14px; }
-    .fake-container-row .image { font-size: 11px; color: #888; font-family: monospace; }
-    .fake-container-row .stats { font-size: 12px; color: #666; }
+    .fake-container-row .image { font-size: 12px; color: var(--nr-muted); font-family: monospace; }
+    .fake-container-row .stats { font-size: 13px; color: var(--nr-muted); }
 
-    /* Simulate bottom bar */
     .fake-bottom-bar {
       position: sticky;
       bottom: 0;
       z-index: 100;
-      background: #262626;
+      background: var(--nr-surface);
       padding: 10px 20px;
-      border-top: 1px solid #333;
+      border-top: 1px solid var(--border-color);
       display: flex;
+      flex-wrap: wrap;
       gap: 10px;
     }
     .fake-bottom-bar button {
       padding: 6px 14px;
-      border: 1px solid #ff8c2f;
+      border: 1px solid #b45309;
       background: transparent;
-      color: #ff8c2f;
+      color: #b45309;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 13px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       cursor: pointer;
     }
+    html.nr-dark .fake-bottom-bar button,
+    html.nr-dark .fake-nav span.active { color: #fb923c; border-color: #fb923c; }
 
     iframe {
+      display: block;
       width: 100%;
       min-height: 600px;
       border: none;
@@ -83,11 +134,11 @@
 
     .section-label {
       padding: 8px 20px;
-      font-size: 11px;
+      font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 1px;
-      color: #666;
-      background: #1a1a1a;
+      color: var(--nr-muted);
+      background: var(--background-color);
     }
   </style>
 </head>
@@ -98,10 +149,11 @@
     <span>Settings</span>
     <span class="active">Docker</span>
     <span>Apps</span>
-    <span>Stats</span>
+    <span class="spacer"></span>
+    <button id="mode-light" type="button" aria-pressed="false">Day</button>
+    <button id="mode-dark" type="button" aria-pressed="false">Night</button>
   </div>
 
-  <!-- Fake containers above the iframe -->
   <div class="fake-container-row">
     <div class="icon"></div>
     <div class="info">
@@ -110,20 +162,11 @@
     </div>
     <div class="stats">CPU 2.3% MEM 1.8%</div>
   </div>
-  <div class="fake-container-row">
-    <div class="icon"></div>
-    <div class="info">
-      <div class="name">postgres</div>
-      <div class="image">postgres:16-alpine</div>
-    </div>
-    <div class="stats">CPU 0.1% MEM 0.5%</div>
-  </div>
 
   <div class="section-label">Docker Folders Plugin (iframe below)</div>
 
   <iframe id="docker-folders-frame" scrolling="no"></iframe>
 
-  <!-- Fake containers below the iframe -->
   <div class="section-label">Native Docker Containers</div>
   <div class="fake-container-row">
     <div class="icon"></div>
@@ -133,42 +176,42 @@
     </div>
     <div class="stats">CPU 0.3% MEM 1.2%</div>
   </div>
-  <div class="fake-container-row">
-    <div class="icon"></div>
-    <div class="info">
-      <div class="name">nginx</div>
-      <div class="image">nginx:alpine</div>
-    </div>
-    <div class="stats">CPU 0.0% MEM 0.1%</div>
-  </div>
 
   <div class="fake-bottom-bar">
-    <button>Add Container</button>
-    <button>Start All</button>
-    <button>Stop All</button>
-    <button>Check for Updates</button>
-    <button>Update All</button>
+    <button type="button">Add Container</button>
+    <button type="button">Start All</button>
+    <button type="button">Stop All</button>
   </div>
 
+  <script src="/include/frameSrc.js"></script>
   <script>
     var frame = document.getElementById('docker-folders-frame');
-    frame.src = '/index.html';
+    var page = new URLSearchParams(location.search).get('frame') === 'widget' ? 'widget.html' : 'index.html';
+
+    // Day or night, in place. Same mechanism as Neoraid: one class on <html>.
+    function setMode(mode) {
+      document.documentElement.classList.remove('nr-dark', 'nr-light');
+      document.documentElement.classList.add('nr-' + mode);
+      document.getElementById('mode-light').setAttribute('aria-pressed', String(mode === 'light'));
+      document.getElementById('mode-dark').setAttribute('aria-pressed', String(mode === 'dark'));
+    }
+    document.getElementById('mode-light').addEventListener('click', function() { setMode('light'); });
+    document.getElementById('mode-dark').addEventListener('click', function() { setMode('dark'); });
+    setMode(new URLSearchParams(location.search).get('mode') === 'dark' ? 'dark' : 'light');
+
+    // Same wiring as Folders.page. The dev server has no csrf_token, so the
+    // helper builds /plugins/.../assets/<page>; use the dev paths instead.
+    var built = window.dockerFoldersFrameSrc(page);
+    frame.src = '/' + page + built.slice(built.indexOf('?'));
+    var sendTheme = window.dockerFoldersWatchTheme(function() { return frame; });
+    frame.addEventListener('load', function() { sendTheme(true); });
 
     window.addEventListener('message', function(e) {
+      if (e.source !== frame.contentWindow) return;
       if (e.data && e.data.type === 'docker-folders-resize') {
         frame.style.height = e.data.height + 'px';
       }
-      if (e.data && e.data.type === 'docker-folders-modal') {
-        if (e.data.open) {
-          frame.style.position = 'relative';
-          frame.style.zIndex = '999';
-          document.body.style.overflow = 'hidden';
-        } else {
-          frame.style.position = '';
-          frame.style.zIndex = '';
-          document.body.style.overflow = '';
-        }
-      }
+      if (e.data && e.data.type === 'docker-folders-widget-ready') sendTheme(true);
     });
   </script>
 </body>
