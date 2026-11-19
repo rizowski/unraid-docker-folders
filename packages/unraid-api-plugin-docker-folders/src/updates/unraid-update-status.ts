@@ -124,19 +124,36 @@ export function writeUnraidJson(path: string, data: JsonObject): boolean {
     }
 }
 
+/**
+ * Change one of Unraid's JSON files without losing what another writer added.
+ * Unraid's own check and the other backend read, change and rename these files
+ * with no lock, and Unraid knows of none we could add. A caller works out its
+ * changes from an earlier read, and this reads the file again just before the
+ * write and hands that fresh copy to `mutate`, which applies only the caller's
+ * own keys. `mutate` returns the new content, or null for nothing to write.
+ *
+ * @returns True when the file was written
+ */
+export function updateUnraidJson(path: string, mutate: (fresh: JsonObject) => JsonObject | null): boolean {
+    const fresh = readUnraidJson(path);
+    if (fresh === null) return false;
+    const next = mutate(fresh);
+    return next !== null && writeUnraidJson(path, next);
+}
+
 /** Drop containers from the Docker tab's cache, so it recomputes their status. */
 export function dropUnraidWebuiEntries(names: string[], webuiPath: string): boolean {
     if (names.length === 0 || !existsSync(webuiPath)) return false;
-    const info = readUnraidJson(webuiPath);
-    if (info === null) return false;
-    let changed = false;
-    for (const name of names) {
-        if (Object.hasOwn(info, name)) {
-            delete info[name];
-            changed = true;
+    return updateUnraidJson(webuiPath, (info) => {
+        let changed = false;
+        for (const name of names) {
+            if (Object.hasOwn(info, name)) {
+                delete info[name];
+                changed = true;
+            }
         }
-    }
-    return changed && writeUnraidJson(webuiPath, info);
+        return changed ? info : null;
+    });
 }
 
 /**
@@ -154,11 +171,12 @@ export function markUnraidImageCurrent(
     const bare = bareImageDigest(digest);
     if (key === null || bare === null) return false;
 
-    const status = readUnraidJson(paths.status);
-    if (status === null) return false;
     const entry: StatusEntry = { local: bare, remote: bare, status: 'true' };
-    status[key] = entry;
-    if (!writeUnraidJson(paths.status, status)) return false;
+    const written = updateUnraidJson(paths.status, (status) => {
+        status[key] = entry;
+        return status;
+    });
+    if (!written) return false;
 
     dropUnraidWebuiEntries(containerNames, paths.webui);
     return true;
@@ -223,7 +241,9 @@ export async function repairUnraidUpdateStatus(
     const status = readUnraidJson(paths.status);
     if (status === null) return [];
 
-    const repaired: string[] = [];
+    // First pass: decide which keys to repair, from this read. `inspect`
+    // takes time per entry, so the file can change meanwhile.
+    const fixes = new Map<string, string>();
     for (const [key, value] of Object.entries(status)) {
         if (value === null || typeof value !== 'object') continue;
         const entry = value as Partial<StatusEntry>;
@@ -239,12 +259,27 @@ export async function repairUnraidUpdateStatus(
             image.repoDigests.map(bareImageDigest).includes(remote) &&
             containersBehindImage(containers, key, image.id).length === 0
         ) {
-            status[key] = { local: remote, remote, status: 'true' } satisfies StatusEntry;
-            repaired.push(key);
+            fixes.set(key, remote);
         }
     }
+    if (fixes.size === 0) return [];
 
-    if (repaired.length === 0 || !writeUnraidJson(paths.status, status)) return [];
+    // Second pass: apply only those keys to a fresh read. A key another writer
+    // changed or removed since the first read is left as that writer left it.
+    let repaired: string[] = [];
+    const written = updateUnraidJson(paths.status, (fresh) => {
+        repaired = [];
+        for (const [key, remote] of fixes) {
+            const entry = fresh[key];
+            if (entry === null || typeof entry !== 'object') continue;
+            const current = entry as Partial<StatusEntry>;
+            if (current.status !== 'false' || bareImageDigest(current.remote) !== remote) continue;
+            fresh[key] = { local: remote, remote, status: 'true' } satisfies StatusEntry;
+            repaired.push(key);
+        }
+        return repaired.length === 0 ? null : fresh;
+    });
+    if (!written) return [];
 
     const names = new Set<string>();
     for (const key of repaired) {

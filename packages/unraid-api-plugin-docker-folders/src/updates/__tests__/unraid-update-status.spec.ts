@@ -191,6 +191,41 @@ describe('unraid-update-status (issue #23)', () => {
         expect(readFileSync(paths.status, 'utf8')).toBe(content);
     });
 
+    it('keeps keys another writer added between the read and the write', async () => {
+        write(paths.status, { 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        const repaired = await repairUnraidUpdateStatus(
+            async () => {
+                // Unraid's own check adds a key while the repair inspects the image.
+                write(paths.status, {
+                    'library/nginx:latest': { local: D2, remote: D1, status: 'false' },
+                    'library/redis:7': { local: D2, remote: D2, status: 'true' },
+                });
+                return { id: 'sha256:n', repoDigests: [`nginx@${D1}`] };
+            },
+            [{ name: 'web', image: 'nginx', imageId: 'sha256:n' }],
+            paths
+        );
+        expect(repaired).toEqual(['library/nginx:latest']);
+        const data = read(paths.status);
+        expect((data['library/nginx:latest'] as { status: string }).status).toBe('true');
+        expect((data['library/redis:7'] as { status: string }).status).toBe('true');
+    });
+
+    it('leaves an entry another writer changed after the first read', async () => {
+        write(paths.status, { 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        const moved = `sha256:${'3'.repeat(64)}`;
+        const repaired = await repairUnraidUpdateStatus(
+            async () => {
+                write(paths.status, { 'library/nginx:latest': { local: D2, remote: moved, status: 'false' } });
+                return { id: 'sha256:n', repoDigests: [`nginx@${D1}`] };
+            },
+            [{ name: 'web', image: 'nginx', imageId: 'sha256:n' }],
+            paths
+        );
+        expect(repaired).toEqual([]);
+        expect((read(paths.status)['library/nginx:latest'] as { status: string }).status).toBe('false');
+    });
+
     it('writes nothing when nothing is stale', async () => {
         const content = JSON.stringify({ 'library/redis:7': { local: D2, remote: D2, status: 'true' } });
         writeFileSync(paths.status, content);

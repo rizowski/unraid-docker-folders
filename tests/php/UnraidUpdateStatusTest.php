@@ -21,6 +21,8 @@ class ImageInfoDockerClient extends DockerClient
     public array $containers = [];
     public ?string $remote = null;
     public ?string $pulled = null;
+    /** @var callable|null Runs inside getImageInfo(), to play another writer. */
+    public $onInspect = null;
 
     public function __construct()
     {
@@ -29,6 +31,9 @@ class ImageInfoDockerClient extends DockerClient
     public function getImageInfo($imageId)
     {
         $this->asked[] = (string) $imageId;
+        if ($this->onInspect !== null) {
+            ($this->onInspect)($imageId);
+        }
         return $this->images[$imageId] ?? null;
     }
 
@@ -289,6 +294,74 @@ final class UnraidUpdateStatusTest extends TestCase
             . 'require_once ' . var_export($root . 'include/config.php', true) . '; echo " loaded";';
         $out = shell_exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($code) . ' 2>&1 </dev/null');
         $this->assertSame('yes loaded', trim((string) $out));
+    }
+
+    #[Test]
+    public function repairKeepsKeysAnotherWriterAddedBetweenReadAndWrite(): void
+    {
+        $this->writeJson($this->status, [
+            'library/nginx:latest' => ['local' => self::D2, 'remote' => self::D1, 'status' => 'false'],
+        ]);
+        $client = new ImageInfoDockerClient();
+        $client->images['library/nginx:latest'] = ['Id' => 'sha256:n', 'RepoDigests' => ['nginx@' . self::D1]];
+        // Unraid's own check adds a key while the repair is inspecting the image.
+        $client->onInspect = function () {
+            $data = $this->readJson($this->status);
+            $data['library/redis:7'] = ['local' => self::D2, 'remote' => self::D2, 'status' => 'true'];
+            $this->writeJson($this->status, $data);
+        };
+
+        $repaired = repairUnraidUpdateStatus(
+            $client,
+            [['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:n']],
+            $this->status,
+            $this->webui
+        );
+
+        $this->assertSame(['library/nginx:latest'], $repaired);
+        $data = $this->readJson($this->status);
+        $this->assertSame('true', $data['library/nginx:latest']['status']);
+        $this->assertSame('true', $data['library/redis:7']['status'], 'the other writer key survives');
+    }
+
+    #[Test]
+    public function repairLeavesAKeyAnotherWriterChangedAfterTheFirstRead(): void
+    {
+        $this->writeJson($this->status, [
+            'library/nginx:latest' => ['local' => self::D2, 'remote' => self::D1, 'status' => 'false'],
+        ]);
+        $client = new ImageInfoDockerClient();
+        $client->images['library/nginx:latest'] = ['Id' => 'sha256:n', 'RepoDigests' => ['nginx@' . self::D1]];
+        // Unraid's check moved the remote digest on: that entry is its to judge.
+        $client->onInspect = function () {
+            $this->writeJson($this->status, [
+                'library/nginx:latest' => ['local' => self::D2, 'remote' => 'sha256:' . str_repeat('3', 64), 'status' => 'false'],
+            ]);
+        };
+
+        $repaired = repairUnraidUpdateStatus(
+            $client,
+            [['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:n']],
+            $this->status,
+            $this->webui
+        );
+
+        $this->assertSame([], $repaired);
+        $this->assertSame('false', $this->readJson($this->status)['library/nginx:latest']['status']);
+    }
+
+    #[Test]
+    public function updateUnraidJsonAppliesTheChangeToTheFreshFile(): void
+    {
+        $this->writeJson($this->status, ['a' => 1]);
+        $ok = updateUnraidJson($this->status, function ($fresh) {
+            // Another writer lands after the caller's earlier read, before this one.
+            $fresh['b'] = 2;
+            return $fresh;
+        });
+        $this->assertTrue($ok);
+        $this->assertSame(['a' => 1, 'b' => 2], $this->readJson($this->status));
+        $this->assertFalse(updateUnraidJson($this->status, fn ($fresh) => null), 'null means nothing to write');
     }
 
     #[Test]
