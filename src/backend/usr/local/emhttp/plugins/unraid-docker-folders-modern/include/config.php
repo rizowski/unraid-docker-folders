@@ -953,6 +953,20 @@ function dfmAssetVersion($absolutePath)
  * because a global set here belongs to the parent document.
  */
 /**
+ * Whether a submitted memory_percent_basis is one the app can show.
+ *
+ * Strict, so a JSON `true`, a number or an array is refused as well as an
+ * unknown string. api/settings.php rejects the request when this is false.
+ *
+ * @param mixed $value
+ * @return bool
+ */
+function dfmIsValidMemoryPercentBasis($value)
+{
+  return in_array($value, MEMORY_PERCENT_BASES, true);
+}
+
+/**
  * Reduce a stored or submitted backend mode to one we can serve.
  *
  * Both readers need this: `dfmBackendMode()` for pages that have not loaded
