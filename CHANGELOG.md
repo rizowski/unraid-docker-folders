@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026.11.19-dev5
+### New
+- A new Settings page option chooses whether container memory percentages are a share of the container's limit or of the host, with labels and tooltips on cards, details, list rows and the dashboard widget. (#29, #34)
+
+### Improved
+- Links such as the Update tag, release notes link and security findings docs link now show their intended colors, so the Update tag keeps its warning color. (#35)
+
+### Fixed
+- The dashboard widget and Folders tab now follow the Unraid theme when it changes without a page reload, such as a day/night toggle. (#27, #35)
+- The dashboard tile no longer shows white rows with light text under a dark color scheme. (#27, #35)
+
+## 2026.11.19-dev3
+### Fixed
+- After pulling an image, the update check now records the matching image digest, so containers no longer show the wrong update status. (#32, #33)
+
+## 2026.11.19-dev2
+### Fixed
+- Update checks no longer report a container as outdated when its image matches the registry under any of its local digests. (#32, #33)
+
+## 2026.11.19-dev1
+### Fixed
+- Folder headers can now be reached and collapsed with the keyboard, and screen readers announce them properly. (#31)
+
 ## 2026.11.07-dev1
 ### Fixed
 - After the plugin updates and recreates a container, Unraid's Docker tab no longer keeps showing "update ready" for that image. (#23, #24)

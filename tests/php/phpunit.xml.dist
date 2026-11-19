@@ -30,6 +30,8 @@
     </testsuite>
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>
+      <file>PickLocalDigestTest.php</file>
+      <file>RecordImagePulledTest.php</file>
       <file>UnraidUpdateStatusTest.php</file>
     </testsuite>
     <testsuite name="PathSafety">
@@ -87,6 +89,9 @@
     </testsuite>
     <testsuite name="ComposeRestore">
       <file>ComposeRestoreTest.php</file>
+    </testsuite>
+    <testsuite name="MemoryPercentBasis">
+      <file>MemoryPercentBasisTest.php</file>
     </testsuite>
   </testsuites>
 </phpunit>

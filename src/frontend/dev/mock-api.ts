@@ -8,6 +8,8 @@
  */
 
 import type { Plugin } from 'vite';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // --- Mock data ---
 
@@ -712,6 +714,7 @@ const settings: Record<string, string> = {
   distinguish_healthy: '1',
   enable_security_advisor: '1',
   memory_calculation: 'docker',
+  memory_percent_basis: 'limit',
   enable_update_checks: '1',
   update_check_schedule: 'disabled',
   notify_on_updates: '0',
@@ -753,7 +756,7 @@ const mockStatsProfiles: Record<string, { cpuBase: number; memBase: number; memL
   efg567hij890: { cpuBase: 2, memBase: 128, memLimit: 2048, pids: 4, restarts: 1, startedHoursAgo: 120, imageSizeMB: 55, logSizeMB: 3 },
   fgh678ijk901: { cpuBase: 3, memBase: 256, memLimit: 2048, pids: 15, restarts: 0, startedHoursAgo: 120, imageSizeMB: 420, logSizeMB: 120 },
   ijk901lmn234: { cpuBase: 12, memBase: 1024, memLimit: 4096, pids: 30, restarts: 2, startedHoursAgo: 24, imageSizeMB: 1200, logSizeMB: 1200 },
-  jkl012mno345: { cpuBase: 6, memBase: 384, memLimit: 2048, pids: 18, restarts: 0, startedHoursAgo: 96, imageSizeMB: 310, logSizeMB: 5 },
+  jkl012mno345: { cpuBase: 6, memBase: 384, memLimit: 65536, pids: 18, restarts: 0, startedHoursAgo: 96, imageSizeMB: 310, logSizeMB: 5 },
 };
 
 function generateMockStats(id: string) {
@@ -1430,6 +1433,18 @@ export function mockApiPlugin(): Plugin {
     name: 'mock-api',
     configureServer(server) {
       const API_PREFIX = '/plugins/unraid-docker-folders-modern/api';
+
+      // The real include/frameSrc.js, so dev/iframe-test.html exercises the file
+      // that ships instead of a copy of it.
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?')[0] !== '/include/frameSrc.js') return next();
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(
+          readFileSync(
+            resolve(__dirname, '../../backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/frameSrc.js'),
+          ),
+        );
+      });
 
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith(API_PREFIX)) return next();

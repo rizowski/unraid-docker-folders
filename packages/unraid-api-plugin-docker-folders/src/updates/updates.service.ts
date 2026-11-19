@@ -112,6 +112,25 @@ export interface PullOptions {
     recreateOnly?: boolean;
 }
 
+/**
+ * Pick which of an image's RepoDigests to compare with the registry digest.
+ * A re-pulled image can carry several, and nothing guarantees the current one
+ * comes first. Prefer the one equal to the
+ * registry's; otherwise the first, so a real update is still reported.
+ * Mirrors `DockerClient::pickLocalDigest`.
+ */
+export function pickLocalDigest(repoDigests: string[], remoteDigest: string | null): string | null {
+    if (repoDigests.length === 0) return null;
+    if (remoteDigest) {
+        const match = repoDigests.find((d) => {
+            const at = d.indexOf('@');
+            return (at !== -1 ? d.slice(at + 1) : d) === remoteDigest;
+        });
+        if (match !== undefined) return match;
+    }
+    return repoDigests[0];
+}
+
 function toStatus(row: Row, notes: Map<string, Row>): DockerFoldersImageUpdateStatus {
     const sourceRepo = nullableString(row.source_repo);
     return {
@@ -673,14 +692,13 @@ export class UpdatesService {
 
     /** `DockerClient::checkImageUpdate`. */
     private async checkOne(image: string, imageId: string): Promise<OneImageCheck> {
-        let localDigest: string | null = null;
+        let localDigests: string[] = [];
         let sourceUrl: string | null = null;
 
         if (imageId !== '') {
             try {
                 const info = await this.docker.getImage(imageId).inspect();
-                const digests = info.RepoDigests ?? [];
-                localDigest = digests.length > 0 ? digests[0] : null;
+                localDigests = info.RepoDigests ?? [];
 
                 const src = info.Config?.Labels?.[SOURCE_LABEL];
                 if (typeof src === 'string' && /^https?:\/\//i.test(src)) {
@@ -704,13 +722,18 @@ export class UpdatesService {
 
         if (remoteDigest === null) {
             return {
-                localDigest,
+                // On a registry error the first digest is stored, as before the match logic.
+                localDigest: localDigests[0] ?? null,
                 remoteDigest: null,
                 updateAvailable: false,
                 sourceUrl,
                 error: 'Failed to fetch remote digest',
             };
         }
+
+        // An image can carry several RepoDigests (a re-indexed tag, or the same
+        // image pulled twice). Compare the one the registry reports, not just the first.
+        const localDigest = pickLocalDigest(localDigests, remoteDigest);
 
         // Local RepoDigest format is "name@sha256:abc...", remote is bare "sha256:abc...".
         let updateAvailable = false;
@@ -963,8 +986,7 @@ export class UpdatesService {
         let localDigest: string | null = null;
         try {
             const info = await this.docker.getImage(image).inspect();
-            const digests = info.RepoDigests ?? [];
-            localDigest = digests.length > 0 ? digests[0] : null;
+            localDigest = pickLocalDigest(info.RepoDigests ?? [], remoteDigest);
         } catch (error) {
             this.logger.warn(`Could not read local digest for ${image}: ${errorMessage(error)}`);
         }

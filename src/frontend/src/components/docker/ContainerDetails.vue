@@ -5,7 +5,15 @@
       <p class="text-text-secondary text-xs">Resource Usage</p>
       <template v-if="isRunning && containerStats">
         <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="wide" />
-        <StatsBar label="Memory" :percent="containerStats.memoryPercent" size="wide" :formatted-value="`${formatBytes(containerStats.memoryUsage)} / ${formatBytes(containerStats.memoryLimit)} (${formatPercent(containerStats.memoryPercent)})`" />
+        <StatsBar
+          v-if="memoryView"
+          label="Memory"
+          size="wide"
+          :percent="memoryView.percent"
+          :level-percent="memoryView.level"
+          :title="memoryView.title"
+          :formatted-value="memoryDetailText(containerStats, memoryView)"
+        />
       </template>
       <template v-else-if="isRunning && showStats">
         <StatsBar label="CPU" :percent="null" size="wide" />
@@ -256,7 +264,9 @@ import { useDockerStore, type Container, type HostPortBinding } from '@/stores/d
 import type { ContainerStats } from '@/stores/stats';
 import { useScheduleStore } from '@/stores/schedules';
 import type { Schedule } from '@/types/schedule';
-import { formatBytes, formatPercent, formatUptime, formatTimeUntil, scheduleStatusClass } from '@/utils/format';
+import { formatBytes, formatUptime, formatTimeUntil, scheduleStatusClass } from '@/utils/format';
+import { memoryDetailText, memoryPercentView } from '@/utils/memoryPercent';
+import { useSettingsStore } from '@/stores/settings';
 import StatsBar from '@/components/common/StatsBar.vue';
 import ImageLink from '@/components/common/ImageLink.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -292,6 +302,10 @@ const scheduleStore = useScheduleStore();
 // The right stats cell renders whenever stats exist, which includes a stopped
 // container's last reading. A running container with stats on keeps the track
 // open before the first poll too, so nothing shifts when it lands.
+const settingsStore = useSettingsStore();
+const memoryView = computed(() =>
+  props.containerStats ? memoryPercentView(props.containerStats, settingsStore.memoryPercentBasis) : null,
+);
 const hasStatsColumn = computed(() => !!props.containerStats || (props.isRunning && props.showStats));
 
 // Schedules target a container by NAME, not by docker id — see the emit at

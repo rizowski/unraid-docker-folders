@@ -28,7 +28,7 @@
 
   <!-- Filled bar -->
   <template v-else>
-    <div v-if="size === 'wide'" class="space-y-0.5">
+    <div v-if="size === 'wide'" class="space-y-0.5" :title="title">
       <div class="flex justify-between text-xs">
         <span class="text-muted">{{ label }}</span>
         <span class="text-text-secondary font-mono">{{ formattedValue ?? formatPercent(percent) }}</span>
@@ -41,7 +41,7 @@
         ></div>
       </div>
     </div>
-    <div v-else-if="size === 'inline'" class="flex items-center gap-1.5 text-[11px]">
+    <div v-else-if="size === 'inline'" class="flex items-center gap-1.5 text-[11px]" :title="title">
       <span class="text-text w-7 text-right">{{ label }}</span>
       <div class="w-16 h-1 stats-bar-track rounded-full overflow-hidden">
         <div
@@ -52,7 +52,7 @@
       </div>
       <span class="text-text font-mono w-9 text-right">{{ formattedValue ?? formatPercent(percent) }}</span>
     </div>
-    <div v-else class="flex items-center gap-2 text-xs">
+    <div v-else class="flex items-center gap-2 text-xs" :title="title">
       <span class="text-text w-8 shrink-0">{{ label }}</span>
       <div class="flex-1 h-1.5 stats-bar-track rounded-full overflow-hidden">
         <div
@@ -62,6 +62,9 @@
         ></div>
       </div>
       <span class="text-text font-mono w-12 text-right shrink-0">{{ formattedValue ?? formatPercent(percent) }}</span>
+      <!-- What the percent is of. An empty string keeps the room, so the CPU
+           and MEM bars of a card end in the same place. -->
+      <span v-if="suffix !== undefined" class="text-muted text-[11px] w-12 shrink-0">{{ suffix }}</span>
     </div>
   </template>
 </template>
@@ -75,11 +78,17 @@ interface Props {
   percent: number | null;
   formattedValue?: string;
   size?: 'compact' | 'inline' | 'wide';
+  /** Tooltip for the whole row. */
+  title?: string;
+  /** Percent that picks the bar color, when it is not the shown one. See memoryPercentView. */
+  levelPercent?: number;
+  /** Compact size only: text after the value, e.g. "of limit". "" reserves the room without text. */
+  suffix?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   size: 'compact',
 });
 
-const barColor = computed(() => LOAD_BAR_CLASSES[loadLevel(props.percent ?? 0)]);
+const barColor = computed(() => LOAD_BAR_CLASSES[loadLevel(props.levelPercent ?? props.percent ?? 0)]);
 </script>

@@ -18,6 +18,8 @@ $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $memoryCalculation = ($settings['memory_calculation'] ?? '') === 'raw' ? 'raw' : 'docker';
 $memoryCalculationOptions = ['docker' => 'Docker CLI (excludes page cache)', 'raw' => 'Raw cgroup (includes page cache)'];
+$memoryPercentBasis = ($settings['memory_percent_basis'] ?? '') === 'host' ? 'host' : 'limit';
+$memoryPercentBasisOptions = ['limit' => 'Container limit', 'host' => 'Total host memory'];
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '1') === '1';
 $showLegacyContainers = ($settings['show_legacy_containers'] ?? '0') === '1';
 $showLegacyButtons = ($settings['show_legacy_buttons'] ?? '0') === '1';
@@ -713,6 +715,21 @@ if (file_exists($changelogPath)) {
           <?php endforeach; ?>
         </select>
         <span id="save-status-memory-calculation" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <label for="memory-percent-basis">Memory percentage is of</label>
+        <div class="description">What the memory percentage on a container is measured against. Container limit is the container's own memory limit (<code>--memory</code>), as in <code>docker stats</code>; with no limit set it is the host's memory. Total host memory always uses the host's memory. A bar still turns red when a container nears its own limit. A folder's total is always a share of host memory. Applies to both backends. <strong>Default: Container limit</strong></div>
+      </div>
+      <div class="setting-control">
+        <select id="memory-percent-basis" onchange="saveSetting('memory_percent_basis', this.value)">
+          <?php foreach ($memoryPercentBasisOptions as $basisValue => $basisLabel): ?>
+          <option value="<?= $basisValue ?>" <?= $memoryPercentBasis === $basisValue ? 'selected' : '' ?>><?= $basisLabel ?></option>
+          <?php endforeach; ?>
+        </select>
+        <span id="save-status-memory-percent-basis" class="save-status">Saved</span>
       </div>
     </div>
 

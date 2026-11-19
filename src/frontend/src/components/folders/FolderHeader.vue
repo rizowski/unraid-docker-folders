@@ -2,7 +2,13 @@
   <div
     class="folder-header relative flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-2 cursor-pointer select-none hover:bg-bg-card transition"
     :class="{ 'z-50': menuOpen }"
+    role="button"
+    tabindex="0"
+    :aria-expanded="!folder.collapsed"
+    :aria-label="`${folder.collapsed ? 'Expand' : 'Collapse'} folder ${folder.name}`"
     @click="$emit('toggle-collapse')"
+    @keydown.enter.self.prevent="$emit('toggle-collapse')"
+    @keydown.space.self.prevent="$emit('toggle-collapse')"
   >
     <!-- Folder-color tint fading to transparent on the right (the sanctioned
          gradient exception in DESIGN.md §2): faint when collapsed, full
@@ -22,7 +28,7 @@
         class="hidden sm:grid shrink-0 gap-0.5 mr-2"
         :class="containerIcons.length > 1 ? 'grid-cols-2 w-9 h-9' : 'grid-cols-1 w-9 h-9'"
       >
-        <img v-for="(icon, i) in containerIcons" :key="i" :src="icon" class="w-full h-full object-contain rounded-sm" />
+        <img v-for="(icon, i) in containerIcons" :key="i" :src="icon" alt="" class="w-full h-full object-contain rounded-sm" />
       </div>
       <h2 class="text-sm font-semibold text-text mr-1 truncate min-w-0">{{ folder.name }}</h2>
       <span
@@ -70,7 +76,7 @@
       <!-- Folder total stats, as a share of the host -->
       <div v-if="collapsed && settingsStore.showStats && folderStats" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5" @click.stop>
         <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
-        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
+        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" :title="folderStats.memTitle" />
       </div>
     </div>
     <div class="relative flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
@@ -119,6 +125,7 @@ import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
+import { formatBytes } from '@/utils/format';
 import { useStatsStore, type ContainerStats } from '@/stores/stats';
 import { aggregateStats } from '@/utils/aggregateStats';
 import { useUpdatesStore } from '@/stores/updates';
@@ -450,6 +457,13 @@ const folderStats = computed(() => {
     if (s) list.push(s);
   }
   const total = aggregateStats(list);
-  return total && { cpuPercent: total.cpuSum, memPercent: total.memPercent };
+  // A folder's memory is always a share of the host: members' limits do not add up to one.
+  return (
+    total && {
+      cpuPercent: total.cpuSum,
+      memPercent: total.memPercent,
+      memTitle: `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`,
+    }
+  );
 });
 </script>
