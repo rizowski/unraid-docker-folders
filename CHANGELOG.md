@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.19-dev1
+### Fixed
+- Folder headers can now be reached and collapsed with the keyboard, and screen readers announce them properly. (#31)
+
 ## 2026.11.07-dev1
 ### Fixed
 - After the plugin updates and recreates a container, Unraid's Docker tab no longer keeps showing "update ready" for that image. (#23, #24)
