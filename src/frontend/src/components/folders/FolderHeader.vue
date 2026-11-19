@@ -458,11 +458,16 @@ const folderStats = computed(() => {
   }
   const total = aggregateStats(list);
   // A folder's memory is always a share of the host: members' limits do not add up to one.
+  // Without a host figure aggregateStats falls back to the largest member limit,
+  // which is not host memory, so the tooltip must not say it is.
+  const hostKnown = list.some((s) => (s.hostMemory ?? 0) > 0);
   return (
     total && {
       cpuPercent: total.cpuSum,
       memPercent: total.memPercent,
-      memTitle: `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`,
+      memTitle: hostKnown
+        ? `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`
+        : `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)}.`,
     }
   );
 });

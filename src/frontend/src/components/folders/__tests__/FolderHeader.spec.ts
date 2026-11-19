@@ -369,5 +369,31 @@ describe('FolderHeader', () => {
       expect(text).not.toContain('200.0%');
       expect(text).not.toContain('50.0%');
     });
+
+    it('names host memory in the tooltip when the host figure is reported', () => {
+      useDockerStore().containers = [makeContainer({ id: 'a', name: 'a' })];
+      useStatsStore().stats = { a: entry(10, 4 * GB) };
+      const wrapper = mountHeader({
+        collapsed: true,
+        containers: [{ container_name: 'a' }] as unknown as Folder['containers'],
+      });
+      const bars = wrapper.findAllComponents({ name: 'StatsBar' });
+      expect(bars[bars.length - 1].props('title')).toContain('host memory');
+    });
+
+    it('does not call the total host memory when the host figure is missing', () => {
+      useDockerStore().containers = [makeContainer({ id: 'a', name: 'a' })];
+      useStatsStore().stats = {
+        a: makeContainerStats({ cpuPercent: 10, memoryUsage: 4 * GB, memoryLimit: 32 * GB, hostMemory: undefined }),
+      };
+      const wrapper = mountHeader({
+        collapsed: true,
+        containers: [{ container_name: 'a' }] as unknown as Folder['containers'],
+      });
+      const bars = wrapper.findAllComponents({ name: 'StatsBar' });
+      const title = bars[bars.length - 1].props('title') as string;
+      expect(title).not.toContain('host');
+      expect(title).toContain('4.0 GB');
+    });
   });
 });
