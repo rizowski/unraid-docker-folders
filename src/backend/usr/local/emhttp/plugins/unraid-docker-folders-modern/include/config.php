@@ -625,12 +625,21 @@ function syncUnraidStatusAfterRecreate(
       return;
     }
 
-    $candidates = [$dockerClient->getRemoteImageDigest($image)];
-    $row = $db->fetchOne('SELECT remote_digest FROM image_update_checks WHERE image = ?', [$image]);
-    if ($row) {
-      $candidates[] = $row['remote_digest'] ?? null;
+    // The container list above is still needed: the rule that every container
+    // on the tag runs its image, and the names to drop from the Docker tab.
+    // The registry and the stored row are only fallbacks for a digest, so with
+    // the pull's own digest in hand they are not asked, which keeps the
+    // "complete" event from waiting on a registry round trip.
+    $pullDigest = $dockerClient->getLastPullDigest();
+    $candidates = [];
+    if (bareImageDigest($pullDigest) === null) {
+      $candidates[] = $dockerClient->getRemoteImageDigest($image);
+      $row = $db->fetchOne('SELECT remote_digest FROM image_update_checks WHERE image = ?', [$image]);
+      if ($row) {
+        $candidates[] = $row['remote_digest'] ?? null;
+      }
     }
-    $digest = pickUnraidDigest($dockerClient->getLastPullDigest(), $info['RepoDigests'] ?? [], $candidates);
+    $digest = pickUnraidDigest($pullDigest, $info['RepoDigests'] ?? [], $candidates);
 
     $names = containerNamesForImage($containers, $image);
     if (markUnraidImageCurrent($image, $digest, $names, $statusPath, $webuiPath)) {

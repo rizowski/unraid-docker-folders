@@ -21,6 +21,7 @@ class ImageInfoDockerClient extends DockerClient
     public array $containers = [];
     public ?string $remote = null;
     public ?string $pulled = null;
+    public int $remoteCalls = 0;
     /** @var callable|null Runs inside getImageInfo(), to play another writer. */
     public $onInspect = null;
 
@@ -44,6 +45,7 @@ class ImageInfoDockerClient extends DockerClient
 
     public function getRemoteImageDigest($imageName)
     {
+        $this->remoteCalls++;
         return $this->remote;
     }
 
@@ -57,9 +59,11 @@ class ImageInfoDockerClient extends DockerClient
 class DigestRowDatabase
 {
     public ?string $stored = null;
+    public int $fetches = 0;
 
     public function fetchOne(string $sql, array $params = []): array|false
     {
+        $this->fetches++;
         return $this->stored === null ? false : ['remote_digest' => $this->stored];
     }
 }
@@ -414,6 +418,23 @@ final class UnraidUpdateStatusTest extends TestCase
             $this->readJson($this->status)
         );
         $this->assertSame([], $this->readJson($this->webui));
+    }
+
+    #[Test]
+    public function syncAfterRecreateAsksNeitherTheRegistryNorTheDatabaseWhenThePullDigestIsKnown(): void
+    {
+        $client = new ImageInfoDockerClient();
+        $client->images['nginx'] = ['Id' => 'sha256:new', 'RepoDigests' => ['nginx@' . self::D1]];
+        $client->containers = [['name' => 'web', 'image' => 'nginx', 'imageId' => 'sha256:new']];
+        $client->pulled = self::D1;
+        $client->remote = self::D2;
+        $db = new DigestRowDatabase();
+
+        syncUnraidStatusAfterRecreate($client, $db, 'nginx', $this->status, $this->webui);
+
+        $this->assertSame(self::D1, $this->readJson($this->status)['library/nginx:latest']['local']);
+        $this->assertSame(0, $client->remoteCalls);
+        $this->assertSame(0, $db->fetches);
     }
 
     #[Test]

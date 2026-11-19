@@ -30,6 +30,7 @@ import { ReleaseNotesService } from './release-notes.service.js';
 import { UpdateLogService } from './update-log.service.js';
 import {
     UNRAID_STATUS_PATHS,
+    bareImageDigest,
     containerNamesForImage,
     containersBehindImage,
     markUnraidImageCurrent,
@@ -1053,17 +1054,25 @@ export class UpdatesService {
                 return;
             }
 
-            const remote = await this.docker
-                .distributionInspect(image)
-                .then((d) => d.Descriptor?.digest ?? null)
-                .catch(() => null);
-            const stored = this.db.read(
-                (db) =>
-                    db.prepare('SELECT remote_digest FROM image_update_checks WHERE image = ?').get(image) as
-                        | { remote_digest: string | null }
-                        | undefined
-            );
-            const digest = pickUnraidDigest(pullDigest, info.RepoDigests ?? [], [remote, stored?.remote_digest ?? null]);
+            // The container list above is still needed (the "every container
+            // runs the image" rule, and the names to drop). The registry and the
+            // stored row are only fallbacks for a digest, so with the pull's own
+            // digest they are not asked.
+            const candidates: (string | null)[] = [];
+            if (bareImageDigest(pullDigest) === null) {
+                const remote = await this.docker
+                    .distributionInspect(image)
+                    .then((d) => d.Descriptor?.digest ?? null)
+                    .catch(() => null);
+                const stored = this.db.read(
+                    (db) =>
+                        db.prepare('SELECT remote_digest FROM image_update_checks WHERE image = ?').get(image) as
+                            | { remote_digest: string | null }
+                            | undefined
+                );
+                candidates.push(remote, stored?.remote_digest ?? null);
+            }
+            const digest = pickUnraidDigest(pullDigest, info.RepoDigests ?? [], candidates);
 
             const names = containerNamesForImage(containers, image);
             if (markUnraidImageCurrent(image, digest, names, this.unraidPaths)) {

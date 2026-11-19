@@ -1114,6 +1114,21 @@ describe('UpdatesService and Unraid’s update status (issue #23)', () => {
         expect(Object.keys(JSON.parse(readFileSync(paths.webui, 'utf8')))).toEqual(['plex']);
     });
 
+    it('asks the registry for nothing after a recreate when the pull gave its digest', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+        writeFileSync(paths.status, STALE);
+
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
+        expect((await promise).success).toBe(true);
+
+        expect(readStatus()[PLEX]).toEqual({ local: D_PULLED, remote: D_PULLED, status: 'true' });
+        expect(docker.calls.filter((call) => call.startsWith('distributionInspect'))).toEqual([]);
+    });
+
     it('records the pull’s Digest line, split across chunks, once the container is recreated', async () => {
         setListed([container('plex', PLEX, PLEX_IMAGE_ID), container('sonarr', SONARR, SONARR_IMAGE_ID)]);
         docker.setImageId(PLEX, NEW_PLEX_ID);
