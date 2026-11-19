@@ -15,8 +15,7 @@
 import type { ContainerStats } from '@/stores/stats';
 import { formatBytes, formatPercent } from '@/utils/format';
 
-export const MEMORY_PERCENT_BASES = ['limit', 'host'] as const;
-export type MemoryPercentBasis = (typeof MEMORY_PERCENT_BASES)[number];
+export type MemoryPercentBasis = 'limit' | 'host';
 
 /** Anything but a known value is the default, so a stale or hand-edited row cannot break the display. */
 export function parseMemoryPercentBasis(value: unknown): MemoryPercentBasis {
