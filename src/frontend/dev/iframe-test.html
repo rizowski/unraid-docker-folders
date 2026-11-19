@@ -10,6 +10,9 @@
 
       ?frame=index   the Folders app (default)
       ?frame=widget  the dashboard widget
+      ?mode=dark     start at night
+      ?nofix=1       leave out the iframe's color-scheme:normal, which shows the
+                     opaque white canvas behind the frame at night
 
     It loads the real include/frameSrc.js (served by the mock API plugin) and
     wires it the way Folders.page does, so the frame gets its theme from the URL
@@ -30,6 +33,7 @@
       --nr-border: #d6d3d1;
       --nr-text: #1c1917;
       --nr-muted: #57534e;
+      color-scheme: light;
     }
     html.nr.nr-dark {
       --nr-bg: #111110;
@@ -37,6 +41,9 @@
       --nr-border: #2c2b29;
       --nr-text: #eeedeb;
       --nr-muted: #b4b0ab;
+      /* Neoraid sets this at night. The frame inherits it, and a frame whose
+         scheme differs from its document's gets an opaque white canvas. */
+      color-scheme: dark;
     }
     /* The bridge: stock Unraid variable names pointed at the palette */
     html.nr:root {
@@ -126,6 +133,8 @@
     html.nr-dark .fake-nav span.active { color: #fb923c; border-color: #fb923c; }
 
     iframe {
+      /* Same as the plugin pages. ?nofix=1 drops it to show the white canvas. */
+      color-scheme: normal;
       display: block;
       width: 100%;
       min-height: 600px;
@@ -186,6 +195,7 @@
   <script src="/include/frameSrc.js"></script>
   <script>
     var frame = document.getElementById('docker-folders-frame');
+    if (new URLSearchParams(location.search).get('nofix')) frame.style.colorScheme = 'inherit';
     var page = new URLSearchParams(location.search).get('frame') === 'widget' ? 'widget.html' : 'index.html';
 
     // Day or night, in place. Same mechanism as Neoraid: one class on <html>.

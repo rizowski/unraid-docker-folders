@@ -422,6 +422,16 @@ palette), never reloads the frame, so the frame would keep the old colours.
   apply. That is intended. A stock theme change (Display Settings) reloads the
   page, so only in-place switches need the messages.
 - `dev/iframe-test.html` (`MOCK_API=1 yarn dev`) simulates the Neoraid switch.
+- **Both iframes carry `color-scheme:normal`** (`#docker-folders-widget-frame`,
+  `#docker-folders-frame`). Neoraid sets `color-scheme: dark` on `<html>` at
+  night. The iframe element inherits it and the framed document has none, and
+  when the two differ the browser paints an opaque canvas of the embedded
+  document's scheme (white) behind the frame (CSS Color Adjustment 1, section
+  2.4). The widget is transparent, so its rows turned white with light text.
+  The Folders app hid the same mismatch only because its root paints a
+  background. A new iframe needs the rule too; `pageIframes.spec.ts` checks the
+  page sources. Do not remove it when the live update works: they fix
+  different causes.
 
 
 ### SQL
