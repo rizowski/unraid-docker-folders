@@ -506,6 +506,34 @@ describe('UpdatesService', () => {
             ]);
         });
 
+        it('records the pull\'s own digest, and does not ask the registry, when it moved after the pull', async () => {
+            const pulled = `sha256:${'1'.repeat(64)}`;
+            docker.setRemoteDigest(PLEX, `sha256:${'2'.repeat(64)}`);
+            docker.setLocalDigests(PLEX, [`${PLEX}@${pulled}`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end(`${JSON.stringify({ status: `Digest: ${pulled}` })}\n`);
+            await promise;
+
+            expect(temp.rows('SELECT local_digest, remote_digest, update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { local_digest: `${PLEX}@${pulled}`, remote_digest: pulled, update_available: 0 },
+            ]);
+            expect(docker.calls).not.toContain(`distributionInspect ${PLEX}`);
+        });
+
+        it('flags an update when there is no pull digest and the registry moved after the pull', async () => {
+            docker.setRemoteDigest(PLEX, 'sha256:two');
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:one`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end('');
+            await promise;
+
+            expect(temp.rows('SELECT update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { update_available: 1 },
+            ]);
+        });
+
         it('preserves a previously known source_repo across a pull, unlike the PHP INSERT OR REPLACE', async () => {
             docker.setRemoteDigest(PLEX, 'sha256:pulled');
             new DatabaseService(temp.path).write((db) => {

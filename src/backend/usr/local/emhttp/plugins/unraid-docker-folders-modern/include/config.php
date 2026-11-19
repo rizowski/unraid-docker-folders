@@ -552,25 +552,39 @@ function recreateOneContainer($dockerClient, $name, $id)
  * @param DockerClient $dockerClient Docker API client
  * @param Database $db Database instance
  * @param string $image Image reference, as the update check keys it
+ * @param string|null $pullDigest The pull's own "Digest:" line, when the caller
+ *   has it. The registry can move between the pull and a fresh lookup, so this
+ *   is the digest of the image that was pulled. Without it the registry is asked.
  */
-function recordImagePulled($dockerClient, $db, $image)
+function recordImagePulled($dockerClient, $db, $image, $pullDigest = null)
 {
-  $remoteDigest = $dockerClient->getRemoteImageDigest($image);
+  $remoteDigest = (is_string($pullDigest) && $pullDigest !== '')
+    ? $pullDigest
+    : $dockerClient->getRemoteImageDigest($image);
   // The digest the registry reports, as in checkImageUpdate(), so the stored
   // local_digest matches the plugin's recordPulled for the same inputs.
   $info = $dockerClient->getImageInfo($image);
   $localDigest = DockerClient::pickLocalDigest($info['RepoDigests'] ?? [], $remoteDigest);
 
+  // A real comparison, as checkImageUpdate() makes it: a registry that moved on
+  // after the pull must not read as "up to date".
+  $updateAvailable = 0;
+  if ($localDigest !== null && is_string($remoteDigest) && $remoteDigest !== '') {
+    $at = strpos($localDigest, '@');
+    $localHash = $at !== false ? substr($localDigest, $at + 1) : $localDigest;
+    $updateAvailable = $localHash !== $remoteDigest ? 1 : 0;
+  }
+
   $db->query(
     'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
-     VALUES (:image, :local, :remote, 0, :now, NULL)
+     VALUES (:image, :local, :remote, :avail, :now, NULL)
      ON CONFLICT(image) DO UPDATE SET
        local_digest = excluded.local_digest,
        remote_digest = excluded.remote_digest,
-       update_available = 0,
+       update_available = excluded.update_available,
        checked_at = excluded.checked_at,
        error = NULL',
-    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
+    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':avail' => $updateAvailable, ':now' => time()]
   );
   logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
 }
