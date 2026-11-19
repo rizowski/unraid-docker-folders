@@ -1595,6 +1595,31 @@ class DockerClient
   }
 
   /**
+   * Pick which of an image's RepoDigests to compare with the registry digest.
+   *
+   * An image that was re-pulled can carry more than one digest, and Docker
+   * lists them in sorted order, so the first one is not necessarily the
+   * current one. Prefer the digest that equals the registry's; otherwise fall
+   * back to the first, so a real update is still reported.
+   *
+   * @param string[] $repoDigests "name@sha256:..." entries from the image
+   * @param string|null $remoteDigest Bare "sha256:..." digest from the registry
+   * @return string|null The chosen entry, or null when the image has none
+   */
+  public static function pickLocalDigest(array $repoDigests, $remoteDigest)
+  {
+    if (empty($repoDigests)) return null;
+    if (is_string($remoteDigest) && $remoteDigest !== '') {
+      foreach ($repoDigests as $digest) {
+        $at = strpos($digest, '@');
+        $hash = $at !== false ? substr($digest, $at + 1) : $digest;
+        if ($hash === $remoteDigest) return $digest;
+      }
+    }
+    return $repoDigests[0];
+  }
+
+  /**
    * Check if an image has an update available
    *
    * @param string $imageName Image reference (e.g. linuxserver/plex:latest)
@@ -1614,6 +1639,7 @@ class DockerClient
     // Single lookup: pull digest and OCI source label from the same payload
     $info = $this->getImageInfo($localImageId);
     $localDigest = null;
+    $digests = [];
     if ($info) {
       $digests = $info['RepoDigests'] ?? [];
       $localDigest = !empty($digests) ? $digests[0] : null;
@@ -1632,6 +1658,12 @@ class DockerClient
       return $result;
     }
     $result['remote_digest'] = $remoteDigest;
+
+    // An image can carry several RepoDigests: the registry re-indexed a tag
+    // whose image did not change, or the same image was pulled under two tags.
+    // Compare against the one the registry reports, not just the first.
+    $localDigest = self::pickLocalDigest($digests, $remoteDigest) ?? $localDigest;
+    $result['local_digest'] = $localDigest;
 
     // Compare: local RepoDigest format is "name@sha256:abc...", remote is just "sha256:abc..."
     if ($localDigest && $remoteDigest) {
