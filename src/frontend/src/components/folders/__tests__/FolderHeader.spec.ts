@@ -130,30 +130,68 @@ describe('FolderHeader', () => {
   });
 
   describe('collapse toggle', () => {
+    const toggle = (w: ReturnType<typeof mountHeader>) => w.find('button[aria-expanded]');
+
     it('reports the shown state, not the saved one, when a filter holds a collapsed folder open', () => {
       const wrapper = mount(FolderHeader, {
         props: { folder: makeFolder({ collapsed: true }), collapsed: false },
         global: { plugins: [pinia] },
       });
-      const header = wrapper.find('.folder-header');
-      expect(header.attributes('aria-expanded')).toBe('true');
-      expect(header.attributes('aria-label')).toBe('Collapse folder Test Folder');
+      expect(toggle(wrapper).attributes('aria-expanded')).toBe('true');
+      expect(toggle(wrapper).attributes('aria-label')).toBe('Collapse folder Test Folder');
     });
 
     it('reports collapsed when the shown state is collapsed', () => {
       const wrapper = mountHeader({ collapsed: true });
-      const header = wrapper.find('.folder-header');
-      expect(header.attributes('aria-expanded')).toBe('false');
-      expect(header.attributes('aria-label')).toBe('Expand folder Test Folder');
+      expect(toggle(wrapper).attributes('aria-expanded')).toBe('false');
+      expect(toggle(wrapper).attributes('aria-label')).toBe('Expand folder Test Folder');
     });
 
-    it('emits toggle-collapse on Enter and on Space', async () => {
+    it('puts the button role and state on the chevron, not on the container', () => {
       const wrapper = mountHeader();
       const header = wrapper.find('.folder-header');
-      await header.trigger('keydown', { key: 'Enter' });
+      expect(header.attributes('role')).toBeUndefined();
+      expect(header.attributes('tabindex')).toBeUndefined();
+      expect(header.attributes('aria-expanded')).toBeUndefined();
+      expect(header.attributes('aria-label')).toBeUndefined();
+      expect(toggle(wrapper).element.tagName).toBe('BUTTON');
+      expect(toggle(wrapper).attributes('type')).toBe('button');
+    });
+
+    it('emits once when the chevron button is clicked, not again from the header', async () => {
+      const wrapper = mountHeader();
+      await toggle(wrapper).trigger('click');
       expect(wrapper.emitted('toggle-collapse')).toHaveLength(1);
-      await header.trigger('keydown', { key: ' ' });
-      expect(wrapper.emitted('toggle-collapse')).toHaveLength(2);
+    });
+
+    it('still toggles on a click anywhere else in the header', async () => {
+      const wrapper = mountHeader();
+      await wrapper.find('h2').trigger('click');
+      expect(wrapper.emitted('toggle-collapse')).toHaveLength(1);
+    });
+
+    it('cancels a repeated Enter keydown, so a held key does not toggle again', async () => {
+      const wrapper = mountHeader();
+      const first = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true });
+      const repeat = new KeyboardEvent('keydown', { key: 'Enter', repeat: true, cancelable: true, bubbles: true });
+      toggle(wrapper).element.dispatchEvent(first);
+      toggle(wrapper).element.dispatchEvent(repeat);
+      expect(first.defaultPrevented).toBe(false);
+      expect(repeat.defaultPrevented).toBe(true);
+    });
+
+    it('keeps the inner controls reachable and outside any button role', () => {
+      const wrapper = mountHeader();
+      const header = wrapper.find('.folder-header');
+      const kebab = wrapper.findAll('button').find((b) => b.attributes('title') === 'Folder actions')!;
+      expect(kebab.exists()).toBe(true);
+      expect(header.element.closest('[role="button"]')).toBeNull();
+      expect(kebab.element.closest('[role="button"]')).toBeNull();
+    });
+
+    it('keeps the drag handle the sortable list looks for', () => {
+      const wrapper = mountHeader();
+      expect(wrapper.find('.folder-drag-handle').exists()).toBe(true);
     });
   });
 
