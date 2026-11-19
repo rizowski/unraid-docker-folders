@@ -357,6 +357,10 @@ class ComposeManager
     // most likely an older pinned version, so a download follows.
     if (is_file($cache) && hash_file('sha256', $cache) !== $this->binarySha256()) {
       error_log('Docker Folders: the flash copy of Docker Compose does not match the pinned SHA256. Treating it as a version change and downloading the pinned release.');
+      // Drop it. cacheComposeBinary() keeps a flash copy of the same size
+      // without reading it back, so a bad copy of the right size would
+      // otherwise stay and fail the restore at every boot.
+      $this->removeCachedComposeBinary($cache);
     }
 
     // The boot hook runs detached (event/started ends its line with &), so

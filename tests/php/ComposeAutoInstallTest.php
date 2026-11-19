@@ -258,6 +258,21 @@ final class ComposeAutoInstallTest extends TestCase
     }
 
     #[Test]
+    public function aBadFlashCopyOfTheRightSizeIsReplacedByTheBootDownload(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        file_put_contents($this->manager->cache, 'X' . substr(self::CONTENT, 1));
+        $old = ini_set('error_log', $this->dir . '/php.log');
+        try {
+            $r = $this->manager->ensureComposeBinary();
+        } finally {
+            ini_set('error_log', $old === false ? '' : $old);
+        }
+        $this->assertSame('installed', $r['action']);
+        $this->assertSame(self::CONTENT, file_get_contents($this->manager->cache));
+    }
+
+    #[Test]
     public function aMatchingFlashCopyIsRestoredWithoutADownload(): void
     {
         dfmUpsertSetting($this->db, 'compose_auto_install', '1');
