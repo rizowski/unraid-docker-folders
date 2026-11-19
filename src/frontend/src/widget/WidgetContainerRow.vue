@@ -63,7 +63,7 @@
         :href="webuiUrl"
         target="_blank"
         rel="noopener"
-        class="icon-btn shrink-0 text-text-secondary hover:text-text"
+        class="icon-btn shrink-0 text-text"
         :title="`Open WebUI for ${container.name}`"
       ><IconGlobe :size="14" /></a>
       <span
