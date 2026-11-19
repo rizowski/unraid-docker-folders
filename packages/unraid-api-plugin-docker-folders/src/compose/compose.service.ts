@@ -276,6 +276,7 @@ export class ComposeService {
         // The binary is already in place, so a settings failure must not fail
         // the install: it becomes a warning (same as PHP).
         const warnings: string[] = [];
+        let settingFailed = false;
         let autoInstall = false;
         try {
             if (options.persist && !this.hasAutoInstallChoice()) {
@@ -283,14 +284,15 @@ export class ComposeService {
             }
         } catch (error) {
             this.logger.warn(`Could not save compose_auto_install: ${errorMessage(error)}`);
-            warnings.push(SETTING_SAVE_WARNING);
+            settingFailed = true;
         }
         try {
             autoInstall = this.isAutoInstallEnabled();
         } catch (error) {
             this.logger.warn(`Could not read compose_auto_install: ${errorMessage(error)}`);
-            if (!warnings.includes(SETTING_SAVE_WARNING)) warnings.push(SETTING_SAVE_WARNING);
+            settingFailed = true;
         }
+        if (settingFailed) warnings.push(SETTING_SAVE_WARNING);
 
         if (autoInstall) {
             const cached = await this.cacheComposeBinary({ sourceVerified: true });
@@ -317,20 +319,21 @@ export class ComposeService {
 
     /** `ComposeManager::isAutoInstallEnabled`. */
     isAutoInstallEnabled(): boolean {
-        const row = this.db.read(
+        return this.readAutoInstallRow()?.value === '1';
+    }
+
+    private readAutoInstallRow(): { value: string } | undefined {
+        return this.db.read(
             (db) =>
                 db.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get() as
                     | { value: string }
                     | undefined
         );
-        return row?.value === '1';
     }
 
     /** `ComposeManager::hasAutoInstallChoice`: a stored row, on or off. */
     hasAutoInstallChoice(): boolean {
-        return (
-            this.db.read((db) => db.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get()) !== undefined
-        );
+        return this.readAutoInstallRow() !== undefined;
     }
 
     /** `ComposeManager::enableAutoInstall`. */

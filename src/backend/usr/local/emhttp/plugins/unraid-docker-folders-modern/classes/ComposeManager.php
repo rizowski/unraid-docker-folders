@@ -150,6 +150,7 @@ class ComposeManager
     // The binary is already in place, so a settings failure here must not
     // fail the install: it becomes a warning.
     $warnings = [];
+    $settingFailed = false;
     $autoInstall = false;
     try {
       if ($persist && !$this->hasAutoInstallChoice()) {
@@ -157,15 +158,16 @@ class ComposeManager
       }
     } catch (\Throwable $e) {
       error_log('Docker Folders: could not save compose_auto_install: ' . $e->getMessage());
-      $warnings[] = self::SETTING_SAVE_WARNING;
+      $settingFailed = true;
     }
     try {
       $autoInstall = $this->isAutoInstallEnabled();
     } catch (\Throwable $e) {
       error_log('Docker Folders: could not read compose_auto_install: ' . $e->getMessage());
-      if (!in_array(self::SETTING_SAVE_WARNING, $warnings, true)) {
-        $warnings[] = self::SETTING_SAVE_WARNING;
-      }
+      $settingFailed = true;
+    }
+    if ($settingFailed) {
+      $warnings[] = self::SETTING_SAVE_WARNING;
     }
 
     if ($autoInstall) {
