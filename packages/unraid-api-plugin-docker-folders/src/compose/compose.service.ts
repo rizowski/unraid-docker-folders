@@ -138,6 +138,10 @@ const STACK_COMMAND_TIMEOUT_MS = 600_000;
 /** How often `ComposeService.logStream` flushes buffered `docker compose logs --follow` lines. */
 const LOG_STREAM_COALESCE_MS = 150;
 
+/** `ComposeManager::FLASH_COPY_WARNING`. */
+const FLASH_COPY_WARNING =
+    'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
 /**
  * The Compose read/write and process-execution path, ported from
  * `ComposeManager.php` (~1640 lines).
@@ -170,10 +174,6 @@ const LOG_STREAM_COALESCE_MS = 150;
  * does, regardless of caller. That is `FolderService`'s existing contract,
  * not something this class opts into.
  */
-/** `ComposeManager::FLASH_COPY_WARNING`. */
-const FLASH_COPY_WARNING =
-    'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
-
 @Injectable()
 export class ComposeService {
     private readonly logger = new Logger(ComposeService.name);
