@@ -18,6 +18,12 @@ use PHPUnit\Framework\Attributes\Test;
 class StubbedComposeManager extends ComposeManager
 {
     public ?string $body = null;
+    /** @var array<int, ?string> bodies for successive downloads; null = fail. Used when set. */
+    public array $bodies = [];
+    public int $downloads = 0;
+    public array $waits = [];
+    public array $notices = [];
+    public bool $available = false;
     public string $binary = '';
     public string $cache = '';
     public string $sha = '';
@@ -26,8 +32,16 @@ class StubbedComposeManager extends ComposeManager
     protected function cachePath() { return $this->cache; }
     protected function binarySha256() { return $this->sha; }
 
+    public function isComposeAvailable() { return $this->available || is_file($this->binary); }
+    protected function waitBeforeRetry($seconds) { $this->waits[] = $seconds; }
+    protected function notifyBootInstallFailed($attempts, $error) { $this->notices[] = [$attempts, $error]; }
+
     protected function downloadFile($url, $dest)
     {
+        $this->downloads++;
+        if ($this->bodies) {
+            $this->body = array_shift($this->bodies);
+        }
         if ($this->body === null) {
             return ['success' => false, 'error' => 'Download failed: stub (HTTP 500)'];
         }
@@ -195,6 +209,69 @@ final class ComposeAutoInstallTest extends TestCase
         $this->assertFalse($this->manager->isAutoInstallEnabled());
         $this->manager->enableAutoInstall();
         $this->assertTrue($this->manager->isAutoInstallEnabled());
+    }
+
+    #[Test]
+    public function theBootRetriesTheDownloadThenSucceedsWithoutNotifying(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        $this->manager->bodies = [null, null, self::CONTENT];
+        $r = $this->manager->ensureComposeBinary();
+        $this->assertSame('installed', $r['action']);
+        $this->assertTrue($r['available']);
+        $this->assertSame(3, $this->manager->downloads);
+        $this->assertSame([15, 30], $this->manager->waits);
+        $this->assertSame([], $this->manager->notices);
+    }
+
+    #[Test]
+    public function whenEveryBootTryFailsItNotifiesExactlyOnce(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        $this->manager->body = null;
+        $r = $this->manager->ensureComposeBinary();
+        $this->assertSame('failed', $r['action']);
+        $this->assertFalse($r['available']);
+        $this->assertSame(4, $this->manager->downloads);
+        $this->assertSame([15, 30, 60], $this->manager->waits);
+        $this->assertCount(1, $this->manager->notices);
+        $this->assertSame(4, $this->manager->notices[0][0]);
+        $this->assertStringContainsString('Download failed', $this->manager->notices[0][1]);
+    }
+
+    #[Test]
+    public function aFlashCopyWithTheWrongHashIsNotUsedAndADownloadFollows(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        file_put_contents($this->manager->cache, 'older-pinned-version');
+        $logFile = $this->dir . '/php.log';
+        $old = ini_set('error_log', $logFile);
+        try {
+            $r = $this->manager->ensureComposeBinary();
+        } finally {
+            ini_set('error_log', $old === false ? '' : $old);
+        }
+        $this->assertSame('installed', $r['action']);
+        $this->assertSame(1, $this->manager->downloads);
+        $this->assertSame(self::CONTENT, file_get_contents($this->manager->binary));
+        $this->assertStringContainsString('version change', file_get_contents($logFile));
+    }
+
+    #[Test]
+    public function aMatchingFlashCopyIsRestoredWithoutADownload(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        file_put_contents($this->manager->cache, self::CONTENT);
+        $r = $this->manager->ensureComposeBinary();
+        $this->assertSame('restored', $r['action']);
+        $this->assertSame(0, $this->manager->downloads);
+    }
+
+    #[Test]
+    public function theBootHookRunsDetached(): void
+    {
+        $base = __DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/';
+        $this->assertMatchesRegularExpression('/compose-autostart\.php.*&\s*$/m', file_get_contents($base . 'event/started'));
     }
 
     #[Test]

@@ -349,14 +349,62 @@ class ComposeManager
     if (!$this->isAutoInstallEnabled()) {
       return ['available' => false, 'action' => 'disabled', 'error' => null];
     }
-    if ($this->restoreComposeBinary() && $this->isComposeAvailable()) {
+    $cache = $this->cachePath();
+    if ($this->restoreComposeBinary($cache, $this->binaryPath(), $this->binarySha256()) && $this->isComposeAvailable()) {
       return ['available' => true, 'action' => 'restored', 'error' => null];
     }
-    $result = $this->installComposeBinary();
+    // A flash copy that does not match the pinned hash is never used. It is
+    // most likely an older pinned version, so a download follows.
+    if (is_file($cache) && hash_file('sha256', $cache) !== $this->binarySha256()) {
+      error_log('Docker Folders: the flash copy of Docker Compose does not match the pinned SHA256. Treating it as a version change and downloading the pinned release.');
+    }
+
+    // The boot hook runs detached (event/started ends its line with &), so
+    // waiting here holds up nothing, and stack autostart still follows a late
+    // success. The network is often not up yet when Docker starts.
+    $waits = self::BOOT_INSTALL_WAITS;
+    $attempts = count($waits) + 1;
+    $result = ['success' => false, 'error' => 'not tried'];
+    for ($try = 1; $try <= $attempts; $try++) {
+      $result = $this->installComposeBinary();
+      if ($result['success']) {
+        break;
+      }
+      error_log('Docker Folders: Docker Compose download failed (try ' . $try . ' of ' . $attempts . '): ' . $result['error']);
+      if ($try < $attempts) {
+        $this->waitBeforeRetry($waits[$try - 1]);
+      }
+    }
     if (!$result['success']) {
+      // One notification per boot: only after the last try.
+      $this->notifyBootInstallFailed($attempts, $result['error']);
       return ['available' => false, 'action' => 'failed', 'error' => $result['error']];
     }
     return ['available' => $this->isComposeAvailable(), 'action' => 'installed', 'error' => null];
+  }
+
+  /**
+   * Seconds to wait after each failed boot download. Four tries, 105 seconds
+   * of waiting in all: long enough for a slow network or DNS to come up after
+   * Docker starts, short enough that a missing network is reported within
+   * minutes. Each try is also capped by the 120 second download timeout.
+   */
+  const BOOT_INSTALL_WAITS = [15, 30, 60];
+
+  // Seams for the boot retry: the tests replace them.
+
+  protected function waitBeforeRetry($seconds)
+  {
+    sleep($seconds);
+  }
+
+  protected function notifyBootInstallFailed($attempts, $error)
+  {
+    sendUnraidNotification(
+      'Docker Compose was not reinstalled',
+      'Docker Compose could not be downloaded after ' . $attempts . ' tries, so compose stacks did not autostart. Last error: ' . $error . ' Install it from the Docker Folders tab.',
+      'warning'
+    );
   }
 
   // ─── Conflict Detection ────────────────────────────────────────────
