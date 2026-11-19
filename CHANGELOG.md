@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.19-dev2
+### Fixed
+- Update checks no longer report a container as outdated when its image matches the registry under any of its local digests. (#32, #33)
+
 ## 2026.11.19-dev1
 ### Fixed
 - Folder headers can now be reached and collapsed with the keyboard, and screen readers announce them properly. (#31)

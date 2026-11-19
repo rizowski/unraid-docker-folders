@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.11.19-dev1">
-<!ENTITY md5 "67ed461f01768e719613b760ac42630e">
+<!ENTITY version "2026.11.19-dev2">
+<!ENTITY md5 "61c3ac6707bf9c9eabc949542751f8ce">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -155,6 +155,9 @@
 
 
 
+
+###2026.11.19-dev2
+- Fixed: Update checks no longer report a container as outdated when its image matches the registry under any of its local digests. (#32, #33)
 ###2026.11.19-dev1
 - Fixed: Folder headers can now be reached and collapsed with the keyboard, and screen readers announce them properly. (#31)
 ###2026.11.07-dev1
