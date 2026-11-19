@@ -38,6 +38,10 @@ define('BACKEND_MODES', ['php', 'graphql']);
 // memory_calculation: 'docker' subtracts inactive page cache as `docker stats`
 // does, 'raw' keeps it. See DockerClient::dockerMemoryUsage().
 define('MEMORY_CALCULATION_MODES', ['docker', 'raw']);
+// memory_percent_basis: what a container's memory percent is of. 'limit' is the
+// container's own limit, as `docker stats` shows it. 'host' is total host
+// memory. Only the frontend reads it. src/frontend/src/utils/memoryPercent.ts.
+define('MEMORY_PERCENT_BASES', ['limit', 'host']);
 define('GRAPHQL_PLUGIN_NAME', 'unraid-api-plugin-docker-folders');
 define('UNRAID_API_DIR', '/usr/local/unraid-api');
 define('UNRAID_API_SOCKET', '/var/run/unraid-api.sock');

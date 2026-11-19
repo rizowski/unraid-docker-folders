@@ -74,6 +74,25 @@ describe('SettingsService', () => {
         });
     });
 
+    describe('set — memory_percent_basis', () => {
+        it('accepts limit and host', () => {
+            expect(service.set('memory_percent_basis', 'host').value).toBe('host');
+            expect(service.set('memory_percent_basis', 'limit').value).toBe('limit');
+        });
+
+        it('rejects anything else, as settings.php does', () => {
+            expect(() => service.set('memory_percent_basis', 'total')).toThrow('Invalid memory_percent_basis');
+            expect(() => service.set('memory_percent_basis', '')).toThrow('Invalid memory_percent_basis');
+        });
+
+        it('is returned by getAll once stored', () => {
+            service.set('memory_percent_basis', 'host');
+            expect(service.getAll()).toEqual(
+                expect.arrayContaining([{ key: 'memory_percent_basis', value: 'host' }])
+            );
+        });
+    });
+
     describe('set — value length', () => {
         it('rejects a value over 10000 characters', () => {
             expect(() => service.set('update_check_exclude', 'x'.repeat(10001))).toThrow(

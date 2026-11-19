@@ -76,7 +76,7 @@
       <!-- Folder total stats, as a share of the host -->
       <div v-if="collapsed && settingsStore.showStats && folderStats" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5" @click.stop>
         <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
-        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
+        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" :title="folderStats.memTitle" />
       </div>
     </div>
     <div class="relative flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
@@ -125,6 +125,7 @@ import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
+import { formatBytes } from '@/utils/format';
 import { useStatsStore, type ContainerStats } from '@/stores/stats';
 import { aggregateStats } from '@/utils/aggregateStats';
 import { useUpdatesStore } from '@/stores/updates';
@@ -456,6 +457,13 @@ const folderStats = computed(() => {
     if (s) list.push(s);
   }
   const total = aggregateStats(list);
-  return total && { cpuPercent: total.cpuSum, memPercent: total.memPercent };
+  // A folder's memory is always a share of the host: members' limits do not add up to one.
+  return (
+    total && {
+      cpuPercent: total.cpuSum,
+      memPercent: total.memPercent,
+      memTitle: `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`,
+    }
+  );
 });
 </script>

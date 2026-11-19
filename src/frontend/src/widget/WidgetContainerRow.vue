@@ -51,7 +51,8 @@
       v-if="showStats && isRunning"
       :title="statsTitle"
       :cpu="stats?.cpuPercent"
-      :memory="stats?.memoryPercent"
+      :memory="memoryView?.percent"
+      :memory-level="memoryView?.level"
     />
     <!-- Always rendered while the setting is on, disabled when there is no page
          to open, so every row's kebab lands in the same column. The disabled
@@ -109,7 +110,8 @@ import { useStatsStore } from '@/stores/stats';
 import { useUpdatesStore } from '@/stores/updates';
 import type { Schedule } from '@/types/schedule';
 import { containerEditUrl, containerStatus, containerWebuiUrl, FALLBACK_CONTAINER_ICON, openContainerTerminal } from '@/utils/containerDisplay';
-import { formatBytes, formatPercent } from '@/utils/format';
+import { formatPercent } from '@/utils/format';
+import { memoryPercentView } from '@/utils/memoryPercent';
 import { releaseIndexUrl } from '@/utils/updateUnits';
 
 /** One or two restarts are often a deliberate restart. Three or more point at a restart loop. */
@@ -157,9 +159,10 @@ const webuiDisabledTitle = computed(() =>
 // unregistering on unmount would drop an id the total still reads.
 const stats = computed(() => (props.showStats ? statsStore.getStats(props.container.id) : null));
 const restartCount = computed(() => stats.value?.restartCount ?? 0);
+const memoryView = computed(() => (stats.value ? memoryPercentView(stats.value, settingsStore.memoryPercentBasis) : null));
 const statsTitle = computed(() =>
-  stats.value
-    ? `CPU ${formatPercent(stats.value.cpuPercent)} · Memory ${formatBytes(stats.value.memoryUsage)} / ${formatBytes(stats.value.memoryLimit)}`
+  stats.value && memoryView.value
+    ? `CPU ${formatPercent(stats.value.cpuPercent)} · Memory ${formatPercent(memoryView.value.percent)} ${memoryView.value.suffix}. ${memoryView.value.title}`
     : 'Loading stats',
 );
 const hasUpdate = computed(() => settingsStore.enableUpdateChecks && updatesStore.hasUpdate(props.container.image));

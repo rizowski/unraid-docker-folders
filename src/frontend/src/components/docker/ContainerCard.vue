@@ -90,8 +90,14 @@
   
       <!-- Compact stats bars (always visible for running containers) -->
       <div v-if="isRunning && containerStats && !expanded" class="px-4 sm:px-6 pb-1 space-y-1">
-        <StatsBar label="CPU" :percent="containerStats.cpuPercent" />
-        <StatsBar label="MEM" :percent="containerStats.memoryPercent" />
+        <StatsBar label="CPU" :percent="containerStats.cpuPercent" suffix="" />
+        <StatsBar
+          label="MEM"
+          :percent="memoryView!.percent"
+          :level-percent="memoryView!.level"
+          :suffix="memoryView!.suffix"
+          :title="memoryView!.title"
+        />
         <div v-if="containerStats.restartCount > 0" class="flex items-center gap-2 text-xs">
           <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium">
             {{ containerStats.restartCount }} restart{{ containerStats.restartCount !== 1 ? 's' : '' }}
@@ -235,7 +241,13 @@
       <div v-if="isRunning && containerStats && !expanded" class="hidden md:flex shrink-0 items-center gap-3">
         <div class="w-[140px] space-y-0.5">
           <StatsBar label="CPU" :percent="containerStats.cpuPercent" size="inline" />
-          <StatsBar label="MEM" :percent="containerStats.memoryPercent" size="inline" />
+          <StatsBar
+            label="MEM"
+            size="inline"
+            :percent="memoryView!.percent"
+            :level-percent="memoryView!.level"
+            :title="memoryView!.title"
+          />
         </div>
         <span v-if="containerStats.restartCount > 0" class="inline-flex items-center px-1.5 py-0.5 bg-error/15 text-error rounded text-[11px] font-mono font-medium shrink-0" :title="`${containerStats.restartCount} restart(s)`">
           {{ containerStats.restartCount }} rst
@@ -363,6 +375,7 @@ import ContainerDetails from '@/components/docker/ContainerDetails.vue';
 import ContainerIcon from '@/components/docker/ContainerIcon.vue';
 import { containerStatus, containerEditUrl, containerWebuiUrl, FALLBACK_CONTAINER_ICON, isRunningContainer, openContainerTerminal } from '@/utils/containerDisplay';
 import { imageRegistryUrl } from '@/utils/imageRegistry';
+import { memoryPercentView } from '@/utils/memoryPercent';
 import IconPlay from '@/components/icons/IconPlay.vue';
 import IconStop from '@/components/icons/IconStop.vue';
 import IconRestart from '@/components/icons/IconRestart.vue';
@@ -573,6 +586,11 @@ const { showStats, containerStats } = useContainerStats({
   isRunning,
   expanded,
 });
+
+// Set whenever containerStats is, which the template checks before it reads this.
+const memoryView = computed(() =>
+  containerStats.value ? memoryPercentView(containerStats.value, settingsStore.memoryPercentBasis) : null,
+);
 
 const portConflict = computed(() => dockerStore.getPortConflict(props.container.id));
 const hasPortConflict = computed(() => !!portConflict.value);
