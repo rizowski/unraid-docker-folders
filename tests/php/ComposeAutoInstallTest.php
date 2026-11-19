@@ -61,7 +61,15 @@ class StubbedComposeManager extends ComposeManager
     protected function binarySha256() { return $this->sha; }
 
     public function isComposeAvailable() { return $this->available || is_file($this->binary); }
-    protected function waitBeforeRetry($seconds) { $this->waits[] = $seconds; }
+    /** @var ?callable run during each wait, to simulate another install route */
+    public $onWait = null;
+    protected function waitBeforeRetry($seconds)
+    {
+        $this->waits[] = $seconds;
+        if ($this->onWait) {
+            ($this->onWait)($this);
+        }
+    }
     protected function notifyBootInstallFailed($attempts, $error) { $this->notices[] = [$attempts, $error]; }
 
     protected function downloadFile($url, $dest)
@@ -293,6 +301,39 @@ final class ComposeAutoInstallTest extends TestCase
         $this->assertTrue($r['available']);
         $this->assertSame(3, $this->manager->downloads);
         $this->assertSame([15, 30], $this->manager->waits);
+        $this->assertSame([], $this->manager->notices);
+    }
+
+    #[Test]
+    public function composeAppearingDuringAWaitStopsTheRetriesWithoutANotice(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        $this->manager->body = null;
+        $this->manager->onWait = function ($m) {
+            $m->available = true; // the user clicked Install, say
+        };
+        $r = $this->manager->ensureComposeBinary();
+        $this->assertSame('present', $r['action']);
+        $this->assertTrue($r['available']);
+        $this->assertSame(1, $this->manager->downloads);
+        $this->assertSame([15], $this->manager->waits);
+        $this->assertSame([], $this->manager->notices);
+    }
+
+    #[Test]
+    public function composeAppearingDuringTheLastTryGivesNoFalseNotice(): void
+    {
+        dfmUpsertSetting($this->db, 'compose_auto_install', '1');
+        $this->manager->body = null;
+        $this->manager->onWait = function ($m) {
+            if (count($m->waits) === 3) {
+                $m->available = true;
+            }
+        };
+        $r = $this->manager->ensureComposeBinary();
+        // The check before the fourth try already sees it.
+        $this->assertSame('present', $r['action']);
+        $this->assertSame(3, $this->manager->downloads);
         $this->assertSame([], $this->manager->notices);
     }
 

@@ -394,6 +394,11 @@ class ComposeManager
     $attempts = count($waits) + 1;
     $result = ['success' => false, 'error' => 'not tried'];
     for ($try = 1; $try <= $attempts; $try++) {
+      // Compose can appear by another route during a wait: the banner's
+      // Install button, or another plugin. Do not download over it.
+      if ($try > 1 && $this->composeAppearedMeanwhile()) {
+        return ['available' => true, 'action' => 'present', 'error' => null];
+      }
       $result = $this->installComposeBinary();
       if ($result['success']) {
         break;
@@ -404,11 +409,22 @@ class ComposeManager
       }
     }
     if (!$result['success']) {
+      // No false "not reinstalled" notice when it appeared in the meantime.
+      if ($this->composeAppearedMeanwhile()) {
+        return ['available' => true, 'action' => 'present', 'error' => null];
+      }
       // One notification per boot: only after the last try.
       $this->notifyBootInstallFailed($attempts, $result['error']);
       return ['available' => false, 'action' => 'failed', 'error' => $result['error']];
     }
     return ['available' => $this->isComposeAvailable(), 'action' => 'installed', 'error' => null];
+  }
+
+  /** Forget the cached availability and ask again. */
+  private function composeAppearedMeanwhile()
+  {
+    $this->composeAvailable = null;
+    return (bool) $this->isComposeAvailable();
   }
 
   /**
