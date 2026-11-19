@@ -570,9 +570,7 @@ function recordImagePulled($dockerClient, $db, $image, $pullDigest = null)
   // after the pull must not read as "up to date".
   $updateAvailable = 0;
   if ($localDigest !== null && is_string($remoteDigest) && $remoteDigest !== '') {
-    $at = strpos($localDigest, '@');
-    $localHash = $at !== false ? substr($localDigest, $at + 1) : $localDigest;
-    $updateAvailable = $localHash !== $remoteDigest ? 1 : 0;
+    $updateAvailable = DockerClient::digestHash($localDigest) !== $remoteDigest ? 1 : 0;
   }
 
   $db->query(
