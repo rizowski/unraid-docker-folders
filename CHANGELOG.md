@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026.11.19-dev7
+### Improved
+- At boot, the Compose reinstall retries the download several times and sends one Unraid notification only if every try fails, so stack autostart still runs after a slow network start. (#26, #30)
+- After a plugin update that changes the backend, the Unraid API is reloaded once so the new plugin code takes effect without a reboot. (#30)
+
+### Fixed
+- Compose installed from the setup banner now stays installed after a reboot, unless you turned off auto-reinstall in Settings, and the banner says what the install did. (#26, #30)
+- The setup banner shows a warning when Compose installs but the flash copy or the reinstall-after-reboot setting cannot be saved, instead of reporting a failure. (#26, #30)
+
+### Internal
+- Internal fixes and performance improvements.
+
 ## 2026.11.19-dev6
 ### Fixed
 - Container memory stats now show a container limit set above host memory as a real limit, with the limit in the tooltip. (#29, #36)
