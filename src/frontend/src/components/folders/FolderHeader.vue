@@ -16,14 +16,18 @@
     ></div>
     <div class="relative flex items-center gap-2 flex-1 min-w-0">
       <DragHandle v-if="!dragLocked" handle-class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing" />
-      <!-- The keyboard and screen reader control for the toggle. The rest of the
+      <!-- The negative margin is important (-m-1.5!) because the Unraid reset
+           `#unraid-docker-folders-modern button:not(.nav-btn) { margin: 0 }`
+           is unlayered and beats the layered utility. Without it the padding
+           of .icon-btn pushes the title 12px right.
+           The keyboard and screen reader control for the toggle. The rest of the
            header still toggles on a mouse click. @click.stop keeps one toggle
            per activation: the click would otherwise bubble to the header.
            Space clicks once on keyup. A held Enter makes the browser repeat
            the click, so a repeated Enter keydown is cancelled. -->
       <button
         type="button"
-        class="icon-btn -m-1.5 shrink-0"
+        class="icon-btn -m-1.5! shrink-0"
         :aria-expanded="!collapsed"
         :aria-label="`${collapsed ? 'Expand' : 'Collapse'} folder ${folder.name}`"
         @keydown.enter="(e: KeyboardEvent) => e.repeat && e.preventDefault()"
