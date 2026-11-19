@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.11.19-dev2">
-<!ENTITY md5 "61c3ac6707bf9c9eabc949542751f8ce">
+<!ENTITY version "2026.11.19-dev3">
+<!ENTITY md5 "242b605cf6a92ceb2986e2e1b05d14ec">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -156,6 +156,9 @@
 
 
 
+
+###2026.11.19-dev3
+- Fixed: After pulling an image, the update check now records the matching image digest, so containers no longer show the wrong update status. (#32, #33)
 ###2026.11.19-dev2
 - Fixed: Update checks no longer report a container as outdated when its image matches the registry under any of its local digests. (#32, #33)
 ###2026.11.19-dev1

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.19-dev3
+### Fixed
+- After pulling an image, the update check now records the matching image digest, so containers no longer show the wrong update status. (#32, #33)
+
 ## 2026.11.19-dev2
 ### Fixed
 - Update checks no longer report a container as outdated when its image matches the registry under any of its local digests. (#32, #33)
