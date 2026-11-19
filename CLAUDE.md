@@ -726,6 +726,11 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
 - `DELETE /api/folders.php?id=<id>` - Delete folder
 - `GET /api/settings.php` - Get all plugin settings
 - `POST /api/settings.php` - Update setting (body: `{key, value}`)
+  `memory_percent_basis` (`limit` default, or `host`) picks what a container's
+  memory percent is of. Only the frontend reads it, through
+  `utils/memoryPercent.ts`; stats responses are unchanged and already carry
+  `hostMemory`. On `host` the bar color still follows the container's own limit.
+  A folder's memory is always a share of the host.
 - `GET /api/stats.php?ids=id1,id2` - Get live resource stats for containers
 - `GET /api/updates.php` - Image update availability
 - `POST /api/pull.php` - Pull updated images (supports batches). `containers=`

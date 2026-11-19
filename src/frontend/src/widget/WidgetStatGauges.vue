@@ -1,12 +1,12 @@
 <template>
   <span class="shrink-0 flex gap-1.5 text-xs font-mono">
     <span v-for="part in parts" :key="part.key" class="widget-stat flex flex-col w-10">
-      <span class="text-right leading-tight" :class="loadClass(part.percent)">{{ part.percent === undefined ? '--' : formatPercent(part.percent) }}</span>
+      <span class="text-right leading-tight" :class="loadClass(part.level)">{{ part.percent === undefined ? '--' : formatPercent(part.percent) }}</span>
       <span class="h-0.5 stats-bar-track rounded-full overflow-hidden">
         <span
           v-if="part.percent !== undefined"
           class="block h-full rounded-full transition-all duration-300"
-          :class="LOAD_BAR_CLASSES[loadLevel(part.percent)]"
+          :class="LOAD_BAR_CLASSES[loadLevel(part.level ?? part.percent)]"
           :style="{ width: Math.min(part.percent, 100) + '%' }"
         />
       </span>
@@ -27,13 +27,15 @@ const LOAD_TEXT_CLASSES = { high: 'text-error', medium: 'text-warning', low: 'te
 const props = defineProps<{
   cpu: number | undefined;
   memory: number | undefined;
+  /** Percent that picks the memory color, when it is not the shown one. See memoryPercentView. */
+  memoryLevel?: number;
 }>();
 
 // Computed rather than built in the template, so a rerender that does not
 // touch the numbers does not rebuild the pair.
 const parts = computed(() => [
-  { key: 'cpu', percent: props.cpu },
-  { key: 'memory', percent: props.memory },
+  { key: 'cpu', percent: props.cpu, level: props.cpu },
+  { key: 'memory', percent: props.memory, level: props.memoryLevel ?? props.memory },
 ]);
 
 function loadClass(percent: number | undefined): string {

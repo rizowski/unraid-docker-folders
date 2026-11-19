@@ -87,5 +87,8 @@
     <testsuite name="ComposeRestore">
       <file>ComposeRestoreTest.php</file>
     </testsuite>
+    <testsuite name="MemoryPercentBasis">
+      <file>MemoryPercentBasisTest.php</file>
+    </testsuite>
   </testsuites>
 </phpunit>

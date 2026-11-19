@@ -7,6 +7,7 @@ import { ref } from 'vue';
 import { useBackend } from '@/backends';
 import { SORT_MODE_OPTIONS, type SortMode } from '@/types/folder';
 import { formatTimestamp } from '@/utils/format';
+import { parseMemoryPercentBasis, type MemoryPercentBasis } from '@/utils/memoryPercent';
 
 /** A stack action that deletes containers, so it asks first unless turned off. */
 export type DestructiveStackAction = 'down' | 'recompose';
@@ -25,6 +26,8 @@ export const useSettingsStore = defineStore('settings', () => {
   /** Whether an automatic sort mode also reorders folders. Off keeps the folder drag order. */
   const sortFolders = ref(false);
   const showStats = ref(true);
+  /** What a container's memory percent is of: its own limit, or total host memory. */
+  const memoryPercentBasis = ref<MemoryPercentBasis>('limit');
   const replaceDockerSection = ref(true);
   const showFolderPorts = ref(true);
   const showInlineLogs = ref(false);
@@ -68,6 +71,9 @@ export const useSettingsStore = defineStore('settings', () => {
       }
       if ('show_stats' in settings) {
         showStats.value = settings.show_stats !== '0';
+      }
+      if ('memory_percent_basis' in settings) {
+        memoryPercentBasis.value = parseMemoryPercentBasis(settings.memory_percent_basis);
       }
       if ('replace_docker_section' in settings) {
         replaceDockerSection.value = settings.replace_docker_section === '1';
@@ -338,6 +344,7 @@ export const useSettingsStore = defineStore('settings', () => {
     sortFolders,
     setSortFolders,
     showStats,
+    memoryPercentBasis,
     replaceDockerSection,
     showFolderPorts,
     showInlineLogs,

@@ -116,6 +116,7 @@ function handlePost()
     'sort_mode', 'sort_folders',
     'backend_mode',
     'memory_calculation',
+    'memory_percent_basis',
   ];
   if (!in_array($key, $allowedKeys, true)) {
     errorResponse('Invalid settings key', 400);
@@ -145,6 +146,10 @@ function handlePost()
 
   if ($key === 'memory_calculation' && !in_array($value, MEMORY_CALCULATION_MODES, true)) {
     errorResponse('Invalid memory_calculation', 400);
+  }
+
+  if ($key === 'memory_percent_basis' && !in_array($value, MEMORY_PERCENT_BASES, true)) {
+    errorResponse('Invalid memory_percent_basis', 400);
   }
 
   // Validate value length
