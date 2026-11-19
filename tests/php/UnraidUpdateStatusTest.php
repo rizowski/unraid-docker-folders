@@ -355,6 +355,26 @@ final class UnraidUpdateStatusTest extends TestCase
     }
 
     #[Test]
+    public function writesTheSameBytesAsUnraidsSaveJsonForEveryFixtureInput(): void
+    {
+        $fixture = json_decode((string) file_get_contents(
+            __DIR__ . '/../../packages/unraid-api-plugin-docker-folders/src/updates/__tests__/unraid-json.fixture.json'
+        ), true);
+        $this->assertNotEmpty($fixture);
+        foreach ($fixture as $case) {
+            $input = $case['input'];
+            $addKey = str_ends_with($input, ' + key');
+            file_put_contents($this->status, $addKey ? substr($input, 0, -strlen(' + key')) : $input);
+            $data = readUnraidJson($this->status) ?? [];
+            if ($addKey) {
+                $data['lscr.io/linuxserver/sonarr:latest'] = ['status' => 'true'];
+            }
+            $this->assertTrue(writeUnraidJson($this->status, $data), $input);
+            $this->assertSame($case['output'], file_get_contents($this->status), $input);
+        }
+    }
+
+    #[Test]
     public function updateUnraidJsonAppliesTheChangeToTheFreshFile(): void
     {
         $this->writeJson($this->status, ['a' => 1]);

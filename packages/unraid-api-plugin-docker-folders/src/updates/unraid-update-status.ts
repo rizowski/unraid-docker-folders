@@ -85,9 +85,11 @@ export function readUnraidJson(path: string): JsonObject | null {
     if (raw.trim() === '') return null;
     try {
         const data: unknown = JSON.parse(raw);
-        // Unraid's saveJSON() writes an empty PHP array as `[]`. Any other
-        // list is not something to add keys to.
-        if (Array.isArray(data)) return data.length === 0 ? {} : null;
+        // Unraid's loadJSON() decodes to a PHP array, so a list is read like a
+        // map with the keys 0, 1, ...: an empty one as `{}`, and a non-empty
+        // one keeps its items under their index, as PHP does when a string key
+        // is added to it. `bareDigest`-style entries are never at those keys.
+        if (Array.isArray(data)) return Object.fromEntries(data.map((item, i) => [String(i), item]));
         return data !== null && typeof data === 'object' ? (data as JsonObject) : null;
     } catch {
         return null;
@@ -95,9 +97,36 @@ export function readUnraidJson(path: string): JsonObject | null {
 }
 
 /**
- * Replace the file atomically, in the format Unraid's `saveJSON()` writes
- * (`JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES`, four-space indent). The temp
- * file sits beside it: `/var/lib/docker` is often a loop mount.
+ * The bytes Unraid's `saveJSON()` writes: PHP's
+ * `json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)`. That is a
+ * four-space indent, an empty array as `[]` (PHP has no empty map), an array
+ * with the keys 0, 1, ... as a list, and every non-ASCII character as a
+ * lower-case `\uXXXX` escape, with a surrogate pair above U+FFFF. Slashes stay
+ * raw. `__tests__/unraid-json.fixture.json` holds PHP's output for the same
+ * inputs, from `scripts/unraid-json-oracle.php`.
+ *
+ * One difference is left: a JavaScript object lists integer-like keys first,
+ * where PHP keeps insertion order.
+ */
+export function encodeUnraidJson(data: unknown): string {
+    const json = JSON.stringify(
+        data,
+        (_key, value: unknown) => {
+            if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+            const keys = Object.keys(value);
+            if (keys.length === 0) return [];
+            if (keys.every((k, i) => k === String(i))) return Object.values(value);
+            return value;
+        },
+        4
+    );
+    return json.replace(/[\u0080-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+/**
+ * Replace the file atomically, in the format Unraid's `saveJSON()` writes (see
+ * `encodeUnraidJson`). The temp file sits beside it: `/var/lib/docker` is often
+ * a loop mount.
  */
 export function writeUnraidJson(path: string, data: JsonObject): boolean {
     const dir = dirname(path);
@@ -110,7 +139,7 @@ export function writeUnraidJson(path: string, data: JsonObject): boolean {
     }
     const tmp = join(dir, `.${basename(path)}.dfm-${process.pid}.tmp`);
     try {
-        writeFileSync(tmp, JSON.stringify(data, null, 4));
+        writeFileSync(tmp, encodeUnraidJson(data));
         chmodSync(tmp, mode);
         renameSync(tmp, path);
         return true;

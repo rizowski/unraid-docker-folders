@@ -1,0 +1,50 @@
+[
+    {
+        "input": "{}",
+        "output": "[]"
+    },
+    {
+        "input": "[]",
+        "output": "[]"
+    },
+    {
+        "input": "{\"nginx\":{\"local\":\"sha256:a\",\"remote\":\"sha256:b\",\"status\":\"false\"}}",
+        "output": "{\n    \"nginx\": {\n        \"local\": \"sha256:a\",\n        \"remote\": \"sha256:b\",\n        \"status\": \"false\"\n    }\n}"
+    },
+    {
+        "input": "{\"a/b:latest\":{\"status\":\"true\"}}",
+        "output": "{\n    \"a/b:latest\": {\n        \"status\": \"true\"\n    }\n}"
+    },
+    {
+        "input": "{\"caf\u00e9\":{\"name\":\"Pl\u00e8x \u2603 \ud83d\ude00\"}}",
+        "output": "{\n    \"caf\\u00e9\": {\n        \"name\": \"Pl\\u00e8x \\u2603 \\ud83d\\ude00\"\n    }\n}"
+    },
+    {
+        "input": "{\"plex\":{\"template\":[],\"ports\":{}}}",
+        "output": "{\n    \"plex\": {\n        \"template\": [],\n        \"ports\": []\n    }\n}"
+    },
+    {
+        "input": "{\"x\":{\"nested\":{\"deep\":{\"k\":\"v\"}}}}",
+        "output": "{\n    \"x\": {\n        \"nested\": {\n            \"deep\": {\n                \"k\": \"v\"\n            }\n        }\n    }\n}"
+    },
+    {
+        "input": "[\"a\",\"b\"]",
+        "output": "[\n    \"a\",\n    \"b\"\n]"
+    },
+    {
+        "input": "{\"0\":\"a\",\"1\":\"b\"}",
+        "output": "[\n    \"a\",\n    \"b\"\n]"
+    },
+    {
+        "input": "{\"k\":\"line\\nbreak\\ttab \\\"quote\\\" \\\\ back\"}",
+        "output": "{\n    \"k\": \"line\\nbreak\\ttab \\\"quote\\\" \\\\ back\"\n}"
+    },
+    {
+        "input": "{\"n\":1,\"f\":1.5,\"t\":true,\"z\":null}",
+        "output": "{\n    \"n\": 1,\n    \"f\": 1.5,\n    \"t\": true,\n    \"z\": null\n}"
+    },
+    {
+        "input": "[\"a\",\"b\"] + key",
+        "output": "{\n    \"0\": \"a\",\n    \"1\": \"b\",\n    \"lscr.io/linuxserver/sonarr:latest\": {\n        \"status\": \"true\"\n    }\n}"
+    }
+]
