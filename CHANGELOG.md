@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.11.19-dev4
+### New
+- A new Settings page option chooses whether container memory percentages are shown as a share of the container's memory limit or of the host, with labels like "of limit" or "of host" and an explanatory tooltip on cards, details, list rows and the dashboard widget. (#29, #34)
+
+### Improved
+- Folder memory totals now show a tooltip explaining they are a share of host memory. (#29, #34)
+
 ## 2026.11.19-dev3
 ### Fixed
 - After pulling an image, the update check now records the matching image digest, so containers no longer show the wrong update status. (#32, #33)
