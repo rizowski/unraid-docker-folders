@@ -180,6 +180,17 @@ describe('unraid-update-status (issue #23)', () => {
         expect(readFileSync(paths.status, 'utf8')).toBe(content);
     });
 
+    it('leaves a flag alone when no container uses the tag', async () => {
+        const content = JSON.stringify({ 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        writeFileSync(paths.status, content);
+        const inspect = async () => ({ id: 'sha256:new', repoDigests: [`nginx@${D1}`] });
+        expect(await repairUnraidUpdateStatus(inspect, [], paths)).toEqual([]);
+        expect(
+            await repairUnraidUpdateStatus(inspect, [{ name: 'db', image: 'postgres', imageId: 'sha256:p' }], paths)
+        ).toEqual([]);
+        expect(readFileSync(paths.status, 'utf8')).toBe(content);
+    });
+
     it('writes nothing when nothing is stale', async () => {
         const content = JSON.stringify({ 'library/redis:7': { local: D2, remote: D2, status: 'true' } });
         writeFileSync(paths.status, content);

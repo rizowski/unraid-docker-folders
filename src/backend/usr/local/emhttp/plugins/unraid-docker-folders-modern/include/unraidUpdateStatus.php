@@ -301,8 +301,8 @@ function pickUnraidDigest($pullDigest, array $repoDigests, array $candidates)
  * Clear "update ready" flags left by pulls made before this fix.
  *
  * Touches only an entry with status "false" whose `remote` digest is one of
- * the local image's RepoDigests, and only when every container on that tag
- * runs that image. Then the containers run the build the registry serves,
+ * the local image's RepoDigests, and only when at least one container is on
+ * that tag and every container on it runs that image. Then the containers run the build the registry serves,
  * the state a recreate would have recorded.
  *
  * @param DockerClient $dockerClient
@@ -329,6 +329,11 @@ function repairUnraidUpdateStatus(
     }
     $remote = bareImageDigest($entry['remote'] ?? null);
     if ($remote === null || ($entry['local'] ?? null) === $remote) {
+      continue;
+    }
+    // With no container on this tag there is nothing to judge, and "every
+    // container runs the image" would pass by default. Leave the entry alone.
+    if (empty(containerNamesForImage($containers, (string) $key))) {
       continue;
     }
     $info = $dockerClient->getImageInfo((string) $key);

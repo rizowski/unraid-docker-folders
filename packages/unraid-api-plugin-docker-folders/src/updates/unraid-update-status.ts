@@ -209,7 +209,8 @@ export function pickUnraidDigest(
 /**
  * Clear flags left by pulls made before this fix. Touches only an entry with
  * status "false" whose `remote` digest is one of the image's RepoDigests, and
- * only when every container on that tag runs that image.
+ * only when at least one container is on that tag and every container on it
+ * runs that image.
  *
  * @param inspect The tag's image id and RepoDigests, or null when it is not on disk
  * @returns Keys that were repaired
@@ -229,6 +230,9 @@ export async function repairUnraidUpdateStatus(
         if (entry.status !== 'false') continue;
         const remote = bareImageDigest(entry.remote);
         if (remote === null || entry.local === remote) continue;
+        // With no container on this tag there is nothing to judge, and "every
+        // container runs the image" would pass by default. Leave the entry alone.
+        if (containerNamesForImage(containers, key).length === 0) continue;
         const image = await inspect(key);
         if (image === null) continue;
         if (

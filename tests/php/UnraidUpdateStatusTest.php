@@ -281,6 +281,21 @@ final class UnraidUpdateStatusTest extends TestCase
     }
 
     #[Test]
+    public function repairLeavesAFlagAloneWhenNoContainerUsesTheTag(): void
+    {
+        $content = json_encode(['library/nginx:latest' => ['local' => self::D2, 'remote' => self::D1, 'status' => 'false']]);
+        file_put_contents($this->status, $content);
+        $client = new ImageInfoDockerClient();
+        $client->images['library/nginx:latest'] = ['Id' => 'sha256:new', 'RepoDigests' => ['nginx@' . self::D1]];
+
+        // An empty container list, then a list with only other images.
+        $this->assertSame([], repairUnraidUpdateStatus($client, [], $this->status, $this->webui));
+        $other = [['name' => 'db', 'image' => 'postgres', 'imageId' => 'sha256:p']];
+        $this->assertSame([], repairUnraidUpdateStatus($client, $other, $this->status, $this->webui));
+        $this->assertSame($content, file_get_contents($this->status));
+    }
+
+    #[Test]
     public function behindListsContainersOnTheTagRunningAnotherImage(): void
     {
         $containers = [
