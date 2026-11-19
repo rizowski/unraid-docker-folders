@@ -281,6 +281,17 @@ final class UnraidUpdateStatusTest extends TestCase
     }
 
     #[Test]
+    public function dockerClientLoadsItsOwnPullDigestParserWithoutConfig(): void
+    {
+        $root = __DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/';
+        $code = 'require_once ' . var_export($root . 'classes/DockerClient.php', true) . ';'
+            . 'echo function_exists("pullDigestFromStatus") ? "yes" : "no";'
+            . 'require_once ' . var_export($root . 'include/config.php', true) . '; echo " loaded";';
+        $out = shell_exec(escapeshellarg(PHP_BINARY) . ' -r ' . escapeshellarg($code) . ' 2>&1 </dev/null');
+        $this->assertSame('yes loaded', trim((string) $out));
+    }
+
+    #[Test]
     public function repairLeavesAFlagAloneWhenNoContainerUsesTheTag(): void
     {
         $content = json_encode(['library/nginx:latest' => ['local' => self::D2, 'remote' => self::D1, 'status' => 'false']]);

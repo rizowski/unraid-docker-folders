@@ -8,6 +8,10 @@
  */
 
 require_once __DIR__ . '/DockerStreamDemuxer.php';
+// pullDigestFromStatus() is called by pullImage(). include/config.php loads this
+// file too; require_once resolves both paths to one file, so it loads once. The
+// file only declares constants and functions and requires nothing.
+require_once dirname(__DIR__) . '/include/unraidUpdateStatus.php';
 
 class DockerClient
 {
