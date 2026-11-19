@@ -129,6 +129,34 @@ describe('FolderHeader', () => {
     expect(wrapper.find('.kebab-menu-item').exists()).toBe(false);
   });
 
+  describe('collapse toggle', () => {
+    it('reports the shown state, not the saved one, when a filter holds a collapsed folder open', () => {
+      const wrapper = mount(FolderHeader, {
+        props: { folder: makeFolder({ collapsed: true }), collapsed: false },
+        global: { plugins: [pinia] },
+      });
+      const header = wrapper.find('.folder-header');
+      expect(header.attributes('aria-expanded')).toBe('true');
+      expect(header.attributes('aria-label')).toBe('Collapse folder Test Folder');
+    });
+
+    it('reports collapsed when the shown state is collapsed', () => {
+      const wrapper = mountHeader({ collapsed: true });
+      const header = wrapper.find('.folder-header');
+      expect(header.attributes('aria-expanded')).toBe('false');
+      expect(header.attributes('aria-label')).toBe('Expand folder Test Folder');
+    });
+
+    it('emits toggle-collapse on Enter and on Space', async () => {
+      const wrapper = mountHeader();
+      const header = wrapper.find('.folder-header');
+      await header.trigger('keydown', { key: 'Enter' });
+      expect(wrapper.emitted('toggle-collapse')).toHaveLength(1);
+      await header.trigger('keydown', { key: ' ' });
+      expect(wrapper.emitted('toggle-collapse')).toHaveLength(2);
+    });
+  });
+
   describe('z-index stacking', () => {
     // FolderHeader renders a fragment (header div + InputModal), so
     // wrapper.element is the mount container — target the header div itself.
