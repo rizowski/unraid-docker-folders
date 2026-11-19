@@ -90,4 +90,29 @@ describe('include/frameSrc.js', () => {
       window.location.origin,
     );
   });
+
+  it('keeps trying after a post was lost because the frame was missing', async () => {
+    let current: FakeFrame | null = null;
+    w.dockerFoldersWatchTheme(() => current);
+    root().style.setProperty('--background-color', '#111');
+    root().classList.add('nr-dark');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(post).not.toHaveBeenCalled();
+    // The frame is back and the theme is unchanged: it must still go out.
+    current = frame;
+    root().classList.add('again');
+    await vi.advanceTimersByTimeAsync(100);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenCalledWith(
+      { type: 'docker-folders-theme', theme: { '--background-color': '#111', '--text-color': '#111' } },
+      window.location.origin,
+    );
+  });
+
+  it('keeps the same theme variable list as iframeHost.ts', () => {
+    const match = FRAME_SRC.match(/var DFM_THEME_VARS = \[([\s\S]*?)\];/);
+    expect(match).not.toBeNull();
+    const names = [...(match as RegExpMatchArray)[1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    expect(names).toEqual([...THEME_VARS]);
+  });
 });

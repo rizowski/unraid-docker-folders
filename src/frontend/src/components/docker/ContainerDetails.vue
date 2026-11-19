@@ -299,13 +299,13 @@ const emit = defineEmits<{ (e: 'refresh-logs'): void }>();
 const dockerStore = useDockerStore();
 const scheduleStore = useScheduleStore();
 
-// The right stats cell renders whenever stats exist, which includes a stopped
-// container's last reading. A running container with stats on keeps the track
-// open before the first poll too, so nothing shifts when it lands.
 const settingsStore = useSettingsStore();
 const memoryView = computed(() =>
   props.containerStats ? memoryPercentView(props.containerStats, settingsStore.memoryPercentBasis) : null,
 );
+// The right stats cell renders whenever stats exist, which includes a stopped
+// container's last reading. A running container with stats on keeps the track
+// open before the first poll too, so nothing shifts when it lands.
 const hasStatsColumn = computed(() => !!props.containerStats || (props.isRunning && props.showStats));
 
 // Schedules target a container by NAME, not by docker id — see the emit at

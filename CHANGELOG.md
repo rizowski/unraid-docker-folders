@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026.11.19-dev6
+### Fixed
+- Container memory stats now show a container limit set above host memory as a real limit, with the limit in the tooltip. (#29, #36)
+- Folder memory totals no longer call the figure host memory when the host memory is unknown. (#29, #36)
+- After a pull, the update status compares the pulled image with the registry instead of always saying up to date. (#32, #36)
+- Unraid's update status flags are no longer marked as current when no container uses the image tag. (#23, #36)
+- Writing Unraid's update status files no longer drops entries that Unraid or the other backend changed at the same time. (#23, #36)
+- Unraid's update status files are now written in the same format Unraid itself uses. (#23, #36)
+- The folder chevron is now a real expand/collapse button that works with the keyboard and screen readers and reports the shown state. (#31, #36)
+- The theme is sent to the embedded page again if an earlier send was lost. (#27, #36)
+
+### Internal
+- Internal fixes and performance improvements.
+
 ## 2026.11.19-dev5
 ### New
 - A new Settings page option chooses whether container memory percentages are a share of the container's limit or of the host, with labels and tooltips on cards, details, list rows and the dashboard widget. (#29, #34)

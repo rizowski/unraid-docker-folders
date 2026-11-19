@@ -28,15 +28,27 @@ final class MemoryPercentBasisTest extends TestCase
     }
 
     #[Test]
-    public function settingsEndpointAllowsTheKeyAndValidatesItAgainstTheConstant(): void
+    public function acceptsTheTwoBases(): void
     {
+        $this->assertTrue(dfmIsValidMemoryPercentBasis('limit'));
+        $this->assertTrue(dfmIsValidMemoryPercentBasis('host'));
+    }
+
+    #[Test]
+    public function rejectsAnythingElse(): void
+    {
+        foreach (['', 'total', 'Host', 'LIMIT', ' host', 'limit ', '0', '1', 0, 1, true, false, null, [], ['host']] as $value) {
+            $this->assertFalse(dfmIsValidMemoryPercentBasis($value), var_export($value, true));
+        }
+    }
+
+    #[Test]
+    public function settingsEndpointCallsTheValidator(): void
+    {
+        // The handler ends in exit() and needs a session, so only the wiring is checked here.
         $source = file_get_contents(self::PLUGIN_DIR . '/api/settings.php');
         $this->assertMatchesRegularExpression("/'memory_percent_basis',\s*\n\s*\];/", $source, 'key is in the allowlist');
-        $this->assertStringContainsString(
-            "\$key === 'memory_percent_basis' && !in_array(\$value, MEMORY_PERCENT_BASES, true)",
-            $source
-        );
-        $this->assertStringContainsString("'Invalid memory_percent_basis', 400", $source);
+        $this->assertStringContainsString("\$key === 'memory_percent_basis' && !dfmIsValidMemoryPercentBasis(\$value)", $source);
     }
 
     #[Test]

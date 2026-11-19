@@ -200,7 +200,7 @@ try {
 
     // Post-pull operations are non-critical — never let them prevent complete/done
     try {
-      recordImagePulled($dockerClient, Database::getInstance(), $image);
+      recordImagePulled($dockerClient, Database::getInstance(), $image, $dockerClient->getLastPullDigest());
     } catch (\Throwable $e) {
       logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
     }

@@ -16,6 +16,7 @@ class PulledImageDockerClient extends DockerClient
 {
     public ?string $remote = null;
     public ?array $info = null;
+    public int $remoteCalls = 0;
 
     public function __construct()
     {
@@ -24,6 +25,7 @@ class PulledImageDockerClient extends DockerClient
 
     public function getRemoteImageDigest($imageName)
     {
+        $this->remoteCalls++;
         return $this->remote;
     }
 
@@ -50,16 +52,19 @@ class PulledImageDatabase
  */
 final class RecordImagePulledTest extends TestCase
 {
-    private function record(?string $remote, ?array $info): array
+    private ?PulledImageDockerClient $lastClient = null;
+
+    private function record(?string $remote, ?array $info, ?string $pullDigest = null): array
     {
         $client = new PulledImageDockerClient();
+        $this->lastClient = $client;
         $client->remote = $remote;
         $client->info = $info;
         $db = new PulledImageDatabase();
         // The update log directory does not exist off a real Unraid box.
         set_error_handler(fn () => true);
         try {
-            recordImagePulled($client, $db, 'postgres:16');
+            recordImagePulled($client, $db, 'postgres:16', $pullDigest);
         } finally {
             restore_error_handler();
         }
@@ -94,5 +99,37 @@ final class RecordImagePulledTest extends TestCase
     {
         $this->assertNull($this->record('sha256:new', ['RepoDigests' => []])[':local']);
         $this->assertNull($this->record('sha256:new', null)[':local']);
+    }
+
+    #[Test]
+    public function usesThePullDigestAndSkipsTheRegistryWhenTheRegistryMovedAfterThePull(): void
+    {
+        // The pull brought in one; the registry has published two since.
+        $params = $this->record('sha256:two', ['RepoDigests' => ['postgres@sha256:one']], 'sha256:one');
+        $this->assertSame('sha256:one', $params[':remote']);
+        $this->assertSame('postgres@sha256:one', $params[':local']);
+        $this->assertSame(0, $params[':avail']);
+        $this->assertSame(0, $this->lastClient->remoteCalls, 'no registry call when the pull digest is known');
+    }
+
+    #[Test]
+    public function flagsAnUpdateWhenTheRegistryMovedAndThereIsNoPullDigest(): void
+    {
+        $params = $this->record('sha256:two', ['RepoDigests' => ['postgres@sha256:one']]);
+        $this->assertSame(1, $params[':avail']);
+        $this->assertSame(1, $this->lastClient->remoteCalls);
+    }
+
+    #[Test]
+    public function marksCurrentWhenTheLocalDigestEqualsTheRemoteOne(): void
+    {
+        $this->assertSame(0, $this->record('sha256:two', ['RepoDigests' => ['postgres@sha256:one', 'postgres@sha256:two']])[':avail']);
+    }
+
+    #[Test]
+    public function isNotFlaggedWhenThereIsNothingToCompare(): void
+    {
+        $this->assertSame(0, $this->record(null, ['RepoDigests' => ['postgres@sha256:one']])[':avail']);
+        $this->assertSame(0, $this->record('sha256:new', ['RepoDigests' => []])[':avail']);
     }
 }

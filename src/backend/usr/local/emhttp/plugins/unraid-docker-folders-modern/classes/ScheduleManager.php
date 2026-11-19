@@ -817,7 +817,7 @@ class ScheduleManager
       }
       logUpdate("PULL OK {$image}");
       try {
-        recordImagePulled($docker, $this->db, $image);
+        recordImagePulled($docker, $this->db, $image, $docker->getLastPullDigest());
       } catch (\Throwable $e) {
         logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
       }

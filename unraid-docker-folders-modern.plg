@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.11.19-dev5">
-<!ENTITY md5 "1db184f6c8e4d65f77178d4e9fdfe5b0">
+<!ENTITY version "2026.11.19-dev6">
+<!ENTITY md5 "ee47e5083852da759c6786436193787b">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -158,6 +158,17 @@
 
 
 
+
+###2026.11.19-dev6
+- Fixed: Container memory stats now show a container limit set above host memory as a real limit, with the limit in the tooltip. (#29, #36)
+- Fixed: Folder memory totals no longer call the figure host memory when the host memory is unknown. (#29, #36)
+- Fixed: After a pull, the update status compares the pulled image with the registry instead of always saying up to date. (#32, #36)
+- Fixed: Unraid's update status flags are no longer marked as current when no container uses the image tag. (#23, #36)
+- Fixed: Writing Unraid's update status files no longer drops entries that Unraid or the other backend changed at the same time. (#23, #36)
+- Fixed: Unraid's update status files are now written in the same format Unraid itself uses. (#23, #36)
+- Fixed: The folder chevron is now a real expand/collapse button that works with the keyboard and screen readers and reports the shown state. (#31, #36)
+- Fixed: The theme is sent to the embedded page again if an earlier send was lost. (#27, #36)
+- Internal fixes and performance improvements.
 ###2026.11.19-dev5
 - New: A new Settings page option chooses whether container memory percentages are a share of the container's limit or of the host, with labels and tooltips on cards, details, list rows and the dashboard widget. (#29, #34)
 - Improved: Links such as the Update tag, release notes link and security findings docs link now show their intended colors, so the Update tag keeps its warning color. (#35)
