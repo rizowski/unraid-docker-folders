@@ -15,8 +15,8 @@ use PHPUnit\Framework\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
- * An image that was re-pulled can carry more than one RepoDigest, and Docker
- * lists them sorted. The update check must compare the one the registry
+ * An image that was re-pulled can carry more than one RepoDigest, and nothing
+ * guarantees the current one comes first. The update check must compare the one the registry
  * reports, or the image shows "update available" until the extra digest goes.
  */
 final class PickLocalDigestTest extends TestCase
@@ -51,5 +51,31 @@ final class PickLocalDigestTest extends TestCase
     public function doesNotMatchOnAPrefixOfTheHash(): void
     {
         $this->assertSame('postgres@sha256:abcdef', DockerClient::pickLocalDigest(['postgres@sha256:abcdef', 'postgres@sha256:abc'], 'sha256:abcd'));
+    }
+
+    #[Test]
+    public function matchesOnTheHashAloneWhenTheMatchingEntryNamesAnotherRepository(): void
+    {
+        $digests = ['library/postgres@sha256:one', 'mirror.example/postgres@sha256:two'];
+        $this->assertSame('mirror.example/postgres@sha256:two', DockerClient::pickLocalDigest($digests, 'sha256:two'));
+    }
+
+    #[Test]
+    public function matchesABareDigestEntryThatHasNoAtSign(): void
+    {
+        $this->assertSame('sha256:aaa', DockerClient::pickLocalDigest(['postgres@sha256:bbb', 'sha256:aaa'], 'sha256:aaa'));
+        $this->assertSame('postgres@sha256:bbb', DockerClient::pickLocalDigest(['sha256:aaa', 'postgres@sha256:bbb'], 'sha256:bbb'));
+    }
+
+    #[Test]
+    public function fallsBackToTheFirstForAnEmptyRegistryDigest(): void
+    {
+        $this->assertSame('postgres@sha256:one', DockerClient::pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], ''));
+    }
+
+    #[Test]
+    public function fallsBackToTheFirstForANullRegistryDigestWithSeveralEntries(): void
+    {
+        $this->assertSame('postgres@sha256:one', DockerClient::pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], null));
     }
 }

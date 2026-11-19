@@ -552,8 +552,10 @@ function recreateOneContainer($dockerClient, $name, $id)
 function recordImagePulled($dockerClient, $db, $image)
 {
   $remoteDigest = $dockerClient->getRemoteImageDigest($image);
-  $localDigest = $dockerClient->getImageDigest($image);
-
+  // The digest the registry reports, as in checkImageUpdate(), so the stored
+  // local_digest matches the plugin's recordPulled for the same inputs.
+  $info = $dockerClient->getImageInfo($image);
+  $localDigest = DockerClient::pickLocalDigest($info['RepoDigests'] ?? [], $remoteDigest);
 
   $db->query(
     'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)

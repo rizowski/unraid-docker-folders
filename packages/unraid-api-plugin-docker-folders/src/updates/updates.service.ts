@@ -114,8 +114,8 @@ export interface PullOptions {
 
 /**
  * Pick which of an image's RepoDigests to compare with the registry digest.
- * A re-pulled image can carry several, and Docker lists them sorted, so the
- * first is not necessarily the current one. Prefer the one equal to the
+ * A re-pulled image can carry several, and nothing guarantees the current one
+ * comes first. Prefer the one equal to the
  * registry's; otherwise the first, so a real update is still reported.
  * Mirrors `DockerClient::pickLocalDigest`.
  */
@@ -692,7 +692,6 @@ export class UpdatesService {
 
     /** `DockerClient::checkImageUpdate`. */
     private async checkOne(image: string, imageId: string): Promise<OneImageCheck> {
-        let localDigest: string | null = null;
         let localDigests: string[] = [];
         let sourceUrl: string | null = null;
 
@@ -700,7 +699,6 @@ export class UpdatesService {
             try {
                 const info = await this.docker.getImage(imageId).inspect();
                 localDigests = info.RepoDigests ?? [];
-                localDigest = localDigests.length > 0 ? localDigests[0] : null;
 
                 const src = info.Config?.Labels?.[SOURCE_LABEL];
                 if (typeof src === 'string' && /^https?:\/\//i.test(src)) {
@@ -724,7 +722,8 @@ export class UpdatesService {
 
         if (remoteDigest === null) {
             return {
-                localDigest,
+                // On a registry error the first digest is stored, as before the match logic.
+                localDigest: localDigests[0] ?? null,
                 remoteDigest: null,
                 updateAvailable: false,
                 sourceUrl,
@@ -734,7 +733,7 @@ export class UpdatesService {
 
         // An image can carry several RepoDigests (a re-indexed tag, or the same
         // image pulled twice). Compare the one the registry reports, not just the first.
-        localDigest = pickLocalDigest(localDigests, remoteDigest) ?? localDigest;
+        const localDigest = pickLocalDigest(localDigests, remoteDigest);
 
         // Local RepoDigest format is "name@sha256:abc...", remote is bare "sha256:abc...".
         let updateAvailable = false;

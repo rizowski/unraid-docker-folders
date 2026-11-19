@@ -1597,10 +1597,10 @@ class DockerClient
   /**
    * Pick which of an image's RepoDigests to compare with the registry digest.
    *
-   * An image that was re-pulled can carry more than one digest, and Docker
-   * lists them in sorted order, so the first one is not necessarily the
-   * current one. Prefer the digest that equals the registry's; otherwise fall
-   * back to the first, so a real update is still reported.
+   * An image that was re-pulled can carry more than one digest, and nothing
+   * guarantees the current one comes first. Prefer the digest that equals the
+   * registry's; otherwise fall back to the first, so a real update is still
+   * reported.
    *
    * @param string[] $repoDigests "name@sha256:..." entries from the image
    * @param string|null $remoteDigest Bare "sha256:..." digest from the registry
@@ -1638,18 +1638,17 @@ class DockerClient
 
     // Single lookup: pull digest and OCI source label from the same payload
     $info = $this->getImageInfo($localImageId);
-    $localDigest = null;
     $digests = [];
     if ($info) {
       $digests = $info['RepoDigests'] ?? [];
-      $localDigest = !empty($digests) ? $digests[0] : null;
       $labels = $info['Config']['Labels'] ?? [];
       $src = $labels['org.opencontainers.image.source'] ?? null;
       if (is_string($src) && preg_match('#^https?://#i', $src)) {
         $result['source_url'] = rtrim($src, '/');
       }
     }
-    $result['local_digest'] = $localDigest;
+    // On a registry error the first digest is stored, as before the match logic.
+    $result['local_digest'] = $digests[0] ?? null;
 
     // Get remote digest
     $remoteDigest = $this->getRemoteImageDigest($imageName);
@@ -1662,7 +1661,7 @@ class DockerClient
     // An image can carry several RepoDigests: the registry re-indexed a tag
     // whose image did not change, or the same image was pulled under two tags.
     // Compare against the one the registry reports, not just the first.
-    $localDigest = self::pickLocalDigest($digests, $remoteDigest) ?? $localDigest;
+    $localDigest = self::pickLocalDigest($digests, $remoteDigest);
     $result['local_digest'] = $localDigest;
 
     // Compare: local RepoDigest format is "name@sha256:abc...", remote is just "sha256:abc..."

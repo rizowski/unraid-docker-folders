@@ -18,7 +18,7 @@ import type { RecreateResult, RecreateService } from '../recreate.service.js';
 import { ReleaseNotesService, type ReleaseFetcher } from '../release-notes.service.js';
 import { UpdateLogService } from '../update-log.service.js';
 import type { UnraidStatusPaths } from '../unraid-update-status.js';
-import { UpdatesService } from '../updates.service.js';
+import { pickLocalDigest, UpdatesService } from '../updates.service.js';
 
 const PLEX = 'linuxserver/plex:latest';
 const PLEX_IMAGE_ID = 'sha256:image-plex';
@@ -188,6 +188,50 @@ function container(name: string, image: string, imageId: string): DockerListCont
     return { Id: CONTAINER_IDS[name] ?? name, Names: [`/${name}`], Image: image, ImageID: imageId };
 }
 
+// Same cases as tests/php/PickLocalDigestTest.php, so the two helpers are proven equal.
+describe('pickLocalDigest', () => {
+    it('picks the digest that matches the registry even when it is not first', () => {
+        expect(pickLocalDigest(['postgres@sha256:aaa-old-index', 'postgres@sha256:zzz-current'], 'sha256:zzz-current')).toBe(
+            'postgres@sha256:zzz-current'
+        );
+    });
+
+    it('falls back to the first when none match', () => {
+        expect(pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], 'sha256:new')).toBe('postgres@sha256:one');
+    });
+
+    it('falls back to the first when there is no registry digest', () => {
+        expect(pickLocalDigest(['postgres@sha256:one'], null)).toBe('postgres@sha256:one');
+    });
+
+    it('returns null for an image with no RepoDigests', () => {
+        expect(pickLocalDigest([], 'sha256:new')).toBeNull();
+    });
+
+    it('does not match on a prefix of the hash', () => {
+        expect(pickLocalDigest(['postgres@sha256:abcdef', 'postgres@sha256:abc'], 'sha256:abcd')).toBe('postgres@sha256:abcdef');
+    });
+
+    it('matches on the hash alone when the matching entry names another repository', () => {
+        expect(pickLocalDigest(['library/postgres@sha256:one', 'mirror.example/postgres@sha256:two'], 'sha256:two')).toBe(
+            'mirror.example/postgres@sha256:two'
+        );
+    });
+
+    it('matches a bare digest entry that has no at sign', () => {
+        expect(pickLocalDigest(['postgres@sha256:bbb', 'sha256:aaa'], 'sha256:aaa')).toBe('sha256:aaa');
+        expect(pickLocalDigest(['sha256:aaa', 'postgres@sha256:bbb'], 'sha256:bbb')).toBe('postgres@sha256:bbb');
+    });
+
+    it('falls back to the first for an empty registry digest', () => {
+        expect(pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], '')).toBe('postgres@sha256:one');
+    });
+
+    it('falls back to the first for a null registry digest with several entries', () => {
+        expect(pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], null)).toBe('postgres@sha256:one');
+    });
+});
+
 describe('UpdatesService', () => {
     let temp: TempDatabase;
     let docker: ReturnType<typeof fakeDocker>;
@@ -251,7 +295,7 @@ describe('UpdatesService', () => {
         });
 
         it('reports no update when a later RepoDigest matches the registry, not just the first', async () => {
-            // A re-indexed tag leaves the image with two digests; Docker lists them sorted.
+            // A re-indexed tag leaves the image with two digests, and nothing says which comes first.
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:aaa-old-index`, `${PLEX}@sha256:zzz-current`]);
             docker.setRemoteDigest(PLEX, 'sha256:zzz-current');
@@ -446,6 +490,19 @@ describe('UpdatesService', () => {
             expect(events.publish).toHaveBeenCalledWith('container', 'updated');
             expect(temp.rows('SELECT update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
                 { update_available: 0 },
+            ]);
+        });
+
+        it('stores the RepoDigest that matches the registry after a pull, not just the first', async () => {
+            docker.setRemoteDigest(PLEX, 'sha256:two');
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:one`, `${PLEX}@sha256:two`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end('');
+            await promise;
+
+            expect(temp.rows('SELECT local_digest, remote_digest FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { local_digest: `${PLEX}@sha256:two`, remote_digest: 'sha256:two' },
             ]);
         });
 
