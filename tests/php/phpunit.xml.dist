@@ -11,6 +11,9 @@
     <testsuite name="ApiVersion">
       <file>ApiVersionTest.php</file>
     </testsuite>
+    <testsuite name="ApiPluginScript">
+      <file>ApiPluginScriptTest.php</file>
+    </testsuite>
     <testsuite name="BackendWatchdog">
       <file>BackendWatchdogTest.php</file>
     </testsuite>

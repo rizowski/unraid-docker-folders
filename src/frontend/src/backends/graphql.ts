@@ -910,9 +910,10 @@ const INSTALL_COMPOSE_BINARY = `
 
 // What an API plugin from before `warning` and `autoInstall` answers. After a
 // plugin update the new assets are served while the API can still run the old
-// plugin code (see scripts/api-plugin.sh: it restarts the API only when the
-// backend does not answer, and `unraid-api restart` keeps old plugin code), and
-// GraphQL rejects a whole operation that names an unknown field.
+// plugin code. scripts/api-plugin.sh stops and starts the API after an update
+// that changed the backend, but that reload can fail, and a manual install can
+// skip it (`unraid-api restart` keeps old plugin code). GraphQL rejects a whole
+// operation that names an unknown field.
 const INSTALL_COMPOSE_BINARY_LEGACY = `
   mutation InstallDockerFoldersComposeBinary {
     installDockerFoldersComposeBinary { success error status { ${COMPOSE_STATUS_FIELDS} } }
