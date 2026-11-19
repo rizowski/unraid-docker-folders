@@ -607,6 +607,12 @@ contract and a fault there can take all of Unraid's GraphQL offline.
   passes a run id, and waits for the state line that carries it. Choosing PHP
   stores `php` at once and runs `remove`. The plugin's own `settings.set`
   refuses `backend_mode`.
+- An install that replaces backend code already in the API (the content hash
+  differs and `plugins install` succeeded) stops and starts the API once, even
+  though the old code still answers the probe, because the API keeps serving
+  the old plugin until then. A skipped install does not restart, and neither
+  does an API that is not online. `ApiPluginScriptTest` runs the script with
+  stubs for `unraid-api` and `curl` and counts the stops and starts.
 - `classes/BackendWatchdog.php` runs every minute from `run-schedules.php`.
   When the plugin's heartbeat has been stale for 5 minutes, and the API has
   run for 5 minutes, it switches to PHP, removes the backend and sends a

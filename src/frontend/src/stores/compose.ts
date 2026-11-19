@@ -33,6 +33,10 @@ export const useComposeStore = defineStore('compose', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const installingBinary = ref(false);
+  // Set when the install worked but the flash copy did not.
+  const installWarning = ref<string | null>(null);
+  // Whether Compose is reinstalled after a reboot, as the last install reported it. Null before an install.
+  const installAutoInstall = ref<boolean | null>(null);
   const statusChecked = ref(false);
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
@@ -121,6 +125,8 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function installBinary(): Promise<boolean> {
     installingBinary.value = true;
+    installWarning.value = null;
+    installAutoInstall.value = null;
     error.value = null;
 
     try {
@@ -131,6 +137,8 @@ export const useComposeStore = defineStore('compose', () => {
       }
 
       status.value = data.status as ComposeStatus;
+      installWarning.value = data.warning ?? null;
+      installAutoInstall.value = data.auto_install ?? null;
       return true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -491,6 +499,8 @@ export const useComposeStore = defineStore('compose', () => {
     loading,
     error,
     installingBinary,
+    installWarning,
+    installAutoInstall,
 
     // Getters
     stackCount,

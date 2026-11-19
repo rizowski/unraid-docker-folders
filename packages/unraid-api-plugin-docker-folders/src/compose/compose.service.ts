@@ -138,6 +138,14 @@ const STACK_COMMAND_TIMEOUT_MS = 600_000;
 /** How often `ComposeService.logStream` flushes buffered `docker compose logs --follow` lines. */
 const LOG_STREAM_COALESCE_MS = 150;
 
+/** `ComposeManager::FLASH_COPY_WARNING`. */
+const FLASH_COPY_WARNING =
+    'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
+/** `ComposeManager::SETTING_SAVE_WARNING`. */
+const SETTING_SAVE_WARNING =
+    'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.';
+
 /**
  * The Compose read/write and process-execution path, ported from
  * `ComposeManager.php` (~1640 lines).
@@ -205,8 +213,14 @@ export class ComposeService {
      * child process), but the binary it produces is later executed by every
      * other method in this class, so the hash check is the security boundary
      * for this one method.
+     *
+     * `persist` is true for an install the user started (the banner's
+     * button): a success then turns on `compose_auto_install` when the user
+     * never chose a value (no stored row), so the flash copy is kept and
+     * restored at boot. A stored off stays off and no flash copy is written.
+     * The default leaves the setting alone.
      */
-    async installComposeBinary(): Promise<{ success: boolean; error: string | null }> {
+    async installComposeBinary(options: { persist?: boolean } = {}): Promise<{ success: boolean; error: string | null; warning?: string }> {
         const url = `https://github.com/docker/compose/releases/download/v${this.paths.binaryVersion}/docker-compose-linux-x86_64`;
         const dir = dirname(this.paths.binaryPath);
 
@@ -258,11 +272,40 @@ export class ComposeService {
             return { success: false, error: 'Failed to move binary into place' };
         }
 
-        if (this.isAutoInstallEnabled()) {
+        // Only when the user never chose: a stored value, on or off, stays.
+        // The binary is already in place, so a settings failure must not fail
+        // the install: it becomes a warning (same as PHP).
+        const warnings: string[] = [];
+        let settingFailed = false;
+        let autoInstall = false;
+        try {
+            if (options.persist && !this.hasAutoInstallChoice()) {
+                this.enableAutoInstall();
+            }
+        } catch (error) {
+            this.logger.warn(`Could not save compose_auto_install: ${errorMessage(error)}`);
+            settingFailed = true;
+        }
+        try {
+            autoInstall = this.isAutoInstallEnabled();
+        } catch (error) {
+            this.logger.warn(`Could not read compose_auto_install: ${errorMessage(error)}`);
+            settingFailed = true;
+        }
+        if (settingFailed) warnings.push(SETTING_SAVE_WARNING);
+
+        if (autoInstall) {
             const cached = await this.cacheComposeBinary({ sourceVerified: true });
             if (!cached.success) {
                 this.logger.warn(`No flash copy of Docker Compose: ${cached.error}`);
+                // The install worked. Say that the copy did not (same wording
+                // as `ComposeManager::FLASH_COPY_WARNING`).
+                warnings.push(FLASH_COPY_WARNING);
             }
+        }
+
+        if (warnings.length > 0) {
+            return { success: true, error: null, warning: warnings.join(' ') };
         }
 
         return { success: true, error: null };
@@ -276,13 +319,33 @@ export class ComposeService {
 
     /** `ComposeManager::isAutoInstallEnabled`. */
     isAutoInstallEnabled(): boolean {
-        const row = this.db.read(
+        return this.readAutoInstallRow()?.value === '1';
+    }
+
+    private readAutoInstallRow(): { value: string } | undefined {
+        return this.db.read(
             (db) =>
                 db.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get() as
                     | { value: string }
                     | undefined
         );
-        return row?.value === '1';
+    }
+
+    /** `ComposeManager::hasAutoInstallChoice`: a stored row, on or off. */
+    hasAutoInstallChoice(): boolean {
+        return this.readAutoInstallRow() !== undefined;
+    }
+
+    /** `ComposeManager::enableAutoInstall`. */
+    enableAutoInstall(): void {
+        this.db.write((db) =>
+            db
+                .prepare(
+                    "INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', ?) " +
+                        'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+                )
+                .run(nowSeconds())
+        );
     }
 
     /**

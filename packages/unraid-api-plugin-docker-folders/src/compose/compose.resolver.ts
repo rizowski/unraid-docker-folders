@@ -243,10 +243,24 @@ export class ComposeResolver {
     public async installDockerFoldersComposeBinary(): Promise<{
         success: boolean;
         error: string | null;
+        warning?: string;
+        autoInstall: boolean;
         status: DockerFoldersComposeStatus | null;
     }> {
-        const result = await this.compose.installComposeBinary();
-        return { ...result, status: result.success ? await this.compose.getStatus() : null };
+        const result = await this.compose.installComposeBinary({ persist: true });
+        // The install worked, so an unreadable setting must not turn it into an
+        // error; the service already put the warning in the result.
+        let autoInstall = false;
+        try {
+            autoInstall = this.compose.isAutoInstallEnabled();
+        } catch {
+            // unknown: reported as off, and the banner makes no claim
+        }
+        return {
+            ...result,
+            autoInstall,
+            status: result.success ? await this.compose.getStatus() : null,
+        };
     }
 
     @UsePermissions({ action: AuthAction.UPDATE_ANY, resource: Resource.DOCKER })

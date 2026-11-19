@@ -98,25 +98,128 @@ class ComposeManager
   /**
    * Download and install Docker Compose CLI plugin binary
    *
-   * @return array ['success' => bool, 'error' => string|null]
+   * @param bool $persist true for an install the user started (the banner's
+   *   button): a successful install then turns on compose_auto_install when
+   *   the user never chose a value (no stored row), so the flash copy is kept
+   *   and restored at boot. A stored off stays off, and then no flash copy is
+   *   written. The boot hook leaves it
+   *   false, so a restore never switches the setting on by itself, and a user
+   *   who turned it off keeps it off until they install again.
+   * @return array ['success' => bool, 'error' => string|null, 'warning' => string (only when the flash copy or the setting failed; both facts when both did)]
    */
-  public function installComposeBinary()
+  public function installComposeBinary($persist = false)
   {
     $url = 'https://github.com/docker/compose/releases/download/v'
       . self::COMPOSE_VERSION . '/docker-compose-linux-x86_64';
 
-    $dir = dirname(self::COMPOSE_BINARY_PATH);
+    $binary = $this->binaryPath();
+    $sha = $this->binarySha256();
+
+    $dir = dirname($binary);
     if (!is_dir($dir)) {
       if (!@mkdir($dir, 0755, true)) {
         return ['success' => false, 'error' => 'Failed to create directory: ' . $dir];
       }
     }
 
-    $tmpPath = self::COMPOSE_BINARY_PATH . '.tmp';
+    $tmpPath = $binary . '.tmp';
 
-    // Download
+    $download = $this->downloadFile($url, $tmpPath);
+    if (!$download['success']) {
+      return $download;
+    }
+
+    // Verify SHA256
+    $hash = hash_file('sha256', $tmpPath);
+    if ($hash !== $sha) {
+      @unlink($tmpPath);
+      return ['success' => false, 'error' => 'SHA256 verification failed. Expected: ' . $sha . ', got: ' . $hash];
+    }
+
+    // Move into place and set permissions
+    if (!@rename($tmpPath, $binary)) {
+      @unlink($tmpPath);
+      return ['success' => false, 'error' => 'Failed to move binary into place'];
+    }
+
+    @chmod($binary, 0755);
+    $this->composeAvailable = null;
+
+    // Turn the setting on only when the user never chose. A stored value,
+    // on or off, is their choice, and an install must not override it.
+    // The binary is already in place, so a settings failure here must not
+    // fail the install: it becomes a warning.
+    $warnings = [];
+    $settingFailed = false;
+    $autoInstall = false;
+    try {
+      if ($persist && !$this->hasAutoInstallChoice()) {
+        $this->enableAutoInstall();
+      }
+    } catch (\Throwable $e) {
+      error_log('Docker Folders: could not save compose_auto_install: ' . $e->getMessage());
+      $settingFailed = true;
+    }
+    try {
+      $autoInstall = $this->isAutoInstallEnabled();
+    } catch (\Throwable $e) {
+      error_log('Docker Folders: could not read compose_auto_install: ' . $e->getMessage());
+      $settingFailed = true;
+    }
+    if ($settingFailed) {
+      $warnings[] = self::SETTING_SAVE_WARNING;
+    }
+
+    if ($autoInstall) {
+      $cached = $this->cacheComposeBinary($binary, $this->cachePath(), $sha, true);
+      if (!$cached['success']) {
+        error_log('Docker Folders: no flash copy of Docker Compose: ' . $cached['error']);
+        // The install worked. Say that the copy did not, so the user is not
+        // told Compose survives a reboot when it only does by a new download.
+        $warnings[] = self::FLASH_COPY_WARNING;
+      }
+    }
+
+    $result = ['success' => true, 'error' => null];
+    if ($warnings) {
+      $result['warning'] = implode(' ', $warnings);
+    }
+
+    return $result;
+  }
+
+  /** Shown when Compose installed but the copy on the flash drive could not be written. */
+  const FLASH_COPY_WARNING = 'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
+  /** Shown when Compose installed but the reinstall-after-reboot setting could not be saved or read. */
+  const SETTING_SAVE_WARNING = 'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.';
+
+  // Seams for the install: the tests replace them, the plugin never does.
+
+  protected function binaryPath()
+  {
+    return self::COMPOSE_BINARY_PATH;
+  }
+
+  protected function cachePath()
+  {
+    return self::COMPOSE_CACHE_PATH;
+  }
+
+  protected function binarySha256()
+  {
+    return self::COMPOSE_SHA256;
+  }
+
+  /**
+   * Download $url to $dest.
+   *
+   * @return array ['success' => bool, 'error' => string|null]
+   */
+  protected function downloadFile($url, $dest)
+  {
     $ch = curl_init($url);
-    $fp = fopen($tmpPath, 'w');
+    $fp = fopen($dest, 'w');
     if (!$fp) {
       return ['success' => false, 'error' => 'Failed to open temp file for writing'];
     }
@@ -136,31 +239,8 @@ class ComposeManager
     fclose($fp);
 
     if (!$result || $httpCode >= 400) {
-      @unlink($tmpPath);
+      @unlink($dest);
       return ['success' => false, 'error' => 'Download failed: ' . $curlError . ' (HTTP ' . $httpCode . ')'];
-    }
-
-    // Verify SHA256
-    $hash = hash_file('sha256', $tmpPath);
-    if ($hash !== self::COMPOSE_SHA256) {
-      @unlink($tmpPath);
-      return ['success' => false, 'error' => 'SHA256 verification failed. Expected: ' . self::COMPOSE_SHA256 . ', got: ' . $hash];
-    }
-
-    // Move into place and set permissions
-    if (!@rename($tmpPath, self::COMPOSE_BINARY_PATH)) {
-      @unlink($tmpPath);
-      return ['success' => false, 'error' => 'Failed to move binary into place'];
-    }
-
-    @chmod(self::COMPOSE_BINARY_PATH, 0755);
-    $this->composeAvailable = null;
-
-    if ($this->isAutoInstallEnabled()) {
-      $cached = $this->cacheComposeBinary(self::COMPOSE_BINARY_PATH, self::COMPOSE_CACHE_PATH, self::COMPOSE_SHA256, true);
-      if (!$cached['success']) {
-        error_log('Docker Folders: no flash copy of Docker Compose: ' . $cached['error']);
-      }
     }
 
     return ['success' => true, 'error' => null];
@@ -175,6 +255,25 @@ class ComposeManager
   {
     $row = $this->db->fetchOne("SELECT value FROM settings WHERE key = 'compose_auto_install'");
     return $row && $row['value'] === '1';
+  }
+
+  /**
+   * Whether the user ever chose a value for compose_auto_install. No
+   * migration or default seeds the row, so a row exists only after the
+   * Settings checkbox or a banner install wrote it.
+   */
+  public function hasAutoInstallChoice()
+  {
+    return (bool) $this->db->fetchOne("SELECT value FROM settings WHERE key = 'compose_auto_install'");
+  }
+
+  /**
+   * Turn compose_auto_install on. Only a successful user-started install
+   * calls this.
+   */
+  public function enableAutoInstall()
+  {
+    dfmUpsertSetting($this->db, 'compose_auto_install', '1');
   }
 
   /**
@@ -276,14 +375,82 @@ class ComposeManager
     if (!$this->isAutoInstallEnabled()) {
       return ['available' => false, 'action' => 'disabled', 'error' => null];
     }
-    if ($this->restoreComposeBinary() && $this->isComposeAvailable()) {
+    $cache = $this->cachePath();
+    if ($this->restoreComposeBinary($cache, $this->binaryPath(), $this->binarySha256()) && $this->isComposeAvailable()) {
       return ['available' => true, 'action' => 'restored', 'error' => null];
     }
-    $result = $this->installComposeBinary();
+    // A flash copy that does not match the pinned hash is never used. It is
+    // most likely an older pinned version, so a download follows.
+    if (is_file($cache) && hash_file('sha256', $cache) !== $this->binarySha256()) {
+      error_log('Docker Folders: the flash copy of Docker Compose does not match the pinned SHA256. Treating it as a version change and downloading the pinned release.');
+      // Drop it. cacheComposeBinary() keeps a flash copy of the same size
+      // without reading it back, so a bad copy of the right size would
+      // otherwise stay and fail the restore at every boot.
+      $this->removeCachedComposeBinary($cache);
+    }
+
+    // The boot hook runs detached (event/started ends its line with &), so
+    // waiting here holds up nothing, and stack autostart still follows a late
+    // success. The network is often not up yet when Docker starts.
+    $waits = self::BOOT_INSTALL_WAITS;
+    $attempts = count($waits) + 1;
+    $result = ['success' => false, 'error' => 'not tried'];
+    for ($try = 1; $try <= $attempts; $try++) {
+      // Compose can appear by another route during a wait: the banner's
+      // Install button, or another plugin. Do not download over it.
+      if ($try > 1 && $this->composeAppearedMeanwhile()) {
+        return ['available' => true, 'action' => 'present', 'error' => null];
+      }
+      $result = $this->installComposeBinary();
+      if ($result['success']) {
+        break;
+      }
+      error_log('Docker Folders: Docker Compose download failed (try ' . $try . ' of ' . $attempts . '): ' . $result['error']);
+      if ($try < $attempts) {
+        $this->waitBeforeRetry($waits[$try - 1]);
+      }
+    }
     if (!$result['success']) {
+      // No false "not reinstalled" notice when it appeared in the meantime.
+      if ($this->composeAppearedMeanwhile()) {
+        return ['available' => true, 'action' => 'present', 'error' => null];
+      }
+      // One notification per boot: only after the last try.
+      $this->notifyBootInstallFailed($attempts, $result['error']);
       return ['available' => false, 'action' => 'failed', 'error' => $result['error']];
     }
     return ['available' => $this->isComposeAvailable(), 'action' => 'installed', 'error' => null];
+  }
+
+  /** Forget the cached availability and ask again. */
+  private function composeAppearedMeanwhile()
+  {
+    $this->composeAvailable = null;
+    return (bool) $this->isComposeAvailable();
+  }
+
+  /**
+   * Seconds to wait after each failed boot download. Four tries, 105 seconds
+   * of waiting in all: long enough for a slow network or DNS to come up after
+   * Docker starts, short enough that a missing network is reported within
+   * minutes. Each try is also capped by the 120 second download timeout.
+   */
+  const BOOT_INSTALL_WAITS = [15, 30, 60];
+
+  // Seams for the boot retry: the tests replace them.
+
+  protected function waitBeforeRetry($seconds)
+  {
+    sleep($seconds);
+  }
+
+  protected function notifyBootInstallFailed($attempts, $error)
+  {
+    sendUnraidNotification(
+      'Docker Compose was not reinstalled',
+      'Docker Compose could not be downloaded after ' . $attempts . ' tries, so compose stacks did not autostart. Last error: ' . $error . ' Install it from the Docker Folders tab.',
+      'warning'
+    );
   }
 
   // ─── Conflict Detection ────────────────────────────────────────────

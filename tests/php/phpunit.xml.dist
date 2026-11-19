@@ -11,6 +11,9 @@
     <testsuite name="ApiVersion">
       <file>ApiVersionTest.php</file>
     </testsuite>
+    <testsuite name="ApiPluginScript">
+      <file>ApiPluginScriptTest.php</file>
+    </testsuite>
     <testsuite name="BackendWatchdog">
       <file>BackendWatchdogTest.php</file>
     </testsuite>
@@ -83,6 +86,9 @@
     </testsuite>
     <testsuite name="SecurityAdvisor">
       <file>SecurityAdvisorTest.php</file>
+    </testsuite>
+    <testsuite name="ComposeAutoInstall">
+      <file>ComposeAutoInstallTest.php</file>
     </testsuite>
     <testsuite name="ComposeRestore">
       <file>ComposeRestoreTest.php</file>

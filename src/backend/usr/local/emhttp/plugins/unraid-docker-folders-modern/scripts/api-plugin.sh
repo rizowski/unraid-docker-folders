@@ -170,6 +170,8 @@ do_install() {
   # backend's files without its version. Each build has a new version, so a
   # plugin update that did not change the backend keeps the installed one.
   local want_version want_hash have_version have_hash linked
+  # Set when this run replaced backend code the API may still have loaded.
+  local replaced_backend=0
   read -r want_version want_hash < <(tar -xzOf "${src}" package/package.json 2>/dev/null | package_id -)
   read -r have_version have_hash < <(package_id "${API_DIR}/node_modules/${API_PLUGIN_PKG}/package.json")
   linked=$(grep -o "${API_PLUGIN_PKG}-[^\"/]*\.tgz" "${API_DIR}/package.json" 2>/dev/null | head -1)
@@ -180,6 +182,7 @@ do_install() {
     log "backend ${have_version} has the same code as ${want_version}, skipping install"
   else
     if [ -n "${have_version}" ]; then
+      replaced_backend=1
       echo "GraphQL mode is on. Updating its backend in the Unraid API to ${want_version}..."
     else
       echo "GraphQL mode is on. Installing its backend in the Unraid API..."
@@ -210,8 +213,21 @@ do_install() {
   # Reload only when the API is already running. At boot the API may not be
   # up yet, and starting it from here would race Unraid's own start of it;
   # it loads the plugin by itself when it comes up.
-  if api_online && ! probe_backend; then
-    restart_api_until probe_backend
+  #
+  # Two reasons to reload, one stop and start for both. The backend does not
+  # answer yet (a first install). Or this run replaced backend code that was
+  # already installed: the running API keeps serving the old code, and so
+  # answers the probe, until it is stopped and started. Without this, a fix in
+  # the backend would wait for the next reboot, and a new frontend could ask
+  # for fields the old code lacks.
+  if api_online; then
+    if [ "${replaced_backend}" = "1" ]; then
+      echo "  Reloading the Unraid API to load the updated GraphQL backend..."
+      log "reloading the Unraid API to load the updated GraphQL backend (${want_version})"
+      restart_api_until probe_backend
+    elif ! probe_backend; then
+      restart_api_until probe_backend
+    fi
   fi
 
   if probe_backend; then
