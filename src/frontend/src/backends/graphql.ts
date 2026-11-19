@@ -908,6 +908,20 @@ const INSTALL_COMPOSE_BINARY = `
   }
 `;
 
+// What an API plugin from before `warning` and `autoInstall` answers. After a
+// plugin update the new assets are served while the API can still run the old
+// plugin code (see scripts/api-plugin.sh: it restarts the API only when the
+// backend does not answer, and `unraid-api restart` keeps old plugin code), and
+// GraphQL rejects a whole operation that names an unknown field.
+const INSTALL_COMPOSE_BINARY_LEGACY = `
+  mutation InstallDockerFoldersComposeBinary {
+    installDockerFoldersComposeBinary { success error status { ${COMPOSE_STATUS_FIELDS} } }
+  }
+`;
+
+/** The error GraphQL gives for a field the running plugin does not have. */
+const UNKNOWN_INSTALL_FIELD = /Cannot query field "(warning|autoInstall)" on type "DockerFoldersComposeInstallResult"/;
+
 /** One mutation per action, keyed the same way `CONTAINER_ACTIONS` is above. */
 const COMPOSE_STACK_ACTIONS: Record<'up' | 'down' | 'stop' | 'restart' | 'pull', string> = {
   up: `
@@ -1408,9 +1422,16 @@ export const graphqlBackend: Backend = {
       })),
 
     installBinary: async () => {
-      const result = await gql<{
+      type InstallBinaryData = {
         installDockerFoldersComposeBinary: { success: boolean; error: string | null; warning?: string | null; autoInstall?: boolean | null; status: GqlComposeStatus | null };
-      }>(INSTALL_COMPOSE_BINARY);
+      };
+      let result = await gql<InstallBinaryData>(INSTALL_COMPOSE_BINARY);
+      // An older plugin rejects the new fields and runs nothing. Ask again
+      // without them: the install must still work, and the missing
+      // `autoInstall` leaves the banner making no claim about reboots.
+      if (!result.ok && UNKNOWN_INSTALL_FIELD.test(result.error ?? '')) {
+        result = await gql<InstallBinaryData>(INSTALL_COMPOSE_BINARY_LEGACY);
+      }
       if (!result.ok) return { ok: false, status: result.status, data: toErrorBody(result), error: result.error };
       const install = result.data.installDockerFoldersComposeBinary;
       if (!install.success) {
@@ -1426,7 +1447,7 @@ export const graphqlBackend: Backend = {
         data: {
           status: install.status ? toComposeStatus(install.status) : undefined,
           ...(install.warning ? { warning: install.warning } : {}),
-          auto_install: install.autoInstall === true,
+          ...(typeof install.autoInstall === 'boolean' ? { auto_install: install.autoInstall } : {}),
         },
       };
     },
