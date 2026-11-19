@@ -250,6 +250,28 @@ describe('UpdatesService', () => {
             expect(result.updateAvailable).toBe(false);
         });
 
+        it('reports no update when a later RepoDigest matches the registry, not just the first', async () => {
+            // A re-indexed tag leaves the image with two digests; Docker lists them sorted.
+            docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
+            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:aaa-old-index`, `${PLEX}@sha256:zzz-current`]);
+            docker.setRemoteDigest(PLEX, 'sha256:zzz-current');
+
+            const [result] = await service.checkForUpdates();
+
+            expect(result.updateAvailable).toBe(false);
+            expect(result.localDigest).toBe(`${PLEX}@sha256:zzz-current`);
+        });
+
+        it('still reports an update when none of several RepoDigests match the registry', async () => {
+            docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
+            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:one`, `${PLEX}@sha256:two`]);
+            docker.setRemoteDigest(PLEX, 'sha256:new');
+
+            const [result] = await service.checkForUpdates();
+
+            expect(result.updateAvailable).toBe(true);
+        });
+
         it('suppresses a stale update when the remote digest has not moved since the last no-update check', async () => {
             docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
             // Local RepoDigest still carries the old hash (e.g. multi-arch
