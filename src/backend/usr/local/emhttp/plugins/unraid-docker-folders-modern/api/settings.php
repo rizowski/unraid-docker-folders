@@ -148,7 +148,7 @@ function handlePost()
     errorResponse('Invalid memory_calculation', 400);
   }
 
-  if ($key === 'memory_percent_basis' && !in_array($value, MEMORY_PERCENT_BASES, true)) {
+  if ($key === 'memory_percent_basis' && !dfmIsValidMemoryPercentBasis($value)) {
     errorResponse('Invalid memory_percent_basis', 400);
   }
 

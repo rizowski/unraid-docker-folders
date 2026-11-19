@@ -8,6 +8,10 @@
  */
 
 require_once __DIR__ . '/DockerStreamDemuxer.php';
+// pullDigestFromStatus() is called by pullImage(). include/config.php loads this
+// file too; require_once resolves both paths to one file, so it loads once. The
+// file only declares constants and functions and requires nothing.
+require_once dirname(__DIR__) . '/include/unraidUpdateStatus.php';
 
 class DockerClient
 {
@@ -1594,6 +1598,13 @@ class DockerClient
     return $response['Descriptor']['digest'] ?? null;
   }
 
+  /** The bare "sha256:..." part of a RepoDigest "name@sha256:..."; the input when it has no '@'. */
+  public static function digestHash($digest)
+  {
+    $at = strpos($digest, '@');
+    return $at !== false ? substr($digest, $at + 1) : $digest;
+  }
+
   /**
    * Pick which of an image's RepoDigests to compare with the registry digest.
    *
@@ -1611,9 +1622,7 @@ class DockerClient
     if (empty($repoDigests)) return null;
     if (is_string($remoteDigest) && $remoteDigest !== '') {
       foreach ($repoDigests as $digest) {
-        $at = strpos($digest, '@');
-        $hash = $at !== false ? substr($digest, $at + 1) : $digest;
-        if ($hash === $remoteDigest) return $digest;
+        if (self::digestHash($digest) === $remoteDigest) return $digest;
       }
     }
     return $repoDigests[0];
@@ -1666,10 +1675,7 @@ class DockerClient
 
     // Compare: local RepoDigest format is "name@sha256:abc...", remote is just "sha256:abc..."
     if ($localDigest && $remoteDigest) {
-      $localHash = strpos($localDigest, '@') !== false
-        ? substr($localDigest, strpos($localDigest, '@') + 1)
-        : $localDigest;
-      $result['update_available'] = ($localHash !== $remoteDigest);
+      $result['update_available'] = (self::digestHash($localDigest) !== $remoteDigest);
     }
 
     return $result;

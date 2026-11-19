@@ -154,6 +154,33 @@ function writeUnraidJson($path, array $data)
 }
 
 /**
+ * Change one of Unraid's JSON files without losing what another writer added.
+ *
+ * Unraid's own check and the other backend read, change and rename these files
+ * with no lock, and Unraid knows of none we could add. So a caller works out
+ * its changes from whatever it read earlier, and this reads the file again
+ * just before the write and hands that fresh copy to $mutate, which applies
+ * only the caller's own keys. The window shrinks to the read and the rename.
+ *
+ * @param string $path
+ * @param callable $mutate function (array $fresh): array|null. Returns the new
+ *   content, or null when there is nothing to write
+ * @return bool True when the file was written
+ */
+function updateUnraidJson($path, callable $mutate)
+{
+  $fresh = readUnraidJson($path);
+  if ($fresh === null) {
+    return false;
+  }
+  $next = $mutate($fresh);
+  if (!is_array($next)) {
+    return false;
+  }
+  return writeUnraidJson($path, $next);
+}
+
+/**
  * Drop containers from the Docker tab's cache, so it recomputes their status.
  *
  * Leaves a missing or unreadable file alone. Unraid builds it again itself.
@@ -167,18 +194,16 @@ function dropUnraidWebuiEntries(array $containerNames, $webuiPath = UNRAID_DOCKE
   if (empty($containerNames) || !file_exists($webuiPath)) {
     return false;
   }
-  $info = readUnraidJson($webuiPath);
-  if ($info === null) {
-    return false;
-  }
-  $changed = false;
-  foreach ($containerNames as $name) {
-    if (array_key_exists((string) $name, $info)) {
-      unset($info[(string) $name]);
-      $changed = true;
+  return updateUnraidJson($webuiPath, function ($info) use ($containerNames) {
+    $changed = false;
+    foreach ($containerNames as $name) {
+      if (array_key_exists((string) $name, $info)) {
+        unset($info[(string) $name]);
+        $changed = true;
+      }
     }
-  }
-  return $changed && writeUnraidJson($webuiPath, $info);
+    return $changed ? $info : null;
+  });
 }
 
 /**
@@ -206,12 +231,11 @@ function markUnraidImageCurrent(
     return false;
   }
 
-  $status = readUnraidJson($statusPath);
-  if ($status === null) {
-    return false;
-  }
-  $status[$key] = ['local' => $digest, 'remote' => $digest, 'status' => 'true'];
-  if (!writeUnraidJson($statusPath, $status)) {
+  $written = updateUnraidJson($statusPath, function ($status) use ($key, $digest) {
+    $status[$key] = ['local' => $digest, 'remote' => $digest, 'status' => 'true'];
+    return $status;
+  });
+  if (!$written) {
     return false;
   }
 
@@ -301,8 +325,8 @@ function pickUnraidDigest($pullDigest, array $repoDigests, array $candidates)
  * Clear "update ready" flags left by pulls made before this fix.
  *
  * Touches only an entry with status "false" whose `remote` digest is one of
- * the local image's RepoDigests, and only when every container on that tag
- * runs that image. Then the containers run the build the registry serves,
+ * the local image's RepoDigests, and only when at least one container is on
+ * that tag and every container on it runs that image. Then the containers run the build the registry serves,
  * the state a recreate would have recorded.
  *
  * @param DockerClient $dockerClient
@@ -322,13 +346,20 @@ function repairUnraidUpdateStatus(
     return [];
   }
 
-  $repaired = [];
+  // First pass: decide which keys to repair, from this read. getImageInfo()
+  // takes time per entry, so the file can change meanwhile.
+  $fixes = [];
   foreach ($status as $key => $entry) {
     if (!is_array($entry) || ($entry['status'] ?? null) !== 'false') {
       continue;
     }
     $remote = bareImageDigest($entry['remote'] ?? null);
     if ($remote === null || ($entry['local'] ?? null) === $remote) {
+      continue;
+    }
+    // With no container on this tag there is nothing to judge, and "every
+    // container runs the image" would pass by default. Leave the entry alone.
+    if (empty(containerNamesForImage($containers, (string) $key))) {
       continue;
     }
     $info = $dockerClient->getImageInfo((string) $key);
@@ -338,12 +369,30 @@ function repairUnraidUpdateStatus(
     $local = array_map('bareImageDigest', $info['RepoDigests'] ?? []);
     if (in_array($remote, $local, true)
         && empty(containersBehindImage($containers, (string) $key, (string) ($info['Id'] ?? '')))) {
-      $status[$key] = ['local' => $remote, 'remote' => $remote, 'status' => 'true'];
-      $repaired[] = (string) $key;
+      $fixes[(string) $key] = $remote;
     }
   }
+  if (empty($fixes)) {
+    return [];
+  }
 
-  if (empty($repaired) || !writeUnraidJson($statusPath, $status)) {
+  // Second pass: apply only those keys to a fresh read. A key another writer
+  // changed or removed since the first read is left as that writer left it.
+  $repaired = [];
+  $written = updateUnraidJson($statusPath, function ($fresh) use ($fixes, &$repaired) {
+    $repaired = [];
+    foreach ($fixes as $key => $remote) {
+      $entry = $fresh[$key] ?? null;
+      if (!is_array($entry) || ($entry['status'] ?? null) !== 'false'
+          || bareImageDigest($entry['remote'] ?? null) !== $remote) {
+        continue;
+      }
+      $fresh[$key] = ['local' => $remote, 'remote' => $remote, 'status' => 'true'];
+      $repaired[] = (string) $key;
+    }
+    return empty($repaired) ? null : $fresh;
+  });
+  if (!$written) {
     return [];
   }
 

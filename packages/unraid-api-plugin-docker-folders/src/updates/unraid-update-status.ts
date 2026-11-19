@@ -85,9 +85,11 @@ export function readUnraidJson(path: string): JsonObject | null {
     if (raw.trim() === '') return null;
     try {
         const data: unknown = JSON.parse(raw);
-        // Unraid's saveJSON() writes an empty PHP array as `[]`. Any other
-        // list is not something to add keys to.
-        if (Array.isArray(data)) return data.length === 0 ? {} : null;
+        // Unraid's loadJSON() decodes to a PHP array, so a list is read like a
+        // map with the keys 0, 1, ...: an empty one as `{}`, and a non-empty
+        // one keeps its items under their index, as PHP does when a string key
+        // is added to it. `bareDigest`-style entries are never at those keys.
+        if (Array.isArray(data)) return Object.fromEntries(data.map((item, i) => [String(i), item]));
         return data !== null && typeof data === 'object' ? (data as JsonObject) : null;
     } catch {
         return null;
@@ -95,9 +97,36 @@ export function readUnraidJson(path: string): JsonObject | null {
 }
 
 /**
- * Replace the file atomically, in the format Unraid's `saveJSON()` writes
- * (`JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES`, four-space indent). The temp
- * file sits beside it: `/var/lib/docker` is often a loop mount.
+ * The bytes Unraid's `saveJSON()` writes: PHP's
+ * `json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)`. That is a
+ * four-space indent, an empty array as `[]` (PHP has no empty map), an array
+ * with the keys 0, 1, ... as a list, and every non-ASCII character as a
+ * lower-case `\uXXXX` escape, with a surrogate pair above U+FFFF. Slashes stay
+ * raw. `__tests__/unraid-json.fixture.json` holds PHP's output for the same
+ * inputs, from `scripts/unraid-json-oracle.php`.
+ *
+ * One difference is left: a JavaScript object lists integer-like keys first,
+ * where PHP keeps insertion order.
+ */
+export function encodeUnraidJson(data: unknown): string {
+    const json = JSON.stringify(
+        data,
+        (_key, value: unknown) => {
+            if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+            const keys = Object.keys(value);
+            if (keys.length === 0) return [];
+            if (keys.every((k, i) => k === String(i))) return Object.values(value);
+            return value;
+        },
+        4
+    );
+    return json.replace(/[\u0080-￿]/g, (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+}
+
+/**
+ * Replace the file atomically, in the format Unraid's `saveJSON()` writes (see
+ * `encodeUnraidJson`). The temp file sits beside it: `/var/lib/docker` is often
+ * a loop mount.
  */
 export function writeUnraidJson(path: string, data: JsonObject): boolean {
     const dir = dirname(path);
@@ -110,7 +139,7 @@ export function writeUnraidJson(path: string, data: JsonObject): boolean {
     }
     const tmp = join(dir, `.${basename(path)}.dfm-${process.pid}.tmp`);
     try {
-        writeFileSync(tmp, JSON.stringify(data, null, 4));
+        writeFileSync(tmp, encodeUnraidJson(data));
         chmodSync(tmp, mode);
         renameSync(tmp, path);
         return true;
@@ -124,19 +153,36 @@ export function writeUnraidJson(path: string, data: JsonObject): boolean {
     }
 }
 
+/**
+ * Change one of Unraid's JSON files without losing what another writer added.
+ * Unraid's own check and the other backend read, change and rename these files
+ * with no lock, and Unraid knows of none we could add. A caller works out its
+ * changes from an earlier read, and this reads the file again just before the
+ * write and hands that fresh copy to `mutate`, which applies only the caller's
+ * own keys. `mutate` returns the new content, or null for nothing to write.
+ *
+ * @returns True when the file was written
+ */
+export function updateUnraidJson(path: string, mutate: (fresh: JsonObject) => JsonObject | null): boolean {
+    const fresh = readUnraidJson(path);
+    if (fresh === null) return false;
+    const next = mutate(fresh);
+    return next !== null && writeUnraidJson(path, next);
+}
+
 /** Drop containers from the Docker tab's cache, so it recomputes their status. */
 export function dropUnraidWebuiEntries(names: string[], webuiPath: string): boolean {
     if (names.length === 0 || !existsSync(webuiPath)) return false;
-    const info = readUnraidJson(webuiPath);
-    if (info === null) return false;
-    let changed = false;
-    for (const name of names) {
-        if (Object.hasOwn(info, name)) {
-            delete info[name];
-            changed = true;
+    return updateUnraidJson(webuiPath, (info) => {
+        let changed = false;
+        for (const name of names) {
+            if (Object.hasOwn(info, name)) {
+                delete info[name];
+                changed = true;
+            }
         }
-    }
-    return changed && writeUnraidJson(webuiPath, info);
+        return changed ? info : null;
+    });
 }
 
 /**
@@ -154,11 +200,12 @@ export function markUnraidImageCurrent(
     const bare = bareImageDigest(digest);
     if (key === null || bare === null) return false;
 
-    const status = readUnraidJson(paths.status);
-    if (status === null) return false;
     const entry: StatusEntry = { local: bare, remote: bare, status: 'true' };
-    status[key] = entry;
-    if (!writeUnraidJson(paths.status, status)) return false;
+    const written = updateUnraidJson(paths.status, (status) => {
+        status[key] = entry;
+        return status;
+    });
+    if (!written) return false;
 
     dropUnraidWebuiEntries(containerNames, paths.webui);
     return true;
@@ -209,7 +256,8 @@ export function pickUnraidDigest(
 /**
  * Clear flags left by pulls made before this fix. Touches only an entry with
  * status "false" whose `remote` digest is one of the image's RepoDigests, and
- * only when every container on that tag runs that image.
+ * only when at least one container is on that tag and every container on it
+ * runs that image.
  *
  * @param inspect The tag's image id and RepoDigests, or null when it is not on disk
  * @returns Keys that were repaired
@@ -222,25 +270,45 @@ export async function repairUnraidUpdateStatus(
     const status = readUnraidJson(paths.status);
     if (status === null) return [];
 
-    const repaired: string[] = [];
+    // First pass: decide which keys to repair, from this read. `inspect`
+    // takes time per entry, so the file can change meanwhile.
+    const fixes = new Map<string, string>();
     for (const [key, value] of Object.entries(status)) {
         if (value === null || typeof value !== 'object') continue;
         const entry = value as Partial<StatusEntry>;
         if (entry.status !== 'false') continue;
         const remote = bareImageDigest(entry.remote);
         if (remote === null || entry.local === remote) continue;
+        // With no container on this tag there is nothing to judge, and "every
+        // container runs the image" would pass by default. Leave the entry alone.
+        if (containerNamesForImage(containers, key).length === 0) continue;
         const image = await inspect(key);
         if (image === null) continue;
         if (
             image.repoDigests.map(bareImageDigest).includes(remote) &&
             containersBehindImage(containers, key, image.id).length === 0
         ) {
-            status[key] = { local: remote, remote, status: 'true' } satisfies StatusEntry;
-            repaired.push(key);
+            fixes.set(key, remote);
         }
     }
+    if (fixes.size === 0) return [];
 
-    if (repaired.length === 0 || !writeUnraidJson(paths.status, status)) return [];
+    // Second pass: apply only those keys to a fresh read. A key another writer
+    // changed or removed since the first read is left as that writer left it.
+    let repaired: string[] = [];
+    const written = updateUnraidJson(paths.status, (fresh) => {
+        repaired = [];
+        for (const [key, remote] of fixes) {
+            const entry = fresh[key];
+            if (entry === null || typeof entry !== 'object') continue;
+            const current = entry as Partial<StatusEntry>;
+            if (current.status !== 'false' || bareImageDigest(current.remote) !== remote) continue;
+            fresh[key] = { local: remote, remote, status: 'true' } satisfies StatusEntry;
+            repaired.push(key);
+        }
+        return repaired.length === 0 ? null : fresh;
+    });
+    if (!written) return [];
 
     const names = new Set<string>();
     for (const key of repaired) {

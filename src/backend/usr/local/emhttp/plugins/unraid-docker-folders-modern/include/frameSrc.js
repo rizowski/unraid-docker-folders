@@ -64,9 +64,10 @@ window.dockerFoldersWatchTheme = function(getFrame) {
     var theme = window.dockerFoldersReadTheme();
     var json = JSON.stringify(theme);
     if (!force && json === last) return;
-    last = json;
     if (!frame || !frame.contentWindow) return;
     frame.contentWindow.postMessage({ type: 'docker-folders-theme', theme: theme }, window.location.origin);
+    // Only after the post went out: a lost post must not hide later identical sends.
+    last = json;
   }
   function schedule() {
     clearTimeout(timer);

@@ -281,6 +281,13 @@
   background: color-mix(in srgb, var(--text-color, #1a1a1a) 8%, transparent);
 }
 
+/* Keyboard focus ring for icon buttons, in the accent token. */
+#unraid-docker-folders-modern button.icon-btn:focus-visible,
+#unraid-docker-folders-modern a.icon-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
 /* Round variant — modal header close buttons */
 #unraid-docker-folders-modern button.icon-btn.icon-btn-round,
 #unraid-docker-folders-modern a.icon-btn.icon-btn-round {

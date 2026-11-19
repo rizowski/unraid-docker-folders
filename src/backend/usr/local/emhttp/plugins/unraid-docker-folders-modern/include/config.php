@@ -552,25 +552,37 @@ function recreateOneContainer($dockerClient, $name, $id)
  * @param DockerClient $dockerClient Docker API client
  * @param Database $db Database instance
  * @param string $image Image reference, as the update check keys it
+ * @param string|null $pullDigest The pull's own "Digest:" line, when the caller
+ *   has it. The registry can move between the pull and a fresh lookup, so this
+ *   is the digest of the image that was pulled. Without it the registry is asked.
  */
-function recordImagePulled($dockerClient, $db, $image)
+function recordImagePulled($dockerClient, $db, $image, $pullDigest = null)
 {
-  $remoteDigest = $dockerClient->getRemoteImageDigest($image);
+  $remoteDigest = (is_string($pullDigest) && $pullDigest !== '')
+    ? $pullDigest
+    : $dockerClient->getRemoteImageDigest($image);
   // The digest the registry reports, as in checkImageUpdate(), so the stored
   // local_digest matches the plugin's recordPulled for the same inputs.
   $info = $dockerClient->getImageInfo($image);
   $localDigest = DockerClient::pickLocalDigest($info['RepoDigests'] ?? [], $remoteDigest);
 
+  // A real comparison, as checkImageUpdate() makes it: a registry that moved on
+  // after the pull must not read as "up to date".
+  $updateAvailable = 0;
+  if ($localDigest !== null && is_string($remoteDigest) && $remoteDigest !== '') {
+    $updateAvailable = DockerClient::digestHash($localDigest) !== $remoteDigest ? 1 : 0;
+  }
+
   $db->query(
     'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
-     VALUES (:image, :local, :remote, 0, :now, NULL)
+     VALUES (:image, :local, :remote, :avail, :now, NULL)
      ON CONFLICT(image) DO UPDATE SET
        local_digest = excluded.local_digest,
        remote_digest = excluded.remote_digest,
-       update_available = 0,
+       update_available = excluded.update_available,
        checked_at = excluded.checked_at,
        error = NULL',
-    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
+    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':avail' => $updateAvailable, ':now' => time()]
   );
   logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
 }
@@ -611,12 +623,21 @@ function syncUnraidStatusAfterRecreate(
       return;
     }
 
-    $candidates = [$dockerClient->getRemoteImageDigest($image)];
-    $row = $db->fetchOne('SELECT remote_digest FROM image_update_checks WHERE image = ?', [$image]);
-    if ($row) {
-      $candidates[] = $row['remote_digest'] ?? null;
+    // The container list above is still needed: the rule that every container
+    // on the tag runs its image, and the names to drop from the Docker tab.
+    // The registry and the stored row are only fallbacks for a digest, so with
+    // the pull's own digest in hand they are not asked, which keeps the
+    // "complete" event from waiting on a registry round trip.
+    $pullDigest = $dockerClient->getLastPullDigest();
+    $candidates = [];
+    if (bareImageDigest($pullDigest) === null) {
+      $candidates[] = $dockerClient->getRemoteImageDigest($image);
+      $row = $db->fetchOne('SELECT remote_digest FROM image_update_checks WHERE image = ?', [$image]);
+      if ($row) {
+        $candidates[] = $row['remote_digest'] ?? null;
+      }
     }
-    $digest = pickUnraidDigest($dockerClient->getLastPullDigest(), $info['RepoDigests'] ?? [], $candidates);
+    $digest = pickUnraidDigest($pullDigest, $info['RepoDigests'] ?? [], $candidates);
 
     $names = containerNamesForImage($containers, $image);
     if (markUnraidImageCurrent($image, $digest, $names, $statusPath, $webuiPath)) {
@@ -952,6 +973,20 @@ function dfmAssetVersion($absolutePath)
  * transport. The page files pass the result to the iframe as a query param,
  * because a global set here belongs to the parent document.
  */
+/**
+ * Whether a submitted memory_percent_basis is one the app can show.
+ *
+ * Strict, so a JSON `true`, a number or an array is refused as well as an
+ * unknown string. api/settings.php rejects the request when this is false.
+ *
+ * @param mixed $value
+ * @return bool
+ */
+function dfmIsValidMemoryPercentBasis($value)
+{
+  return in_array($value, MEMORY_PERCENT_BASES, true);
+}
+
 /**
  * Reduce a stored or submitted backend mode to one we can serve.
  *

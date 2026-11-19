@@ -30,6 +30,7 @@ import { ReleaseNotesService } from './release-notes.service.js';
 import { UpdateLogService } from './update-log.service.js';
 import {
     UNRAID_STATUS_PATHS,
+    bareImageDigest,
     containerNamesForImage,
     containersBehindImage,
     markUnraidImageCurrent,
@@ -443,7 +444,7 @@ export class UpdatesService {
             pullDigest = pulled.digest;
             this.updateLog.log(`PULL OK ${image}`);
             try {
-                await this.recordPulled(image);
+                await this.recordPulled(image, pullDigest);
             } catch (error) {
                 this.updateLog.log(`PULL WARN ${image}: DB update failed: ${errorMessage(error)}`);
             }
@@ -862,7 +863,7 @@ export class UpdatesService {
         // try/catch around it: a failure here must not turn a pull that
         // succeeded into a result that reports failure.
         try {
-            await this.recordPulled(image);
+            await this.recordPulled(image, pulled.digest);
         } catch (error) {
             this.updateLog.log(`PULL WARN ${image}: DB update failed: ${errorMessage(error)}`);
         }
@@ -977,11 +978,17 @@ export class UpdatesService {
      * bug (reported, not fixed): the update confirm modal loses its release
      * notes link for that image until the next full check overwrites the row.
      */
-    private async recordPulled(image: string): Promise<void> {
-        const remoteDigest = await this.docker
-            .distributionInspect(image)
-            .then((info) => info.Descriptor?.digest ?? null)
-            .catch(() => null);
+    private async recordPulled(image: string, pullDigest: string | null): Promise<void> {
+        // The pull's own `Digest:` line is the image that was pulled. The
+        // registry can move between the pull and a fresh lookup, so it is
+        // asked only when the pull gave no digest.
+        const remoteDigest =
+            pullDigest !== null && pullDigest !== ''
+                ? pullDigest
+                : await this.docker
+                      .distributionInspect(image)
+                      .then((info) => info.Descriptor?.digest ?? null)
+                      .catch(() => null);
 
         let localDigest: string | null = null;
         try {
@@ -991,18 +998,27 @@ export class UpdatesService {
             this.logger.warn(`Could not read local digest for ${image}: ${errorMessage(error)}`);
         }
 
+        // A real comparison, as the update check makes it: a registry that
+        // moved on after the pull must not read as "up to date".
+        let updateAvailable = 0;
+        if (localDigest !== null && remoteDigest !== null && remoteDigest !== '') {
+            const at = localDigest.indexOf('@');
+            const localHash = at !== -1 ? localDigest.slice(at + 1) : localDigest;
+            updateAvailable = localHash !== remoteDigest ? 1 : 0;
+        }
+
         this.db.write((db) => {
             db.prepare(
                 `INSERT INTO image_update_checks
                     (image, local_digest, remote_digest, update_available, checked_at, error, source_url, source_repo)
-                 VALUES (?, ?, ?, 0, ?, NULL, NULL, NULL)
+                 VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL)
                  ON CONFLICT(image) DO UPDATE SET
                     local_digest = excluded.local_digest,
                     remote_digest = excluded.remote_digest,
-                    update_available = 0,
+                    update_available = excluded.update_available,
                     checked_at = excluded.checked_at,
                     error = NULL`
-            ).run(image, localDigest, remoteDigest, nowSeconds());
+            ).run(image, localDigest, remoteDigest, updateAvailable, nowSeconds());
         });
 
         this.updateLog.log(`PULL DB updated ${image}: local=${localDigest ?? ''}, remote=${remoteDigest ?? ''}`);
@@ -1038,17 +1054,25 @@ export class UpdatesService {
                 return;
             }
 
-            const remote = await this.docker
-                .distributionInspect(image)
-                .then((d) => d.Descriptor?.digest ?? null)
-                .catch(() => null);
-            const stored = this.db.read(
-                (db) =>
-                    db.prepare('SELECT remote_digest FROM image_update_checks WHERE image = ?').get(image) as
-                        | { remote_digest: string | null }
-                        | undefined
-            );
-            const digest = pickUnraidDigest(pullDigest, info.RepoDigests ?? [], [remote, stored?.remote_digest ?? null]);
+            // The container list above is still needed (the "every container
+            // runs the image" rule, and the names to drop). The registry and the
+            // stored row are only fallbacks for a digest, so with the pull's own
+            // digest they are not asked.
+            const candidates: (string | null)[] = [];
+            if (bareImageDigest(pullDigest) === null) {
+                const remote = await this.docker
+                    .distributionInspect(image)
+                    .then((d) => d.Descriptor?.digest ?? null)
+                    .catch(() => null);
+                const stored = this.db.read(
+                    (db) =>
+                        db.prepare('SELECT remote_digest FROM image_update_checks WHERE image = ?').get(image) as
+                            | { remote_digest: string | null }
+                            | undefined
+                );
+                candidates.push(remote, stored?.remote_digest ?? null);
+            }
+            const digest = pickUnraidDigest(pullDigest, info.RepoDigests ?? [], candidates);
 
             const names = containerNamesForImage(containers, image);
             if (markUnraidImageCurrent(image, digest, names, this.unraidPaths)) {

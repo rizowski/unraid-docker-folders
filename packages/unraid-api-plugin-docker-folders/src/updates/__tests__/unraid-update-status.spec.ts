@@ -8,13 +8,17 @@ import {
     bareImageDigest,
     containerNamesForImage,
     containersBehindImage,
+    encodeUnraidJson,
     markUnraidImageCurrent,
     pickUnraidDigest,
     pullDigestFromStatus,
+    readUnraidJson,
     repairUnraidUpdateStatus,
     unraidImageKey,
+    updateUnraidJson,
     type UnraidStatusPaths,
 } from '../unraid-update-status.js';
+import jsonFixture from './unraid-json.fixture.json' with { type: 'json' };
 import keyFixture from './unraid-image-keys.fixture.json' with { type: 'json' };
 
 const D1 = `sha256:${'1'.repeat(64)}`;
@@ -81,7 +85,8 @@ describe('unraid-update-status (issue #23)', () => {
     });
 
     it('leaves a file it cannot parse alone', () => {
-        for (const content of ['{"truncated": ', '', '"a string"', '[1]']) {
+        for (const content of ['{"truncated": ', '', '"a string"']) {
+            // A list is no longer here: Unraid's loadJSON() reads one, so item 12 reads it too.
             writeFileSync(paths.status, content);
             expect(markUnraidImageCurrent('nginx', D1, [], paths)).toBe(false);
             expect(readFileSync(paths.status, 'utf8')).toBe(content);
@@ -178,6 +183,91 @@ describe('unraid-update-status (issue #23)', () => {
         );
         expect(repaired).toEqual([]);
         expect(readFileSync(paths.status, 'utf8')).toBe(content);
+    });
+
+    describe('Unraid’s JSON form (loadJSON and saveJSON)', () => {
+        // loadJSON(): a file that decodes to nothing reads as an empty map.
+        const decode = (input: string) => {
+            writeFileSync(paths.status, input);
+            return readUnraidJson(paths.status) ?? {};
+        };
+        const writeAndRead = (input: unknown) => {
+            writeFileSync(paths.status, JSON.stringify(input));
+            expect(updateUnraidJson(paths.status, (fresh) => fresh)).toBe(true);
+            return readFileSync(paths.status, 'utf8');
+        };
+
+        it('writes the same bytes as Unraid’s saveJSON for every fixture input', () => {
+            expect(jsonFixture.length).toBeGreaterThan(0);
+            for (const { input, output } of jsonFixture) {
+                if (input.endsWith(' + key')) {
+                    const merged = decode(input.slice(0, -' + key'.length));
+                    merged['lscr.io/linuxserver/sonarr:latest'] = { status: 'true' };
+                    expect(encodeUnraidJson(merged), input).toBe(output);
+                    continue;
+                }
+                expect(encodeUnraidJson(decode(input)), input).toBe(output);
+            }
+        });
+
+        it('reads a non-empty list as PHP does, and adds keys to it', () => {
+            writeFileSync(paths.status, '["a","b"]');
+            const data = readUnraidJson(paths.status);
+            expect(data).toEqual({ '0': 'a', '1': 'b' });
+            expect(markUnraidImageCurrent('nginx', D1, [], paths)).toBe(true);
+            expect(read(paths.status)).toMatchObject({ '0': 'a', '1': 'b', 'library/nginx:latest': { status: 'true' } });
+        });
+
+        it('writes an empty map as [] and escapes Unicode, not slashes', () => {
+            expect(writeAndRead({})).toBe('[]');
+            expect(writeAndRead({ 'a/b': 'é☃' })).toBe('{\n    "a/b": "\\u00e9\\u2603"\n}');
+        });
+    });
+
+    it('leaves a flag alone when no container uses the tag', async () => {
+        const content = JSON.stringify({ 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        writeFileSync(paths.status, content);
+        const inspect = async () => ({ id: 'sha256:new', repoDigests: [`nginx@${D1}`] });
+        expect(await repairUnraidUpdateStatus(inspect, [], paths)).toEqual([]);
+        expect(
+            await repairUnraidUpdateStatus(inspect, [{ name: 'db', image: 'postgres', imageId: 'sha256:p' }], paths)
+        ).toEqual([]);
+        expect(readFileSync(paths.status, 'utf8')).toBe(content);
+    });
+
+    it('keeps keys another writer added between the read and the write', async () => {
+        write(paths.status, { 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        const repaired = await repairUnraidUpdateStatus(
+            async () => {
+                // Unraid's own check adds a key while the repair inspects the image.
+                write(paths.status, {
+                    'library/nginx:latest': { local: D2, remote: D1, status: 'false' },
+                    'library/redis:7': { local: D2, remote: D2, status: 'true' },
+                });
+                return { id: 'sha256:n', repoDigests: [`nginx@${D1}`] };
+            },
+            [{ name: 'web', image: 'nginx', imageId: 'sha256:n' }],
+            paths
+        );
+        expect(repaired).toEqual(['library/nginx:latest']);
+        const data = read(paths.status);
+        expect((data['library/nginx:latest'] as { status: string }).status).toBe('true');
+        expect((data['library/redis:7'] as { status: string }).status).toBe('true');
+    });
+
+    it('leaves an entry another writer changed after the first read', async () => {
+        write(paths.status, { 'library/nginx:latest': { local: D2, remote: D1, status: 'false' } });
+        const moved = `sha256:${'3'.repeat(64)}`;
+        const repaired = await repairUnraidUpdateStatus(
+            async () => {
+                write(paths.status, { 'library/nginx:latest': { local: D2, remote: moved, status: 'false' } });
+                return { id: 'sha256:n', repoDigests: [`nginx@${D1}`] };
+            },
+            [{ name: 'web', image: 'nginx', imageId: 'sha256:n' }],
+            paths
+        );
+        expect(repaired).toEqual([]);
+        expect((read(paths.status)['library/nginx:latest'] as { status: string }).status).toBe('false');
     });
 
     it('writes nothing when nothing is stale', async () => {

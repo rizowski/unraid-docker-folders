@@ -2,13 +2,7 @@
   <div
     class="folder-header relative flex justify-between items-center px-3 py-3 sm:px-6 sm:py-4 bg-bg rounded-sm mb-2 cursor-pointer select-none hover:bg-bg-card transition"
     :class="{ 'z-50': menuOpen }"
-    role="button"
-    tabindex="0"
-    :aria-expanded="!folder.collapsed"
-    :aria-label="`${folder.collapsed ? 'Expand' : 'Collapse'} folder ${folder.name}`"
     @click="$emit('toggle-collapse')"
-    @keydown.enter.self.prevent="$emit('toggle-collapse')"
-    @keydown.space.self.prevent="$emit('toggle-collapse')"
   >
     <!-- Folder-color tint fading to transparent on the right (the sanctioned
          gradient exception in DESIGN.md §2): faint when collapsed, full
@@ -22,7 +16,25 @@
     ></div>
     <div class="relative flex items-center gap-2 flex-1 min-w-0">
       <DragHandle v-if="!dragLocked" handle-class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing" />
-      <ChevronIcon :expanded="!collapsed" />
+      <!-- The negative margin is important (-m-1.5!) because the Unraid reset
+           `#unraid-docker-folders-modern button:not(.nav-btn) { margin: 0 }`
+           is unlayered and beats the layered utility. Without it the padding
+           of .icon-btn pushes the title 12px right.
+           The keyboard and screen reader control for the toggle. The rest of the
+           header still toggles on a mouse click. @click.stop keeps one toggle
+           per activation: the click would otherwise bubble to the header.
+           Space clicks once on keyup. A held Enter makes the browser repeat
+           the click, so a repeated Enter keydown is cancelled. -->
+      <button
+        type="button"
+        class="icon-btn -m-1.5! shrink-0"
+        :aria-expanded="!collapsed"
+        :aria-label="`${collapsed ? 'Expand' : 'Collapse'} folder ${folder.name}`"
+        @keydown.enter="(e: KeyboardEvent) => e.repeat && e.preventDefault()"
+        @click.stop="emit('toggle-collapse')"
+      >
+        <ChevronIcon :expanded="!collapsed" />
+      </button>
       <div
         v-if="containerIcons.length > 0"
         class="hidden sm:grid shrink-0 gap-0.5 mr-2"
@@ -458,11 +470,16 @@ const folderStats = computed(() => {
   }
   const total = aggregateStats(list);
   // A folder's memory is always a share of the host: members' limits do not add up to one.
+  // Without a host figure aggregateStats falls back to the largest member limit,
+  // which is not host memory, so the tooltip must not say it is.
+  const hostKnown = list.some((s) => (s.hostMemory ?? 0) > 0);
   return (
     total && {
       cpuPercent: total.cpuSum,
       memPercent: total.memPercent,
-      memTitle: `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`,
+      memTitle: hostKnown
+        ? `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`
+        : `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)}.`,
     }
   );
 });

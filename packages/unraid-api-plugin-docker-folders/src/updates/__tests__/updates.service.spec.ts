@@ -506,6 +506,34 @@ describe('UpdatesService', () => {
             ]);
         });
 
+        it('records the pull\'s own digest, and does not ask the registry, when it moved after the pull', async () => {
+            const pulled = `sha256:${'1'.repeat(64)}`;
+            docker.setRemoteDigest(PLEX, `sha256:${'2'.repeat(64)}`);
+            docker.setLocalDigests(PLEX, [`${PLEX}@${pulled}`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end(`${JSON.stringify({ status: `Digest: ${pulled}` })}\n`);
+            await promise;
+
+            expect(temp.rows('SELECT local_digest, remote_digest, update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { local_digest: `${PLEX}@${pulled}`, remote_digest: pulled, update_available: 0 },
+            ]);
+            expect(docker.calls).not.toContain(`distributionInspect ${PLEX}`);
+        });
+
+        it('flags an update when there is no pull digest and the registry moved after the pull', async () => {
+            docker.setRemoteDigest(PLEX, 'sha256:two');
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:one`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end('');
+            await promise;
+
+            expect(temp.rows('SELECT update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { update_available: 1 },
+            ]);
+        });
+
         it('preserves a previously known source_repo across a pull, unlike the PHP INSERT OR REPLACE', async () => {
             docker.setRemoteDigest(PLEX, 'sha256:pulled');
             new DatabaseService(temp.path).write((db) => {
@@ -1084,6 +1112,21 @@ describe('UpdatesService and Unraid’s update status (issue #23)', () => {
 
         expect(readFileSync(paths.status, 'utf8')).toBe(STALE);
         expect(Object.keys(JSON.parse(readFileSync(paths.webui, 'utf8')))).toEqual(['plex']);
+    });
+
+    it('asks the registry for nothing after a recreate when the pull gave its digest', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+        writeFileSync(paths.status, STALE);
+
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
+        expect((await promise).success).toBe(true);
+
+        expect(readStatus()[PLEX]).toEqual({ local: D_PULLED, remote: D_PULLED, status: 'true' });
+        expect(docker.calls.filter((call) => call.startsWith('distributionInspect'))).toEqual([]);
     });
 
     it('records the pull’s Digest line, split across chunks, once the container is recreated', async () => {
