@@ -550,6 +550,7 @@ class ComposeManager
       $stack['autostart'] = (bool) $stack['autostart'];
       $stack['autostart_force_recreate'] = (bool) $stack['autostart_force_recreate'];
       $stack['own_files'] = self::isOwnStackPath($stack['working_dir']);
+      $stack['source'] = self::stackSource($stack['working_dir']);
 
       // Get runtime service counts
       $ps = $this->stackPs($stack['project_name']);
@@ -636,6 +637,7 @@ class ComposeManager
     $stack['autostart'] = (bool) $stack['autostart'];
     $stack['autostart_force_recreate'] = (bool) $stack['autostart_force_recreate'];
     $stack['own_files'] = self::isOwnStackPath($stack['working_dir']);
+    $stack['source'] = self::stackSource($stack['working_dir']);
 
     $ps = $this->stackPs($projectName);
     $stack['services_total'] = count($ps);
@@ -873,6 +875,25 @@ class ComposeManager
     $dir = is_string($workingDir) && $workingDir !== '' ? normalizePath($workingDir) : null;
     $base = normalizePath($stacksDir ?? COMPOSE_STACKS_DIR);
     return $dir !== null && $base !== null && $base !== '/' && pathIsWithin($dir, $base) && dirname($dir) === $base;
+  }
+
+  /**
+   * Where a stack's files live, by path alone: 'compose_manager' when the
+   * working_dir is inside the Compose Manager projects folder, otherwise null.
+   * It does not read imported_from, so a stack that runs from that folder but
+   * was never imported still counts. The folder itself does not count, and
+   * neither does a sibling that only starts with the same characters.
+   * The UI uses it to group the stacks pane.
+   *
+   * @param string|null $workingDir The stack's working_dir
+   * @param string|null $projectsDir Defaults to COMPOSE_PLUGIN_PROJECTS
+   * @return string|null
+   */
+  public static function stackSource($workingDir, $projectsDir = null)
+  {
+    $dir = is_string($workingDir) && $workingDir !== '' ? normalizePath($workingDir) : null;
+    $base = normalizePath($projectsDir ?? self::COMPOSE_PLUGIN_PROJECTS);
+    return $dir !== null && $base !== null && $dir !== $base && pathIsWithin($dir, $base) ? 'compose_manager' : null;
   }
 
   /**

@@ -41,6 +41,9 @@ export class DockerFoldersComposeStack {
     @Field(() => Boolean, { description: "True when the stack's files are in the plugin's own stack folder, so Remove Stack may delete them" })
     ownFiles!: boolean;
 
+    @Field(() => String, { nullable: true, description: '"compose_manager" when the stack runs from the Compose Manager projects folder, decided by path' })
+    source!: string | null;
+
     @Field(() => Int)
     servicesRunning!: number;
 

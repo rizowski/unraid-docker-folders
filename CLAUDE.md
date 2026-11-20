@@ -707,7 +707,12 @@ plugin's `src/compose/`.
   (503). Files are deleted only with `delete_files`, only for a direct child of
   `COMPOSE_STACKS_DIR` that no other stack uses, and never through a symlink.
   Stack lists carry `own_files` (`ownFiles` in GraphQL), true for such a stack;
-  the dialog shows its delete-files checkbox only then. A container-list poll
+  the dialog shows its delete-files checkbox only then. Stack lists also carry
+  `source`, `compose_manager` when the `working_dir` is inside the Compose
+  Manager projects folder and null otherwise, decided by path and not by
+  `imported_from` (`ComposeManager::stackSource`, `stackSource()` in
+  `compose-remove.ts`); the stacks pane lists those stacks together under a
+  "Compose Manager" sub-header. A container-list poll
   adds a stack back while its containers still run, which is why removal needs
   them gone.
 

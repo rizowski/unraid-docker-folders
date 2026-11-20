@@ -8,7 +8,7 @@ import type { EventBusService } from '../../events/event-bus.service.js';
 import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
 import { FolderService } from '../../folders/folder.service.js';
 import { DEFAULT_COMPOSE_PATHS } from '../compose-config.js';
-import { isOwnStackPath, removeComposeStack, type RemoveContainer } from '../compose-remove.js';
+import { isOwnStackPath, removeComposeStack, stackSource, type RemoveContainer } from '../compose-remove.js';
 import { repairImportedStacks } from '../compose-repair.js';
 import {
     dcflachsSanitize,
@@ -188,6 +188,20 @@ describe('stack removal and the repair of earlier imports (issue #25)', () => {
             expect(isOwnStackPath(join(projects, 'Demo'), stacksDir)).toBe(false);
             expect(isOwnStackPath(`${stacksDir}-evil/demo`, stacksDir)).toBe(false);
             expect(isOwnStackPath(null, stacksDir)).toBe(false);
+        });
+    });
+
+    describe('source flag', () => {
+        it('is decided by path alone', () => {
+            const base = '/boot/config/plugins/compose.manager/projects';
+            expect(stackSource(`${base}/Demo`, base)).toBe('compose_manager');
+            expect(stackSource(`${base}/Demo/deeper`, base)).toBe('compose_manager');
+            expect(stackSource(base, base)).toBeNull();
+            expect(stackSource(`${base}-evil/Demo`, base)).toBeNull();
+            expect(stackSource(`${base}/../projects-evil/Demo`, base)).toBeNull();
+            expect(stackSource(join(stacksDir, 'demo'), base)).toBeNull();
+            expect(stackSource('/mnt/user/appdata/x', base)).toBeNull();
+            expect(stackSource(null, base)).toBeNull();
         });
     });
 

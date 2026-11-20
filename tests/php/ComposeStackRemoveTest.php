@@ -136,6 +136,23 @@ final class ComposeStackRemoveTest extends TestCase
     }
 
     #[Test]
+    public function stackSourceIsDecidedByPathAlone(): void
+    {
+        $base = '/boot/config/plugins/compose.manager/projects';
+        $this->assertSame('compose_manager', ComposeManager::stackSource($base . '/Demo', $base));
+        $this->assertSame('compose_manager', ComposeManager::stackSource($base . '/Demo/deeper', $base));
+        $this->assertNull(ComposeManager::stackSource($base, $base));
+        $this->assertNull(ComposeManager::stackSource($base . '-evil/Demo', $base));
+        $this->assertNull(ComposeManager::stackSource($base . '/../projects-evil/Demo', $base));
+        $this->assertNull(ComposeManager::stackSource('/boot/config/plugins/unraid-docker-folders-modern/compose-stacks/demo', $base));
+        $this->assertNull(ComposeManager::stackSource('/mnt/user/appdata/x', $base));
+        $this->assertNull(ComposeManager::stackSource(null, $base));
+        $this->assertNull(ComposeManager::stackSource('', $base));
+        // The default is the real Compose Manager folder.
+        $this->assertSame('compose_manager', ComposeManager::stackSource(ComposeManager::COMPOSE_PLUGIN_PROJECTS . '/Demo'));
+    }
+
+    #[Test]
     public function removingAnUnknownStackIsNotFound(): void
     {
         $result = $this->manager->removeStack('nope', false, [], $this->stacksDir);

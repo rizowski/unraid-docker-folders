@@ -854,6 +854,7 @@ interface GqlComposeStack {
   projectName: string;
   workingDir: string | null;
   ownFiles: boolean;
+  source: string | null;
   composeFile: string | null;
   envFile: string | null;
   autostart: boolean;
@@ -898,7 +899,7 @@ const COMPOSE_STATUS = `
 const COMPOSE_STACKS = `
   query DockerFoldersComposeStacks {
     dockerFoldersComposeStacks {
-      projectName workingDir ownFiles composeFile envFile autostart autostartForceRecreate
+      projectName workingDir ownFiles source composeFile envFile autostart autostartForceRecreate
       description importedFrom servicesRunning servicesTotal serviceNames
     }
   }
@@ -1069,6 +1070,7 @@ function toComposeStack(s: GqlComposeStack): ComposeStack {
     project_name: s.projectName,
     working_dir: s.workingDir,
     own_files: s.ownFiles,
+    source: s.source === 'compose_manager' ? 'compose_manager' : null,
     compose_file: s.composeFile,
     env_file: s.envFile,
     autostart: s.autostart,

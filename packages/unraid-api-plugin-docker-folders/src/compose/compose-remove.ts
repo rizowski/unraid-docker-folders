@@ -178,6 +178,20 @@ export function isOwnStackPath(workingDir: string | null, stacksDir: string): bo
 }
 
 /**
+ * Where a stack's files live, by path alone: `compose_manager` when the
+ * working_dir is inside the Compose Manager projects folder, otherwise null.
+ * Ported from `ComposeManager::stackSource`. It ignores `imported_from`, so a
+ * stack that runs from that folder but was never imported still counts. The
+ * folder itself does not, and neither does a sibling that only starts with the
+ * same characters.
+ */
+export function stackSource(workingDir: string | null, projectsDir: string): 'compose_manager' | null {
+    const dir = workingDir ? normalizePath(workingDir) : null;
+    const base = normalizePath(projectsDir);
+    return dir !== null && base !== null && dir !== base && pathIsWithin(dir, base) ? 'compose_manager' : null;
+}
+
+/**
  * The directory a stack's own copy lives in, when it is safe to delete from.
  *
  * A direct child of `stacksDir` (so not `stacksDir` itself, and not `..`,

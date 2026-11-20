@@ -9,9 +9,17 @@
          reset strips background and padding from a plain <button> (DESIGN.md
          §11), so the button carries no box of its own and its padding lives on
          the inner span. -->
+    <template v-for="(row, index) in rows" :key="row.project">
+    <!-- Stacks that run from the Compose Manager folder come last, under the
+         pane header's own label markup and a border line. -->
     <div
-      v-for="row in rows"
-      :key="row.project"
+      v-if="index === firstManagerIndex"
+      class="flex items-center justify-between px-2 pt-1.5 pb-1 mt-1 border-t border-border"
+    >
+      <h3 class="text-[11px] font-bold uppercase text-text-secondary">Compose Manager</h3>
+      <span class="text-[11px] text-text-secondary">{{ managerCount }}</span>
+    </div>
+    <div
       class="flex items-center gap-0.5 rounded transition-colors duration-150"
       :class="isSelected(row.project) ? 'bg-primary/15' : 'hover:bg-text/5'"
     >
@@ -46,6 +54,7 @@
         @select="(action) => handleSelect(row.project, action)"
       />
     </div>
+    </template>
   </nav>
 </template>
 
@@ -68,6 +77,8 @@ interface StackRow {
   location: string;
   /** Whether Docker Folders keeps a record of it. A project seen only on container labels has none to remove. */
   stored: boolean;
+  /** `compose_manager` when the stack runs from the Compose Manager folder. */
+  source: 'compose_manager' | null;
 }
 
 const emit = defineEmits<{
@@ -96,10 +107,13 @@ function isSelected(project: string): boolean {
 // up or down (see useFolderRunningState).
 const rows = computed<StackRow[]>(() => {
   const stored = new Set<string>(composeStore.stacks.map((s) => s.project_name));
+  const fromManager = new Set<string>(
+    composeStore.stacks.filter((s) => s.source === 'compose_manager').map((s) => s.project_name),
+  );
   const projects = new Set<string>(stored);
   for (const project of dockerStore.containersByProject.keys()) projects.add(project);
 
-  return [...projects].sort(naturalNameCompare).map((project) => {
+  const all = [...projects].sort(naturalNameCompare).map((project) => {
     const members = dockerStore.containersInStack(project);
     return {
       project,
@@ -107,9 +121,15 @@ const rows = computed<StackRow[]>(() => {
       total: members.length,
       location: locationText(members),
       stored: stored.has(project),
+      source: fromManager.has(project) ? ('compose_manager' as const) : null,
     };
   });
+  // Two groups, each in name order. The sort is stable.
+  return [...all.filter((r) => r.source === null), ...all.filter((r) => r.source !== null)];
 });
+
+const managerCount = computed(() => rows.value.filter((r) => r.source === 'compose_manager').length);
+const firstManagerIndex = computed(() => rows.value.findIndex((r) => r.source === 'compose_manager'));
 
 function locationText(members: Container[]): string {
   if (members.length === 0) return 'Not created';

@@ -7,6 +7,8 @@ export interface ComposeStack {
   working_dir: string | null;
   /** True when the files sit in the plugin's own stack folder, so Remove Stack may delete them. */
   own_files?: boolean;
+  /** `compose_manager` when the stack runs from the Compose Manager projects folder (by path), else null. */
+  source?: 'compose_manager' | null;
   compose_file: string | null;
   env_file: string | null;
   autostart: boolean;

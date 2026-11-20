@@ -36,7 +36,7 @@ import {
 } from './compose-config.js';
 import * as composeFiles from './compose-files.js';
 import { findComposeFile, parseComposeServiceNames, type StackFileFields } from './compose-files.js';
-import { isOwnStackPath, removeComposeStack, type RemoveContainer, type RemoveStackResult } from './compose-remove.js';
+import { isOwnStackPath, removeComposeStack, stackSource, type RemoveContainer, type RemoveStackResult } from './compose-remove.js';
 import { PIN_FILE, nameFromFolder, nameFromLabels, type LabelledContainer } from './compose-project-name.js';
 import { importedCopies, readMetadataFile, repairImportedStacks, sourceDirOf } from './compose-repair.js';
 import {
@@ -505,6 +505,7 @@ export class ComposeService {
             projectName: row.project_name,
             workingDir: row.working_dir,
             ownFiles: isOwnStackPath(row.working_dir, this.paths.stacksDir),
+            source: stackSource(row.working_dir, this.paths.pluginProjectsDir),
             composeFile: row.compose_file,
             envFile: row.env_file,
             autostart: Number(row.autostart) === 1,
