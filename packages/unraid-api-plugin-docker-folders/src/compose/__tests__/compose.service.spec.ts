@@ -737,6 +737,37 @@ describe('ComposeService', () => {
             }
         });
 
+        it('a genuine rollback leaves no row, no folder and no file behind', () => {
+            const a = project('fresh');
+            project('other');
+
+            const originalWrite = db.write.bind(db);
+            const writeSpy = vi.spyOn(db, 'write').mockImplementation((work) =>
+                originalWrite((h) => {
+                    const out = work(h);
+                    // Only the write that added rows fails; reads before it pass.
+                    const added = (h.prepare('SELECT COUNT(*) AS n FROM compose_stacks').get() as { n: number }).n;
+                    if (added > 0) throw new Error('boom');
+                    return out;
+                })
+            );
+
+            try {
+                const result = service.importFromComposePlugin([]);
+
+                expect(result.success).toBe(false);
+                expect(result.stacksImported).toBe(0);
+                expect(result.errors).toContain('boom');
+                expect(stackNames()).toEqual([]);
+                expect(folders.getFolders().filter((f) => f.composeProject !== null)).toEqual([]);
+                // Adopting in place copies nothing, and the source is never touched.
+                expect(existsSync(join(a, 'docker-compose.yml'))).toBe(true);
+                expect(existsSync(join(paths.stacksDir, 'fresh'))).toBe(false);
+            } finally {
+                writeSpy.mockRestore();
+            }
+        });
+
         it('skips a project directory name the compose API could never address again', () => {
             mkdirSync(join(paths.pluginProjectsDir, 'has space'), { recursive: true });
             mkdirSync(join(paths.pluginProjectsDir, '.git'), { recursive: true });

@@ -320,6 +320,30 @@ final class ComposeImportRepairTest extends TestCase
     }
 
     #[Test]
+    public function aFailedImportWriteRollsBackEveryRowAndFolder(): void
+    {
+        $source = $this->project('Fresh');
+        $this->project('Other');
+        // A trigger that makes the last write of the import fail.
+        $this->db->exec("CREATE TRIGGER boom BEFORE INSERT ON folders BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        $log = ini_set('error_log', '/dev/null');
+        set_error_handler(static fn (): bool => true, E_WARNING);
+        try {
+            $result = $this->import();
+        } finally {
+            restore_error_handler();
+            ini_set('error_log', $log === false ? '' : $log);
+        }
+
+        $this->assertSame(0, $result['stacks_imported']);
+        $this->assertSame([], $this->names());
+        $this->assertSame(0, $this->folderCount());
+        $this->assertFileExists($source . '/docker-compose.yml');
+        $this->assertDirectoryDoesNotExist($this->stacks . '/Fresh');
+    }
+
+    #[Test]
     public function twoFoldersWithTheSameProjectNameImportOnlyOnce(): void
     {
         $this->project('Immich');

@@ -668,6 +668,51 @@ Rules that are easy to break:
 
 ---
 
+## Compose Manager import and Remove Stack
+
+Issue #25. Both backends do the same, in `ComposeManager.php` and in the
+plugin's `src/compose/`.
+
+- **Import adopts in place.** `importFromComposePlugin` copies no file. The
+  `compose_stacks` row points at the Compose Manager folder under
+  `/boot/config/plugins/compose.manager/projects/<Dir>` (or at the target of its
+  `indirect` file). The row is named after the Compose project its containers
+  run under: the label of containers whose `working_dir` label is that folder
+  (`ComposeProjectName::fromLabels`). With no such container the name comes from
+  a Compose Manager Plus `project_name` file, then the Plus rule (when Plus is
+  installed or `legacy-origin` exists), else the older dcflachs rule
+  (`ComposeProjectName::fromFolder`). A name Compose refuses, or containers that
+  disagree on it, skip the stack with an error. The import refuses to run when
+  the Docker request fails (503), because "no containers" would then pick a
+  name by rule. The two name rules and their test table are shared:
+  `src/compose/__tests__/project-name-cases.json`. Change both backends together.
+- **Repair of earlier imports.** `repairImportedStacks` runs at the end of the
+  container-list sync (`FolderManager::syncComposeStacks`, plugin
+  `FolderService.syncWithContainers`). It touches only rows with
+  `imported_from = compose_plugin` whose `working_dir` is a copy inside
+  `COMPOSE_STACKS_DIR`, and it writes nothing when none exists. It merges a
+  copy row into another row **only when that row's `working_dir` is the Compose
+  Manager source folder the copy came from** (or its indirect target). A name
+  match never merges: two stacks can sanitize to one name. Without such a row it
+  renames the copy row to the folder's name only when the copied compose file
+  and the `.env` are byte-identical to the source. Everything else stays as it
+  is. Schedules, version history and the folder move to the kept row. It never
+  deletes a file. A folder that holds containers is detached from the stack, not
+  deleted.
+- **Remove Stack** (`ComposeManager::removeStack`, `POST compose.php?action=remove`,
+  plugin mutation `removeDockerFoldersComposeStack`). It deletes the row, its
+  version history, its schedules and its stack folder. It never touches a
+  container or a Compose Manager folder. It is refused while containers of the
+  stack exist (409; run Stack Down first) and when Docker cannot be reached
+  (503). Files are deleted only with `delete_files`, only for a direct child of
+  `COMPOSE_STACKS_DIR` that no other stack uses, and never through a symlink.
+  Stack lists carry `own_files` (`ownFiles` in GraphQL), true for such a stack;
+  the dialog shows its delete-files checkbox only then. A container-list poll
+  adds a stack back while its containers still run, which is why removal needs
+  them gone.
+
+---
+
 ## Testing Strategy
 
 ### Frontend (Vitest)
@@ -785,6 +830,11 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
   because a second pull fails for a locally built image. The plugin takes
   `recreateOnly` on the same mutation and subscription.
 - `GET|POST /api/compose.php` - Read and apply Compose files
+- `POST /api/compose.php?action=remove&project=<name>` - Remove a stack from
+  the plugin (body: `{delete_files}`, default false). 409 while containers of the
+  stack exist, 503 when Docker fails, 404 for an unknown stack. Never touches a
+  container. Answers `{schedules_removed, folder, files_removed,
+  directory_removed, files_note}`.
 - `GET /api/compose-stream.php` - Stream Compose command output
 - `GET|POST /api/schedules.php` - Container action schedules. The list GET also
   returns `runner` (`last_tick`, `stale_after`, `cron_installed`, `repaired`).
