@@ -705,6 +705,272 @@ class ComposeManager
   }
 
   /**
+   * Remove a stack from the plugin: its compose_stacks row and what hangs off
+   * it. Containers are never touched.
+   *
+   * Refused while containers of the stack exist (a container whose
+   * com.docker.compose.project label is the stack's name): the next
+   * container-list sync would add the row again.
+   *
+   * What happens to each reference:
+   * - compose_file_versions: deleted with the row (ON DELETE CASCADE).
+   * - schedules aimed at the stack by name: deleted (they would fail forever).
+   *   Their history goes with them (cascade).
+   * - the stack folder (folders.compose_project = the name): deleted, unless
+   *   it holds a live container that is not this stack's (another project's,
+   *   or one with no compose label), in which case it stays as an ordinary
+   *   folder.
+   * - backup archives on disk: left alone, like the Postgres archives.
+   *
+   * Files go only when $deleteFiles is true, and only the plugin's own copy
+   * under $stacksDir (see ownStackDir), never a Compose Manager folder. They
+   * go after the database commit, so a failure there never leaves a row
+   * pointing at missing files.
+   *
+   * @param string $projectName Exact project_name of the row
+   * @param bool $deleteFiles Also delete the plugin's own copy of the files
+   * @param array $containers Container list as DockerClient gives it (with labels)
+   * @param string|null $stacksDir The directory the plugin keeps stack copies in
+   * @return array success, error, code (not_found | in_use | error), and on
+   *               success schedules_removed, folder (deleted | kept | none),
+   *               files_removed, directory_removed, files_note
+   */
+  public function removeStack($projectName, $deleteFiles, array $containers, $stacksDir = null)
+  {
+    $stacksDir = $stacksDir ?? COMPOSE_STACKS_DIR;
+
+    $row = $this->db->fetchOne('SELECT * FROM compose_stacks WHERE project_name = ?', [$projectName]);
+    if (!$row) {
+      return ['success' => false, 'code' => 'not_found', 'error' => 'Stack not found'];
+    }
+
+    // Every listed container is recorded, labelled or not: a plain one the
+    // user dragged into the stack folder is a live container that is not this
+    // stack's, and must keep its folder.
+    $liveProjects = [];
+    $inUse = false;
+    foreach ($containers as $container) {
+      $label = $container['labels']['com.docker.compose.project'] ?? null;
+      $liveProjects[ltrim($container['name'] ?? '', '/')] = $label;
+      if ($label === $projectName) {
+        $inUse = true;
+      }
+    }
+    if ($inUse) {
+      return [
+        'success' => false,
+        'code' => 'in_use',
+        'error' => "Containers of \"{$projectName}\" still exist. Run Stack Down first, or the stack comes back on the next refresh.",
+      ];
+    }
+
+    $others = $this->db->fetchAll('SELECT * FROM compose_stacks WHERE project_name != ?', [$projectName]);
+    $ownDir = null;
+    $filesNote = null;
+    if ($deleteFiles) {
+      list($ownDir, $filesNote) = self::ownStackDir($row['working_dir'], $stacksDir, $others);
+      // A container created from this directory still reads its files.
+      if ($ownDir !== null && self::containersRunFrom($containers, $ownDir)) {
+        $ownDir = null;
+        $filesNote = 'Containers still run from this directory, so the files were left in place.';
+      }
+    }
+
+    $result = ['schedules_removed' => 0, 'folder' => 'none'];
+
+    $this->db->beginTransaction();
+    try {
+      $result['schedules_removed'] = $this->db->delete(
+        'schedules',
+        "target_type = 'stack' AND target_id = ?",
+        [$projectName]
+      );
+
+      $folders = $this->db->fetchAll('SELECT id FROM folders WHERE compose_project = ?', [$projectName]);
+      foreach ($folders as $folder) {
+        $foreign = false;
+        $members = $this->db->fetchAll('SELECT container_name FROM container_folders WHERE folder_id = ?', [$folder['id']]);
+        foreach ($members as $member) {
+          $name = $member['container_name'];
+          if (array_key_exists($name, $liveProjects) && $liveProjects[$name] !== $projectName) {
+            $foreign = true;
+            break;
+          }
+        }
+        if ($foreign) {
+          $this->db->update('folders', ['compose_project' => null, 'updated_at' => time()], 'id = ?', [$folder['id']]);
+          $result['folder'] = 'kept';
+        } else {
+          $this->db->delete('folders', 'id = ?', [$folder['id']]);
+          if ($result['folder'] !== 'kept') {
+            $result['folder'] = 'deleted';
+          }
+        }
+      }
+
+      // Version history goes by cascade. Foreign keys are on (Database.php).
+      $this->db->delete('compose_stacks', 'project_name = ?', [$projectName]);
+      $this->db->commit();
+    } catch (Exception $e) {
+      $this->db->rollback();
+      return ['success' => false, 'code' => 'error', 'error' => 'Could not remove the stack: ' . $e->getMessage()];
+    }
+
+    $result['success'] = true;
+    $result['files_removed'] = [];
+    $result['directory_removed'] = false;
+    $result['files_note'] = $filesNote;
+
+    if ($deleteFiles && $ownDir !== null) {
+      $removed = self::deleteStackFiles($ownDir, $row);
+      $result['files_removed'] = $removed['files'];
+      $result['directory_removed'] = $removed['directory_removed'];
+      if (!$removed['directory_removed']) {
+        $result['files_note'] = 'The directory still holds files the plugin did not create, so it was left in place.';
+      }
+    }
+
+    return $result;
+  }
+
+  /**
+   * Was any listed container created from $dir? True when its working_dir
+   * label, or any path in its config_files label, is $dir or inside it. A
+   * relative config file is joined to the working_dir first.
+   *
+   * @param array $containers Container list as DockerClient gives it (with labels)
+   * @param string $dir
+   * @return bool
+   */
+  public static function containersRunFrom(array $containers, $dir)
+  {
+    foreach ($containers as $container) {
+      $labels = $container['labels'] ?? [];
+      $workingDir = $labels['com.docker.compose.project.working_dir'] ?? null;
+      if (is_string($workingDir) && pathIsWithin($workingDir, $dir)) {
+        return true;
+      }
+      foreach (explode(',', (string) ($labels['com.docker.compose.project.config_files'] ?? '')) as $file) {
+        $file = trim($file);
+        $path = $file === '' ? null : resolveAgainst($file, is_string($workingDir) ? $workingDir : null);
+        if ($path !== null && pathIsWithin($path, $dir)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The directory a stack's own copy lives in, when it is safe to delete from.
+   *
+   * It must be a direct child of $stacksDir (so not $stacksDir itself, and not
+   * "..", which normalizePath collapses before the test), not a symlink, and
+   * still inside $stacksDir once realpath has resolved it. No other stack may
+   * keep a path inside it. Anything else is not the plugin's to delete: a
+   * compose.manager project, a user's appdata.
+   *
+   * @param string|null $workingDir The stack's working_dir
+   * @param string $stacksDir
+   * @param array $otherRows compose_stacks rows that stay
+   * @return array [dir|null, note|null]; a null dir comes with a reason, except
+   *               when there is simply nothing on disk
+   */
+  public static function ownStackDir($workingDir, $stacksDir, array $otherRows)
+  {
+    if (!is_string($workingDir) || $workingDir === '') {
+      return [null, 'The stack has no working directory, so no files were deleted.'];
+    }
+
+    $dir = normalizePath($workingDir);
+    $base = normalizePath($stacksDir);
+    $notOwn = 'The files are not in the plugin\'s own stack directory, so they were left in place.';
+
+    if ($dir === null || $base === null || $base === '/' || !pathIsWithin($dir, $base) || dirname($dir) !== $base) {
+      return [null, $notOwn];
+    }
+    if (is_link($dir)) {
+      return [null, $notOwn];
+    }
+    if (!is_dir($dir)) {
+      return [null, null];
+    }
+
+    $realDir = realpath($dir);
+    $realBase = realpath($base);
+    if ($realDir === false || $realBase === false || !pathIsWithin($realDir, $realBase) || dirname($realDir) !== $realBase) {
+      return [null, $notOwn];
+    }
+
+    foreach ($otherRows as $other) {
+      foreach (['working_dir', 'compose_file', 'env_file'] as $column) {
+        $path = isset($other[$column]) && is_string($other[$column]) ? normalizePath($other[$column]) : null;
+        if ($path !== null && ($path === $dir || pathIsWithin($path, $dir))) {
+          return [null, 'Another stack uses files in this directory, so they were left in place.'];
+        }
+      }
+    }
+
+    return [$dir, null];
+  }
+
+  /**
+   * Delete the files the plugin keeps for a stack inside its own directory,
+   * then the directory itself if that leaves it empty. Never recursive: a file
+   * the plugin did not write (a bind-mounted data folder next to the compose
+   * file, say) stops the directory from going.
+   *
+   * @param string $dir A directory ownStackDir approved
+   * @param array $row The stack's row
+   * @return array files (names), directory_removed (bool)
+   */
+  private static function deleteStackFiles($dir, array $row)
+  {
+    // Only names the plugin writes. The row's paths come from container
+    // labels too, so a name outside the allowlist is left on disk, and the
+    // directory with it.
+    $names = array_merge(self::COMPOSE_FILENAMES, ['.env']);
+    foreach (['compose_file' => self::COMPOSE_FILENAMES, 'env_file' => null] as $column => $allowed) {
+      if (!empty($row[$column]) && is_string($row[$column])) {
+        $path = normalizePath($row[$column]);
+        if ($path === null || dirname($path) !== $dir) {
+          continue;
+        }
+        $name = basename($path);
+        $ok = $allowed !== null
+          ? in_array($name, $allowed, true)
+          : ($name === '.env' || preg_match('/^[A-Za-z0-9._-]+\.env$/', $name) === 1);
+        if ($ok) {
+          $names[] = $name;
+        }
+      }
+    }
+
+    $removed = [];
+
+    // Version snapshots (snapshotVersion) live in .versions/ as
+    // <timestamp>-<compose|env>.<yml|env>. Take exactly those, nothing else.
+    $versions = $dir . '/.versions';
+    if (is_dir($versions) && !is_link($versions)) {
+      foreach ((array) @scandir($versions) as $entry) {
+        if (preg_match('/^\d+-(compose\.yml|env\.env)$/', $entry) && @unlink($versions . '/' . $entry)) {
+          $removed[] = '.versions/' . $entry;
+        }
+      }
+      @rmdir($versions);
+    }
+
+    foreach (array_unique($names) as $name) {
+      $file = $dir . '/' . $name;
+      if ((is_file($file) || is_link($file)) && @unlink($file)) {
+        $removed[] = $name;
+      }
+    }
+
+    return ['files' => $removed, 'directory_removed' => @rmdir($dir)];
+  }
+
+  /**
    * Create a new compose stack with initial files and folder
    */
   public function createStack($projectName, $composeContent = '', $envContent = '')
