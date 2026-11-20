@@ -295,7 +295,7 @@ function toggleSub(idx: number) {
  * Put the flyout beside the menu, level with its parent row. It prefers the
  * left side because every kebab sits at the right edge of its row, and flips
  * right only when the left has no room. Vertically it shifts up to stay in the
- * viewport, then scrolls if it is taller than the viewport.
+ * visible band, then scrolls if it is taller than the band.
  */
 function placeSub() {
   const parent = subParentRef.value;
@@ -317,17 +317,19 @@ function placeSub() {
     ? Math.max(leftSide, EDGE_GAP)
     : menuRect.right + SUB_GAP;
 
-  const room = window.innerHeight - 2 * EDGE_GAP;
+  // The visible band, not the frame: the frame is as tall as the whole app.
+  const { top: viewTop, bottom: viewBottom } = visibleBand();
+  const room = viewBottom - viewTop - 2 * EDGE_GAP;
   const style: CSSProperties = { left: `${left - origin.left}px` };
   if (height > room) {
-    style.top = `${EDGE_GAP - origin.top}px`;
+    style.top = `${viewTop + EDGE_GAP - origin.top}px`;
     style.maxHeight = `${room}px`;
     style.overflowY = 'auto';
   } else {
     // Align the first child with the parent row, net of the flyout's padding.
     const padTop = parseFloat(getComputedStyle(sub).paddingTop) || 0;
-    const top = Math.min(rowRect.top - padTop, window.innerHeight - EDGE_GAP - height);
-    style.top = `${Math.max(top, EDGE_GAP) - origin.top}px`;
+    const top = Math.min(rowRect.top - padTop, viewBottom - EDGE_GAP - height);
+    style.top = `${Math.max(top, viewTop + EDGE_GAP) - origin.top}px`;
   }
   subStyle.value = style;
 }
