@@ -15,6 +15,17 @@ export interface StackActionStatus {
   error?: string;
 }
 
+/** The action's name for a failure line. One entry per kind, so a new kind fails type-check here. */
+const STACK_ACTION_LABELS: Record<StackActionStatus['kind'], string> = {
+  stop: 'Stop All',
+  down: 'Stack Down',
+  remove: 'Remove Stack',
+};
+
+export function stackActionLabel(kind: StackActionStatus['kind']): string {
+  return STACK_ACTION_LABELS[kind];
+}
+
 /** What a stack's row or header says about a stop or down. */
 export function stackActionText(status: StackActionStatus): string {
   if (status.error) return status.error;
