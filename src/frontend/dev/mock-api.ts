@@ -1077,6 +1077,22 @@ const mockComposeStacks = [
     created_at: Date.now() / 1000,
     updated_at: Date.now() / 1000,
   },
+  // A stack with no running container, as an import leaves it. Remove Stack
+  // works on this one; db-stack has containers and is refused (409).
+  {
+    project_name: 'nginx_test',
+    working_dir: '/boot/config/plugins/compose.manager/projects/Nginx.Test',
+    compose_file: '/boot/config/plugins/compose.manager/projects/Nginx.Test/docker-compose.yml',
+    env_file: null,
+    autostart: false,
+    autostart_force_recreate: false,
+    description: 'Nginx.Test',
+    imported_from: 'compose_plugin',
+    services_running: 0,
+    services_total: 0,
+    created_at: Date.now() / 1000,
+    updated_at: Date.now() / 1000,
+  },
 ];
 
 function handleCompose(req: any, res: any, params: Record<string, string>) {
@@ -1149,6 +1165,16 @@ function handleCompose(req: any, res: any, params: Record<string, string>) {
 
     if (action === 'import') {
       return json(res, { success: true, stacks_imported: 0, stacks_skipped: 0, errors: [] });
+    }
+
+    if (action === 'remove') {
+      const index = mockComposeStacks.findIndex((st) => st.project_name === project);
+      if (index < 0) return json(res, { error: true, message: 'Stack not found' }, 404);
+      if (project === 'db-stack') {
+        return json(res, { error: true, message: 'Containers of "db-stack" still exist. Run Stack Down first, or the stack comes back on the next refresh.' }, 409);
+      }
+      mockComposeStacks.splice(index, 1);
+      return json(res, { success: true, schedules_removed: 0, folder: 'none', files_removed: [], directory_removed: false, files_note: null });
     }
   }
 

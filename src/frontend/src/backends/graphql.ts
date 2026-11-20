@@ -41,6 +41,7 @@ import type {
 import type {
   ComposeFileVersion,
   ComposeFileVersionDetail,
+  ComposeRemoveResult,
   ComposeStack,
   ComposeStatus,
   ComposeValidationError,
@@ -1016,6 +1017,14 @@ const IMPORT_COMPOSE_STACKS = `
   }
 `;
 
+const REMOVE_COMPOSE_STACK = `
+  mutation RemoveDockerFoldersComposeStack($input: DockerFoldersComposeRemoveInput!) {
+    removeDockerFoldersComposeStack(input: $input) {
+      success schedulesRemoved folder filesRemoved directoryRemoved filesNote
+    }
+  }
+`;
+
 const CREATE_COMPOSE_STACK = `
   mutation CreateDockerFoldersComposeStack($input: DockerFoldersComposeCreateInput!) {
     createDockerFoldersComposeStack(input: $input) { success error projectName }
@@ -1563,6 +1572,28 @@ export const graphqlBackend: Backend = {
         (data) => ({
           output: data.dockerFoldersComposeLogs.output ?? undefined,
           error: data.dockerFoldersComposeLogs.error ?? undefined,
+        }),
+      ),
+
+    remove: async (project, body) =>
+      mapResult(
+        await gql<{
+          removeDockerFoldersComposeStack: {
+            success: boolean;
+            schedulesRemoved: number;
+            folder: string;
+            filesRemoved: string[];
+            directoryRemoved: boolean;
+            filesNote: string | null;
+          };
+        }>(REMOVE_COMPOSE_STACK, { input: { project, deleteFiles: body.delete_files } }),
+        (data) => ({
+          success: data.removeDockerFoldersComposeStack.success,
+          schedules_removed: data.removeDockerFoldersComposeStack.schedulesRemoved,
+          folder: data.removeDockerFoldersComposeStack.folder as ComposeRemoveResult['folder'],
+          files_removed: data.removeDockerFoldersComposeStack.filesRemoved,
+          directory_removed: data.removeDockerFoldersComposeStack.directoryRemoved,
+          files_note: data.removeDockerFoldersComposeStack.filesNote,
         }),
       ),
 

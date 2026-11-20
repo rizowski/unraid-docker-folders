@@ -36,6 +36,18 @@ export interface ComposeFileVersionDetail extends ComposeFileVersion {
   content: string;
 }
 
+/** What `compose.php?action=remove` answers with once the stack is gone. */
+export interface ComposeRemoveResult {
+  success: boolean;
+  schedules_removed: number;
+  /** What became of the stack folder: deleted, kept as a plain folder, or none. */
+  folder: 'deleted' | 'kept' | 'none';
+  files_removed: string[];
+  directory_removed: boolean;
+  /** Why files were left in place, when they were. */
+  files_note: string | null;
+}
+
 export interface ComposeImportResult {
   success: boolean;
   stacks_imported: number;

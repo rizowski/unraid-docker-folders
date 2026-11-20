@@ -4,20 +4,22 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeFileVersion, ComposeFileVersionDetail, ComposeValidationError } from '@/types/compose';
+import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeRemoveResult, ComposeFileVersion, ComposeFileVersionDetail, ComposeValidationError } from '@/types/compose';
 import { useBackend } from '@/backends';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 
 export interface StackActionStatus {
-  kind: 'stop' | 'down';
+  kind: 'stop' | 'down' | 'remove';
   /** Set once it fails. Until then the action is still running. */
   error?: string;
 }
 
 /** What a stack's row or header says about a stop or down. */
 export function stackActionText(status: StackActionStatus): string {
-  return status.error ?? (status.kind === 'down' ? 'Removing…' : 'Stopping…');
+  if (status.error) return status.error;
+  if (status.kind === 'remove') return 'Deleting stack…';
+  return status.kind === 'down' ? 'Removing…' : 'Stopping…';
 }
 
 export const useComposeStore = defineStore('compose', () => {
@@ -241,6 +243,34 @@ export const useComposeStore = defineStore('compose', () => {
       if (result.success) stackActionStatus.value.delete(project);
       else stackActionStatus.value.set(project, { kind, error: result.error || 'Failed' });
     }
+  }
+
+  /**
+   * Remove a stack from the plugin. Containers are never touched, and the
+   * backend refuses while they exist. Progress and failure show on the stack's
+   * row, the way a stop or down does.
+   */
+  async function removeStack(project: string, deleteFiles: boolean): Promise<ComposeRemoveResult | null> {
+    if (isStackBusy(project)) return null;
+    stackActionStatus.value.set(project, { kind: 'remove' });
+    let result: ComposeRemoveResult | null = null;
+    let failure = 'Failed';
+    try {
+      const response = await useBackend().compose.remove(project, { delete_files: deleteFiles });
+      if (response.ok) {
+        result = response.data as ComposeRemoveResult;
+        await Promise.all([fetchStacks(true), useDockerStore().fetchContainers(), useFolderStore().fetchFolders()]);
+      } else {
+        failure = response.data?.message || response.error || failure;
+      }
+    } catch (e) {
+      failure = e instanceof Error ? e.message : failure;
+      console.error('Error removing stack:', e);
+    } finally {
+      if (result) stackActionStatus.value.delete(project);
+      else stackActionStatus.value.set(project, { kind: 'remove', error: failure });
+    }
+    return result;
   }
 
   async function stackRestart(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
@@ -519,6 +549,7 @@ export const useComposeStore = defineStore('compose', () => {
     createStack,
     stackUp,
     stackDown,
+    removeStack,
     stackStop,
     stackActionStatus,
     isStackBusy,

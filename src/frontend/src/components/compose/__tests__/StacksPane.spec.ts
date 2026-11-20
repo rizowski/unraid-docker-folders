@@ -125,4 +125,28 @@ describe('StacksPane', () => {
     await flushPromises();
     expect(rowFor(wrapper, 'arr').text()).toContain('compose down failed');
   });
+
+  it('offers Remove Stack for a stored stack, and emits it for App to confirm', async () => {
+    const wrapper = mountPane();
+    await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for paperless')!.trigger('click');
+    const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Remove Stack')!;
+    expect(item).toBeTruthy();
+    await item.trigger('click');
+    expect(wrapper.emitted('compose-remove')).toEqual([['paperless']]);
+  });
+
+  it('offers no Remove Stack for a project seen only on container labels', async () => {
+    const wrapper = mountPane();
+    await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for monitoring')!.trigger('click');
+    const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    expect(labels).not.toContain('Remove Stack');
+  });
+
+  it('disables Remove Stack while another action runs on the stack', async () => {
+    useComposeStore().stackActionStatus.set('paperless', { kind: 'down' });
+    const wrapper = mountPane();
+    await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for paperless')!.trigger('click');
+    const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Remove Stack')!;
+    expect(item.attributes('disabled')).toBeDefined();
+  });
 });

@@ -57,7 +57,7 @@ import { useFolderStore } from '@/stores/folders';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import { byLabel } from '@/utils/menu';
-import { STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
+import { CLOSE_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
 import { stackActionItems } from '@/utils/stackMenu';
 import { naturalNameCompare } from '@/utils/sortMode';
 
@@ -66,6 +66,8 @@ interface StackRow {
   running: number;
   total: number;
   location: string;
+  /** Whether Docker Folders keeps a record of it. A project seen only on container labels has none to remove. */
+  stored: boolean;
 }
 
 const emit = defineEmits<{
@@ -74,6 +76,7 @@ const emit = defineEmits<{
   'compose-recompose': [project: string];
   'compose-down': [project: string];
   'compose-pull': [project: string];
+  'compose-remove': [project: string];
   schedules: [targetType: string, targetId: string];
 }>();
 
@@ -92,7 +95,8 @@ function isSelected(project: string): boolean {
 // come from docker state, not `services_running`, which goes stale after an
 // up or down (see useFolderRunningState).
 const rows = computed<StackRow[]>(() => {
-  const projects = new Set<string>(composeStore.stacks.map((s) => s.project_name));
+  const stored = new Set<string>(composeStore.stacks.map((s) => s.project_name));
+  const projects = new Set<string>(stored);
   for (const project of dockerStore.containersByProject.keys()) projects.add(project);
 
   return [...projects].sort(naturalNameCompare).map((project) => {
@@ -102,6 +106,7 @@ const rows = computed<StackRow[]>(() => {
       running: members.filter((c) => c.state === 'running').length,
       total: members.length,
       location: locationText(members),
+      stored: stored.has(project),
     };
   });
 });
@@ -144,6 +149,17 @@ function menuItems(row: StackRow): KebabMenuItem[] {
     ...byLabel(items),
     { divider: true },
     { label: 'Stack Down', icon: TRASH_ICON, action: 'compose-down', show: row.total > 0, disabled, title: reason, class: 'hover:text-error' },
+    // Needs no Compose binary and no management: it only edits the plugin's own
+    // records. It does wait for a stop, down or earlier removal still running.
+    {
+      label: 'Remove Stack',
+      icon: CLOSE_ICON,
+      action: 'compose-remove',
+      show: row.stored,
+      disabled: composeStore.isStackBusy(row.project),
+      title: composeStore.isStackBusy(row.project) ? reason : 'Delete the stack\'s record from Docker Folders',
+      class: 'hover:text-error',
+    },
   ];
 }
 
@@ -155,5 +171,6 @@ function handleSelect(project: string, action: string) {
   else if (action === 'schedules') emit('schedules', 'stack', project);
   else if (action === 'compose-stop') composeStore.runStackAction(project, 'stop');
   else if (action === 'compose-down') emit('compose-down', project);
+  else if (action === 'compose-remove') emit('compose-remove', project);
 }
 </script>
