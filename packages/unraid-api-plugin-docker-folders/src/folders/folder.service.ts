@@ -1,6 +1,8 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, OnModuleInit, Optional } from '@nestjs/common';
 import type { DatabaseSync } from 'node:sqlite';
 
+import { COMPOSE_PATHS_TOKEN, DEFAULT_COMPOSE_PATHS, type ComposePathsConfig } from '../compose/compose-config.js';
+import { repairImportedStacks } from '../compose/compose-repair.js';
 import { DatabaseService, type Row } from '../db/database.service.js';
 import { EventBusService } from '../events/event-bus.service.js';
 import { stripLeadingSlash } from '../updates/docker-refs.js';
@@ -85,7 +87,10 @@ export class FolderService implements OnModuleInit {
 
     constructor(
         private readonly db: DatabaseService,
-        private readonly events: EventBusService
+        private readonly events: EventBusService,
+        @Optional()
+        @Inject(COMPOSE_PATHS_TOKEN)
+        private readonly paths: ComposePathsConfig = DEFAULT_COMPOSE_PATHS
     ) {}
 
     onModuleInit() {
@@ -502,7 +507,11 @@ export class FolderService implements OnModuleInit {
             } catch (error) {
                 this.logger.warn(`Could not prime the unfoldered order: ${String(error)}`);
             }
-            return synced || primed;
+            // After the Compose sync, so the row the labels just made is there
+            // to merge into. Runs with no compose container too: a stack that
+            // is not running is repaired by rename.
+            const repaired = repairImportedStacks(db, this.paths);
+            return synced || primed || repaired;
         });
 
         if (changed) this.events.publish('folder', 'compose_sync');
