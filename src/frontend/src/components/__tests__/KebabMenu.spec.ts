@@ -366,6 +366,46 @@ describe('KebabMenu – fitting the visible part of a framed page', () => {
 
     expect(dropdown.classes()).toContain('top-full');
   });
+
+  it('falls back to the frame viewport when the parent is cross-origin', async () => {
+    stubFramed({ frameTop: 0, buttonTop: 800, menuHeight: 200 });
+    // A cross-origin window throws on any property read except a few.
+    stubWindow('parent', {
+      get innerHeight(): number {
+        throw new DOMException('Blocked a frame', 'SecurityError');
+      },
+    });
+    const dropdown = await openFramed();
+
+    // 3000px frame, button at 800: room below, so the menu stays below.
+    expect(dropdown.classes()).toContain('top-full');
+  });
+
+  it('falls back to the frame viewport when the frame element is not found', async () => {
+    stubFramed({ frameTop: 0, buttonTop: 800, menuHeight: 200 });
+    stubWindow('frameElement', null);
+    const dropdown = await openFramed();
+
+    expect(dropdown.classes()).toContain('top-full');
+  });
+
+  it('keeps a submenu flyout inside the visible window, not the whole frame', async () => {
+    stubFramed({ frameTop: 0, buttonTop: 800, menuHeight: 200 });
+    const items: KebabMenuItem[] = [
+      { label: 'Sort', icon: 'M0 0', children: [{ label: 'Name', icon: 'M0 0', action: 'sort:name' }] },
+    ];
+    const wrapper = mountMenu(items);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    await wrapper.find('button[aria-haspopup="menu"]').trigger('click');
+    await flushPromises();
+    await nextTick();
+
+    // Band bottom is 900. The flyout is 200 tall, so its top is at most
+    // 900 - 8 - 200 = 692 on screen. Every rect has top 800, so the wrapper
+    // origin is 800 and the style is relative to it.
+    expect(wrapper.find('[role="menu"]').attributes('style')).toContain('top: -108px');
+  });
 });
 
 describe('KebabMenu open-change', () => {

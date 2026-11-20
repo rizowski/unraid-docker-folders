@@ -10,10 +10,10 @@
          §11), so the button carries no box of its own and its padding lives on
          the inner span. -->
     <template v-for="(row, index) in rows" :key="row.project">
-    <!-- Stacks that run from the Compose Manager folder come last, under the
-         pane header's own label markup and a border line. -->
+    <!-- Stacks that run from the Compose Manager folder come last, under their
+         own header. -->
     <div
-      v-if="index === firstManagerIndex"
+      v-if="index === managerStart"
       class="flex items-center justify-between px-2 pt-1.5 pb-1 mt-1 border-t border-border"
     >
       <h3 class="text-[11px] font-bold uppercase text-text-secondary">Compose Manager</h3>
@@ -105,31 +105,37 @@ function isSelected(project: string): boolean {
 // Every known stack, plus any project seen only on container labels. Counts
 // come from docker state, not `services_running`, which goes stale after an
 // up or down (see useFolderRunningState).
-const rows = computed<StackRow[]>(() => {
-  const stored = new Set<string>(composeStore.stacks.map((s) => s.project_name));
-  const fromManager = new Set<string>(
-    composeStore.stacks.filter((s) => s.source === 'compose_manager').map((s) => s.project_name),
-  );
+const grouped = computed(() => {
+  const stored = new Set<string>();
+  const fromManager = new Set<string>();
+  for (const s of composeStore.stacks) {
+    stored.add(s.project_name);
+    if (s.source === 'compose_manager') fromManager.add(s.project_name);
+  }
   const projects = new Set<string>(stored);
   for (const project of dockerStore.containersByProject.keys()) projects.add(project);
 
-  const all = [...projects].sort(naturalNameCompare).map((project) => {
+  // Two groups, each in name order, because the projects are sorted first.
+  const own: StackRow[] = [];
+  const manager: StackRow[] = [];
+  for (const project of [...projects].sort(naturalNameCompare)) {
     const members = dockerStore.containersInStack(project);
-    return {
+    const source = fromManager.has(project) ? 'compose_manager' : null;
+    (source ? manager : own).push({
       project,
       running: members.filter((c) => c.state === 'running').length,
       total: members.length,
       location: locationText(members),
       stored: stored.has(project),
-      source: fromManager.has(project) ? ('compose_manager' as const) : null,
-    };
-  });
-  // Two groups, each in name order. The sort is stable.
-  return [...all.filter((r) => r.source === null), ...all.filter((r) => r.source !== null)];
+      source,
+    });
+  }
+  return { rows: [...own, ...manager], managerStart: manager.length > 0 ? own.length : -1 };
 });
 
-const managerCount = computed(() => rows.value.filter((r) => r.source === 'compose_manager').length);
-const firstManagerIndex = computed(() => rows.value.findIndex((r) => r.source === 'compose_manager'));
+const rows = computed(() => grouped.value.rows);
+const managerStart = computed(() => grouped.value.managerStart);
+const managerCount = computed(() => (managerStart.value < 0 ? 0 : rows.value.length - managerStart.value));
 
 function locationText(members: Container[]): string {
   if (members.length === 0) return 'Not created';
