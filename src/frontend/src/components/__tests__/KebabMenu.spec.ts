@@ -301,6 +301,73 @@ describe('KebabMenu – fitting the viewport', () => {
   });
 });
 
+describe('KebabMenu – fitting the visible part of a framed page', () => {
+  // A 3000px frame whose top sits at frameTop in a parent window 900px tall.
+  // The button is at buttonTop inside the frame. Rects: the frame's own, then
+  // every other element's (the button).
+  const saved = new Map<string, PropertyDescriptor | undefined>();
+  function stubWindow(key: string, value: unknown) {
+    if (!saved.has(key)) saved.set(key, Object.getOwnPropertyDescriptor(window, key));
+    Object.defineProperty(window, key, { value, configurable: true });
+  }
+
+  function stubFramed(opts: { frameTop: number; buttonTop: number; menuHeight: number }) {
+    const frame = document.createElement('iframe');
+    stubWindow('innerHeight', 3000);
+    stubWindow('parent', { innerHeight: 900 });
+    stubWindow('frameElement', frame);
+    const rect = (top: number, height: number) =>
+      ({ top, bottom: top + height, left: 0, right: 0, width: 0, height, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return this === frame ? rect(opts.frameTop, 3000) : rect(opts.buttonTop, 30);
+    });
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { value: opts.menuHeight, configurable: true });
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollHeight;
+    for (const [key, desc] of saved) {
+      if (desc) Object.defineProperty(window, key, desc);
+      else delete (window as unknown as Record<string, unknown>)[key];
+    }
+    saved.clear();
+  });
+
+  async function openFramed() {
+    const wrapper = mountMenu(linkItems);
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    await nextTick();
+    return wrapper.findAll('div').find((d) => d.classes().includes('absolute'))!;
+  }
+
+  it('flips above when the frame is tall but the menu would run off the browser window', async () => {
+    // Button at 800px on screen (frame top 0 plus 800, inside a 900px window):
+    // 62px visible below it, the frame itself has 2162px.
+    stubFramed({ frameTop: 0, buttonTop: 800, menuHeight: 200 });
+    const dropdown = await openFramed();
+
+    expect(dropdown.classes()).toContain('bottom-full');
+  });
+
+  it('counts the scrolled-off top of the frame when working out room above', async () => {
+    // Frame scrolled up by 1000px; button at frame y 1750 is at screen y 750.
+    // 150px below on screen, 742px above. The menu needs 300.
+    stubFramed({ frameTop: -1000, buttonTop: 1750, menuHeight: 300 });
+    const dropdown = await openFramed();
+
+    expect(dropdown.classes()).toContain('bottom-full');
+  });
+
+  it('stays below when the visible window has room', async () => {
+    stubFramed({ frameTop: 0, buttonTop: 100, menuHeight: 200 });
+    const dropdown = await openFramed();
+
+    expect(dropdown.classes()).toContain('top-full');
+  });
+});
+
 describe('KebabMenu open-change', () => {
   it('reports open with the menu bottom, then close with 0', async () => {
     const wrapper = mountMenu(buttonItems);
