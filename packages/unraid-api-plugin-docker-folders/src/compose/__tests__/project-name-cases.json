@@ -1,0 +1,42 @@
+{
+  "_note": "One table for ComposeProjectName.php and compose-project-name.ts. Change both together.",
+  "plus": [
+    { "raw": "Immich", "expect": "immich" },
+    { "raw": "Nginx.Test", "expect": "nginx_test" },
+    { "raw": "  My  App  ", "expect": "my_app" },
+    { "raw": "My-App", "expect": "my-app" },
+    { "raw": "a--b__c", "expect": "a-b_c" },
+    { "raw": "_-web-_", "expect": "web" },
+    { "raw": "Café", "expect": "caf" },
+    { "raw": "...", "expect": null },
+    { "raw": "", "expect": null }
+  ],
+  "dcflachs": [
+    { "raw": "Immich", "expect": "immich" },
+    { "raw": "Nginx.Test", "expect": "nginx_test" },
+    { "raw": "My-App v2", "expect": "my_app_v2" },
+    { "raw": "web@home", "expect": "web@home" }
+  ],
+  "valid": [
+    { "name": "immich", "expect": true },
+    { "name": "nginx_test", "expect": true },
+    { "name": "9lives", "expect": true },
+    { "name": "Immich", "expect": false },
+    { "name": "nginx.test", "expect": false },
+    { "name": "_web", "expect": false },
+    { "name": "-web", "expect": false },
+    { "name": "", "expect": false }
+  ],
+  "folder": [
+    { "why": "no marker, plain name", "dir": "Immich", "display": null, "pinned": null, "plus": false, "legacy": false, "expect": "immich" },
+    { "why": "dcflachs takes the name file", "dir": "stack1", "display": "My App", "pinned": null, "plus": false, "legacy": false, "expect": "my_app" },
+    { "why": "dcflachs keeps a character Compose refuses", "dir": "web@home", "display": null, "pinned": null, "plus": false, "legacy": false, "expect": null },
+    { "why": "dot in the folder name", "dir": "Nginx.Test", "display": null, "pinned": null, "plus": false, "legacy": false, "expect": "nginx_test" },
+    { "why": "Plus uses the folder, not the name file", "dir": "My-App", "display": "Other Name", "pinned": null, "plus": true, "legacy": false, "expect": "my-app" },
+    { "why": "legacy marker keeps the dcflachs name", "dir": "My-App", "display": null, "pinned": null, "plus": true, "legacy": true, "expect": "my_app" },
+    { "why": "legacy marker, name invalid, falls to the folder rule", "dir": "web@home", "display": null, "pinned": null, "plus": true, "legacy": true, "expect": "web_home" },
+    { "why": "a valid pin wins", "dir": "Immich", "display": "Photos", "pinned": "photos", "plus": true, "legacy": true, "expect": "photos" },
+    { "why": "an invalid pin is an error", "dir": "Immich", "display": null, "pinned": "Photos", "plus": true, "legacy": false, "expect": null },
+    { "why": "Plus folder with nothing usable", "dir": "...", "display": null, "pinned": null, "plus": true, "legacy": false, "expect": null }
+  ]
+}

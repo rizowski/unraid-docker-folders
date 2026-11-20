@@ -37,6 +37,10 @@
       <file>RecordImagePulledTest.php</file>
       <file>UnraidUpdateStatusTest.php</file>
     </testsuite>
+    <testsuite name="ComposeStacks">
+      <file>ComposeProjectNameTest.php</file>
+      <file>ComposeImportRepairTest.php</file>
+    </testsuite>
     <testsuite name="PathSafety">
       <file>PathSafetyTest.php</file>
     </testsuite>

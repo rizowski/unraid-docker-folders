@@ -9,6 +9,7 @@
  */
 
 require_once __DIR__ . '/Database.php';
+require_once __DIR__ . '/ComposeProjectName.php';
 
 class ComposeManager
 {
@@ -645,6 +646,20 @@ class ComposeManager
     $stack['service_names'] = $this->parseComposeServiceNames($stack);
 
     return $stack;
+  }
+
+  /**
+   * True when a container list should not be trusted: it is empty because the
+   * Docker request failed. listContainers() answers [] both for "no containers"
+   * and for a failure, and only the failure sets lastError.
+   *
+   * @param array $containers
+   * @param string $lastError DockerClient::getLastError()
+   * @return bool
+   */
+  public static function containerListFailed(array $containers, $lastError)
+  {
+    return empty($containers) && $lastError !== '';
   }
 
   /**
@@ -1782,15 +1797,39 @@ class ComposeManager
   }
 
   // ─── Migration from compose_plugin ─────────────────────────────────
-
   /**
-   * Import projects from dcflachs/compose_plugin
+   * Adopt the projects of dcflachs/compose_plugin or Compose Manager Plus.
    *
-   * Reads project data from the compose_plugin directory.
-   * Never modifies the source plugin's files.
+   * Nothing is copied. Each stack gets one compose_stacks row that points at
+   * its own folder under the Compose Manager projects directory, the same row
+   * the container-list sync creates from the labels of a running stack, so
+   * the two resolve to one row and one folder. Never modifies the source
+   * plugin's files.
+   *
+   * The row's project_name is the name the stack runs under, found in this
+   * order (see ComposeProjectName):
+   * 1. the project label of containers whose working_dir label is the stack's
+   *    folder,
+   * 2. Compose Manager's own rule (project_name file, else the sanitizer).
+   * A stack whose name Compose would refuse, whose containers disagree on the
+   * name, or whose name is already a stack at another path is skipped, with an
+   * error.
+   *
+   * Not handled: Compose Manager's override file, its env path file, and a
+   * stack with several compose files. Only the first compose file found in
+   * the folder is used, as before. A stack whose "indirect" target is missing
+   * is skipped.
+   *
+   * @param array $containers Container list from DockerClient, with labels
+   * @param string|null $projectsDir Test hook; every real caller passes nothing
+   * @param string|null $pluginDir Test hook; every real caller passes nothing
+   * @param string|null $stacksDir Test hook; every real caller passes nothing
    */
-  public function importFromComposePlugin()
+  public function importFromComposePlugin(array $containers, $projectsDir = null, $pluginDir = null, $stacksDir = null)
   {
+    $projectsDir = $projectsDir ?? self::COMPOSE_PLUGIN_PROJECTS;
+    $pluginDir = $pluginDir ?? self::COMPOSE_PLUGIN_DIR;
+
     $result = [
       'success' => true,
       'stacks_imported' => 0,
@@ -1798,124 +1837,104 @@ class ComposeManager
       'errors' => [],
     ];
 
-    if (!is_dir(self::COMPOSE_PLUGIN_PROJECTS)) {
+    if (!is_dir($projectsDir)) {
       $result['success'] = false;
       $result['errors'][] = 'Compose plugin projects directory not found';
       return $result;
     }
 
-    $dirs = @scandir(self::COMPOSE_PLUGIN_PROJECTS);
+    $dirs = @scandir($projectsDir);
     if ($dirs === false) {
       $result['success'] = false;
       $result['errors'][] = 'Failed to scan compose plugin projects directory';
       return $result;
     }
 
-    // Two phases. The file copies run first, outside any transaction, and
-    // the rows go in afterwards in one short transaction. Copying inside the
-    // transaction held SQLite's write lock for the whole copy, and a rollback
-    // left the copied files behind with no row pointing at them.
+    // A copy an earlier version of this import made is merged into its
+    // running counterpart, or renamed, first. Whatever stays is left alone,
+    // and the loop below must not add a second row for it.
+    $this->repairImportedStacks($projectsDir, $pluginDir, $stacksDir);
+    $copyDirs = [];
+    foreach ($this->importedCopies($stacksDir) as $copy) {
+      $copyDirs[$copy['dir']] = true;
+    }
+
+    $legacyOrigin = is_file(dirname($projectsDir) . '/legacy-origin');
+    $plusInstalled = is_file($pluginDir . '/include/ProjectIdentity.php');
+
     $plans = [];
+    $planned = [];
     foreach ($dirs as $dir) {
       if ($dir === '.' || $dir === '..') continue;
 
-      $projectPath = self::COMPOSE_PLUGIN_PROJECTS . '/' . $dir;
+      $projectPath = $projectsDir . '/' . $dir;
       if (!is_dir($projectPath)) continue;
 
-      // compose.php and compose-stream.php refuse any other name, so a stack
-      // imported under one could never be started, edited, or deleted. This
-      // also keeps hidden directories such as ".git" out.
+      // Keeps hidden directories such as ".git" out, and any name that is not
+      // one path segment.
       if (safeComposeProjectParam($dir) === null) {
-        $result['errors'][] = $dir . ': unsupported project name, skipped';
+        $result['errors'][] = $dir . ': unsupported folder name, skipped';
         continue;
       }
 
-      $projectName = $dir;
-
-      // Check if already imported
-      $existing = $this->db->fetchOne(
-        'SELECT project_name FROM compose_stacks WHERE project_name = ?',
-        [$projectName]
-      );
-      if ($existing) {
-        $result['stacks_skipped']++;
+      if (isset($copyDirs[$dir])) {
+        $result['errors'][] = $dir . ': an earlier import copied this stack and it could not be matched to the original, so it was left as it is';
         continue;
       }
 
-      // Read metadata files
-      $name = $this->readMetadataFile($projectPath . '/name');
+      $displayName = $this->readMetadataFile($projectPath . '/name');
       $description = $this->readMetadataFile($projectPath . '/description');
       $autostart = strtolower(trim($this->readMetadataFile($projectPath . '/autostart') ?? '')) === 'true';
-      $isIndirect = file_exists($projectPath . '/indirect');
 
-      // Determine source compose file path and working directory
-      $sourceDir = null;
-      $sourceComposeFile = null;
+      $sourceDir = $this->sourceDirOf($projectPath);
+      if ($sourceDir === null) {
+        $result['errors'][] = $dir . ': its folder is indirect and the target is missing, skipped';
+        continue;
+      }
 
-      if ($isIndirect) {
-        // Indirect: the file contains a path to the actual compose location
-        $indirectPath = $this->readMetadataFile($projectPath . '/indirect');
-        if ($indirectPath && is_dir($indirectPath)) {
-          $sourceDir = $indirectPath;
+      // (1) The name a running stack carries.
+      $fromLabels = ComposeProjectName::fromLabels($containers, [$projectPath, $sourceDir]);
+      if ($fromLabels['error'] !== null) {
+        $result['errors'][] = $dir . ': ' . $fromLabels['error'] . ', skipped';
+        continue;
+      }
+      $projectName = $fromLabels['name'];
+
+      // (2) Compose Manager's own rule.
+      if ($projectName === null) {
+        $rule = ComposeProjectName::fromFolder(
+          $dir,
+          $displayName,
+          $this->readMetadataFile($projectPath . '/' . ComposeProjectName::PIN_FILE),
+          $plusInstalled,
+          $legacyOrigin
+        );
+        if ($rule['name'] === null) {
+          $result['errors'][] = $dir . ': no project name Compose accepts (' . $rule['error'] . '), skipped';
+          continue;
         }
-      } else {
-        // Direct: compose file is in the project directory
-        $sourceDir = $projectPath;
+        $projectName = $rule['name'];
       }
 
-      // Find actual compose file in source
-      if ($sourceDir) {
-        $sourceComposeFile = $this->findComposeFile($sourceDir);
+      if (isset($planned[$projectName])) {
+        $result['errors'][] = $dir . ': project name "' . $projectName . '" is already taken by the stack in "' . $planned[$projectName] . '", skipped';
+        continue;
       }
 
-      // Copy files into our own plugin directory so stacks are self-contained
-      $destDir = COMPOSE_STACKS_DIR . '/' . $projectName;
-      $createdDir = false;
-      if (!is_dir($destDir)) {
-        $createdDir = @mkdir($destDir, 0755, true);
+      $existing = $this->db->fetchOne('SELECT working_dir FROM compose_stacks WHERE project_name = ?', [$projectName]);
+      if ($existing && normalizePath((string) $existing['working_dir']) !== normalizePath($sourceDir)) {
+        $result['errors'][] = $dir . ': project name "' . $projectName . '" is already a stack at another path, skipped';
+        continue;
       }
 
-      $composeFile = null;
-      $envFile = null;
-      $copied = [];
-
-      // A file is recorded as copied only when this run created it. One that
-      // was already there is overwritten, but a rollback must not delete it.
-      if ($sourceComposeFile && file_exists($sourceComposeFile)) {
-        $destFile = $destDir . '/' . basename($sourceComposeFile);
-        $existed = file_exists($destFile);
-        if (@copy($sourceComposeFile, $destFile)) {
-          $composeFile = $destFile;
-          if (!$existed) {
-            $copied[] = $destFile;
-          }
-        } else {
-          $result['errors'][] = $projectName . ': failed to copy compose file';
-        }
-      }
-
-      // Copy .env if it exists in source
-      if ($sourceDir && file_exists($sourceDir . '/.env')) {
-        $destEnv = $destDir . '/.env';
-        $existed = file_exists($destEnv);
-        if (@copy($sourceDir . '/.env', $destEnv)) {
-          $envFile = $destEnv;
-          if (!$existed) {
-            $copied[] = $destEnv;
-          }
-        }
-      }
-
+      $planned[$projectName] = $dir;
       $plans[] = [
         'project' => $projectName,
-        'name' => $name,
+        'display' => $displayName ?: $dir,
         'description' => $description,
         'autostart' => $autostart,
-        'working_dir' => $destDir,
-        'compose_file' => $composeFile,
-        'env_file' => $envFile,
-        'created_dir' => $createdDir,
-        'copied' => $copied,
+        'working_dir' => $sourceDir,
+        'compose_file' => $this->findComposeFile($sourceDir),
       ];
     }
 
@@ -1926,41 +1945,52 @@ class ComposeManager
     $this->db->beginTransaction();
 
     try {
-      foreach ($plans as $i => $plan) {
+      foreach ($plans as $plan) {
         $projectName = $plan['project'];
-        $name = $plan['name'];
         $now = time();
 
-        // Checked again inside the transaction. An import that overlapped this one
-        // (a double click) can have committed the same project since the
-        // copy phase. Its row points at the files this run copied over, so
-        // they must not be removed by the rollback below.
-        $taken = $this->db->fetchOne(
-          'SELECT project_name FROM compose_stacks WHERE project_name = ?',
-          [$projectName]
-        );
-        if ($taken) {
-          $plans[$i]['copied'] = [];
-          $plans[$i]['created_dir'] = false;
-          $result['stacks_skipped']++;
-          continue;
+        // Read inside the transaction: the container-list sync can have added
+        // the row since the plan was made. Adopt it instead of adding a second.
+        $row = $this->db->fetchOne('SELECT * FROM compose_stacks WHERE project_name = ?', [$projectName]);
+        if ($row) {
+          $updates = [];
+          if ($row['imported_from'] !== 'compose_plugin') {
+            $updates['imported_from'] = 'compose_plugin';
+          }
+          if (empty($row['description']) && ($plan['description'] ?: $plan['display'])) {
+            $updates['description'] = $plan['description'] ?: $plan['display'];
+          }
+          if (!$row['autostart'] && $plan['autostart']) {
+            $updates['autostart'] = 1;
+          }
+          if (empty($row['compose_file']) && $plan['compose_file']) {
+            $updates['compose_file'] = $plan['compose_file'];
+          }
+          if (empty($updates)) {
+            $result['stacks_skipped']++;
+          } else {
+            $updates['updated_at'] = $now;
+            $this->db->update('compose_stacks', $updates, 'project_name = ?', [$projectName]);
+            $result['stacks_imported']++;
+          }
+        } else {
+          $this->db->insert('compose_stacks', [
+            'project_name' => $projectName,
+            'working_dir' => $plan['working_dir'],
+            'compose_file' => $plan['compose_file'],
+            // As the label sync leaves it: the default .env of the folder.
+            'env_file' => null,
+            'autostart' => $plan['autostart'] ? 1 : 0,
+            'autostart_force_recreate' => 0,
+            'description' => $plan['description'] ?: $plan['display'],
+            'imported_from' => 'compose_plugin',
+            'created_at' => $now,
+            'updated_at' => $now,
+          ]);
+          $result['stacks_imported']++;
         }
 
-        // Insert compose_stacks row
-        $this->db->insert('compose_stacks', [
-          'project_name' => $projectName,
-          'working_dir' => $plan['working_dir'],
-          'compose_file' => $plan['compose_file'],
-          'env_file' => $plan['env_file'],
-          'autostart' => $plan['autostart'] ? 1 : 0,
-          'autostart_force_recreate' => 0,
-          'description' => $plan['description'] ?: ($name ?: null),
-          'imported_from' => 'compose_plugin',
-          'created_at' => $now,
-          'updated_at' => $now,
-        ]);
-
-        // Create a folder if one doesn't exist for this project
+        // One folder per project name. The sync matches it by compose_project.
         $existingFolder = $this->db->fetchOne(
           'SELECT id FROM folders WHERE compose_project = ?',
           [$projectName]
@@ -1969,7 +1999,7 @@ class ComposeManager
         if (!$existingFolder) {
           $maxPosition = $this->db->fetchValue('SELECT MAX(position) FROM folders') ?? -1;
           $this->db->insert('folders', [
-            'name' => $name ?: $projectName,
+            'name' => $plan['display'],
             'icon' => 'layer-group',
             'color' => null,
             'position' => $maxPosition + 1,
@@ -1979,8 +2009,6 @@ class ComposeManager
             'updated_at' => $now,
           ]);
         }
-
-        $result['stacks_imported']++;
       }
 
       $this->db->commit();
@@ -1989,36 +2017,387 @@ class ComposeManager
       $result['success'] = false;
       $result['stacks_imported'] = 0;
       $result['errors'][] = $e->getMessage();
-
-      // No row survived, so remove what this run copied. Only files this run
-      // wrote, and a directory only if this run created it and it is empty.
-      // The in-transaction check above only reached the plans before the one
-      // that threw. A racing import can have committed any of the rest, and
-      // its row points at these files, so look again now.
-      // If that lookup fails too, keep the files: an orphan is safer than
-      // deleting a live stack's compose file.
-      foreach ($plans as $plan) {
-        try {
-          $owned = $this->db->fetchOne(
-            'SELECT project_name FROM compose_stacks WHERE project_name = ?',
-            [$plan['project']]
-          );
-        } catch (Exception $lookupError) {
-          $owned = true;
-        }
-        if ($owned) {
-          continue;
-        }
-        foreach ($plan['copied'] as $file) {
-          @unlink($file);
-        }
-        if ($plan['created_dir']) {
-          @rmdir($plan['working_dir']);
-        }
-      }
     }
 
     return $result;
+  }
+
+  /**
+   * The directory a Compose Manager project's compose files live in: the
+   * folder itself, or the target of its "indirect" file.
+   *
+   * @return string|null null when an indirect target is missing or relative
+   */
+  private function sourceDirOf($projectPath)
+  {
+    if (!file_exists($projectPath . '/indirect')) {
+      return $projectPath;
+    }
+    $target = $this->readMetadataFile($projectPath . '/indirect');
+    $target = $target ? normalizePath($target) : null;
+    return ($target !== null && is_dir($target)) ? $target : null;
+  }
+
+  // ─── Repair of stacks an earlier import copied ─────────────────────
+
+  /**
+   * Rows an earlier import made: imported_from is compose_plugin and the
+   * files sit in a copy under COMPOSE_STACKS_DIR.
+   *
+   * @return array[] each ['row' => compose_stacks row, 'dir' => name of the copy's folder]
+   */
+  private function importedCopies($stacksDir = null)
+  {
+    $base = normalizePath($stacksDir ?? COMPOSE_STACKS_DIR);
+    $copies = [];
+    if ($base === null || $base === '/') {
+      return $copies;
+    }
+    foreach ($this->db->fetchAll("SELECT * FROM compose_stacks WHERE imported_from = 'compose_plugin'") as $row) {
+      $dir = is_string($row['working_dir']) ? normalizePath($row['working_dir']) : null;
+      if ($dir === null || $dir === $base || !pathIsWithin($dir, $base)) {
+        continue;
+      }
+      $rest = substr($dir, strlen($base) + 1);
+      $copies[] = ['row' => $row, 'dir' => explode('/', $rest)[0]];
+    }
+    return $copies;
+  }
+
+  /**
+   * Merge or rename the rows an earlier import copied, so a stack is one row.
+   *
+   * Runs on the container-list sync of both backends, so it needs no
+   * migration and no menu. It reads one small query on a server that has no
+   * such row and then writes nothing.
+   *
+   * A copy row (imported_from compose_plugin, working_dir inside
+   * COMPOSE_STACKS_DIR) is handled in one of three ways:
+   * - It has a counterpart, the row for the same Compose Manager stack that
+   *   the label sync made: its working_dir is the project folder the copy was
+   *   made from (or that folder's indirect target), or its name is what a
+   *   Compose Manager name rule makes of the copy's name. Then the
+   *   counterpart is kept and the copy's schedules, saved file versions and
+   *   folder move to it, and the copy row goes. The folder goes only when it
+   *   is empty (a folder with containers in it is detached from the stack
+   *   instead). Two counterparts that fit equally leave the row alone.
+   * - It has none, the source folder still exists, and the copied compose
+   *   file (and .env, when there is one) is byte-identical to the source: the
+   *   row is renamed to the name Compose Manager gives the folder and
+   *   repointed at it.
+   * - Anything else: left alone.
+   *
+   * Never deletes a file. All writes run in one transaction.
+   *
+   * @return bool True when anything was written
+   */
+  public function repairImportedStacks($projectsDir = null, $pluginDir = null, $stacksDir = null)
+  {
+    $copies = $this->importedCopies($stacksDir);
+    if (empty($copies)) {
+      return false;
+    }
+
+    $projectsDir = $projectsDir ?? self::COMPOSE_PLUGIN_PROJECTS;
+    $pluginDir = $pluginDir ?? self::COMPOSE_PLUGIN_DIR;
+    $legacyOrigin = is_file(dirname($projectsDir) . '/legacy-origin');
+    $plusInstalled = is_file($pluginDir . '/include/ProjectIdentity.php');
+
+    $copyNames = [];
+    foreach ($copies as $copy) {
+      $copyNames[$copy['row']['project_name']] = true;
+    }
+    $others = [];
+    foreach ($this->db->fetchAll('SELECT * FROM compose_stacks') as $row) {
+      if (!isset($copyNames[$row['project_name']])) {
+        $others[] = $row;
+      }
+    }
+    $taken = [];
+    foreach ($this->db->fetchAll('SELECT project_name FROM compose_stacks') as $row) {
+      $taken[$row['project_name']] = true;
+    }
+
+    $actions = [];
+    foreach ($copies as $copy) {
+      $row = $copy['row'];
+      $sourcePath = $projectsDir . '/' . $copy['dir'];
+      $sourceDir = is_dir($sourcePath) ? $this->sourceDirOf($sourcePath) : null;
+
+      $counterpart = $this->findCounterpart($row, $copy['dir'], $sourceDir, $sourcePath, $others);
+      if ($counterpart === false) {
+        continue; // two fit equally
+      }
+      if ($counterpart !== null) {
+        $actions[] = ['type' => 'merge', 'from' => $row, 'to' => $counterpart];
+        continue;
+      }
+
+      if ($sourceDir === null || !$this->copyMatchesSource($row, $sourceDir)) {
+        continue;
+      }
+      $rule = ComposeProjectName::fromFolder(
+        $copy['dir'],
+        $this->readMetadataFile($sourcePath . '/name'),
+        $this->readMetadataFile($sourcePath . '/' . ComposeProjectName::PIN_FILE),
+        $plusInstalled,
+        $legacyOrigin
+      );
+      // The copy's own name is not "taken": the row is repointed in place.
+      if ($rule['name'] === null || (isset($taken[$rule['name']]) && $rule['name'] !== $row['project_name'])) {
+        continue;
+      }
+      $taken[$rule['name']] = true;
+      $actions[] = ['type' => 'rename', 'from' => $row, 'name' => $rule['name'], 'source_dir' => $sourceDir];
+    }
+
+    if (empty($actions)) {
+      return false;
+    }
+
+    // Snapshot files are copied before the transaction: a copy inside it would
+    // hold the write lock for the file I/O, and a rollback cannot undo it.
+    // Nothing is deleted. The copy of a file that already exists is left.
+    foreach ($actions as &$action) {
+      $toDir = $action['type'] === 'merge' ? $action['to']['working_dir'] : $action['source_dir'];
+      $action['version_paths'] = $this->carryVersionFiles($action['from'], $toDir);
+    }
+    unset($action);
+
+    $this->db->beginTransaction();
+    try {
+      foreach ($actions as $action) {
+        if ($action['type'] === 'merge') {
+          $this->mergeStackRows($action['from'], $action['to'], $action['version_paths']);
+        } else {
+          $this->renameStackRow($action['from'], $action['name'], $action['source_dir'], $action['version_paths']);
+        }
+      }
+      $this->db->commit();
+    } catch (Exception $e) {
+      $this->db->rollback();
+      error_log('Compose import repair failed: ' . $e->getMessage());
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * The row for the same Compose Manager stack as a copy row.
+   *
+   * @return array|false|null the row; null when none fits; false when more than one does
+   */
+  private function findCounterpart(array $copyRow, $copyDir, $sourceDir, $sourcePath, array $others)
+  {
+    $folders = [];
+    foreach ([$sourcePath, $sourceDir] as $path) {
+      $n = is_string($path) ? normalizePath($path) : null;
+      if ($n !== null) {
+        $folders[$n] = true;
+      }
+    }
+
+    // Tier 1: it runs from this stack's folder.
+    $byFolder = [];
+    foreach ($others as $other) {
+      $dir = is_string($other['working_dir']) ? normalizePath($other['working_dir']) : null;
+      if ($dir !== null && isset($folders[$dir])) {
+        $byFolder[] = $other;
+      }
+    }
+    if (count($byFolder) === 1) {
+      return $byFolder[0];
+    }
+    if (count($byFolder) > 1) {
+      return false;
+    }
+
+    // Tier 2: the name a Compose Manager rule makes of the imported name.
+    $names = [];
+    foreach ([ComposeProjectName::plusSanitize($copyRow['project_name']), ComposeProjectName::dcflachsSanitize($copyRow['project_name'])] as $name) {
+      if ($name !== null && ComposeProjectName::isValid($name) && $name !== $copyRow['project_name']) {
+        $names[$name] = true;
+      }
+    }
+    $byName = [];
+    foreach ($others as $other) {
+      if (isset($names[$other['project_name']])) {
+        $byName[] = $other;
+      }
+    }
+    if (count($byName) === 1) {
+      return $byName[0];
+    }
+    return count($byName) > 1 ? false : null;
+  }
+
+  /**
+   * Is the copy a row points at the same bytes as the source folder it came
+   * from? Checks the compose file, and the .env when the copy has one.
+   */
+  private function copyMatchesSource(array $row, $sourceDir)
+  {
+    $copyCompose = is_string($row['compose_file']) ? $row['compose_file'] : null;
+    if ($copyCompose === null || !is_file($copyCompose)) {
+      return false;
+    }
+    $sourceCompose = $sourceDir . '/' . basename($copyCompose);
+    if (!is_file($sourceCompose) || !self::sameBytes($copyCompose, $sourceCompose)) {
+      return false;
+    }
+
+    $copyEnv = is_string($row['env_file']) && $row['env_file'] !== '' ? $row['env_file'] : null;
+    if ($copyEnv !== null && is_file($copyEnv)) {
+      $sourceEnv = $sourceDir . '/' . basename($copyEnv);
+      return is_file($sourceEnv) && self::sameBytes($copyEnv, $sourceEnv);
+    }
+    return true;
+  }
+
+  private static function sameBytes($a, $b)
+  {
+    $x = @file_get_contents($a);
+    $y = @file_get_contents($b);
+    return $x !== false && $y !== false && $x === $y;
+  }
+
+  /**
+   * Copy a stack's saved-version snapshot files from its old folder to the new
+   * one, so the version rows still resolve after they move. The files stay
+   * where they are.
+   *
+   * @return array version id => file_path to store (relative to the new folder)
+   */
+  private function carryVersionFiles(array $fromRow, $toDir)
+  {
+    $paths = [];
+    $fromDir = is_string($fromRow['working_dir']) ? $fromRow['working_dir'] : null;
+    $toDir = is_string($toDir) ? normalizePath($toDir) : null;
+    if ($fromDir === null || $toDir === null || $toDir === '/') {
+      return $paths;
+    }
+    $rows = $this->db->fetchAll(
+      'SELECT id, file_path FROM compose_file_versions WHERE project_name = ?',
+      [$fromRow['project_name']]
+    );
+    foreach ($rows as $v) {
+      $src = resolveAgainst($v['file_path'], $fromDir);
+      $name = basename($v['file_path']);
+      if ($src === null || !pathIsWithin($src, $fromDir) || !is_file($src) || safePathComponent($name) === null) {
+        continue;
+      }
+      $rel = '.versions/' . $name;
+      $dest = $toDir . '/' . $rel;
+      if (is_file($dest) && !self::sameBytes($src, $dest)) {
+        $rel = '.versions/' . $v['id'] . '-' . $name;
+        $dest = $toDir . '/' . $rel;
+      }
+      if (!is_dir($toDir . '/.versions') && !@mkdir($toDir . '/.versions', 0755, true)) {
+        continue;
+      }
+      if (is_file($dest) || @copy($src, $dest)) {
+        $paths[$v['id']] = $rel;
+      }
+    }
+    return $paths;
+  }
+
+  /**
+   * Move everything that hangs on the stack $from to the stack named $to.
+   * The row $to must already exist (compose_file_versions has a foreign key
+   * to it). Runs inside the caller's transaction.
+   */
+  private function moveStackReferences($from, $to, array $versionPaths)
+  {
+    $this->db->update(
+      'schedules',
+      ['target_id' => $to],
+      "target_type = 'stack' AND target_id = ?",
+      [$from]
+    );
+
+    $this->moveVersionFiles($to, $versionPaths);
+    // Rows whose file could not be carried keep their path and still move.
+    $this->db->update('compose_file_versions', ['project_name' => $to], 'project_name = ?', [$from]);
+
+    foreach ($this->db->fetchAll('SELECT id FROM folders WHERE compose_project = ?', [$from]) as $folder) {
+      $kept = $this->db->fetchOne('SELECT id FROM folders WHERE compose_project = ?', [$to]);
+      if (!$kept) {
+        $this->db->update('folders', ['compose_project' => $to, 'updated_at' => time()], 'id = ?', [$folder['id']]);
+        continue;
+      }
+      $members = (int) $this->db->fetchValue('SELECT COUNT(*) FROM container_folders WHERE folder_id = ?', [$folder['id']]);
+      if ($members === 0) {
+        $this->db->delete('folders', 'id = ?', [$folder['id']]);
+      } else {
+        // Containers the user put there stay there, as an ordinary folder.
+        $this->db->update('folders', ['compose_project' => null, 'updated_at' => time()], 'id = ?', [$folder['id']]);
+      }
+    }
+  }
+
+  /** Point carried version rows at their new relative path, under the stack $to. */
+  private function moveVersionFiles($to, array $versionPaths)
+  {
+    foreach ($versionPaths as $id => $path) {
+      $this->db->update('compose_file_versions', ['project_name' => $to, 'file_path' => $path], 'id = ?', [$id]);
+    }
+  }
+
+  private function mergeStackRows(array $from, array $to, array $versionPaths)
+  {
+    $now = time();
+    $updates = [];
+    if ($to['imported_from'] !== 'compose_plugin') {
+      // So the import prompt stays away once the copy row is gone.
+      $updates['imported_from'] = 'compose_plugin';
+    }
+    if (empty($to['description']) && !empty($from['description'])) {
+      $updates['description'] = $from['description'];
+    }
+    if (!$to['autostart'] && $from['autostart']) {
+      $updates['autostart'] = 1;
+    }
+    if (!$to['autostart_force_recreate'] && $from['autostart_force_recreate']) {
+      $updates['autostart_force_recreate'] = 1;
+    }
+    if (!empty($updates)) {
+      $updates['updated_at'] = $now;
+      $this->db->update('compose_stacks', $updates, 'project_name = ?', [$to['project_name']]);
+    }
+
+    $this->moveStackReferences($from['project_name'], $to['project_name'], $versionPaths);
+    $this->db->delete('compose_stacks', 'project_name = ?', [$from['project_name']]);
+  }
+
+  private function renameStackRow(array $from, $newName, $sourceDir, array $versionPaths)
+  {
+    $now = time();
+    if ($newName === $from['project_name']) {
+      $this->db->update('compose_stacks', [
+        'working_dir' => $sourceDir,
+        'compose_file' => $sourceDir . '/' . basename((string) $from['compose_file']),
+        'env_file' => null,
+        'updated_at' => $now,
+      ], 'project_name = ?', [$newName]);
+      $this->moveVersionFiles($newName, $versionPaths);
+      return;
+    }
+    $this->db->insert('compose_stacks', [
+      'project_name' => $newName,
+      'working_dir' => $sourceDir,
+      'compose_file' => $sourceDir . '/' . basename((string) $from['compose_file']),
+      'env_file' => null,
+      'autostart' => $from['autostart'],
+      'autostart_force_recreate' => $from['autostart_force_recreate'],
+      'description' => $from['description'],
+      'imported_from' => 'compose_plugin',
+      'created_at' => $from['created_at'],
+      'updated_at' => $now,
+    ]);
+    $this->moveStackReferences($from['project_name'], $newName, $versionPaths);
+    $this->db->delete('compose_stacks', 'project_name = ?', [$from['project_name']]);
   }
 
   /**

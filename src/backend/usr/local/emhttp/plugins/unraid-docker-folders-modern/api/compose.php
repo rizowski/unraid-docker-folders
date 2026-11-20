@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/ComposeManager.php';
+require_once dirname(__DIR__) . '/classes/DockerClient.php';
 require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 header('Content-Type: application/json');
@@ -205,10 +206,20 @@ function handlePost($composeManager)
 
   // Import from compose_plugin
   if ($action === 'import') {
-    $result = $composeManager->importFromComposePlugin();
+    // The import names each stack after its running containers when it has
+    // any. A failed Docker request would look like "none running" and the
+    // stack would be named by rule instead, so refuse and ask for a retry.
+    $dockerClient = new DockerClient();
+    $containers = $dockerClient->listContainers(true);
+    if (ComposeManager::containerListFailed($containers, $dockerClient->getLastError())) {
+      errorResponse('Cannot reach Docker, so nothing was imported. Try again. (' . $dockerClient->getLastError() . ')', 503);
+    }
+
+    $result = $composeManager->importFromComposePlugin($containers);
 
     if ($result['stacks_imported'] > 0) {
       WebSocketPublisher::publish('compose', 'import', $result);
+      WebSocketPublisher::publish('folder', 'updated');
     }
 
     jsonResponse($result);
