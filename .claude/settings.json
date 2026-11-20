@@ -1,0 +1,41 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dfm-checks.sh edit",
+            "timeout": 30,
+            "statusMessage": "Linting the edited file..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dfm-checks.sh stop",
+            "timeout": 300,
+            "statusMessage": "Running lint and type checks..."
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/dfm-checks.sh stop",
+            "timeout": 300,
+            "statusMessage": "Running lint and type checks..."
+          }
+        ]
+      }
+    ]
+  }
+}
