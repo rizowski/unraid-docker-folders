@@ -33,7 +33,7 @@
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
-    <span class="text-text flex-1">Compose Manager plugin is installed. Stack management is read-only — uninstall it to manage stacks here.</span>
+    <span data-testid="compose-plugin-note" class="text-text flex-1">Compose Manager is installed, so stacks are read-only here. To manage them in Docker Folders, remove the Compose Manager plugin. Your stack files stay on the flash drive. Then choose Import Stacks.</span>
   </div>
 
   <!-- Compose plugin data migration banner -->
@@ -43,7 +43,7 @@
       <polyline points="17 8 12 3 7 8" />
       <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
-    <span class="text-text flex-1">Compose Manager plugin data detected. Import your existing stacks?</span>
+    <span data-testid="compose-import-note" class="text-text flex-1">Compose Manager plugin data detected. Import your existing stacks? The stacks are adopted where they are, and no files are copied.</span>
     <button
       @click="handleImport"
       :disabled="importing"
