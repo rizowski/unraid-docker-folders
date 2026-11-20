@@ -563,6 +563,24 @@ acceptable.
 
 ---
 
+## Claude Code hooks
+
+`.claude/settings.json` and `.claude/hooks/dfm-checks.sh` are checked in. The
+rest of `.claude/` stays local. The script exits with code 2 on a failure, so
+Claude gets the output and must fix it.
+
+- After each Edit or Write of a frontend file, it runs oxlint on that file.
+- When Claude or a subagent stops, it runs the checks of the release workflow
+  for each package the work changed: frontend `oxlint src dev --deny-warnings`
+  and `vue-tsc --noEmit`, and for the GraphQL plugin
+  `tsc --noEmit -p tsconfig.test.json`, which includes the test files.
+- A changed package with no `node_modules` also blocks, with a message that
+  the checks did not run.
+
+A stop hook blocks one time. It does not run PHP checks or the test suites.
+
+---
+
 ## Real-Time Updates
 
 **Architecture**:
