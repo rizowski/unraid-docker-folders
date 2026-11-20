@@ -2388,14 +2388,12 @@ class ComposeManager
       $copyNames[$copy['row']['project_name']] = true;
     }
     $others = [];
+    $taken = [];
     foreach ($this->db->fetchAll('SELECT * FROM compose_stacks') as $row) {
+      $taken[$row['project_name']] = true;
       if (!isset($copyNames[$row['project_name']])) {
         $others[] = $row;
       }
-    }
-    $taken = [];
-    foreach ($this->db->fetchAll('SELECT project_name FROM compose_stacks') as $row) {
-      $taken[$row['project_name']] = true;
     }
 
     $actions = [];
@@ -2523,6 +2521,10 @@ class ComposeManager
 
   private static function sameBytes($a, $b)
   {
+    // A size check first: most differing files are caught without reading either.
+    if (@filesize($a) !== @filesize($b)) {
+      return false;
+    }
     $x = @file_get_contents($a);
     $y = @file_get_contents($b);
     return $x !== false && $y !== false && $x === $y;

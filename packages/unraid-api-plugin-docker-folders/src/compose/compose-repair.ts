@@ -173,7 +173,8 @@ function copyMatchesSource(row: StackRow, sourceDir: string): boolean {
 
 function sameBytes(a: string, b: string): boolean {
     try {
-        return readFileSync(a).equals(readFileSync(b));
+        // A size check first: most differing files are caught without reading either.
+        return statSync(a).size === statSync(b).size && readFileSync(a).equals(readFileSync(b));
     } catch {
         return false;
     }

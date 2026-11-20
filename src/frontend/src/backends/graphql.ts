@@ -1589,13 +1589,13 @@ export const graphqlBackend: Backend = {
             filesNote: string | null;
           };
         }>(REMOVE_COMPOSE_STACK, { input: { project, deleteFiles: body.delete_files } }),
-        (data) => ({
-          success: data.removeDockerFoldersComposeStack.success,
-          schedules_removed: data.removeDockerFoldersComposeStack.schedulesRemoved,
-          folder: data.removeDockerFoldersComposeStack.folder as ComposeRemoveResult['folder'],
-          files_removed: data.removeDockerFoldersComposeStack.filesRemoved,
-          directory_removed: data.removeDockerFoldersComposeStack.directoryRemoved,
-          files_note: data.removeDockerFoldersComposeStack.filesNote,
+        ({ removeDockerFoldersComposeStack: r }) => ({
+          success: r.success,
+          schedules_removed: r.schedulesRemoved,
+          folder: r.folder as ComposeRemoveResult['folder'],
+          files_removed: r.filesRemoved,
+          directory_removed: r.directoryRemoved,
+          files_note: r.filesNote,
         }),
       ),
 
