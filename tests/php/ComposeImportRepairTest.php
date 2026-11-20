@@ -603,7 +603,16 @@ final class ComposeImportRepairTest extends TestCase
         $before = $this->db->fetchAll('SELECT * FROM schedules');
         $this->addSchedule('Immich');
 
-        $this->assertFalse($this->repair());
+        // SQLite3 raises a PHP warning for the failed statement, and the repair
+        // logs it. Both are expected here, so keep them out of the test output.
+        $log = ini_set('error_log', '/dev/null');
+        set_error_handler(static fn (): bool => true, E_WARNING);
+        try {
+            $this->assertFalse($this->repair());
+        } finally {
+            restore_error_handler();
+            ini_set('error_log', $log === false ? '' : $log);
+        }
 
         $this->assertSame(['Immich', 'immich'], $this->names());
         $this->assertSame('Immich', $this->db->fetchValue('SELECT target_id FROM schedules'));

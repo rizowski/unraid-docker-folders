@@ -5,7 +5,7 @@
     :message="message"
     confirm-label="Remove Stack"
     variant="danger"
-    checkbox-label="Also delete the files in the plugin's own stack folder"
+    :checkbox-label="ownFiles ? 'Also delete the compose files Docker Folders keeps for this stack' : undefined"
     @confirm="emit('confirm', $event)"
     @cancel="emit('cancel')"
   />
@@ -14,6 +14,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
+import { useComposeStore } from '@/stores/compose';
+import { useDockerStore } from '@/stores/docker';
 
 // Mounted only while a removal is pending (see useStackRemoveConfirm). The
 // checkbox is the delete-files choice and starts unchecked; ConfirmModal
@@ -27,10 +29,16 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
-// Says what goes and what stays. No container is touched: the backend refuses
-// while the stack has containers, and the stack's own folder goes with it.
-const message = computed(
-  () =>
-    `Remove "${props.project}" from Docker Folders? Its record, its schedules and its folder are deleted. Containers are never touched, so a stack with containers must be taken down first. Compose files stay on disk unless you tick the box, and then only a copy that Docker Folders keeps itself is deleted, never files in another folder and never while a container still runs from that copy.`,
-);
+const composeStore = useComposeStore();
+const dockerStore = useDockerStore();
+
+// The backend says whether the files are in the plugin's own stack folder.
+// For any other stack there is no box, and no file is ever deleted.
+const ownFiles = computed(() => composeStore.stacks.find((s) => s.project_name === props.project)?.own_files === true);
+const hasContainers = computed(() => (dockerStore.containersByProject.get(props.project)?.length ?? 0) > 0);
+
+const message = computed(() => {
+  const base = `Remove "${props.project}" from Docker Folders? Its schedules and its folder are removed too. Containers and compose files are not changed.`;
+  return hasContainers.value ? `${base} This stack still has containers. Run Stack Down first.` : base;
+});
 </script>

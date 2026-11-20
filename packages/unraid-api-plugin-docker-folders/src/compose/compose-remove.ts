@@ -167,6 +167,17 @@ function isEnvFileName(name: string): boolean {
 }
 
 /**
+ * Is a stack's working_dir a direct child of the plugin's own stack folder? A
+ * path check only. The UI uses it to offer "delete the files", and
+ * `ownStackDir` checks the disk again before anything is deleted.
+ */
+export function isOwnStackPath(workingDir: string | null, stacksDir: string): boolean {
+    const dir = workingDir ? normalizePath(workingDir) : null;
+    const base = normalizePath(stacksDir);
+    return dir !== null && base !== null && base !== '/' && pathIsWithin(dir, base) && dirname(dir) === base;
+}
+
+/**
  * The directory a stack's own copy lives in, when it is safe to delete from.
  *
  * A direct child of `stacksDir` (so not `stacksDir` itself, and not `..`,
@@ -188,9 +199,7 @@ export function ownStackDir(
     const base = normalizePath(stacksDir);
     const notOwn = "The files are not in the plugin's own stack directory, so they were left in place.";
 
-    if (dir === null || base === null || base === '/' || !pathIsWithin(dir, base) || dirname(dir) !== base) {
-        return [null, notOwn];
-    }
+    if (dir === null || base === null || !isOwnStackPath(workingDir, stacksDir)) return [null, notOwn];
 
     let stat;
     try {

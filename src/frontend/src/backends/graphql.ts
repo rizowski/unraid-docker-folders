@@ -853,6 +853,7 @@ function toScheduleInput(body: Partial<Schedule>) {
 interface GqlComposeStack {
   projectName: string;
   workingDir: string | null;
+  ownFiles: boolean;
   composeFile: string | null;
   envFile: string | null;
   autostart: boolean;
@@ -897,7 +898,7 @@ const COMPOSE_STATUS = `
 const COMPOSE_STACKS = `
   query DockerFoldersComposeStacks {
     dockerFoldersComposeStacks {
-      projectName workingDir composeFile envFile autostart autostartForceRecreate
+      projectName workingDir ownFiles composeFile envFile autostart autostartForceRecreate
       description importedFrom servicesRunning servicesTotal serviceNames
     }
   }
@@ -1067,6 +1068,7 @@ function toComposeStack(s: GqlComposeStack): ComposeStack {
   return {
     project_name: s.projectName,
     working_dir: s.workingDir,
+    own_files: s.ownFiles,
     compose_file: s.composeFile,
     env_file: s.envFile,
     autostart: s.autostart,

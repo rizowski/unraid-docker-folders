@@ -38,6 +38,9 @@ export class DockerFoldersComposeStack {
     @Field(() => String, { nullable: true, description: '"compose_plugin" when migrated from dcflachs/compose_plugin' })
     importedFrom!: string | null;
 
+    @Field(() => Boolean, { description: "True when the stack's files are in the plugin's own stack folder, so Remove Stack may delete them" })
+    ownFiles!: boolean;
+
     @Field(() => Int)
     servicesRunning!: number;
 

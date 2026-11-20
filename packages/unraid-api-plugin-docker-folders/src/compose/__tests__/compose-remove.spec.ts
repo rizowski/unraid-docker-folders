@@ -8,7 +8,7 @@ import type { EventBusService } from '../../events/event-bus.service.js';
 import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
 import { FolderService } from '../../folders/folder.service.js';
 import { DEFAULT_COMPOSE_PATHS } from '../compose-config.js';
-import { removeComposeStack, type RemoveContainer } from '../compose-remove.js';
+import { isOwnStackPath, removeComposeStack, type RemoveContainer } from '../compose-remove.js';
 import { repairImportedStacks } from '../compose-repair.js';
 import {
     dcflachsSanitize,
@@ -178,6 +178,17 @@ describe('stack removal and the repair of earlier imports (issue #25)', () => {
             expect(existsSync(join(stacksDir, 'Immich', 'docker-compose.yml'))).toBe(true);
         });
 
+    });
+
+    describe('own folder flag', () => {
+        it('is true only for a direct child of the stacks directory', () => {
+            expect(isOwnStackPath(join(stacksDir, 'demo'), stacksDir)).toBe(true);
+            expect(isOwnStackPath(stacksDir, stacksDir)).toBe(false);
+            expect(isOwnStackPath(join(stacksDir, 'demo', 'deeper'), stacksDir)).toBe(false);
+            expect(isOwnStackPath(join(projects, 'Demo'), stacksDir)).toBe(false);
+            expect(isOwnStackPath(`${stacksDir}-evil/demo`, stacksDir)).toBe(false);
+            expect(isOwnStackPath(null, stacksDir)).toBe(false);
+        });
     });
 
     describe('file deletion', () => {

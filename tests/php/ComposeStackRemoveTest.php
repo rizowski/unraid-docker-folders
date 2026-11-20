@@ -123,6 +123,19 @@ final class ComposeStackRemoveTest extends TestCase
     // ─── A: removal ───────────────────────────────────────────────────
 
     #[Test]
+    public function isOwnStackPathIsTrueOnlyForADirectChildOfTheStacksDirectory(): void
+    {
+        $base = '/boot/config/plugins/x/compose-stacks';
+        $this->assertTrue(ComposeManager::isOwnStackPath($base . '/demo', $base));
+        $this->assertFalse(ComposeManager::isOwnStackPath($base, $base));
+        $this->assertFalse(ComposeManager::isOwnStackPath($base . '/demo/deeper', $base));
+        $this->assertFalse(ComposeManager::isOwnStackPath($base . '/../demo', $base));
+        $this->assertFalse(ComposeManager::isOwnStackPath($base . '-evil/demo', $base));
+        $this->assertFalse(ComposeManager::isOwnStackPath('/boot/config/plugins/compose.manager/projects/Demo', $base));
+        $this->assertFalse(ComposeManager::isOwnStackPath(null, $base));
+    }
+
+    #[Test]
     public function removingAnUnknownStackIsNotFound(): void
     {
         $result = $this->manager->removeStack('nope', false, [], $this->stacksDir);

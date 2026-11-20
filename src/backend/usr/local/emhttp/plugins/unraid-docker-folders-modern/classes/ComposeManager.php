@@ -549,6 +549,7 @@ class ComposeManager
     foreach ($stacks as &$stack) {
       $stack['autostart'] = (bool) $stack['autostart'];
       $stack['autostart_force_recreate'] = (bool) $stack['autostart_force_recreate'];
+      $stack['own_files'] = self::isOwnStackPath($stack['working_dir']);
 
       // Get runtime service counts
       $ps = $this->stackPs($stack['project_name']);
@@ -634,6 +635,7 @@ class ComposeManager
 
     $stack['autostart'] = (bool) $stack['autostart'];
     $stack['autostart_force_recreate'] = (bool) $stack['autostart_force_recreate'];
+    $stack['own_files'] = self::isOwnStackPath($stack['working_dir']);
 
     $ps = $this->stackPs($projectName);
     $stack['services_total'] = count($ps);
@@ -862,6 +864,18 @@ class ComposeManager
   }
 
   /**
+   * Is a stack's working_dir a direct child of the plugin's own stack folder?
+   * A path check only. The UI uses it to offer "delete the files", and
+   * ownStackDir() checks the disk again before anything is deleted.
+   */
+  public static function isOwnStackPath($workingDir, $stacksDir = null)
+  {
+    $dir = is_string($workingDir) && $workingDir !== '' ? normalizePath($workingDir) : null;
+    $base = normalizePath($stacksDir ?? COMPOSE_STACKS_DIR);
+    return $dir !== null && $base !== null && $base !== '/' && pathIsWithin($dir, $base) && dirname($dir) === $base;
+  }
+
+  /**
    * The directory a stack's own copy lives in, when it is safe to delete from.
    *
    * It must be a direct child of $stacksDir (so not $stacksDir itself, and not
@@ -886,7 +900,7 @@ class ComposeManager
     $base = normalizePath($stacksDir);
     $notOwn = 'The files are not in the plugin\'s own stack directory, so they were left in place.';
 
-    if ($dir === null || $base === null || $base === '/' || !pathIsWithin($dir, $base) || dirname($dir) !== $base) {
+    if (!self::isOwnStackPath($workingDir, $stacksDir)) {
       return [null, $notOwn];
     }
     if (is_link($dir)) {
