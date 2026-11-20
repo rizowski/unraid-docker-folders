@@ -535,7 +535,7 @@ EOF
 
         # Push tag to remote
         echo "Pushing tag to remote..."
-        # GitHub can answer "remote rejected (failed)" for a moment (run
+        # GitHub appears to answer "remote rejected (failed)" for a moment at times (run
         # 44470207248), so try three times before giving up.
         for ATTEMPT in 1 2 3; do
           if git push origin "$TAG_NAME" 2>&1; then
