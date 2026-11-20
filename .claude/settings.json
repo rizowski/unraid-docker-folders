@@ -1,25 +1,5 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash|Grep",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x \"$HOME/.local/bin/graphify\" ]; then \"$HOME/.local/bin/graphify\" hook-guard search; fi"
-          }
-        ]
-      },
-      {
-        "matcher": "Read|Glob",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -x \"$HOME/.local/bin/graphify\" ]; then \"$HOME/.local/bin/graphify\" hook-guard read; fi"
-          }
-        ]
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
