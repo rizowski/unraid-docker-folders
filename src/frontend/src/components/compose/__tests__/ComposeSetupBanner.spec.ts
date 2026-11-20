@@ -64,4 +64,22 @@ describe('ComposeSetupBanner', () => {
     const wrapper = mount(ComposeSetupBanner, { global: { plugins: [pinia] } });
     expect(wrapper.find('[data-testid="compose-reboot-note"]').exists()).toBe(false);
   });
+
+  it('explains the migration path while Compose Manager is installed', () => {
+    const compose = useComposeStore();
+    compose.status = { ...compose.status, compose_plugin_installed: true };
+
+    const wrapper = mount(ComposeSetupBanner, { global: { plugins: [pinia] } });
+    expect(wrapper.find('[data-testid="compose-plugin-note"]').text()).toBe(
+      'Compose Manager is installed, so stacks are read-only here. To manage them in Docker Folders, remove the Compose Manager plugin. Your stack files stay on the flash drive. Then choose Import Stacks.'
+    );
+  });
+
+  it('says the import adopts stacks in place', () => {
+    const compose = useComposeStore();
+    compose.status = { ...compose.status, compose_plugin_installed: false, compose_plugin_data_exists: true };
+
+    const wrapper = mount(ComposeSetupBanner, { global: { plugins: [pinia] } });
+    expect(wrapper.find('[data-testid="compose-import-note"]').text()).toContain('adopted where they are, and no files are copied');
+  });
 });

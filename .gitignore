@@ -1,5 +1,5 @@
 # Dependencies
-node_modules/
+node_modules
 vendor/
 
 # This project uses yarn (see packageManager in src/frontend/package.json).

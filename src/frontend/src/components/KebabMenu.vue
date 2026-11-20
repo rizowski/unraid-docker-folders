@@ -158,6 +158,31 @@ async function toggleMenu() {
 }
 
 /**
+ * The part of this window the user can see, in this window's coordinates.
+ *
+ * The iframe is as tall as the app (main.ts), so its own viewport is the whole
+ * page and says nothing about what is on screen: the parent page scrolls, and
+ * a row near the bottom of the browser window would open its menu off-screen.
+ * The frame is same-origin with the parent, so intersect the two. Cross-origin
+ * or not framed: fall back to this window's viewport.
+ */
+function visibleBand(): { top: number; bottom: number } {
+  const full = { top: 0, bottom: window.innerHeight };
+  if (window.parent === window) return full;
+  try {
+    const frame = window.frameElement;
+    if (!frame) return full;
+    const frameTop = frame.getBoundingClientRect().top;
+    const top = Math.max(full.top, -frameTop);
+    const bottom = Math.min(full.bottom, window.parent.innerHeight - frameTop);
+    // A frame scrolled fully out of view leaves no band to fit into.
+    return bottom > top ? { top, bottom } : full;
+  } catch {
+    return full;
+  }
+}
+
+/**
  * Keep the menu inside the viewport.
  *
  * On Unraid the app runs in an iframe whose height tracks the app's own content
@@ -178,8 +203,9 @@ function fitToViewport() {
   if (naturalHeight <= 0) return;
 
   const rect = button.getBoundingClientRect();
-  const spaceBelow = window.innerHeight - rect.bottom - EDGE_GAP;
-  const spaceAbove = rect.top - EDGE_GAP;
+  const { top: viewTop, bottom: viewBottom } = visibleBand();
+  const spaceBelow = viewBottom - rect.bottom - EDGE_GAP;
+  const spaceAbove = rect.top - viewTop - EDGE_GAP;
 
   const preferred = props.position;
   const preferredSpace = preferred === 'below' ? spaceBelow : spaceAbove;

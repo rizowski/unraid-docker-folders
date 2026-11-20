@@ -38,6 +38,12 @@ export class DockerFoldersComposeStack {
     @Field(() => String, { nullable: true, description: '"compose_plugin" when migrated from dcflachs/compose_plugin' })
     importedFrom!: string | null;
 
+    @Field(() => Boolean, { description: "True when the stack's files are in the plugin's own stack folder, so Remove Stack may delete them" })
+    ownFiles!: boolean;
+
+    @Field(() => String, { nullable: true, description: '"compose_manager" when the stack runs from the Compose Manager projects folder, decided by path' })
+    source!: string | null;
+
     @Field(() => Int)
     servicesRunning!: number;
 
@@ -254,6 +260,44 @@ export class DockerFoldersComposeCreateInput {
     @IsOptional()
     @IsString()
     envContent?: string;
+}
+
+/**
+ * Input for removing a stack from the plugin. `project` is checked against the
+ * project-name rule by the resolver; `deleteFiles` is off unless the caller
+ * asks, and then removes only the plugin's own copy of the files.
+ */
+@InputType()
+export class DockerFoldersComposeRemoveInput {
+    @Field(() => String)
+    @IsString()
+    project!: string;
+
+    @Field(() => Boolean, { nullable: true })
+    @IsOptional()
+    @IsBoolean()
+    deleteFiles?: boolean;
+}
+
+@ObjectType()
+export class DockerFoldersComposeRemoveResult {
+    @Field(() => Boolean)
+    success!: boolean;
+
+    @Field(() => Int, { description: 'Schedules that aimed at the stack and went with it.' })
+    schedulesRemoved!: number;
+
+    @Field(() => String, { description: 'What became of the stack folder: deleted, kept (as a plain folder) or none.' })
+    folder!: string;
+
+    @Field(() => [String], { description: 'Files deleted from the plugin\'s own copy.' })
+    filesRemoved!: string[];
+
+    @Field(() => Boolean)
+    directoryRemoved!: boolean;
+
+    @Field(() => String, { nullable: true, description: 'Why files were left in place, when they were.' })
+    filesNote!: string | null;
 }
 
 @InputType()

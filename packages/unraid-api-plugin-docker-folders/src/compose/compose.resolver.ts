@@ -1,5 +1,13 @@
 import { Args, Int, Mutation, Query, Resolver, Subscription } from '@nestjs/graphql';
-import { BadRequestException, ForbiddenException, Inject, NotFoundException, Optional } from '@nestjs/common';
+import {
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    Inject,
+    NotFoundException,
+    Optional,
+    ServiceUnavailableException,
+} from '@nestjs/common';
 
 import { AuthAction, Resource } from '@unraid/shared/graphql.model.js';
 import { UsePermissions } from '@unraid/shared/use-permissions.directive.js';
@@ -25,12 +33,15 @@ import {
     DockerFoldersComposeFileVersionDetail,
     DockerFoldersComposeImportResult,
     DockerFoldersComposeInstallResult,
+    DockerFoldersComposeRemoveInput,
+    DockerFoldersComposeRemoveResult,
     DockerFoldersComposeLogChunk,
     DockerFoldersComposeStack,
     DockerFoldersComposeStatus,
     DockerFoldersComposeValidateResult,
 } from './compose.model.js';
 import { ComposeService, isValidProjectName } from './compose.service.js';
+import { ContainerListService } from '../containers/container-list.service.js';
 
 /**
  * The HTTP boundary for Compose, ported from `api/compose.php`.
@@ -90,7 +101,8 @@ export class ComposeResolver {
         private readonly events: EventBusService,
         @Optional()
         @Inject(COMPOSE_PATHS_TOKEN)
-        private readonly paths: ComposePathsConfig = DEFAULT_COMPOSE_PATHS
+        private readonly paths: ComposePathsConfig = DEFAULT_COMPOSE_PATHS,
+        private readonly containerList: ContainerListService
     ) {}
 
     /**
@@ -294,14 +306,64 @@ export class ComposeResolver {
         return result;
     }
 
+    /**
+     * The container list, as the labels the import and remove read. A failed
+     * Docker request throws here and stops the write: an empty list would look
+     * like "nothing runs" (`containers.php` answers 503 the same way).
+     */
+    private async listLabelled(): Promise<{ name: string; labels: Record<string, string> }[]> {
+        try {
+            const listed = await this.containerList.listContainers();
+            return listed.map((container) => ({
+                name: container.name,
+                labels: Object.fromEntries(container.labels.map((label) => [label.key, label.value])),
+            }));
+        } catch (error) {
+            throw new ServiceUnavailableException(
+                `Cannot reach Docker, so nothing was changed. Try again. (${error instanceof Error ? error.message : String(error)})`
+            );
+        }
+    }
+
     @UsePermissions({ action: AuthAction.CREATE_ANY, resource: Resource.DOCKER })
-    @Mutation(() => DockerFoldersComposeImportResult, { description: 'Import stacks from dcflachs/compose_plugin.' })
-    public importDockerFoldersComposeStacks(): DockerFoldersComposeImportResult {
-        const result = this.compose.importFromComposePlugin();
+    @Mutation(() => DockerFoldersComposeImportResult, {
+        description: 'Adopt stacks from Compose Manager in place, named after the project they run under.',
+    })
+    public async importDockerFoldersComposeStacks(): Promise<DockerFoldersComposeImportResult> {
+        const result = this.compose.importFromComposePlugin(await this.listLabelled());
         if (result.stacksImported > 0) {
             this.events.publish('compose', 'import');
+            this.events.publish('folder', 'updated');
         }
         return result;
+    }
+
+    /**
+     * `api/compose.php`'s `remove` action. Not gated on `management_enabled`
+     * (it deletes the plugin's own records, never a container). Refused while
+     * containers of the stack exist, since the next sync would add the row again.
+     */
+    @UsePermissions({ action: AuthAction.DELETE_ANY, resource: Resource.DOCKER })
+    @Mutation(() => DockerFoldersComposeRemoveResult, {
+        description:
+            'Remove a stack from the plugin: its record, schedules and stack folder. With deleteFiles, also the ' +
+            "plugin's own copy of its files. Containers are never touched; refused while they exist.",
+    })
+    public async removeDockerFoldersComposeStack(
+        @Args('input') input: DockerFoldersComposeRemoveInput
+    ): Promise<DockerFoldersComposeRemoveResult> {
+        if (!isValidProjectName(input.project)) throw new BadRequestException('Invalid project name');
+
+        const result = this.compose.removeStack(input.project, input.deleteFiles === true, await this.listLabelled());
+        if (!result.success) {
+            if (result.code === 'not_found') throw new NotFoundException(result.error);
+            throw new ConflictException(result.error);
+        }
+
+        this.events.publish('compose', 'remove');
+        this.events.publish('folder', 'updated');
+        if (result.schedulesRemoved > 0) this.events.publish('schedules', 'updated');
+        return { ...result };
     }
 
     @UsePermissions({ action: AuthAction.UPDATE_ANY, resource: Resource.DOCKER })

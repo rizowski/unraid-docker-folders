@@ -457,6 +457,48 @@ describe('graphql compose', () => {
     expect(ok).toBe(false);
     expect(data.message).toBe("Stack 'media' already exists");
   });
+
+  it('removes a stack through the mutation and maps the result to the PHP body shape', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      gqlResponse({
+        data: {
+          removeDockerFoldersComposeStack: {
+            success: true,
+            schedulesRemoved: 2,
+            folder: 'deleted',
+            filesRemoved: ['docker-compose.yml'],
+            directoryRemoved: true,
+            filesNote: null,
+          },
+        },
+      }),
+    );
+
+    const { ok, data } = await graphqlBackend.compose.remove('Immich', { delete_files: true });
+
+    const body = JSON.parse((vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).body as string);
+    expect(body.variables).toEqual({ input: { project: 'Immich', deleteFiles: true } });
+    expect(ok).toBe(true);
+    expect(data).toEqual({
+      success: true,
+      schedules_removed: 2,
+      folder: 'deleted',
+      files_removed: ['docker-compose.yml'],
+      directory_removed: true,
+      files_note: null,
+    });
+  });
+
+  it('hands the store the refusal message when containers still exist', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      gqlResponse({ errors: [{ message: 'Containers of "Immich" still exist. Run Stack Down first' }], data: null }),
+    );
+
+    const result = await graphqlBackend.compose.remove('Immich', { delete_files: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Stack Down');
+  });
 });
 
 describe('backend selection', () => {

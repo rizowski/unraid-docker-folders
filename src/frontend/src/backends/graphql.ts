@@ -41,6 +41,7 @@ import type {
 import type {
   ComposeFileVersion,
   ComposeFileVersionDetail,
+  ComposeRemoveResult,
   ComposeStack,
   ComposeStatus,
   ComposeValidationError,
@@ -852,6 +853,8 @@ function toScheduleInput(body: Partial<Schedule>) {
 interface GqlComposeStack {
   projectName: string;
   workingDir: string | null;
+  ownFiles: boolean;
+  source: string | null;
   composeFile: string | null;
   envFile: string | null;
   autostart: boolean;
@@ -896,7 +899,7 @@ const COMPOSE_STATUS = `
 const COMPOSE_STACKS = `
   query DockerFoldersComposeStacks {
     dockerFoldersComposeStacks {
-      projectName workingDir composeFile envFile autostart autostartForceRecreate
+      projectName workingDir ownFiles source composeFile envFile autostart autostartForceRecreate
       description importedFrom servicesRunning servicesTotal serviceNames
     }
   }
@@ -1016,6 +1019,14 @@ const IMPORT_COMPOSE_STACKS = `
   }
 `;
 
+const REMOVE_COMPOSE_STACK = `
+  mutation RemoveDockerFoldersComposeStack($input: DockerFoldersComposeRemoveInput!) {
+    removeDockerFoldersComposeStack(input: $input) {
+      success schedulesRemoved folder filesRemoved directoryRemoved filesNote
+    }
+  }
+`;
+
 const CREATE_COMPOSE_STACK = `
   mutation CreateDockerFoldersComposeStack($input: DockerFoldersComposeCreateInput!) {
     createDockerFoldersComposeStack(input: $input) { success error projectName }
@@ -1058,6 +1069,8 @@ function toComposeStack(s: GqlComposeStack): ComposeStack {
   return {
     project_name: s.projectName,
     working_dir: s.workingDir,
+    own_files: s.ownFiles,
+    source: s.source === 'compose_manager' ? 'compose_manager' : null,
     compose_file: s.composeFile,
     env_file: s.envFile,
     autostart: s.autostart,
@@ -1563,6 +1576,28 @@ export const graphqlBackend: Backend = {
         (data) => ({
           output: data.dockerFoldersComposeLogs.output ?? undefined,
           error: data.dockerFoldersComposeLogs.error ?? undefined,
+        }),
+      ),
+
+    remove: async (project, body) =>
+      mapResult(
+        await gql<{
+          removeDockerFoldersComposeStack: {
+            success: boolean;
+            schedulesRemoved: number;
+            folder: string;
+            filesRemoved: string[];
+            directoryRemoved: boolean;
+            filesNote: string | null;
+          };
+        }>(REMOVE_COMPOSE_STACK, { input: { project, deleteFiles: body.delete_files } }),
+        ({ removeDockerFoldersComposeStack: r }) => ({
+          success: r.success,
+          schedules_removed: r.schedulesRemoved,
+          folder: r.folder as ComposeRemoveResult['folder'],
+          files_removed: r.filesRemoved,
+          directory_removed: r.directoryRemoved,
+          files_note: r.filesNote,
         }),
       ),
 
