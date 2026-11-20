@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026.11.20-dev1
+### New
+- The stack menu in the stacks pane has a Remove Stack item that removes a stack, its saved versions, its schedules and its folder from the plugin without touching any container, with an option to also delete the plugin's own copy of the files. (#25, #28)
+- The stacks pane groups Compose Manager stacks together under a "Compose Manager" sub-header with their count. (#25, #28)
+- When Compose cannot be restored at boot after several download tries, the plugin sends an Unraid notification. (#26, #30)
+
+### Improved
+- Import Stacks now adopts Compose Manager stacks where they are instead of copying their files, and stacks copied by an earlier import are merged back with their schedules, saved versions and folder. (#25, #28)
+- The Compose banners explain why stacks are read-only while Compose Manager is installed and how to migrate to Import Stacks. (#25, #28)
+- Restoring Compose at boot now retries the download when the network is not up yet, so stack autostart still runs. (#26, #30)
+- Installing Compose from the banner shows a warning if the copy on the flash drive cannot be saved, and says whether Compose will be reinstalled after a reboot. (#26, #30)
+- After a plugin update, the Unraid API is reloaded so the new backend takes effect without a reboot. (#30)
+
+### Fixed
+- Compose installed from the setup banner is no longer lost after a reboot, and a reinstall setting you turned off in Settings stays off. (#26, #30)
+- Menus near the bottom of the browser window now open where you can reach them instead of below the visible page. (#25, #28)
+
+### Internal
+- Internal fixes and performance improvements.
+
 ## 2026.11.19-dev7
 ### Improved
 - At boot, the Compose reinstall retries the download several times and sends one Unraid notification only if every try fails, so stack autostart still runs after a slow network start. (#26, #30)
