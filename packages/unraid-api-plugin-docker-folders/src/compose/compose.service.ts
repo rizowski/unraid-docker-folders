@@ -10,7 +10,6 @@ import {
     readdirSync,
     readFileSync,
     renameSync,
-    rmdirSync,
     statSync,
     unlinkSync,
     writeFileSync,
@@ -37,6 +36,7 @@ import {
 } from './compose-config.js';
 import * as composeFiles from './compose-files.js';
 import { findComposeFile, parseComposeServiceNames, type StackFileFields } from './compose-files.js';
+import { removeComposeStack, type RemoveContainer, type RemoveStackResult } from './compose-remove.js';
 import { PIN_FILE, nameFromFolder, nameFromLabels, type LabelledContainer } from './compose-project-name.js';
 import { importedCopies, readMetadataFile, repairImportedStacks, sourceDirOf } from './compose-repair.js';
 import {
@@ -516,6 +516,15 @@ export class ComposeService {
             // the stack is fully down (no containers, so `ps` is empty).
             serviceNames: resolveServiceNames(row),
         };
+    }
+
+    /**
+     * `ComposeManager::removeStack`: drop a stack's row, its schedules and its
+     * stack folder, and with `deleteFiles` the plugin's own copy of its files.
+     * Never touches a container, and never publishes (the resolver does).
+     */
+    removeStack(projectName: string, deleteFiles: boolean, containers: readonly RemoveContainer[]): RemoveStackResult {
+        return removeComposeStack(this.db, projectName, deleteFiles, containers, this.paths.stacksDir);
     }
 
     /**
@@ -1620,29 +1629,11 @@ function isFile(path: string): boolean {
     }
 }
 
-function readMetadataFile(path: string): string | null {
-    if (!existsSync(path)) return null;
-    try {
-        return readFileSync(path, 'utf8').trim();
-    } catch {
-        return null;
-    }
-}
-
 function safeUnlink(path: string): void {
     try {
         unlinkSync(path);
     } catch {
         // Matches PHP's `@unlink`.
-    }
-}
-
-/** Matches PHP's `@rmdir` — only removes an empty directory, silently doing nothing otherwise. */
-function safeRmdir(path: string): void {
-    try {
-        rmdirSync(path);
-    } catch {
-        // Not empty, already gone, or some other failure — same as PHP's `@rmdir`.
     }
 }
 
