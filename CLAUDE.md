@@ -756,8 +756,11 @@ added there, or it never runs.** PHPUnit gives no warning, and
 `--filter <Class>` reports "No tests executed".
 
 ### GraphQL plugin (Vitest)
-Lives in `packages/unraid-api-plugin-docker-folders`. Run `npx vitest run` and
-`npx tsc --noEmit -p .` in that directory. Several suites check the plugin
+Lives in `packages/unraid-api-plugin-docker-folders`. Run `npm test` and
+`npm run type-check` in that directory. These are the two commands CI runs.
+`npm run type-check` is `tsc --noEmit -p tsconfig.test.json`, which includes
+the test files. Do not use `npx tsc --noEmit -p .`: it skips the tests, so a
+stale constructor call in a spec passes locally and fails the release. Several suites check the plugin
 against PHP's own output: the fixtures under `src/schedules/__tests__/` come
 from PHP methods, run by the scripts in `scripts/*-oracle.php`.
 

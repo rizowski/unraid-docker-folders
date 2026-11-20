@@ -189,7 +189,7 @@ describe('ComposeResolver', () => {
                         composePluginDataExists: false,
                     })),
                 });
-                const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+                const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
                 await expect(resolver.bringUpDockerFoldersComposeStack(name)).rejects.toBeInstanceOf(
                     BadRequestException
@@ -201,7 +201,7 @@ describe('ComposeResolver', () => {
 
         it('accepts a project name with dots, such as one imported from compose.manager', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await resolver.bringUpDockerFoldersComposeStack('my.stack');
             expect(compose.stackUp).toHaveBeenCalledWith('my.stack', false);
@@ -209,7 +209,7 @@ describe('ComposeResolver', () => {
 
         it('accepts a 128-character project name and rejects a 129-character one', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             const name128 = 'a'.repeat(128);
             await resolver.bringUpDockerFoldersComposeStack(name128);
@@ -223,7 +223,7 @@ describe('ComposeResolver', () => {
 
         it('skips validation for an empty project on a non-stream action, matching compose.php', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await resolver.bringUpDockerFoldersComposeStack('');
             expect(compose.stackUp).toHaveBeenCalledWith('', false);
@@ -231,7 +231,7 @@ describe('ComposeResolver', () => {
 
         it('does NOT skip an empty project on the stream, unlike every other action', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await expect(resolver.dockerFoldersComposeStream('', 'up')).rejects.toBeInstanceOf(BadRequestException);
             expect(compose.streamStackUp).not.toHaveBeenCalled();
@@ -239,7 +239,7 @@ describe('ComposeResolver', () => {
 
         it('applies the same rule (safePathComponent + 128-char cap) to the stream', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await expect(resolver.dockerFoldersComposeStream('..', 'up')).rejects.toBeInstanceOf(BadRequestException);
 
@@ -307,7 +307,7 @@ describe('ComposeResolver', () => {
         it('create publishes compose/create and folder/updated only on success', () => {
             const events = fakeEventBus();
 
-            const okResolver = new ComposeResolver(fakeComposeService(), events, testPaths);
+            const okResolver = new ComposeResolver(fakeComposeService(), events, testPaths, fakeContainerList());
             okResolver.createDockerFoldersComposeStack({ projectName: 'demo' });
             expect(events.publish).toHaveBeenCalledWith('compose', 'create');
             expect(events.publish).toHaveBeenCalledWith('folder', 'updated');
@@ -352,14 +352,14 @@ describe('ComposeResolver', () => {
 
         it('the install mutation asks the service to persist compose_auto_install', async () => {
             const compose = fakeComposeService();
-            await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
+            await new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList()).installDockerFoldersComposeBinary();
             expect(compose.installComposeBinary).toHaveBeenCalledWith({ persist: true });
         });
 
         it.each([[true], [false]])('the install mutation reports autoInstall=%s from the service', async (on) => {
             const compose = fakeComposeService();
             vi.mocked(compose.isAutoInstallEnabled).mockReturnValue(on);
-            const result = await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
+            const result = await new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList()).installDockerFoldersComposeBinary();
             expect(result.autoInstall).toBe(on);
         });
 
@@ -368,7 +368,7 @@ describe('ComposeResolver', () => {
             vi.mocked(compose.isAutoInstallEnabled).mockImplementation(() => {
                 throw new Error('database is locked');
             });
-            const result = await new ComposeResolver(compose, fakeEventBus(), testPaths).installDockerFoldersComposeBinary();
+            const result = await new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList()).installDockerFoldersComposeBinary();
             expect(result.autoInstall).toBe(false);
         });
     });
@@ -384,7 +384,7 @@ describe('ComposeResolver', () => {
 
         it('a relative path with no working_dir is rejected', async () => {
             const compose = fakeComposeService({ getStackWorkingDir: vi.fn(() => null) });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             await expect(resolver.setDockerFoldersComposeEnvPath('demo', 'custom.env')).rejects.toBeInstanceOf(
                 BadRequestException
             );
@@ -392,7 +392,7 @@ describe('ComposeResolver', () => {
 
         it('a path outside /mnt, stacksDir, and the stack\'s own working_dir is rejected', async () => {
             const compose = fakeComposeService({ getStackWorkingDir: vi.fn(() => '/mnt/demo') });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             await expect(
                 resolver.setDockerFoldersComposeEnvPath('demo', '/etc/passwd')
             ).rejects.toBeInstanceOf(BadRequestException);
@@ -434,7 +434,7 @@ describe('ComposeResolver', () => {
             const compose = fakeComposeService({
                 getComposeFileContent: vi.fn(() => ({ success: false, error: 'Compose file not found', content: null, path: null })),
             });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             expect(() => resolver.dockerFoldersComposeFile('demo')).toThrow(NotFoundException);
         });
 
@@ -442,7 +442,7 @@ describe('ComposeResolver', () => {
             const compose = fakeComposeService({
                 getEnvFileContent: vi.fn(() => ({ success: true, error: null, content: '', path: null })),
             });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             expect(resolver.dockerFoldersComposeEnv('demo')).toEqual({ content: '', path: '' });
         });
 
@@ -450,7 +450,7 @@ describe('ComposeResolver', () => {
             const compose = fakeComposeService({
                 getEnvFileContent: vi.fn(() => ({ success: false, error: 'Failed to read env file', content: null, path: '/mnt/demo/.env' })),
             });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             expect(() => resolver.dockerFoldersComposeEnv('demo')).toThrow('Failed to read env file');
         });
 
@@ -458,7 +458,7 @@ describe('ComposeResolver', () => {
             const compose = fakeComposeService({
                 getFileVersions: vi.fn(() => ({ success: false, error: 'Invalid file type', versions: [] })),
             });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             expect(() => resolver.dockerFoldersComposeFileVersions('demo', 'nope')).toThrow(BadRequestException);
         });
 
@@ -466,7 +466,7 @@ describe('ComposeResolver', () => {
             const compose = fakeComposeService({
                 getFileVersionContent: vi.fn(() => ({ success: false, error: 'Version not found', version: null })),
             });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
             expect(() => resolver.dockerFoldersComposeFileVersion('demo', 999)).toThrow(NotFoundException);
         });
     });
@@ -474,7 +474,7 @@ describe('ComposeResolver', () => {
     describe('dockerFoldersComposeStream subscription', () => {
         it('refuses an invalid action before ever checking management_enabled', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await expect(resolver.dockerFoldersComposeStream('demo', 'restart')).rejects.toBeInstanceOf(
                 BadRequestException
@@ -486,7 +486,7 @@ describe('ComposeResolver', () => {
 
         it('refuses an invalid project name before ever checking management_enabled', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await expect(resolver.dockerFoldersComposeStream('bad name!', 'up')).rejects.toBeInstanceOf(
                 BadRequestException
@@ -505,7 +505,7 @@ describe('ComposeResolver', () => {
                     composePluginDataExists: false,
                 })),
             });
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await expect(resolver.dockerFoldersComposeStream('demo', 'up')).rejects.toBeInstanceOf(
                 ForbiddenException
@@ -538,7 +538,7 @@ describe('ComposeResolver', () => {
 
         it('calls streamStackPull, not streamStackUp, for action "pull"', async () => {
             const compose = fakeComposeService();
-            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths);
+            const resolver = new ComposeResolver(compose, fakeEventBus(), testPaths, fakeContainerList());
 
             await drain(await resolver.dockerFoldersComposeStream('demo', 'pull'));
 
