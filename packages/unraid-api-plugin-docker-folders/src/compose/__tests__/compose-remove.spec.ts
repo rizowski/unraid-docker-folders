@@ -435,11 +435,20 @@ describe('repair of earlier imports', () => {
         expect(temp.rows('SELECT container_name FROM container_folders')).toEqual([{ container_name: 'photos-1' }]);
     });
 
-    it('matches by the name rule when no row runs from the folder', () => {
+    it('never merges two stacks on a matching name alone', () => {
+        // "Nginx.Test" sanitizes to "nginx_test", but the other row runs from an unrelated folder.
         oldCopy('Nginx.Test');
         labelRow('nginx_test', join(root, 'appdata'));
-        expect(repair()).toBe(true);
-        expect(names()).toEqual(['nginx_test']);
+        expect(repair()).toBe(false);
+        expect(names()).toEqual(['Nginx.Test', 'nginx_test']);
+    });
+
+    it('does not rename onto the name of an unrelated stack', () => {
+        source('Nginx.Test');
+        oldCopy('Nginx.Test');
+        labelRow('nginx_test', join(root, 'appdata'));
+        expect(repair()).toBe(false);
+        expect(names()).toEqual(['Nginx.Test', 'nginx_test']);
     });
 
     it('renames a stopped stack when the copy matches the source byte for byte', () => {

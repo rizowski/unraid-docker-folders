@@ -6,7 +6,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { normalizePath, pathIsWithin, resolveAgainst, safePathComponent } from '../paths/paths.js';
 import { nowSeconds } from '../util/time.js';
 import type { ComposePathsConfig } from './compose-config.js';
-import { PIN_FILE, dcflachsSanitize, isValidComposeName, nameFromFolder, plusSanitize } from './compose-project-name.js';
+import { PIN_FILE, nameFromFolder } from './compose-project-name.js';
 
 /**
  * Merge or rename the rows an earlier import copied, so a stack is one row.
@@ -39,7 +39,7 @@ export function repairImportedStacks(db: DatabaseSync, paths: ComposePathsConfig
         const sourcePath = `${projectsDir}/${copy.dir}`;
         const sourceDir = isDir(sourcePath) ? sourceDirOf(sourcePath) : null;
 
-        const counterpart = findCounterpart(row, sourceDir, sourcePath, others);
+        const counterpart = findCounterpart(sourceDir, sourcePath, others);
         if (counterpart === false) continue; // two fit equally
         if (counterpart !== null) {
             actions.push({ type: 'merge', from: row, to: counterpart, versionPaths: new Map() });
@@ -131,13 +131,12 @@ export function importedCopies(db: DatabaseSync, stacksDir: string): { row: Stac
 }
 
 /**
- * The row for the same Compose Manager stack as a copy row. A row that runs
- * from the stack's folder wins; else a row named as a Compose Manager rule
- * would name the imported name. Null when none fits; false when more than one
- * does.
+ * The row for the same Compose Manager stack as a copy row: the one that runs
+ * from the stack's folder (or that folder's indirect target). A name match
+ * alone never counts, because two stacks can sanitize to the same value.
+ * Null when none fits; false when more than one does.
  */
 function findCounterpart(
-    copyRow: StackRow,
     sourceDir: string | null,
     sourcePath: string,
     others: readonly StackRow[]
@@ -154,14 +153,7 @@ function findCounterpart(
     });
     if (byFolder.length === 1) return byFolder[0];
     if (byFolder.length > 1) return false;
-
-    const names = new Set<string>();
-    for (const name of [plusSanitize(copyRow.project_name), dcflachsSanitize(copyRow.project_name)]) {
-        if (name !== null && isValidComposeName(name) && name !== copyRow.project_name) names.add(name);
-    }
-    const byName = others.filter((other) => names.has(other.project_name));
-    if (byName.length === 1) return byName[0];
-    return byName.length > 1 ? false : null;
+    return null;
 }
 
 /** Is the copy a row points at the same bytes as its source folder? Compose file, and .env when the copy has one. */

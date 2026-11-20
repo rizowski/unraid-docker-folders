@@ -452,16 +452,33 @@ final class ComposeImportRepairTest extends TestCase
     }
 
     #[Test]
-    public function repairMatchesByTheNameRuleWhenTheFolderDoesNotMatch(): void
+    public function repairNeverMergesTwoStacksOnAMatchingNameAlone(): void
     {
+        // "Nginx.Test" sanitizes to "nginx_test", but the other row runs from an
+        // unrelated folder. Same name after the rule is no proof of one stack.
         $this->oldCopy('Nginx.Test');
         $elsewhere = $this->root . '/appdata/nginx';
         mkdir($elsewhere, 0755, true);
         $this->addRow('nginx_test', $elsewhere, $elsewhere . '/docker-compose.yml');
 
-        $this->assertTrue($this->repair());
+        $this->assertFalse($this->repair());
 
-        $this->assertSame(['nginx_test'], $this->names());
+        $this->assertSame(['Nginx.Test', 'nginx_test'], $this->names());
+    }
+
+    #[Test]
+    public function repairDoesNotRenameOntoTheNameOfAnUnrelatedStack(): void
+    {
+        $this->project('Nginx.Test');
+        $this->oldCopy('Nginx.Test');
+        $elsewhere = $this->root . '/appdata/nginx';
+        mkdir($elsewhere, 0755, true);
+        $this->addRow('nginx_test', $elsewhere, $elsewhere . '/docker-compose.yml');
+
+        $this->assertFalse($this->repair());
+
+        $this->assertSame(['Nginx.Test', 'nginx_test'], $this->names());
+        $this->assertSame($elsewhere, $this->row('nginx_test')['working_dir']);
     }
 
     #[Test]

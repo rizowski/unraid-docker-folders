@@ -2341,8 +2341,8 @@ class ComposeManager
    * COMPOSE_STACKS_DIR) is handled in one of three ways:
    * - It has a counterpart, the row for the same Compose Manager stack that
    *   the label sync made: its working_dir is the project folder the copy was
-   *   made from (or that folder's indirect target), or its name is what a
-   *   Compose Manager name rule makes of the copy's name. Then the
+   *   made from (or that folder's indirect target). A name match alone never
+   *   counts. Then the
    *   counterpart is kept and the copy's schedules, saved file versions and
    *   folder move to it, and the copy row goes. The folder goes only when it
    *   is empty (a folder with containers in it is detached from the stack
@@ -2390,7 +2390,7 @@ class ComposeManager
       $sourcePath = $projectsDir . '/' . $copy['dir'];
       $sourceDir = is_dir($sourcePath) ? $this->sourceDirOf($sourcePath) : null;
 
-      $counterpart = $this->findCounterpart($row, $copy['dir'], $sourceDir, $sourcePath, $others);
+      $counterpart = $this->findCounterpart($sourceDir, $sourcePath, $others);
       if ($counterpart === false) {
         continue; // two fit equally
       }
@@ -2454,7 +2454,7 @@ class ComposeManager
    *
    * @return array|false|null the row; null when none fits; false when more than one does
    */
-  private function findCounterpart(array $copyRow, $copyDir, $sourceDir, $sourcePath, array $others)
+  private function findCounterpart($sourceDir, $sourcePath, array $others)
   {
     $folders = [];
     foreach ([$sourcePath, $sourceDir] as $path) {
@@ -2464,7 +2464,9 @@ class ComposeManager
       }
     }
 
-    // Tier 1: it runs from this stack's folder.
+    // Path proof only: the other row runs from this stack's folder. A name
+    // that a rule maps onto another name is never proof, because two stacks
+    // can sanitize to the same value.
     $byFolder = [];
     foreach ($others as $other) {
       $dir = is_string($other['working_dir']) ? normalizePath($other['working_dir']) : null;
@@ -2479,23 +2481,7 @@ class ComposeManager
       return false;
     }
 
-    // Tier 2: the name a Compose Manager rule makes of the imported name.
-    $names = [];
-    foreach ([ComposeProjectName::plusSanitize($copyRow['project_name']), ComposeProjectName::dcflachsSanitize($copyRow['project_name'])] as $name) {
-      if ($name !== null && ComposeProjectName::isValid($name) && $name !== $copyRow['project_name']) {
-        $names[$name] = true;
-      }
-    }
-    $byName = [];
-    foreach ($others as $other) {
-      if (isset($names[$other['project_name']])) {
-        $byName[] = $other;
-      }
-    }
-    if (count($byName) === 1) {
-      return $byName[0];
-    }
-    return count($byName) > 1 ? false : null;
+    return null;
   }
 
   /**
