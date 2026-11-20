@@ -1077,11 +1077,28 @@ const mockComposeStacks = [
     created_at: Date.now() / 1000,
     updated_at: Date.now() / 1000,
   },
+  // A stack in the plugin's own folder (checkbox shown), no container.
+  {
+    project_name: 'own_stack',
+    working_dir: '/boot/config/plugins/unraid-docker-folders-modern/compose-stacks/own_stack',
+    own_files: true,
+    compose_file: '/boot/config/plugins/unraid-docker-folders-modern/compose-stacks/own_stack/docker-compose.yml',
+    env_file: null,
+    autostart: false,
+    autostart_force_recreate: false,
+    description: 'Own folder',
+    imported_from: null,
+    services_running: 0,
+    services_total: 0,
+    created_at: Date.now() / 1000,
+    updated_at: Date.now() / 1000,
+  },
   // A stack with no running container, as an import leaves it. Remove Stack
   // works on this one; db-stack has containers and is refused (409).
   {
     project_name: 'nginx_test',
     working_dir: '/boot/config/plugins/compose.manager/projects/Nginx.Test',
+    own_files: false,
     compose_file: '/boot/config/plugins/compose.manager/projects/Nginx.Test/docker-compose.yml',
     env_file: null,
     autostart: false,

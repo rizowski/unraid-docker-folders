@@ -38,7 +38,8 @@ const ownFiles = computed(() => composeStore.stacks.find((s) => s.project_name =
 const hasContainers = computed(() => (dockerStore.containersByProject.get(props.project)?.length ?? 0) > 0);
 
 const message = computed(() => {
-  const base = `Remove "${props.project}" from Docker Folders? Its schedules and its folder are removed too. Containers and compose files are not changed.`;
+  const kept = ownFiles.value ? 'Containers are not changed. Compose files are not changed unless you tick the box.' : 'Containers and compose files are not changed.';
+  const base = `Remove "${props.project}" from Docker Folders? Its schedules and its folder are removed too. ${kept}`;
   return hasContainers.value ? `${base} This stack still has containers. Run Stack Down first.` : base;
 });
 </script>

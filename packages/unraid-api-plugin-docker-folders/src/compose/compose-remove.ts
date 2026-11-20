@@ -208,7 +208,7 @@ export function ownStackDir(
         return [null, null]; // nothing on disk
     }
     if (stat.isSymbolicLink()) return [null, notOwn];
-    if (!stat.isDirectory()) return [null, notOwn];
+    if (!stat.isDirectory()) return [null, null]; // as PHP is_dir: nothing to delete
 
     let realDir: string;
     let realBase: string;

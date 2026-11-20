@@ -46,7 +46,9 @@ describe('StackRemoveConfirmModal', () => {
 
   it('offers the delete-files box only for a stack in the plugin own folder', () => {
     useComposeStore().stacks = [makeStack('immich', true)];
-    expect(mountModal().checkboxLabel).toBeTruthy();
+    const props = mountModal();
+    expect(props.checkboxLabel).toBeTruthy();
+    expect(props.message).toContain('not changed unless you tick the box');
   });
 
   it('has no delete-files box for any other stack', () => {
