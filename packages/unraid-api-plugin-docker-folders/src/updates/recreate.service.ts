@@ -20,6 +20,7 @@ function isNotModified(error: unknown): boolean {
 
 type RawConfig = Record<string, unknown>;
 
+const asMap = (value: unknown): Record<string, unknown> => (isMap(value) ? value : {});
 const isMap = (value: unknown): value is Record<string, unknown> =>
     typeof value === 'object' && value !== null && !Array.isArray(value);
 
@@ -64,14 +65,14 @@ export function userSettingsConfig(
         out.Env = out.Env.filter((entry) => !imageEnv.includes(entry as string));
     }
     if (isMap(out.Labels)) {
-        const imageLabels = isMap(imageConfig.Labels) ? imageConfig.Labels : {};
+        const imageLabels = asMap(imageConfig.Labels);
         out.Labels = Object.fromEntries(
             Object.entries(out.Labels).filter(([key, value]) => !(key in imageLabels && imageLabels[key] === value)),
         );
     }
     for (const field of ['ExposedPorts', 'Volumes']) {
         if (isMap(out[field])) {
-            out[field] = omitKeys(out[field], isMap(imageConfig[field]) ? imageConfig[field] : {});
+            out[field] = omitKeys(out[field], asMap(imageConfig[field]));
         }
     }
     // Single values: copy only when they differ from the image's.
@@ -101,7 +102,7 @@ export function reuseAnonymousVolumes(
     const mounts = [...((hostConfig.Mounts as RawConfig[] | undefined) ?? [])].map((mount) => ({ ...mount }));
     const removedByImage =
         oldImageConfig !== null && newImageConfig !== null
-            ? omitKeys(isMap(oldImageConfig.Volumes) ? oldImageConfig.Volumes : {}, isMap(newImageConfig.Volumes) ? newImageConfig.Volumes : {})
+            ? omitKeys(asMap(oldImageConfig.Volumes), asMap(newImageConfig.Volumes))
             : {};
 
     const named = new Set<string>();
@@ -160,11 +161,13 @@ export function buildCreateBody(
     config.Image = resolveImageTag(String(config.Image ?? ''), containerName);
 
     const { ContainerIDFile: _containerIdFile, ...hostConfigRest } = hostConfig;
-    const createBody: RawConfig = { ...config, HostConfig: hostConfigRest };
 
     // Keep anonymous volumes (and their data) across the recreate.
     const mounts = reuseAnonymousVolumes(inspect as unknown as RawConfig, oldImageConfig, newImageConfig);
-    if (mounts.length > 0) hostConfigRest.Mounts = mounts;
+    const createBody: RawConfig = {
+        ...config,
+        HostConfig: mounts.length > 0 ? { ...hostConfigRest, Mounts: mounts } : hostConfigRest,
+    };
 
     // A container that joins another's network namespace cannot declare
     // ports, and Docker answers 400 "conflicting options: port exposing and
@@ -239,8 +242,10 @@ export class RecreateService {
         // The old image by id (its tag may already point at the new one after the
         // pull) and the new image by tag, right before the create. A failed
         // inspect gives null, which keeps more rather than dropping data.
-        const oldImageConfig = await this.imageConfig(String(inspect.Image ?? ''));
-        const newImageConfig = await this.imageConfig(resolveImageTag(String(inspect.Config?.Image ?? ''), containerName));
+        const [oldImageConfig, newImageConfig] = await Promise.all([
+            this.imageConfig(String(inspect.Image ?? '')),
+            this.imageConfig(resolveImageTag(String(inspect.Config?.Image ?? ''), containerName)),
+        ]);
         if (oldImageConfig === null) {
             this.logger.warn(`recreate ${containerName}: old image inspect failed, copying the whole container config`);
         }
