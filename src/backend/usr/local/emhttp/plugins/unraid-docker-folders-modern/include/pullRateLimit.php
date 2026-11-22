@@ -45,13 +45,9 @@ function parseRetryAfter($value, $now = null)
  */
 function dfmPullRateLimitDelay($message, $attempt)
 {
-  $seconds = null;
-  if (preg_match('/retry[- ]after:?\s*(\d+)/i', (string) $message, $m)) {
-    $seconds = (int) $m[1];
-  }
-  if ($seconds === null) {
-    $seconds = DFM_PULL_RATE_LIMIT_BASE_WAIT * (2 ** max(0, $attempt - 1));
-  }
+  $seconds = preg_match('/retry[- ]after:?\s*(\d+)/i', (string) $message, $m)
+    ? (int) $m[1]
+    : DFM_PULL_RATE_LIMIT_BASE_WAIT * (2 ** ($attempt - 1));
   return max(1, min(DFM_PULL_RATE_LIMIT_MAX_WAIT, $seconds));
 }
 

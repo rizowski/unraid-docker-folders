@@ -11,8 +11,8 @@
 
 /** Counts the first try: 4 means up to 3 retries. */
 export const PULL_RATE_LIMIT_MAX_ATTEMPTS = 4;
-export const PULL_RATE_LIMIT_MAX_WAIT_SECONDS = 300;
-export const PULL_RATE_LIMIT_BASE_WAIT_SECONDS = 30;
+const PULL_RATE_LIMIT_MAX_WAIT_SECONDS = 300;
+const PULL_RATE_LIMIT_BASE_WAIT_SECONDS = 30;
 
 export function isRateLimitMessage(message: string): boolean {
     return /toomanyrequests|too many requests|rate limit|\b429\b/i.test(message);
@@ -36,7 +36,7 @@ export function pullRateLimitDelay(message: string, attempt: number): number {
     const named = /retry[- ]after:?\s*(\d+)/i.exec(message);
     const seconds = named
         ? Number(named[1])
-        : PULL_RATE_LIMIT_BASE_WAIT_SECONDS * 2 ** Math.max(0, attempt - 1);
+        : PULL_RATE_LIMIT_BASE_WAIT_SECONDS * 2 ** (attempt - 1);
     return Math.max(1, Math.min(PULL_RATE_LIMIT_MAX_WAIT_SECONDS, seconds));
 }
 
