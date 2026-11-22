@@ -185,6 +185,13 @@ export function buildCreateBody(
                 Aliases: raw.Aliases ?? null,
                 Links: raw.Links ?? null,
                 DriverOpts: raw.DriverOpts ?? null,
+                // PHP inspects at API v1.41, where Config.MacAddress carries a
+                // user-set MAC and passes through the config copy. This client
+                // is unversioned: Docker 25+ reports the MAC only on the
+                // endpoint, and a create without it assigns a new one. Inspect
+                // cannot tell a set MAC from a generated one, so keep the MAC
+                // the container has on every network.
+                ...(raw.MacAddress ? { MacAddress: raw.MacAddress } : {}),
             };
         }
         createBody.NetworkingConfig = { EndpointsConfig: endpointsConfig };
