@@ -98,6 +98,26 @@ JSON;
     }
 
     #[Test]
+    public function emptyListsStayListsWhileEmptyMapsBecomeObjects(): void
+    {
+        $body = json_decode(
+            '{"Cmd":[],"Entrypoint":[],"Env":[],"Labels":{},"ExposedPorts":{},'
+            . '"Healthcheck":{"Test":[]},'
+            . '"HostConfig":{"Binds":[],"Dns":[],"DnsSearch":[],"ExtraHosts":[],"CapAdd":[],"Devices":[],"Sysctls":{}}}',
+            true
+        );
+        $json = json_encode(DockerClient::emptyMapsToObjects($body));
+
+        foreach (['"Cmd":[]', '"Entrypoint":[]', '"Env":[]', '"Test":[]', '"Binds":[]', '"Dns":[]',
+                  '"DnsSearch":[]', '"ExtraHosts":[]', '"CapAdd":[]', '"Devices":[]'] as $list) {
+            $this->assertStringContainsString($list, $json);
+        }
+        foreach (['"Labels":{}', '"ExposedPorts":{}', '"Sysctls":{}'] as $map) {
+            $this->assertStringContainsString($map, $json);
+        }
+    }
+
+    #[Test]
     public function populatedMapsAndListValuesStayAsTheyAre(): void
     {
         $body = [
