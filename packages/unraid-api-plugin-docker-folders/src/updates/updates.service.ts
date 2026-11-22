@@ -24,7 +24,7 @@ import {
     stripLeadingSlash,
 } from './docker-refs.js';
 import type { DockerFoldersPullEvent } from './pull-events.js';
-import { isRateLimitMessage, runWithPullRateLimitRetry } from './pull-rate-limit.js';
+import { imageRegistry, isRateLimitMessage, runWithPullRateLimitRetry } from './pull-rate-limit.js';
 import { RecreateService, type RecreateResult } from './recreate.service.js';
 import { parseRepo, toReleaseNote } from './release-notes.util.js';
 import { ReleaseNotesService } from './release-notes.service.js';
@@ -802,6 +802,7 @@ export class UpdatesService {
                 return result.success ? null : (result.error ?? 'Pull failed');
             },
             {
+                registry: imageRegistry(image),
                 notify: (status) =>
                     emit({ type: 'progress', id: '', status, current: null, total: null }),
             }

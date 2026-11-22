@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
     PULL_RATE_LIMIT_MAX_ATTEMPTS,
+    imageRegistry,
     isRateLimitMessage,
     parseRetryAfter,
     pullRateLimitDelay,
@@ -36,6 +37,23 @@ describe('pull rate limit', () => {
         expect(isRateLimitMessage(LIMIT)).toBe(true);
         expect(isRateLimitMessage('Too Many Requests')).toBe(true);
         expect(isRateLimitMessage('manifest unknown')).toBe(false);
+        expect(isRateLimitMessage('manifest for app:v1.429 not found')).toBe(false);
+    });
+
+    it('splits the registry host from an image reference', () => {
+        expect(imageRegistry('nginx:latest')).toBe('docker.io');
+        expect(imageRegistry('library/nginx')).toBe('docker.io');
+        expect(imageRegistry('ghcr.io/foo/bar:1')).toBe('ghcr.io');
+        expect(imageRegistry('localhost:5000/app')).toBe('localhost:5000');
+    });
+
+    it('does not make a pull from another registry wait', async () => {
+        const h = harness();
+        const results = [LIMIT, null];
+        await runWithPullRateLimitRetry(async () => results.shift() ?? null, h.hooks);
+        const other = harness();
+        await runWithPullRateLimitRetry(async () => null, { ...other.hooks, registry: 'ghcr.io' });
+        expect(other.slept).toEqual([]);
     });
 
     it('reads Retry-After seconds and HTTP dates', () => {

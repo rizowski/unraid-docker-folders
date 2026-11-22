@@ -15,7 +15,7 @@ const PULL_RATE_LIMIT_MAX_WAIT_SECONDS = 300;
 const PULL_RATE_LIMIT_BASE_WAIT_SECONDS = 30;
 
 export function isRateLimitMessage(message: string): boolean {
-    return /toomanyrequests|too many requests|rate limit|\b429\b/i.test(message);
+    return /toomanyrequests|too many requests|rate limit|http 429|status:? 429/i.test(message);
 }
 
 /** Seconds from a Retry-After value (seconds or HTTP-date); null if not understood. */
@@ -45,14 +45,27 @@ export interface PullRateLimitHooks {
     notify: (status: string) => void;
     sleep?: (ms: number) => Promise<void>;
     now?: () => number;
+    /** Registry host that shares the wait. Defaults to Docker Hub. */
+    registry?: string;
 }
 
-/** When the shared wait ends, in ms. One rate limit usually hits the rest of a batch too. */
-let sharedDeadlineMs = 0;
+/** The registry host of an image reference. No host in the name means Docker Hub. */
+export function imageRegistry(image: string): string {
+    const slash = image.indexOf('/');
+    if (slash === -1) return 'docker.io';
+    const first = image.slice(0, slash);
+    return first.includes('.') || first.includes(':') || first === 'localhost' ? first.toLowerCase() : 'docker.io';
+}
+
+/**
+ * When the shared wait ends, in ms, per registry. One rate limit usually hits
+ * the rest of a batch too, but not pulls from another registry.
+ */
+const sharedDeadlines = new Map<string, number>();
 
 /** For tests. */
 export function resetPullRateLimitState(): void {
-    sharedDeadlineMs = 0;
+    sharedDeadlines.clear();
 }
 
 /**
@@ -66,6 +79,7 @@ export async function runWithPullRateLimitRetry(
 ): Promise<string | null> {
     const sleep = hooks.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     const now = hooks.now ?? Date.now;
+    const registry = hooks.registry ?? 'docker.io';
 
     const wait = async (seconds: number, label: string): Promise<void> => {
         hooks.notify(`${label}, retrying in ${seconds}s`);
@@ -74,7 +88,7 @@ export async function runWithPullRateLimitRetry(
 
     let error: string | null = null;
     for (let attemptNo = 1; attemptNo <= PULL_RATE_LIMIT_MAX_ATTEMPTS; attemptNo++) {
-        const left = Math.ceil((sharedDeadlineMs - now()) / 1000);
+        const left = Math.ceil(((sharedDeadlines.get(registry) ?? 0) - now()) / 1000);
         if (left > 0) {
             await wait(Math.min(left, PULL_RATE_LIMIT_MAX_WAIT_SECONDS), 'Waiting for a registry rate limit');
         }
@@ -83,8 +97,12 @@ export async function runWithPullRateLimitRetry(
         error = await attempt(!last);
         if (error === null || last || !isRateLimitMessage(error)) return error;
 
-        sharedDeadlineMs = Math.max(sharedDeadlineMs, now() + pullRateLimitDelay(error, attemptNo) * 1000);
-        await wait(Math.max(1, Math.ceil((sharedDeadlineMs - now()) / 1000)), 'Rate limited by the registry');
+        const deadline = Math.max(
+            sharedDeadlines.get(registry) ?? 0,
+            now() + pullRateLimitDelay(error, attemptNo) * 1000
+        );
+        sharedDeadlines.set(registry, deadline);
+        await wait(Math.max(1, Math.ceil((deadline - now()) / 1000)), 'Rate limited by the registry');
     }
     return error;
 }

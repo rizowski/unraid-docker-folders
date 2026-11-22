@@ -21,7 +21,7 @@ const DFM_PULL_RATE_LIMIT_BASE_WAIT = 30;
 /** True when a daemon or registry message reports a rate limit. */
 function dfmIsRateLimitMessage($message)
 {
-  return (bool) preg_match('/toomanyrequests|too many requests|rate limit|\b429\b/i', (string) $message);
+  return (bool) preg_match('/toomanyrequests|too many requests|rate limit|http 429|status:? 429/i', (string) $message);
 }
 
 /**
@@ -51,9 +51,20 @@ function dfmPullRateLimitDelay($message, $attempt)
   return max(1, min(DFM_PULL_RATE_LIMIT_MAX_WAIT, $seconds));
 }
 
-function dfmPullRateLimitStatePath()
+/** The registry host of an image reference. No host in the name means Docker Hub. */
+function dfmImageRegistry($image)
 {
-  return sys_get_temp_dir() . '/unraid-docker-folders-pull-ratelimit';
+  $first = explode('/', (string) $image, 2);
+  if (count($first) === 2 && (strpos($first[0], '.') !== false || strpos($first[0], ':') !== false || $first[0] === 'localhost')) {
+    return strtolower($first[0]);
+  }
+  return 'docker.io';
+}
+
+/** One state file per registry: a limit on Docker Hub must not stall ghcr.io pulls. */
+function dfmPullRateLimitStatePath($registry = 'docker.io')
+{
+  return sys_get_temp_dir() . '/unraid-docker-folders-pull-ratelimit-' . md5($registry);
 }
 
 /**
@@ -69,12 +80,13 @@ function dfmPullRateLimitStatePath()
  * @param callable|null $sleep fn(int $seconds), for tests
  * @param string|null $statePath state file, for tests
  * @param callable|null $now   fn(): int, for tests
+ * @param string $registry     registry host that shares the wait, from dfmImageRegistry()
  */
-function dfmRunPullWithRateLimitRetry(callable $attempt, callable $getError, callable $onProgress, $sleep = null, $statePath = null, $now = null)
+function dfmRunPullWithRateLimitRetry(callable $attempt, callable $getError, callable $onProgress, $sleep = null, $statePath = null, $now = null, $registry = 'docker.io')
 {
   $sleep = $sleep ?? 'sleep';
   $now = $now ?? 'time';
-  $statePath = $statePath ?? dfmPullRateLimitStatePath();
+  $statePath = $statePath ?? dfmPullRateLimitStatePath($registry);
 
   $wait = function ($seconds, $label) use ($sleep, $onProgress) {
     $onProgress(['id' => '', 'status' => "{$label}, retrying in {$seconds}s"]);

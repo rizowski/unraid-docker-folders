@@ -55,6 +55,17 @@ final class PullRateLimitTest extends TestCase
         $this->assertTrue(dfmIsRateLimitMessage('toomanyrequests: You have reached your pull rate limit.'));
         $this->assertTrue(dfmIsRateLimitMessage('Too Many Requests'));
         $this->assertFalse(dfmIsRateLimitMessage('manifest unknown'));
+        $this->assertFalse(dfmIsRateLimitMessage('manifest for app:v1.429 not found'));
+    }
+
+    #[Test]
+    public function theWaitIsPerRegistry(): void
+    {
+        $this->assertSame('docker.io', dfmImageRegistry('nginx:latest'));
+        $this->assertSame('docker.io', dfmImageRegistry('library/nginx'));
+        $this->assertSame('ghcr.io', dfmImageRegistry('ghcr.io/foo/bar:1'));
+        $this->assertSame('localhost:5000', dfmImageRegistry('localhost:5000/app'));
+        $this->assertNotSame(dfmPullRateLimitStatePath('docker.io'), dfmPullRateLimitStatePath('ghcr.io'));
     }
 
     #[Test]

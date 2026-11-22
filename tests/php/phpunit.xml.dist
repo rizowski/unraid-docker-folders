@@ -29,8 +29,10 @@
     </testsuite>
     <testsuite name="ImageReference">
       <file>ImageReferenceTest.php</file>
-      <file>PullRateLimitTest.php</file>
       <file>RecreateTargetsTest.php</file>
+    </testsuite>
+    <testsuite name="PullRateLimit">
+      <file>PullRateLimitTest.php</file>
     </testsuite>
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>

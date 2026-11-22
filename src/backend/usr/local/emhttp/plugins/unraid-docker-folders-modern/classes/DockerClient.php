@@ -2122,7 +2122,11 @@ class DockerClient
       function () {
         return $this->lastError;
       },
-      $onProgress
+      $onProgress,
+      null,
+      null,
+      null,
+      dfmImageRegistry($imageName)
     );
   }
 
