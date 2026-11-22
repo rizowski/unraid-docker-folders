@@ -24,6 +24,7 @@ import {
     stripLeadingSlash,
 } from './docker-refs.js';
 import type { DockerFoldersPullEvent } from './pull-events.js';
+import { imageRegistry, isRateLimitMessage, runWithPullRateLimitRetry } from './pull-rate-limit.js';
 import { RecreateService, type RecreateResult } from './recreate.service.js';
 import { parseRepo, toReleaseNote } from './release-notes.util.js';
 import { ReleaseNotesService } from './release-notes.service.js';
@@ -793,6 +794,28 @@ export class UpdatesService {
         image: string,
         emit: (event: DockerFoldersPullEvent) => void
     ): Promise<{ success: boolean; error: string | null; digest: string | null }> {
+        // A registry rate limit (429) is retried after a wait; other errors are not.
+        let result = { success: false, error: null as string | null, digest: null as string | null };
+        await runWithPullRateLimitRetry(
+            async (hold) => {
+                result = await this.pullAttempt(image, emit, hold);
+                return result.success ? null : (result.error ?? 'Pull failed');
+            },
+            {
+                registry: imageRegistry(image),
+                notify: (status) =>
+                    emit({ type: 'progress', id: '', status, current: null, total: null }),
+            }
+        );
+        return result;
+    }
+
+    /** One pull attempt. With `hold`, a rate limit error line is not emitted, because a retry follows. */
+    private async pullAttempt(
+        image: string,
+        emit: (event: DockerFoldersPullEvent) => void,
+        hold: boolean
+    ): Promise<{ success: boolean; error: string | null; digest: string | null }> {
         let stream: NodeJS.ReadableStream;
         try {
             stream = await this.docker.pullImage(image);
@@ -809,7 +832,7 @@ export class UpdatesService {
         let streamError: string | null;
         let digest: string | null;
         try {
-            ({ error: streamError, digest } = await this.consumeChunksWithTimeout(stream, emit));
+            ({ error: streamError, digest } = await this.consumeChunksWithTimeout(stream, emit, hold));
         } catch (error) {
             const reason = errorMessage(error);
             this.logger.warn(`Docker pull stream error for ${image}: ${reason}`);
@@ -896,7 +919,8 @@ export class UpdatesService {
      */
     private consumeChunks(
         stream: NodeJS.ReadableStream,
-        emit: (event: DockerFoldersPullEvent) => void
+        emit: (event: DockerFoldersPullEvent) => void,
+        hold = false
     ): Promise<PullStreamOutcome> {
         return new Promise((resolve, reject) => {
             let buffer = '';
@@ -932,7 +956,9 @@ export class UpdatesService {
 
                     if (typeof parsed.error === 'string' && parsed.error !== '') {
                         lastError = parsed.error;
-                        emit({ type: 'error', message: parsed.error });
+                        if (!(hold && isRateLimitMessage(parsed.error))) {
+                            emit({ type: 'error', message: parsed.error });
+                        }
                         continue;
                     }
 
@@ -961,14 +987,15 @@ export class UpdatesService {
      */
     private consumeChunksWithTimeout(
         stream: NodeJS.ReadableStream,
-        emit: (event: DockerFoldersPullEvent) => void
+        emit: (event: DockerFoldersPullEvent) => void,
+        hold = false
     ): Promise<PullStreamOutcome> {
         const destroyable = stream as NodeJS.ReadableStream & { destroy?: (error?: Error) => void };
         const timer = setTimeout(() => {
             destroyable.destroy?.(new Error('Pull timed out'));
         }, PULL_TIMEOUT_MS);
 
-        return this.consumeChunks(stream, emit).finally(() => clearTimeout(timer));
+        return this.consumeChunks(stream, emit, hold).finally(() => clearTimeout(timer));
     }
 
     /**

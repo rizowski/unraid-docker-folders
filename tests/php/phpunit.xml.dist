@@ -32,6 +32,9 @@
       <file>ImageReferenceTest.php</file>
       <file>RecreateTargetsTest.php</file>
     </testsuite>
+    <testsuite name="PullRateLimit">
+      <file>PullRateLimitTest.php</file>
+    </testsuite>
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>
       <file>PickLocalDigestTest.php</file>
