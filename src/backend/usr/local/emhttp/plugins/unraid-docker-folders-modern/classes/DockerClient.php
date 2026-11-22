@@ -2113,9 +2113,25 @@ class DockerClient
    *
    * A declared mount with an empty Source gets the old volume name. A target
    * already in Binds or Mounts is not added twice.
+   *
+   * An anonymous volume at a path the OLD image declared with VOLUME, and the
+   * NEW image no longer declares, is dropped: the new image does not want
+   * that path to be a volume. The old volume stays on disk, unattached. A
+   * path that is not in the old image's Volumes is the user's own (for
+   * example `docker run -v /data`) and is always kept. With either image
+   * Config unknown (null), nothing is dropped. A declared mount in
+   * HostConfig.Mounts is never dropped.
+   *
+   * @param array|null $oldImageConfig inspect Config of the old image
+   * @param array|null $newImageConfig inspect Config of the image the new container uses
    */
-  public static function reuseAnonymousVolumes(array $inspect): array
+  public static function reuseAnonymousVolumes(array $inspect, ?array $oldImageConfig = null, ?array $newImageConfig = null): array
   {
+    $removedByImage = [];
+    if ($oldImageConfig !== null && $newImageConfig !== null) {
+      $removedByImage = array_diff_key((array) ($oldImageConfig['Volumes'] ?? []), (array) ($newImageConfig['Volumes'] ?? []));
+    }
+
     $hostConfig = $inspect['HostConfig'] ?? [];
     $mounts = array_values((array) ($hostConfig['Mounts'] ?? []));
 
@@ -2150,7 +2166,7 @@ class DockerClient
           continue 2;
         }
       }
-      if (!isset($targets[$target])) {
+      if (!isset($targets[$target]) && !array_key_exists($target, $removedByImage)) {
         $entry = ['Type' => 'volume', 'Source' => $name, 'Target' => $target];
         if (($mount['RW'] ?? true) === false) {
           $entry['ReadOnly'] = true;
@@ -2160,6 +2176,47 @@ class DockerClient
     }
 
     return $mounts;
+  }
+
+  /**
+   * The create body of a recreate, from the old container's inspect data.
+   *
+   * Pure: no Docker calls, so the tests can feed it fixtures. NetworkingConfig
+   * is not part of it (see planNetworks).
+   *
+   * @param array|null $oldImageConfig inspect Config of the old image, null when unknown
+   * @param array|null $newImageConfig inspect Config of the new image, null when unknown
+   * @param string $image the resolved image tag the new container uses
+   */
+  public static function buildRecreateBody(array $inspect, ?array $oldImageConfig, ?array $newImageConfig, string $image): array
+  {
+    $config = self::userSettingsConfig(
+      $inspect['Config'] ?? [],
+      $oldImageConfig,
+      (string) ($inspect['Id'] ?? ''),
+      (string) ($inspect['HostConfig']['NetworkMode'] ?? '')
+    );
+    $config['Image'] = $image;
+
+    $createBody = $config;
+    $createBody['HostConfig'] = $inspect['HostConfig'] ?? [];
+
+    // Remove read-only HostConfig fields
+    unset($createBody['HostConfig']['ContainerIDFile']);
+
+    // Keep anonymous volumes (and their data) across the recreate.
+    $mounts = self::reuseAnonymousVolumes($inspect, $oldImageConfig, $newImageConfig);
+    if ($mounts !== []) {
+      $createBody['HostConfig']['Mounts'] = $mounts;
+    }
+
+    $createBody = self::emptyMapsToObjects($createBody);
+
+    // A container that joins another's network namespace cannot declare ports.
+    // Docker answers 400 "conflicting options: port exposing and the container
+    // type network mode", yet inspect lists the image's EXPOSE ports in
+    // Config.ExposedPorts. Drop them (issue #43).
+    return self::dropExposedPortsForSharedNetwork($createBody);
   }
 
   /**
@@ -2199,35 +2256,17 @@ class DockerClient
     if ($imageConfig === null) {
       error_log("recreateContainer {$containerName}: old image inspect failed, copying the whole container config");
     }
-    $config = self::userSettingsConfig(
-      $inspect['Config'] ?? [],
-      $imageConfig,
-      (string) $oldId,
-      (string) ($inspect['HostConfig']['NetworkMode'] ?? '')
-    );
-
     // Ensure Image is a tag reference, not a SHA digest
-    $config['Image'] = $this->resolveImageTag($config['Image'] ?? '', $containerName);
+    $image = $this->resolveImageTag($inspect['Config']['Image'] ?? '', $containerName);
 
-    $createBody = $config;
-    $createBody['HostConfig'] = $inspect['HostConfig'] ?? [];
+    // The image the new container will use, inspected right before the create
+    // (after the pull). Without it no anonymous volume is dropped.
+    $newImageInfo = $this->getImageInfo($image);
+    $newImageConfig = is_array($newImageInfo) && isset($newImageInfo['Config']) && is_array($newImageInfo['Config'])
+      ? $newImageInfo['Config']
+      : null;
 
-    // Remove read-only HostConfig fields
-    unset($createBody['HostConfig']['ContainerIDFile']);
-
-    // Keep anonymous volumes (and their data) across the recreate.
-    $mounts = self::reuseAnonymousVolumes($inspect);
-    if ($mounts !== []) {
-      $createBody['HostConfig']['Mounts'] = $mounts;
-    }
-
-    $createBody = self::emptyMapsToObjects($createBody);
-
-    // A container that joins another's network namespace cannot declare ports.
-    // Docker answers 400 "conflicting options: port exposing and the container
-    // type network mode", yet inspect lists the image's EXPOSE ports in
-    // Config.ExposedPorts. Drop them (issue #43).
-    $createBody = self::dropExposedPortsForSharedNetwork($createBody);
+    $createBody = self::buildRecreateBody($inspect, $imageConfig, $newImageConfig, $image);
 
     // Docker before API 1.44 refuses a create with more than one endpoint, so
     // create with the primary network and connect the rest afterwards.

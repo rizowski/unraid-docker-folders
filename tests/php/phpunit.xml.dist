@@ -28,6 +28,7 @@
       <file>DockerClientSharedNetworkTest.php</file>
       <file>DockerClientRecreateNetworksTest.php</file>
       <file>DockerClientRecreateUserSettingsTest.php</file>
+      <file>DockerClientRecreateBodyTest.php</file>
       <file>DockerClientLogsTest.php</file>
     </testsuite>
     <testsuite name="ImageReference">
