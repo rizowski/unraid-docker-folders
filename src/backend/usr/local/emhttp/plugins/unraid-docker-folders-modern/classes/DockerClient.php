@@ -1925,19 +1925,21 @@ class DockerClient
   {
     $isEmpty = static fn($v) => is_array($v) && $v === [];
 
-    foreach (['Labels', 'ExposedPorts', 'Volumes'] as $field) {
-      if (isset($createBody[$field]) && $isEmpty($createBody[$field])) {
-        $createBody[$field] = (object) [];
-      }
+    if (isset($createBody['Labels']) && $isEmpty($createBody['Labels'])) {
+      $createBody['Labels'] = (object) [];
     }
-    // The values of ExposedPorts and Volumes are empty objects too.
+    // ExposedPorts and Volumes are maps whose values are empty objects too.
     foreach (['ExposedPorts', 'Volumes'] as $field) {
-      if (isset($createBody[$field]) && is_array($createBody[$field])) {
-        foreach ($createBody[$field] as $key => $val) {
-          if ($isEmpty($val)) {
-            $createBody[$field][$key] = (object) [];
-          }
+      if (!isset($createBody[$field]) || !is_array($createBody[$field])) {
+        continue;
+      }
+      foreach ($createBody[$field] as $key => $val) {
+        if ($isEmpty($val)) {
+          $createBody[$field][$key] = (object) [];
         }
+      }
+      if ($createBody[$field] === []) {
+        $createBody[$field] = (object) [];
       }
     }
 
