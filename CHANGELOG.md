@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026.11.20-dev2
+### New
+- A Remove Stack item in the stack menu removes a stack from the plugin after a confirm dialog, and can also delete the plugin's own copy of the files. (#25, #28)
+- The stacks pane lists Compose Manager stacks together under their own "Compose Manager" sub-header with a count. (#25, #28)
+
+### Improved
+- Importing Compose Manager stacks now adopts them where they are instead of copying files, and stacks copied by an earlier import are merged back with their schedules, versions and folder. (#25, #28)
+- The Compose banners now explain why stacks are read-only while Compose Manager is installed and how to migrate with Import Stacks. (#25, #28)
+- At boot, the Compose download is retried several times and an Unraid notification is sent only if every try fails. (#26, #30)
+- After a plugin update that changes the backend, the Unraid API is reloaded so the new code is used right away. (#30)
+
+### Fixed
+- Compose installed from the setup banner is no longer lost after a reboot, unless you turned automatic reinstall off in Settings. (#26, #30)
+- The banner install warns when the flash copy or the reinstall setting cannot be saved, instead of failing although Compose works. (#26, #30)
+- Menus and submenus on rows near the bottom of the browser window no longer open off screen. (#25, #28, #38)
+- A failed stack action now names the right action on the folder header's failure line. (#25, #28)
+
+### Internal
+- Internal fixes and performance improvements.
+
+## 2026.11.19-dev7
+### Improved
+- At boot, the Compose reinstall retries the download several times and sends one Unraid notification only if every try fails, so stack autostart still runs after a slow network start. (#26, #30)
+- After a plugin update that changes the backend, the Unraid API is reloaded once so the new plugin code takes effect without a reboot. (#30)
+
+### Fixed
+- Compose installed from the setup banner now stays installed after a reboot, unless you turned off auto-reinstall in Settings, and the banner says what the install did. (#26, #30)
+- The setup banner shows a warning when Compose installs but the flash copy or the reinstall-after-reboot setting cannot be saved, instead of reporting a failure. (#26, #30)
+
+### Internal
+- Internal fixes and performance improvements.
+
+## 2026.11.19-dev6
+### Fixed
+- Container memory stats now show a container limit set above host memory as a real limit, with the limit in the tooltip. (#29, #36)
+- Folder memory totals no longer call the figure host memory when the host memory is unknown. (#29, #36)
+- After a pull, the update status compares the pulled image with the registry instead of always saying up to date. (#32, #36)
+- Unraid's update status flags are no longer marked as current when no container uses the image tag. (#23, #36)
+- Writing Unraid's update status files no longer drops entries that Unraid or the other backend changed at the same time. (#23, #36)
+- Unraid's update status files are now written in the same format Unraid itself uses. (#23, #36)
+- The folder chevron is now a real expand/collapse button that works with the keyboard and screen readers and reports the shown state. (#31, #36)
+- The theme is sent to the embedded page again if an earlier send was lost. (#27, #36)
+
+### Internal
+- Internal fixes and performance improvements.
+
+## 2026.11.19-dev5
+### New
+- A new Settings page option chooses whether container memory percentages are a share of the container's limit or of the host, with labels and tooltips on cards, details, list rows and the dashboard widget. (#29, #34)
+
+### Improved
+- Links such as the Update tag, release notes link and security findings docs link now show their intended colors, so the Update tag keeps its warning color. (#35)
+
+### Fixed
+- The dashboard widget and Folders tab now follow the Unraid theme when it changes without a page reload, such as a day/night toggle. (#27, #35)
+- The dashboard tile no longer shows white rows with light text under a dark color scheme. (#27, #35)
+
+## 2026.11.19-dev3
+### Fixed
+- After pulling an image, the update check now records the matching image digest, so containers no longer show the wrong update status. (#32, #33)
+
+## 2026.11.19-dev2
+### Fixed
+- Update checks no longer report a container as outdated when its image matches the registry under any of its local digests. (#32, #33)
+
+## 2026.11.19-dev1
+### Fixed
+- Folder headers can now be reached and collapsed with the keyboard, and screen readers announce them properly. (#31)
+
+## 2026.11.07-dev1
+### Fixed
+- After the plugin updates and recreates a container, Unraid's Docker tab no longer keeps showing "update ready" for that image. (#23, #24)
+
+## 2026.10.25-dev2
+### Fixed
+- A container dragged to another folder no longer shows up in both folders until the page is reloaded.
+- Reordering containers within a folder no longer makes the card snap back while the new order saves.
 ## 2026.10.25-2
 ### Fixed
 - A container dragged to another folder no longer shows in both folders until the page is reloaded.

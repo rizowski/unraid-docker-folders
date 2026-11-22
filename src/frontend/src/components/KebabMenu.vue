@@ -158,6 +158,31 @@ async function toggleMenu() {
 }
 
 /**
+ * The part of this window the user can see, in this window's coordinates.
+ *
+ * The iframe is as tall as the app (main.ts), so its own viewport is the whole
+ * page and says nothing about what is on screen: the parent page scrolls, and
+ * a row near the bottom of the browser window would open its menu off-screen.
+ * The frame is same-origin with the parent, so intersect the two. Cross-origin
+ * or not framed: fall back to this window's viewport.
+ */
+function visibleBand(): { top: number; bottom: number } {
+  const full = { top: 0, bottom: window.innerHeight };
+  if (window.parent === window) return full;
+  try {
+    const frame = window.frameElement;
+    if (!frame) return full;
+    const frameTop = frame.getBoundingClientRect().top;
+    const top = Math.max(full.top, -frameTop);
+    const bottom = Math.min(full.bottom, window.parent.innerHeight - frameTop);
+    // A frame scrolled fully out of view leaves no band to fit into.
+    return bottom > top ? { top, bottom } : full;
+  } catch {
+    return full;
+  }
+}
+
+/**
  * Keep the menu inside the viewport.
  *
  * On Unraid the app runs in an iframe whose height tracks the app's own content
@@ -178,8 +203,9 @@ function fitToViewport() {
   if (naturalHeight <= 0) return;
 
   const rect = button.getBoundingClientRect();
-  const spaceBelow = window.innerHeight - rect.bottom - EDGE_GAP;
-  const spaceAbove = rect.top - EDGE_GAP;
+  const { top: viewTop, bottom: viewBottom } = visibleBand();
+  const spaceBelow = viewBottom - rect.bottom - EDGE_GAP;
+  const spaceAbove = rect.top - viewTop - EDGE_GAP;
 
   const preferred = props.position;
   const preferredSpace = preferred === 'below' ? spaceBelow : spaceAbove;
@@ -269,7 +295,7 @@ function toggleSub(idx: number) {
  * Put the flyout beside the menu, level with its parent row. It prefers the
  * left side because every kebab sits at the right edge of its row, and flips
  * right only when the left has no room. Vertically it shifts up to stay in the
- * viewport, then scrolls if it is taller than the viewport.
+ * visible band, then scrolls if it is taller than the band.
  */
 function placeSub() {
   const parent = subParentRef.value;
@@ -291,17 +317,19 @@ function placeSub() {
     ? Math.max(leftSide, EDGE_GAP)
     : menuRect.right + SUB_GAP;
 
-  const room = window.innerHeight - 2 * EDGE_GAP;
+  // The visible band, not the frame: the frame is as tall as the whole app.
+  const { top: viewTop, bottom: viewBottom } = visibleBand();
+  const room = viewBottom - viewTop - 2 * EDGE_GAP;
   const style: CSSProperties = { left: `${left - origin.left}px` };
   if (height > room) {
-    style.top = `${EDGE_GAP - origin.top}px`;
+    style.top = `${viewTop + EDGE_GAP - origin.top}px`;
     style.maxHeight = `${room}px`;
     style.overflowY = 'auto';
   } else {
     // Align the first child with the parent row, net of the flyout's padding.
     const padTop = parseFloat(getComputedStyle(sub).paddingTop) || 0;
-    const top = Math.min(rowRect.top - padTop, window.innerHeight - EDGE_GAP - height);
-    style.top = `${Math.max(top, EDGE_GAP) - origin.top}px`;
+    const top = Math.min(rowRect.top - padTop, viewBottom - EDGE_GAP - height);
+    style.top = `${Math.max(top, viewTop + EDGE_GAP) - origin.top}px`;
   }
   subStyle.value = style;
 }

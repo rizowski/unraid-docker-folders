@@ -56,13 +56,13 @@
       class="text-[11px] text-error truncate max-w-[240px] cursor-pointer"
       :title="`${stackActionText(failure)} (click to dismiss)`"
       @click="composeStore.clearStackStatus(projectName)"
-    >{{ failure.kind === 'down' ? 'Stack Down' : 'Stop All' }} failed: {{ stackActionText(failure) }}</span>
+    >{{ stackActionLabel(failure.kind) }} failed: {{ stackActionText(failure) }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useComposeStore, stackActionText } from '@/stores/compose';
+import { useComposeStore, stackActionText, stackActionLabel } from '@/stores/compose';
 import { useFolderRunningState } from '@/composables/useFolderRunningState';
 import type { Folder } from '@/types/folder';
 

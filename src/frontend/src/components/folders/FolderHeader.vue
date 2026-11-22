@@ -16,13 +16,31 @@
     ></div>
     <div class="relative flex items-center gap-2 flex-1 min-w-0">
       <DragHandle v-if="!dragLocked" handle-class="folder-drag-handle shrink-0 text-text-secondary cursor-grab active:cursor-grabbing" />
-      <ChevronIcon :expanded="!collapsed" />
+      <!-- The negative margin is important (-m-1.5!) because the Unraid reset
+           `#unraid-docker-folders-modern button:not(.nav-btn) { margin: 0 }`
+           is unlayered and beats the layered utility. Without it the padding
+           of .icon-btn pushes the title 12px right.
+           The keyboard and screen reader control for the toggle. The rest of the
+           header still toggles on a mouse click. @click.stop keeps one toggle
+           per activation: the click would otherwise bubble to the header.
+           Space clicks once on keyup. A held Enter makes the browser repeat
+           the click, so a repeated Enter keydown is cancelled. -->
+      <button
+        type="button"
+        class="icon-btn -m-1.5! shrink-0"
+        :aria-expanded="!collapsed"
+        :aria-label="`${collapsed ? 'Expand' : 'Collapse'} folder ${folder.name}`"
+        @keydown.enter="(e: KeyboardEvent) => e.repeat && e.preventDefault()"
+        @click.stop="emit('toggle-collapse')"
+      >
+        <ChevronIcon :expanded="!collapsed" />
+      </button>
       <div
         v-if="containerIcons.length > 0"
         class="hidden sm:grid shrink-0 gap-0.5 mr-2"
         :class="containerIcons.length > 1 ? 'grid-cols-2 w-9 h-9' : 'grid-cols-1 w-9 h-9'"
       >
-        <img v-for="(icon, i) in containerIcons" :key="i" :src="icon" class="w-full h-full object-contain rounded-sm" />
+        <img v-for="(icon, i) in containerIcons" :key="i" :src="icon" alt="" class="w-full h-full object-contain rounded-sm" />
       </div>
       <h2 class="text-sm font-semibold text-text mr-1 truncate min-w-0">{{ folder.name }}</h2>
       <span
@@ -70,7 +88,7 @@
       <!-- Folder total stats, as a share of the host -->
       <div v-if="collapsed && settingsStore.showStats && folderStats" class="hidden md:block ml-auto mr-4 shrink-0 w-[140px] space-y-0.5" @click.stop>
         <StatsBar label="CPU" :percent="folderStats.cpuPercent" size="inline" />
-        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" />
+        <StatsBar label="MEM" :percent="folderStats.memPercent" size="inline" :title="folderStats.memTitle" />
       </div>
     </div>
     <div class="relative flex items-center gap-2 sm:gap-3 shrink-0" @click.stop>
@@ -119,6 +137,7 @@ import { computed, inject, ref, type Ref } from 'vue';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 import { useSettingsStore } from '@/stores/settings';
+import { formatBytes } from '@/utils/format';
 import { useStatsStore, type ContainerStats } from '@/stores/stats';
 import { aggregateStats } from '@/utils/aggregateStats';
 import { useUpdatesStore } from '@/stores/updates';
@@ -450,6 +469,18 @@ const folderStats = computed(() => {
     if (s) list.push(s);
   }
   const total = aggregateStats(list);
-  return total && { cpuPercent: total.cpuSum, memPercent: total.memPercent };
+  // A folder's memory is always a share of the host: members' limits do not add up to one.
+  // Without a host figure aggregateStats falls back to the largest member limit,
+  // which is not host memory, so the tooltip must not say it is.
+  const hostKnown = list.some((s) => (s.hostMemory ?? 0) > 0);
+  return (
+    total && {
+      cpuPercent: total.cpuSum,
+      memPercent: total.memPercent,
+      memTitle: hostKnown
+        ? `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)} host memory.`
+        : `Running containers here use ${formatBytes(total.memoryUsage)} of ${formatBytes(total.hostMemory)}.`,
+    }
+  );
 });
 </script>

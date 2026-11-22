@@ -41,6 +41,7 @@ import type {
 import type {
   ComposeFileVersion,
   ComposeFileVersionDetail,
+  ComposeRemoveResult,
   ComposeStack,
   ComposeStatus,
   ComposeValidationError,
@@ -852,6 +853,8 @@ function toScheduleInput(body: Partial<Schedule>) {
 interface GqlComposeStack {
   projectName: string;
   workingDir: string | null;
+  ownFiles: boolean;
+  source: string | null;
   composeFile: string | null;
   envFile: string | null;
   autostart: boolean;
@@ -896,7 +899,7 @@ const COMPOSE_STATUS = `
 const COMPOSE_STACKS = `
   query DockerFoldersComposeStacks {
     dockerFoldersComposeStacks {
-      projectName workingDir composeFile envFile autostart autostartForceRecreate
+      projectName workingDir ownFiles source composeFile envFile autostart autostartForceRecreate
       description importedFrom servicesRunning servicesTotal serviceNames
     }
   }
@@ -904,9 +907,24 @@ const COMPOSE_STACKS = `
 
 const INSTALL_COMPOSE_BINARY = `
   mutation InstallDockerFoldersComposeBinary {
+    installDockerFoldersComposeBinary { success error warning autoInstall status { ${COMPOSE_STATUS_FIELDS} } }
+  }
+`;
+
+// What an API plugin from before `warning` and `autoInstall` answers. After a
+// plugin update the new assets are served while the API can still run the old
+// plugin code. scripts/api-plugin.sh stops and starts the API after an update
+// that changed the backend, but that reload can fail, and a manual install can
+// skip it (`unraid-api restart` keeps old plugin code). GraphQL rejects a whole
+// operation that names an unknown field.
+const INSTALL_COMPOSE_BINARY_LEGACY = `
+  mutation InstallDockerFoldersComposeBinary {
     installDockerFoldersComposeBinary { success error status { ${COMPOSE_STATUS_FIELDS} } }
   }
 `;
+
+/** The error GraphQL gives for a field the running plugin does not have. */
+const UNKNOWN_INSTALL_FIELD = /Cannot query field "(warning|autoInstall)" on type "DockerFoldersComposeInstallResult"/;
 
 /** One mutation per action, keyed the same way `CONTAINER_ACTIONS` is above. */
 const COMPOSE_STACK_ACTIONS: Record<'up' | 'down' | 'stop' | 'restart' | 'pull', string> = {
@@ -1001,6 +1019,14 @@ const IMPORT_COMPOSE_STACKS = `
   }
 `;
 
+const REMOVE_COMPOSE_STACK = `
+  mutation RemoveDockerFoldersComposeStack($input: DockerFoldersComposeRemoveInput!) {
+    removeDockerFoldersComposeStack(input: $input) {
+      success schedulesRemoved folder filesRemoved directoryRemoved filesNote
+    }
+  }
+`;
+
 const CREATE_COMPOSE_STACK = `
   mutation CreateDockerFoldersComposeStack($input: DockerFoldersComposeCreateInput!) {
     createDockerFoldersComposeStack(input: $input) { success error projectName }
@@ -1043,6 +1069,8 @@ function toComposeStack(s: GqlComposeStack): ComposeStack {
   return {
     project_name: s.projectName,
     working_dir: s.workingDir,
+    own_files: s.ownFiles,
+    source: s.source === 'compose_manager' ? 'compose_manager' : null,
     compose_file: s.composeFile,
     env_file: s.envFile,
     autostart: s.autostart,
@@ -1408,9 +1436,16 @@ export const graphqlBackend: Backend = {
       })),
 
     installBinary: async () => {
-      const result = await gql<{
-        installDockerFoldersComposeBinary: { success: boolean; error: string | null; status: GqlComposeStatus | null };
-      }>(INSTALL_COMPOSE_BINARY);
+      type InstallBinaryData = {
+        installDockerFoldersComposeBinary: { success: boolean; error: string | null; warning?: string | null; autoInstall?: boolean | null; status: GqlComposeStatus | null };
+      };
+      let result = await gql<InstallBinaryData>(INSTALL_COMPOSE_BINARY);
+      // An older plugin rejects the new fields and runs nothing. Ask again
+      // without them: the install must still work, and the missing
+      // `autoInstall` leaves the banner making no claim about reboots.
+      if (!result.ok && UNKNOWN_INSTALL_FIELD.test(result.error ?? '')) {
+        result = await gql<InstallBinaryData>(INSTALL_COMPOSE_BINARY_LEGACY);
+      }
       if (!result.ok) return { ok: false, status: result.status, data: toErrorBody(result), error: result.error };
       const install = result.data.installDockerFoldersComposeBinary;
       if (!install.success) {
@@ -1423,7 +1458,11 @@ export const graphqlBackend: Backend = {
       return {
         ok: true,
         status: result.status,
-        data: { status: install.status ? toComposeStatus(install.status) : undefined },
+        data: {
+          status: install.status ? toComposeStatus(install.status) : undefined,
+          ...(install.warning ? { warning: install.warning } : {}),
+          ...(typeof install.autoInstall === 'boolean' ? { auto_install: install.autoInstall } : {}),
+        },
       };
     },
 
@@ -1537,6 +1576,28 @@ export const graphqlBackend: Backend = {
         (data) => ({
           output: data.dockerFoldersComposeLogs.output ?? undefined,
           error: data.dockerFoldersComposeLogs.error ?? undefined,
+        }),
+      ),
+
+    remove: async (project, body) =>
+      mapResult(
+        await gql<{
+          removeDockerFoldersComposeStack: {
+            success: boolean;
+            schedulesRemoved: number;
+            folder: string;
+            filesRemoved: string[];
+            directoryRemoved: boolean;
+            filesNote: string | null;
+          };
+        }>(REMOVE_COMPOSE_STACK, { input: { project, deleteFiles: body.delete_files } }),
+        ({ removeDockerFoldersComposeStack: r }) => ({
+          success: r.success,
+          schedules_removed: r.schedulesRemoved,
+          folder: r.folder as ComposeRemoveResult['folder'],
+          files_removed: r.filesRemoved,
+          directory_removed: r.directoryRemoved,
+          files_note: r.filesNote,
         }),
       ),
 

@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 
 import { BadRequestException } from '@nestjs/common';
@@ -14,7 +17,8 @@ import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests
 import type { RecreateResult, RecreateService } from '../recreate.service.js';
 import { ReleaseNotesService, type ReleaseFetcher } from '../release-notes.service.js';
 import { UpdateLogService } from '../update-log.service.js';
-import { UpdatesService } from '../updates.service.js';
+import type { UnraidStatusPaths } from '../unraid-update-status.js';
+import { pickLocalDigest, UpdatesService } from '../updates.service.js';
 
 const PLEX = 'linuxserver/plex:latest';
 const PLEX_IMAGE_ID = 'sha256:image-plex';
@@ -184,6 +188,50 @@ function container(name: string, image: string, imageId: string): DockerListCont
     return { Id: CONTAINER_IDS[name] ?? name, Names: [`/${name}`], Image: image, ImageID: imageId };
 }
 
+// Same cases as tests/php/PickLocalDigestTest.php, so the two helpers are proven equal.
+describe('pickLocalDigest', () => {
+    it('picks the digest that matches the registry even when it is not first', () => {
+        expect(pickLocalDigest(['postgres@sha256:aaa-old-index', 'postgres@sha256:zzz-current'], 'sha256:zzz-current')).toBe(
+            'postgres@sha256:zzz-current'
+        );
+    });
+
+    it('falls back to the first when none match', () => {
+        expect(pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], 'sha256:new')).toBe('postgres@sha256:one');
+    });
+
+    it('falls back to the first when there is no registry digest', () => {
+        expect(pickLocalDigest(['postgres@sha256:one'], null)).toBe('postgres@sha256:one');
+    });
+
+    it('returns null for an image with no RepoDigests', () => {
+        expect(pickLocalDigest([], 'sha256:new')).toBeNull();
+    });
+
+    it('does not match on a prefix of the hash', () => {
+        expect(pickLocalDigest(['postgres@sha256:abcdef', 'postgres@sha256:abc'], 'sha256:abcd')).toBe('postgres@sha256:abcdef');
+    });
+
+    it('matches on the hash alone when the matching entry names another repository', () => {
+        expect(pickLocalDigest(['library/postgres@sha256:one', 'mirror.example/postgres@sha256:two'], 'sha256:two')).toBe(
+            'mirror.example/postgres@sha256:two'
+        );
+    });
+
+    it('matches a bare digest entry that has no at sign', () => {
+        expect(pickLocalDigest(['postgres@sha256:bbb', 'sha256:aaa'], 'sha256:aaa')).toBe('sha256:aaa');
+        expect(pickLocalDigest(['sha256:aaa', 'postgres@sha256:bbb'], 'sha256:bbb')).toBe('postgres@sha256:bbb');
+    });
+
+    it('falls back to the first for an empty registry digest', () => {
+        expect(pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], '')).toBe('postgres@sha256:one');
+    });
+
+    it('falls back to the first for a null registry digest with several entries', () => {
+        expect(pickLocalDigest(['postgres@sha256:one', 'postgres@sha256:two'], null)).toBe('postgres@sha256:one');
+    });
+});
+
 describe('UpdatesService', () => {
     let temp: TempDatabase;
     let docker: ReturnType<typeof fakeDocker>;
@@ -244,6 +292,28 @@ describe('UpdatesService', () => {
             const [result] = await service.checkForUpdates();
 
             expect(result.updateAvailable).toBe(false);
+        });
+
+        it('reports no update when a later RepoDigest matches the registry, not just the first', async () => {
+            // A re-indexed tag leaves the image with two digests, and nothing says which comes first.
+            docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
+            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:aaa-old-index`, `${PLEX}@sha256:zzz-current`]);
+            docker.setRemoteDigest(PLEX, 'sha256:zzz-current');
+
+            const [result] = await service.checkForUpdates();
+
+            expect(result.updateAvailable).toBe(false);
+            expect(result.localDigest).toBe(`${PLEX}@sha256:zzz-current`);
+        });
+
+        it('still reports an update when none of several RepoDigests match the registry', async () => {
+            docker.setContainers([container('plex', PLEX, PLEX_IMAGE_ID)]);
+            docker.setLocalDigests(PLEX_IMAGE_ID, [`${PLEX}@sha256:one`, `${PLEX}@sha256:two`]);
+            docker.setRemoteDigest(PLEX, 'sha256:new');
+
+            const [result] = await service.checkForUpdates();
+
+            expect(result.updateAvailable).toBe(true);
         });
 
         it('suppresses a stale update when the remote digest has not moved since the last no-update check', async () => {
@@ -420,6 +490,47 @@ describe('UpdatesService', () => {
             expect(events.publish).toHaveBeenCalledWith('container', 'updated');
             expect(temp.rows('SELECT update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
                 { update_available: 0 },
+            ]);
+        });
+
+        it('stores the RepoDigest that matches the registry after a pull, not just the first', async () => {
+            docker.setRemoteDigest(PLEX, 'sha256:two');
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:one`, `${PLEX}@sha256:two`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end('');
+            await promise;
+
+            expect(temp.rows('SELECT local_digest, remote_digest FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { local_digest: `${PLEX}@sha256:two`, remote_digest: 'sha256:two' },
+            ]);
+        });
+
+        it('records the pull\'s own digest, and does not ask the registry, when it moved after the pull', async () => {
+            const pulled = `sha256:${'1'.repeat(64)}`;
+            docker.setRemoteDigest(PLEX, `sha256:${'2'.repeat(64)}`);
+            docker.setLocalDigests(PLEX, [`${PLEX}@${pulled}`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end(`${JSON.stringify({ status: `Digest: ${pulled}` })}\n`);
+            await promise;
+
+            expect(temp.rows('SELECT local_digest, remote_digest, update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { local_digest: `${PLEX}@${pulled}`, remote_digest: pulled, update_available: 0 },
+            ]);
+            expect(docker.calls).not.toContain(`distributionInspect ${PLEX}`);
+        });
+
+        it('flags an update when there is no pull digest and the registry moved after the pull', async () => {
+            docker.setRemoteDigest(PLEX, 'sha256:two');
+            docker.setLocalDigests(PLEX, [`${PLEX}@sha256:one`]);
+
+            const promise = service.pullImage(PLEX);
+            docker.streamFor(PLEX).end('');
+            await promise;
+
+            expect(temp.rows('SELECT update_available FROM image_update_checks WHERE image = ?', [PLEX])).toEqual([
+                { update_available: 1 },
             ]);
         });
 
@@ -931,5 +1042,155 @@ describe('UpdatesService', () => {
 
             expect(result).toEqual({ success: false, message: 'Update failed for plex: stop failed' });
         });
+    });
+});
+
+describe('UpdatesService and Unraid’s update status (issue #23)', () => {
+    const D_PULLED = `sha256:${'a'.repeat(64)}`;
+    const D_REMOTE = `sha256:${'b'.repeat(64)}`;
+    const D_OLD = `sha256:${'c'.repeat(64)}`;
+    const NEW_PLEX_ID = 'sha256:image-plex-new';
+
+    let temp: TempDatabase;
+    let docker: ReturnType<typeof fakeDocker>;
+    let dir: string;
+    let paths: UnraidStatusPaths;
+    let service: UpdatesService;
+    // Container name -> the image id it runs once recreated.
+    let recreatedOnto: Map<string, string>;
+    let listed: DockerListContainer[];
+
+    beforeEach(() => {
+        temp = createMigratedDatabase();
+        docker = fakeDocker();
+        dir = mkdtempSync(join(tmpdir(), 'dfm-unraid-svc-'));
+        paths = { status: join(dir, 'unraid-update-status.json'), webui: join(dir, 'docker.json') };
+        recreatedOnto = new Map();
+        listed = [];
+        const recreate = {
+            recreateContainer: async (id: string) => {
+                listed = listed.map((c) => (c.Id === id ? { ...c, ImageID: recreatedOnto.get(c.Id) ?? c.ImageID } : c));
+                docker.setContainers(listed);
+                return { success: true, newId: id, error: null };
+            },
+        } as unknown as RecreateService;
+        const updateLog = fakeUpdateLog();
+        service = new UpdatesService(
+            docker.client,
+            new DatabaseService(temp.path),
+            fakeEvents(),
+            updateLog,
+            releaseNotesServiceThatNeverFetches(temp.path, updateLog),
+            recreate,
+            undefined,
+            paths
+        );
+    });
+
+    afterEach(() => {
+        temp.cleanup();
+        rmSync(dir, { recursive: true, force: true });
+    });
+
+    const setListed = (value: DockerListContainer[]) => {
+        listed = value;
+        docker.setContainers(value);
+    };
+    const readStatus = () => JSON.parse(readFileSync(paths.status, 'utf8')) as Record<string, unknown>;
+    const STALE = JSON.stringify({ [PLEX]: { local: D_OLD, remote: D_REMOTE, status: 'false' } });
+    const digestLine = JSON.stringify({ status: `Digest: ${D_PULLED}` });
+
+    it('leaves Unraid alone after a pull with no recreate', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+        writeFileSync(paths.status, STALE);
+        writeFileSync(paths.webui, JSON.stringify({ plex: { updated: 'false' } }));
+
+        const promise = service.pullImage(PLEX);
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
+        expect((await promise).success).toBe(true);
+
+        expect(readFileSync(paths.status, 'utf8')).toBe(STALE);
+        expect(Object.keys(JSON.parse(readFileSync(paths.webui, 'utf8')))).toEqual(['plex']);
+    });
+
+    it('asks the registry for nothing after a recreate when the pull gave its digest', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+        writeFileSync(paths.status, STALE);
+
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
+        expect((await promise).success).toBe(true);
+
+        expect(readStatus()[PLEX]).toEqual({ local: D_PULLED, remote: D_PULLED, status: 'true' });
+        expect(docker.calls.filter((call) => call.startsWith('distributionInspect'))).toEqual([]);
+    });
+
+    it('records the pull’s Digest line, split across chunks, once the container is recreated', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID), container('sonarr', SONARR, SONARR_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+        writeFileSync(paths.status, STALE);
+        writeFileSync(paths.webui, JSON.stringify({ plex: { updated: 'false' }, sonarr: { updated: 'true' } }));
+
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        const stream = docker.streamFor(PLEX);
+        stream.write(`{"status":"Pull complete"}\n${digestLine.slice(0, 20)}`);
+        stream.write(`${digestLine.slice(20)}\n`);
+        stream.end(`{"status":"Status: Downloaded newer image for ${PLEX}"}\n`);
+        expect((await promise).success).toBe(true);
+
+        expect(readStatus()[PLEX]).toEqual({ local: D_PULLED, remote: D_PULLED, status: 'true' });
+        expect(Object.keys(JSON.parse(readFileSync(paths.webui, 'utf8')))).toEqual(['sonarr']);
+    });
+
+    it('leaves Unraid alone while another container on the tag still runs the old image', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID), container('plex2', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        writeFileSync(paths.status, STALE);
+
+        const promise = service.pullImage(PLEX, { recreate: true, containers: [CONTAINER_IDS.plex] });
+        docker.streamFor(PLEX).end(`${digestLine}\n`);
+        await promise;
+
+        expect(readFileSync(paths.status, 'utf8')).toBe(STALE);
+    });
+
+    it('on a recreate without a pull, records the registry digest only if it is the image on disk', async () => {
+        setListed([container('plex', PLEX, PLEX_IMAGE_ID)]);
+        docker.setImageId(PLEX, NEW_PLEX_ID);
+        recreatedOnto.set(CONTAINER_IDS.plex, NEW_PLEX_ID);
+        docker.setRemoteDigest(PLEX, D_REMOTE);
+
+        // The registry has moved on past the build on disk: record nothing.
+        docker.setLocalDigests(PLEX, [`linuxserver/plex@${D_PULLED}`]);
+        await service.pullImage(PLEX, { containers: [CONTAINER_IDS.plex], recreateOnly: true });
+        expect(existsSync(paths.status)).toBe(false);
+
+        docker.setLocalDigests(PLEX, [`linuxserver/plex@${D_REMOTE}`]);
+        await service.pullImage(PLEX, { containers: [CONTAINER_IDS.plex], recreateOnly: true });
+        expect(readStatus()[PLEX]).toEqual({ local: D_REMOTE, remote: D_REMOTE, status: 'true' });
+    });
+
+    it('repairs a stale flag during a full check, but not while a container is behind', async () => {
+        const stale = JSON.stringify({ [SONARR]: { local: D_OLD, remote: D_REMOTE, status: 'false' } });
+        docker.setRemoteDigest(SONARR, D_REMOTE);
+        docker.setLocalDigests(SONARR_IMAGE_ID, [`linuxserver/sonarr@${D_REMOTE}`]);
+        docker.setLocalDigests(SONARR, [`linuxserver/sonarr@${D_REMOTE}`]);
+        writeFileSync(paths.status, stale);
+
+        docker.setImageId(SONARR, 'sha256:image-sonarr-newer');
+        setListed([container('sonarr', SONARR, SONARR_IMAGE_ID)]);
+        await service.checkForUpdates();
+        expect(readFileSync(paths.status, 'utf8')).toBe(stale);
+
+        docker.setImageId(SONARR, SONARR_IMAGE_ID);
+        await service.checkForUpdates();
+        expect(readStatus()[SONARR]).toEqual({ local: D_REMOTE, remote: D_REMOTE, status: 'true' });
     });
 });

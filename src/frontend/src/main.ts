@@ -3,11 +3,13 @@ import { createPinia } from 'pinia'
 import App from './App.vue'
 import './assets/styles/main.css'
 import { initBackend } from '@/backends'
-import { applyThemeParam, reportHeightToParent } from './utils/iframeHost'
+import { applyThemeParam, listenForThemeUpdates, reportHeightToParent } from './utils/iframeHost'
 import { modalFrameFloor } from './composables/useModalElevation'
 
 // The theme is applied before the await so the page is never briefly unstyled.
 applyThemeParam()
+// A theme that switches in place (day/night) is sent later by message.
+listenForThemeUpdates()
 
 // Pick the backend before anything can issue a request. GraphQL mode probes the
 // plugin first, so mounting waits for it. A bootstrap function rather than a

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -631,9 +631,22 @@ describe('ComposeService', () => {
     });
 
     describe('importFromComposePlugin', () => {
+        const project = (dir: string, files: Record<string, string> = { 'docker-compose.yml': 'services: {}\n' }) => {
+            const path = join(paths.pluginProjectsDir, dir);
+            mkdirSync(path, { recursive: true });
+            for (const [name, content] of Object.entries(files)) writeFileSync(join(path, name), content);
+            return path;
+        };
+        const stackRow = (name: string) =>
+            db.read((h) => h.prepare('SELECT * FROM compose_stacks WHERE project_name = ?').get(name) as Record<string, unknown>);
+        const stackNames = () =>
+            db.read((h) => (h.prepare('SELECT project_name FROM compose_stacks ORDER BY project_name').all() as { project_name: string }[]).map((r) => r.project_name));
+        const labelled = (project: string, dir: string) => [
+            { name: '/web', labels: { 'com.docker.compose.project': project, 'com.docker.compose.project.working_dir': dir } },
+        ];
+
         it('fails cleanly when the plugin projects directory does not exist', () => {
-            const result = service.importFromComposePlugin();
-            expect(result).toEqual({
+            expect(service.importFromComposePlugin([])).toEqual({
                 success: false,
                 stacksImported: 0,
                 stacksSkipped: 0,
@@ -641,293 +654,131 @@ describe('ComposeService', () => {
             });
         });
 
-        it('imports a direct project: copies its files, inserts the stack row, and creates a folder', () => {
-            const projectDir = join(paths.pluginProjectsDir, 'legacyapp');
-            mkdirSync(projectDir, { recursive: true });
-            writeFileSync(join(projectDir, 'name'), 'Legacy App\n');
-            writeFileSync(join(projectDir, 'description'), 'An old stack\n');
-            writeFileSync(join(projectDir, 'autostart'), 'true\n');
-            writeFileSync(join(projectDir, 'docker-compose.yml'), 'services: {}\n');
-            writeFileSync(join(projectDir, '.env'), 'A=1\n');
+        it('adopts a direct project in place: one row on its own folder, no copy, and a folder', () => {
+            const dir = project('Legacy', {
+                name: 'Legacy App\n',
+                description: 'An old stack\n',
+                autostart: 'true\n',
+                'docker-compose.yml': 'services: {}\n',
+            });
 
-            const result = service.importFromComposePlugin();
+            const result = service.importFromComposePlugin([]);
+
             expect(result).toEqual({ success: true, stacksImported: 1, stacksSkipped: 0, errors: [] });
-
-            const row = db.read(
-                (h) =>
-                    h.prepare('SELECT * FROM compose_stacks WHERE project_name = ?').get('legacyapp') as {
-                        autostart: number;
-                        description: string;
-                        imported_from: string;
-                        working_dir: string;
-                        compose_file: string;
-                        env_file: string;
-                    }
-            );
+            // No Plus, no marker: the dcflachs rule over the name file.
+            const row = stackRow('legacy_app');
+            expect(row.working_dir).toBe(dir);
+            expect(row.compose_file).toBe(join(dir, 'docker-compose.yml'));
+            expect(row.env_file).toBeNull();
             expect(row.autostart).toBe(1);
             expect(row.description).toBe('An old stack');
             expect(row.imported_from).toBe('compose_plugin');
-            expect(readFileSync(row.compose_file, 'utf8')).toBe('services: {}\n');
-            expect(readFileSync(row.env_file, 'utf8')).toBe('A=1\n');
-
-            const folder = folders.getFolders().find((f) => f.composeProject === 'legacyapp');
+            expect(existsSync(paths.stacksDir) ? readdirSync(paths.stacksDir) : []).toEqual([]);
+            const folder = folders.getFolders().find((f) => f.composeProject === 'legacy_app');
             expect(folder?.name).toBe('Legacy App');
         });
 
-        it('follows an indirect project to its real compose location', () => {
+        it('names a stack after its running containers', () => {
+            const dir = project('Photos-Stack');
+            service.importFromComposePlugin(labelled('my_photos', dir));
+            expect(stackNames()).toEqual(['my_photos']);
+        });
+
+        it('skips a stack whose name Compose refuses, and one whose containers disagree', () => {
+            project('web@home');
+            const dir = project('Two');
+            const result = service.importFromComposePlugin([
+                ...labelled('one', dir),
+                ...labelled('two', dir),
+            ]);
+            expect(result.stacksImported).toBe(0);
+            expect(result.errors).toHaveLength(2);
+            expect(stackNames()).toEqual([]);
+        });
+
+        it('adopts the row the sync made, and a second import adds nothing', () => {
+            const dir = project('Immich');
+            const containers = labelled('immich', dir);
+            folders.syncWithContainers(containers.map((c) => ({ id: 'i1', ...c })));
+            expect(stackRow('immich').imported_from).toBeNull();
+
+            expect(service.importFromComposePlugin(containers).stacksImported).toBe(1);
+            const again = service.importFromComposePlugin(containers);
+
+            expect(again.stacksImported).toBe(0);
+            expect(again.stacksSkipped).toBe(1);
+            expect(stackNames()).toEqual(['immich']);
+            expect(stackRow('immich').imported_from).toBe('compose_plugin');
+            expect(folders.getFolders().filter((f) => f.composeProject !== null)).toHaveLength(1);
+        });
+
+        it('refuses a stack whose name is already a stack at another path', () => {
+            project('Already');
+            insertStack({ project_name: 'already' });
+            const result = service.importFromComposePlugin([]);
+            expect(result.stacksImported).toBe(0);
+            expect(result.errors[0]).toContain('another path');
+        });
+
+        it('follows an indirect project to its target, and skips one whose target is gone', () => {
             const realDir = mkdtempSync(join(tmpdir(), 'compose-indirect-'));
             try {
                 writeFileSync(join(realDir, 'compose.yml'), 'services: {}\n');
+                project('Pointer', { indirect: realDir });
+                project('Lost', { indirect: join(realDir, 'missing') });
 
-                const projectDir = join(paths.pluginProjectsDir, 'pointer');
-                mkdirSync(projectDir, { recursive: true });
-                writeFileSync(join(projectDir, 'indirect'), realDir);
+                const result = service.importFromComposePlugin([]);
 
-                const result = service.importFromComposePlugin();
                 expect(result.stacksImported).toBe(1);
-
-                const row = db.read(
-                    (h) => h.prepare('SELECT compose_file FROM compose_stacks WHERE project_name = ?').get('pointer') as { compose_file: string }
-                );
-                expect(readFileSync(row.compose_file, 'utf8')).toBe('services: {}\n');
+                expect(result.errors).toHaveLength(1);
+                expect(stackRow('pointer').compose_file).toBe(join(realDir, 'compose.yml'));
             } finally {
                 rmSync(realDir, { recursive: true, force: true });
             }
         });
 
-        it('skips a project whose stack already exists, without touching its files', () => {
-            insertStack({ project_name: 'already' });
-            mkdirSync(join(paths.pluginProjectsDir, 'already'), { recursive: true });
-
-            const result = service.importFromComposePlugin();
-            expect(result).toEqual({ success: true, stacksImported: 0, stacksSkipped: 1, errors: [] });
-        });
-
-        it('records a per-project error and keeps going when a compose file fails to copy', () => {
-            const projectDir = join(paths.pluginProjectsDir, 'broken');
-            mkdirSync(projectDir, { recursive: true });
-            // A directory named like a compose file makes `copyFileSync` fail.
-            mkdirSync(join(projectDir, 'docker-compose.yml'));
-
-            const result = service.importFromComposePlugin();
-            expect(result.success).toBe(true);
-            expect(result.stacksImported).toBe(1);
-            expect(result.errors).toEqual(['broken: failed to copy compose file']);
-        });
-
-        // 31b04c2 (reported to the dev branch): compose.php and
-        // compose-stream.php refuse any project name that fails
-        // isValidProjectName (a space, a leading dot such as ".git", or over
-        // 128 characters), so a stack imported under one could never be
-        // started, edited, or deleted again. The import now refuses it too,
-        // with PHP's exact message, and never creates its stack directory.
-        it('skips a project directory name the compose API could never address again', () => {
-            mkdirSync(join(paths.pluginProjectsDir, 'has space'), { recursive: true });
-            mkdirSync(join(paths.pluginProjectsDir, '.git'), { recursive: true });
-            const tooLong = 'a'.repeat(129);
-            mkdirSync(join(paths.pluginProjectsDir, tooLong), { recursive: true });
-            // A normal project alongside the bad ones still imports.
-            mkdirSync(join(paths.pluginProjectsDir, 'good'), { recursive: true });
-
-            const result = service.importFromComposePlugin();
-
-            expect(result.success).toBe(true);
-            expect(result.stacksImported).toBe(1);
-            expect(result.stacksSkipped).toBe(0);
-            expect(result.errors.sort()).toEqual(
-                [
-                    'has space: unsupported project name, skipped',
-                    '.git: unsupported project name, skipped',
-                    `${tooLong}: unsupported project name, skipped`,
-                ].sort()
-            );
-            expect(existsSync(join(paths.stacksDir, 'has space'))).toBe(false);
-            expect(existsSync(join(paths.stacksDir, '.git'))).toBe(false);
-            expect(existsSync(join(paths.stacksDir, tooLong))).toBe(false);
-        });
-
-        // d2011ec (reported to the dev branch): the file copies run before
-        // any transaction opens, so a second import can commit the same
-        // project in the gap between this run's copy and its insert. The
-        // insert phase re-checks right before writing and, finding the row
-        // already taken, skips its own insert instead of erroring — and,
-        // just as importantly, must not schedule this run's copied files
-        // for deletion if something else in the same run later rolls back.
-        it('skips its own insert, without deleting its files, when another import commits the project first', () => {
-            const projectDir = join(paths.pluginProjectsDir, 'raced');
-            mkdirSync(projectDir, { recursive: true });
-            writeFileSync(join(projectDir, 'docker-compose.yml'), 'services: {}\n');
-
-            // Simulate a second `importFromComposePlugin()` call committing
-            // 'raced' in the gap between this run's own "already imported?"
-            // read (phase 1) and its insert (phase 2, inside the write
-            // transaction) — the exact race the recheck guards against.
-            // `db.read` is called exactly once for this single-entry
-            // directory (the phase-1 existing-project check), so the first
-            // call is where the race is injected.
-            let reads = 0;
-            const originalRead = db.read.bind(db);
-            vi.spyOn(db, 'read').mockImplementation((work) => {
-                const result = originalRead(work);
-                if (reads === 0) {
-                    reads++;
-                    insertStack({ project_name: 'raced' });
-                }
-                return result;
-            });
-
-            try {
-                const result = service.importFromComposePlugin();
-
-                expect(result.success).toBe(true);
-                expect(result.stacksImported).toBe(0);
-                expect(result.stacksSkipped).toBe(1);
-
-                // Its row belongs to the "racing" import (inserted with a
-                // null working_dir by `insertStack`), not overwritten by
-                // this run.
-                const row = db.read(
-                    (h) =>
-                        h.prepare('SELECT working_dir FROM compose_stacks WHERE project_name = ?').get('raced') as {
-                            working_dir: string | null;
-                        }
-                );
-                expect(row.working_dir).toBeNull();
-
-                // This run's own copy is left alone — it is what the
-                // racing import's row now points at conceptually (same
-                // destination directory), and nothing in this run's own
-                // completion path deletes it.
-                expect(existsSync(join(paths.stacksDir, 'raced', 'docker-compose.yml'))).toBe(true);
-            } finally {
-                vi.restoreAllMocks();
-            }
-        });
-
-        // 9020f94 (reported to the dev branch): if the transaction rolls
-        // back for an unrelated reason, cleanup must not delete a project's
-        // files once the recheck (above) or a genuine race shows a row
-        // committed for it — but it must still delete an ordinary orphan
-        // this run created and nothing now owns.
-        it('cleanup after a rolled-back import deletes only the files nothing owns', () => {
-            const ownedDir = mkdtempSync(join(tmpdir(), 'compose-owned-'));
-            const orphanDir = mkdtempSync(join(tmpdir(), 'compose-orphan-'));
-            const ownedFile = join(ownedDir, 'docker-compose.yml');
-            const orphanFile = join(orphanDir, 'docker-compose.yml');
-            writeFileSync(ownedFile, 'services: {}\n');
-            writeFileSync(orphanFile, 'services: {}\n');
-
-            insertStack({ project_name: 'owned' });
-
-            const cleanup = (
-                service as unknown as {
-                    cleanupFailedComposeImport: (
-                        plans: {
-                            project: string;
-                            name: string | null;
-                            description: string | null;
-                            autostart: boolean;
-                            workingDir: string;
-                            composeFile: string | null;
-                            envFile: string | null;
-                            createdDir: boolean;
-                            copied: string[];
-                        }[]
-                    ) => void;
-                }
-            ).cleanupFailedComposeImport;
-
-            cleanup.call(service, [
-                {
-                    project: 'owned',
-                    name: null,
-                    description: null,
-                    autostart: false,
-                    workingDir: ownedDir,
-                    composeFile: ownedFile,
-                    envFile: null,
-                    createdDir: true,
-                    copied: [ownedFile],
-                },
-                {
-                    project: 'orphan',
-                    name: null,
-                    description: null,
-                    autostart: false,
-                    workingDir: orphanDir,
-                    composeFile: orphanFile,
-                    envFile: null,
-                    createdDir: true,
-                    copied: [orphanFile],
-                },
-            ]);
-
-            expect(existsSync(ownedFile)).toBe(true);
-            expect(existsSync(ownedDir)).toBe(true);
-            expect(existsSync(orphanFile)).toBe(false);
-            expect(existsSync(orphanDir)).toBe(false);
-
-            rmSync(ownedDir, { recursive: true, force: true });
-        });
-
-        // End-to-end complement to the unit test above: a genuine mid-transaction
-        // failure, through the real insert phase, over two real projects —
-        // one this run creates from nothing ('fresh') and one whose
-        // destination file already existed before this run's copy ('kept',
-        // 451a330). `db.write` is wrapped so the real per-plan commit logic
-        // still runs for real, inside a real `BEGIN IMMEDIATE`/`ROLLBACK`,
-        // and then a failure is forced after it — proving the whole
-        // transaction, not just the hand-built cleanup unit above, rolls
-        // back the DB while leaving 'kept' alone and removing 'fresh'.
-        it('a genuine rollback removes what it created and leaves what it only overwrote', () => {
-            const freshSrc = join(paths.pluginProjectsDir, 'fresh');
-            mkdirSync(freshSrc, { recursive: true });
-            writeFileSync(join(freshSrc, 'docker-compose.yml'), 'services: {fresh: {}}\n');
-
-            const keptSrc = join(paths.pluginProjectsDir, 'kept');
-            mkdirSync(keptSrc, { recursive: true });
-            writeFileSync(join(keptSrc, 'docker-compose.yml'), 'services: {kept: {}}\n');
-
-            // 'kept' already has a destination directory and file before this
-            // run — the import overwrites the file but must not be credited
-            // with creating either.
-            const keptDestDir = join(paths.stacksDir, 'kept');
-            mkdirSync(keptDestDir, { recursive: true });
-            const keptDestFile = join(keptDestDir, 'docker-compose.yml');
-            writeFileSync(keptDestFile, 'services: {old: {}}\n');
+        it('a genuine rollback leaves no row, no folder and no file behind', () => {
+            const a = project('fresh');
+            project('other');
 
             const originalWrite = db.write.bind(db);
             const writeSpy = vi.spyOn(db, 'write').mockImplementation((work) =>
                 originalWrite((h) => {
-                    work(h);
-                    throw new Error('boom');
+                    const out = work(h);
+                    // Only the write that added rows fails; reads before it pass.
+                    const added = (h.prepare('SELECT COUNT(*) AS n FROM compose_stacks').get() as { n: number }).n;
+                    if (added > 0) throw new Error('boom');
+                    return out;
                 })
             );
 
             try {
-                const result = service.importFromComposePlugin();
+                const result = service.importFromComposePlugin([]);
 
                 expect(result.success).toBe(false);
                 expect(result.stacksImported).toBe(0);
                 expect(result.errors).toContain('boom');
-
-                // Neither project got a row: the whole transaction rolled back.
-                const rows = db.read((h) => h.prepare('SELECT project_name FROM compose_stacks').all());
-                expect(rows).toEqual([]);
-
-                // 'fresh': this run created both the directory and the file,
-                // so cleanup removes both.
-                expect(existsSync(join(paths.stacksDir, 'fresh', 'docker-compose.yml'))).toBe(false);
+                expect(stackNames()).toEqual([]);
+                expect(folders.getFolders().filter((f) => f.composeProject !== null)).toEqual([]);
+                // Adopting in place copies nothing, and the source is never touched.
+                expect(existsSync(join(a, 'docker-compose.yml'))).toBe(true);
                 expect(existsSync(join(paths.stacksDir, 'fresh'))).toBe(false);
-
-                // 'kept': this run overwrote the file but did not create it or
-                // its directory, so cleanup leaves both — with the new content,
-                // matching PHP's `@copy` overwrite.
-                expect(existsSync(keptDestDir)).toBe(true);
-                expect(readFileSync(keptDestFile, 'utf8')).toBe('services: {kept: {}}\n');
             } finally {
                 writeSpy.mockRestore();
             }
+        });
+
+        it('skips a project directory name the compose API could never address again', () => {
+            mkdirSync(join(paths.pluginProjectsDir, 'has space'), { recursive: true });
+            mkdirSync(join(paths.pluginProjectsDir, '.git'), { recursive: true });
+            project('good');
+
+            const result = service.importFromComposePlugin([]);
+
+            expect(result.stacksImported).toBe(1);
+            expect(result.errors.sort()).toEqual(
+                ['has space: unsupported folder name, skipped', '.git: unsupported folder name, skipped'].sort()
+            );
         });
     });
 
@@ -1288,6 +1139,159 @@ describe('ComposeService', () => {
             setAutoInstall('0');
             await pinned.applyAutoInstallSetting('1');
             expect(existsSync(paths.cachePath)).toBe(false);
+        });
+    });
+
+    describe('installComposeBinary and compose_auto_install', () => {
+        const content = 'compose-bytes';
+        const sha = createHash('sha256').update(content).digest('hex');
+        let pinned: ComposeService;
+
+        function autoInstall(): string | undefined {
+            const row = db.read(
+                (d) => d.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get() as { value: string } | undefined
+            );
+            return row?.value;
+        }
+
+        function stubDownload(body: string | null): void {
+            vi.stubGlobal(
+                'fetch',
+                vi.fn(async () =>
+                    body === null ? new Response('nope', { status: 500 }) : new Response(body, { status: 200 })
+                )
+            );
+        }
+
+        beforeEach(() => {
+            mkdirSync(paths.configDir, { recursive: true });
+            pinned = new ComposeService(db, folders, fake.runner, { ...paths, binarySha256: sha });
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('a user-started install turns the option on and leaves a flash copy', async () => {
+            stubDownload(content);
+            await expect(pinned.installComposeBinary({ persist: true })).resolves.toEqual({ success: true, error: null });
+            expect(autoInstall()).toBe('1');
+            expect(readFileSync(paths.cachePath, 'utf8')).toBe(content);
+        });
+
+        it('an install that does not ask to persist (the boot path) leaves the option alone', async () => {
+            stubDownload(content);
+            await pinned.installComposeBinary();
+            expect(autoInstall()).toBeUndefined();
+            expect(existsSync(paths.cachePath)).toBe(false);
+        });
+
+        it('keeps an option the user turned off when the boot path installs', async () => {
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            stubDownload(content);
+            await pinned.installComposeBinary();
+            expect(autoInstall()).toBe('0');
+        });
+
+        it('a user-started install keeps an option that was off, and writes no flash copy', async () => {
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            stubDownload(content);
+            await expect(pinned.installComposeBinary({ persist: true })).resolves.toEqual({ success: true, error: null });
+            expect(autoInstall()).toBe('0');
+            expect(pinned.isAutoInstallEnabled()).toBe(false);
+            expect(existsSync(paths.cachePath)).toBe(false);
+        });
+
+        it('a user-started install leaves an option that was already on, and keeps the copy', async () => {
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', 0)").run());
+            stubDownload(content);
+            await pinned.installComposeBinary({ persist: true });
+            expect(autoInstall()).toBe('1');
+            expect(readFileSync(paths.cachePath, 'utf8')).toBe(content);
+        });
+
+        it('tells a stored choice from none', () => {
+            expect(pinned.hasAutoInstallChoice()).toBe(false);
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '0', 0)").run());
+            expect(pinned.hasAutoInstallChoice()).toBe(true);
+        });
+
+        it('warns, and still succeeds, when the flash copy cannot be written', async () => {
+            const broken = new ComposeService(db, folders, fake.runner, {
+                ...paths,
+                binarySha256: sha,
+                cachePath: join(rootDir, 'no-such-dir', 'docker-compose'),
+            });
+            stubDownload(content);
+            const result = await broken.installComposeBinary({ persist: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeNull();
+            expect(result.warning).toContain('copy on the flash drive failed');
+            expect(autoInstall()).toBe('1');
+        });
+
+        it('succeeds with a setting warning when the option cannot be saved', async () => {
+            stubDownload(content);
+            vi.spyOn(pinned, 'enableAutoInstall').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result).toEqual({
+                success: true,
+                error: null,
+                warning: 'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.',
+            });
+            expect(existsSync(paths.binaryPath)).toBe(true);
+            expect(existsSync(paths.cachePath)).toBe(false);
+        });
+
+        it('succeeds with a setting warning when the option cannot be read', async () => {
+            stubDownload(content);
+            vi.spyOn(pinned, 'isAutoInstallEnabled').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeNull();
+            expect(result.warning).toContain('could not be saved');
+        });
+
+        it('shows both facts when the option and the flash copy both fail', async () => {
+            const broken = new ComposeService(db, folders, fake.runner, {
+                ...paths,
+                binarySha256: sha,
+                cachePath: join(rootDir, 'no-such-dir', 'docker-compose'),
+            });
+            db.write((d) => d.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', 0)").run());
+            vi.spyOn(broken, 'hasAutoInstallChoice').mockImplementation(() => {
+                throw new Error('database is locked');
+            });
+            stubDownload(content);
+            const result = await broken.installComposeBinary({ persist: true });
+            expect(result.success).toBe(true);
+            expect(result.warning).toContain('could not be saved');
+            expect(result.warning).toContain('copy on the flash drive failed');
+        });
+
+        it('has no warning when the copy is written', async () => {
+            stubDownload(content);
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.warning).toBeUndefined();
+        });
+
+        it('a failed download does not turn the option on', async () => {
+            stubDownload(null);
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.success).toBe(false);
+            expect(autoInstall()).toBeUndefined();
+        });
+
+        it('a download that fails the hash check does not turn the option on', async () => {
+            stubDownload('tampered');
+            const result = await pinned.installComposeBinary({ persist: true });
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('SHA256');
+            expect(autoInstall()).toBeUndefined();
         });
     });
 });

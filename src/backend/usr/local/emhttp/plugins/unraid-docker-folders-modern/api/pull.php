@@ -127,6 +127,7 @@ function recreateTargets($dockerClient, $image, $onlyContainerIds)
       ]);
     }
 
+    $anyRecreated = false;
     foreach ($matchingContainers as $container) {
       $cName = $container['name'];
       $cId = $container['id'];
@@ -136,6 +137,7 @@ function recreateTargets($dockerClient, $image, $onlyContainerIds)
       $recreateResult = recreateOneContainer($dockerClient, $cName, $cId);
 
       if ($recreateResult['success']) {
+        $anyRecreated = true;
         sendSSE('recreated', ['container' => $cName, 'message' => "{$cName} updated successfully"]);
       } else {
         sendSSE('recreate_error', [
@@ -143,6 +145,10 @@ function recreateTargets($dockerClient, $image, $onlyContainerIds)
           'message' => "Failed to recreate {$cName}: {$recreateResult['error']}",
         ]);
       }
+    }
+
+    if ($anyRecreated) {
+      syncUnraidStatusAfterRecreate($dockerClient, Database::getInstance(), $image);
     }
   } catch (\Throwable $e) {
     logUpdate("RECREATE ERROR {$image}: " . $e->getMessage());
@@ -194,7 +200,7 @@ try {
 
     // Post-pull operations are non-critical — never let them prevent complete/done
     try {
-      recordImagePulled($dockerClient, Database::getInstance(), $image);
+      recordImagePulled($dockerClient, Database::getInstance(), $image, $dockerClient->getLastPullDigest());
     } catch (\Throwable $e) {
       logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
     }

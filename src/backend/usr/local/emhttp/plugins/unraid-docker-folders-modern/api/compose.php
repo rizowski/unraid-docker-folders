@@ -10,6 +10,7 @@
 require_once dirname(__DIR__) . '/include/config.php';
 require_once dirname(__DIR__) . '/include/auth.php';
 require_once dirname(__DIR__) . '/classes/ComposeManager.php';
+require_once dirname(__DIR__) . '/classes/DockerClient.php';
 require_once dirname(__DIR__) . '/classes/WebSocketPublisher.php';
 
 header('Content-Type: application/json');
@@ -144,14 +145,28 @@ function handlePost($composeManager)
 
   // Install docker compose binary
   if ($action === 'install_binary') {
-    $result = $composeManager->installComposeBinary();
+    $result = $composeManager->installComposeBinary(true);
     if (!$result['success']) {
       errorResponse($result['error'], 500);
     }
-    jsonResponse([
+    // The install worked, so an unreadable setting must not turn it into an
+    // error. installComposeBinary() already put the warning in the result.
+    try {
+      $autoInstall = $composeManager->isAutoInstallEnabled();
+    } catch (\Throwable $e) {
+      $autoInstall = false;
+    }
+    $body = [
       'success' => true,
       'status' => $composeManager->getStatus(),
-    ]);
+      // Whether Compose is reinstalled after a reboot. The banner says so only
+      // when this is true.
+      'auto_install' => $autoInstall,
+    ];
+    if (!empty($result['warning'])) {
+      $body['warning'] = $result['warning'];
+    }
+    jsonResponse($body);
   }
 
   // Export compose configs to directory
@@ -191,10 +206,20 @@ function handlePost($composeManager)
 
   // Import from compose_plugin
   if ($action === 'import') {
-    $result = $composeManager->importFromComposePlugin();
+    // The import names each stack after its running containers when it has
+    // any. A failed Docker request would look like "none running" and the
+    // stack would be named by rule instead, so refuse and ask for a retry.
+    $dockerClient = new DockerClient();
+    $containers = $dockerClient->listContainers(true);
+    if (ComposeManager::containerListFailed($containers, $dockerClient->getLastError())) {
+      errorResponse('Cannot reach Docker, so nothing was imported. Try again. (' . $dockerClient->getLastError() . ')', 503);
+    }
+
+    $result = $composeManager->importFromComposePlugin($containers);
 
     if ($result['stacks_imported'] > 0) {
       WebSocketPublisher::publish('compose', 'import', $result);
+      WebSocketPublisher::publish('folder', 'updated');
     }
 
     jsonResponse($result);
@@ -203,6 +228,40 @@ function handlePost($composeManager)
   // All remaining actions require a project name
   if (!$project) {
     errorResponse('Project name is required', 400);
+  }
+
+  // Remove a stack from the plugin (row, schedules, stack folder; files only
+  // when asked, and only the plugin's own copy). Not gated on
+  // management_enabled: it deletes the plugin's own records, never a
+  // container, and a server that still has Compose Manager installed is
+  // exactly where a duplicate stack needs to go. A POST, so Unraid's
+  // local_prepend.php checks the CSRF token (see auth.php).
+  if ($action === 'remove') {
+    $data = getRequestData();
+    $deleteFiles = requestFlag($data['delete_files'] ?? false);
+
+    $dockerClient = new DockerClient();
+    $containers = $dockerClient->listContainers(true);
+    // listContainers() answers [] for "no containers" and for a failed
+    // request alike. Removing on a failure would pass the containers check
+    // and the next good poll would add the row back, so refuse (as
+    // containers.php does) and ask for a retry.
+    if (ComposeManager::containerListFailed($containers, $dockerClient->getLastError())) {
+      errorResponse('Cannot reach Docker, so the stack was not removed. Try again. (' . $dockerClient->getLastError() . ')', 503);
+    }
+    $result = $composeManager->removeStack($project, $deleteFiles, $containers);
+
+    if (!$result['success']) {
+      $statuses = ['not_found' => 404, 'in_use' => 409];
+      errorResponse($result['error'], $statuses[$result['code']] ?? 500);
+    }
+
+    WebSocketPublisher::publish('compose', 'remove', ['project' => $project]);
+    WebSocketPublisher::publish('folder', 'updated');
+    if ($result['schedules_removed'] > 0) {
+      WebSocketPublisher::publish('schedules', 'updated');
+    }
+    jsonResponse($result);
   }
 
   // Check conflict before management operations

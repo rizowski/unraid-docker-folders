@@ -157,6 +157,7 @@
             @compose-recompose="openComposeRecompose"
             @compose-down="downConfirm.request"
             @compose-pull="handleComposePull"
+            @compose-remove="removeConfirm.request"
             @schedules="openSchedules"
           />
         </Transition>
@@ -318,6 +319,7 @@
     />
     <StackActionConfirmModal v-if="recomposeConfirm.pending.value" :pending="recomposeConfirm.pending.value" @confirm="recomposeConfirm.confirm" @cancel="recomposeConfirm.cancel" />
     <StackActionConfirmModal v-if="downConfirm.pending.value" :pending="downConfirm.pending.value" @confirm="downConfirm.confirm" @cancel="downConfirm.cancel" />
+    <StackRemoveConfirmModal v-if="removeConfirm.pending.value" :project="removeConfirm.pending.value.project" @confirm="removeConfirm.confirm" @cancel="removeConfirm.cancel" />
     <UpdateConfirmModal
       :is-open="showBatchConfirm"
       :units="pendingUnits"
@@ -351,7 +353,9 @@ import StacksPane from '@/components/compose/StacksPane.vue';
 import IconComposeStack from '@/components/icons/IconComposeStack.vue';
 import ConfirmModal from '@/components/ConfirmModal.vue';
 import StackActionConfirmModal from '@/components/compose/StackActionConfirmModal.vue';
+import StackRemoveConfirmModal from '@/components/compose/StackRemoveConfirmModal.vue';
 import { useStackActionConfirm } from '@/composables/useStackActionConfirm';
+import { useStackRemoveConfirm } from '@/composables/useStackRemoveConfirm';
 import ContainerCard from '@/components/docker/ContainerCard.vue';
 import ChevronIcon from '@/components/common/ChevronIcon.vue';
 import LoadingSkeleton from '@/components/common/LoadingSkeleton.vue';
@@ -544,6 +548,10 @@ const recomposeConfirm = useStackActionConfirm('recompose', startComposeRecompos
 // any failure show on both (composeStore.runStackAction). Up, Recompose and
 // Pull start below, so each clears an old stop or down failure first.
 const downConfirm = useStackActionConfirm('down', (project) => composeStore.runStackAction(project, 'down'));
+
+// Remove Stack, from the stacks pane only. It always asks, and the dialog's
+// checkbox decides whether the plugin's own copy of the files goes too.
+const removeConfirm = useStackRemoveConfirm();
 
 function openComposeRecompose(project: string) {
   recomposeConfirm.request(project);

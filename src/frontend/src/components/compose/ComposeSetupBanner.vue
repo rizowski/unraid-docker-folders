@@ -6,7 +6,10 @@
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
     </svg>
-    <span class="text-text flex-1">Docker Compose is not installed. Install it to manage compose stacks.</span>
+    <div class="text-text flex-1">
+      <p>Docker Compose is not installed. Install it to manage compose stacks.</p>
+      <p data-testid="compose-reboot-note" class="text-xs text-text-secondary">Installing also keeps a copy on the flash drive (about 65 MB) and reinstalls Compose after a reboot, unless you turned that off in Settings.</p>
+    </div>
     <button
       @click="install"
       :disabled="composeStore.installingBinary"
@@ -30,7 +33,7 @@
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
     </svg>
-    <span class="text-text flex-1">Compose Manager plugin is installed. Stack management is read-only — uninstall it to manage stacks here.</span>
+    <span data-testid="compose-plugin-note" class="text-text flex-1">Compose Manager is installed, so stacks are read-only here. To manage them in Docker Folders, remove the Compose Manager plugin. Your stack files stay on the flash drive. Then choose Import Stacks.</span>
   </div>
 
   <!-- Compose plugin data migration banner -->
@@ -40,7 +43,7 @@
       <polyline points="17 8 12 3 7 8" />
       <line x1="12" y1="3" x2="12" y2="15" />
     </svg>
-    <span class="text-text flex-1">Compose Manager plugin data detected. Import your existing stacks?</span>
+    <span data-testid="compose-import-note" class="text-text flex-1">Compose Manager plugin data detected. Import your existing stacks? The stacks are adopted where they are, and no files are copied.</span>
     <button
       @click="handleImport"
       :disabled="importing"
@@ -62,6 +65,17 @@
     <template v-else>
       Import failed: {{ importResult.errors?.join(', ') || 'Unknown error' }}
     </template>
+  </div>
+
+  <!-- What the install did about reinstalling after a reboot. Shown only once the backend has said. -->
+  <div v-if="composeStore.installAutoInstall !== null" data-testid="compose-install-note" class="px-4 py-2 mb-4 rounded bg-info/10 border border-info/30 text-xs text-text-secondary">
+    <template v-if="composeStore.installAutoInstall">Compose is reinstalled after a reboot, and a copy (about 65 MB) is kept on the flash drive. You can turn this off in Settings.</template>
+    <template v-else>Compose is not reinstalled after a reboot, as you set in Settings. After a reboot, install it again from here.</template>
+  </div>
+
+  <!-- Installed, but the flash copy failed -->
+  <div v-if="composeStore.installWarning" data-testid="compose-install-warning" class="flex items-center gap-2 px-4 py-2 mb-4 rounded bg-warning/10 border border-warning/30 text-sm text-text">
+    {{ composeStore.installWarning }}
   </div>
 
   <!-- Install error -->

@@ -5,6 +5,10 @@
 export interface ComposeStack {
   project_name: string;
   working_dir: string | null;
+  /** True when the files sit in the plugin's own stack folder, so Remove Stack may delete them. */
+  own_files?: boolean;
+  /** `compose_manager` when the stack runs from the Compose Manager projects folder (by path), else null. */
+  source?: 'compose_manager' | null;
   compose_file: string | null;
   env_file: string | null;
   autostart: boolean;
@@ -34,6 +38,18 @@ export interface ComposeFileVersion {
 
 export interface ComposeFileVersionDetail extends ComposeFileVersion {
   content: string;
+}
+
+/** What `compose.php?action=remove` answers with once the stack is gone. */
+export interface ComposeRemoveResult {
+  success: boolean;
+  schedules_removed: number;
+  /** What became of the stack folder: deleted, kept as a plain folder, or none. */
+  folder: 'deleted' | 'kept' | 'none';
+  files_removed: string[];
+  directory_removed: boolean;
+  /** Why files were left in place, when they were. */
+  files_note: string | null;
 }
 
 export interface ComposeImportResult {

@@ -76,6 +76,7 @@ export const ALLOWED_SETTING_KEYS = [
     'sort_mode',
     'sort_folders',
     'memory_calculation',
+    'memory_percent_basis',
 ] as const;
 
 export type AllowedSettingKey = (typeof ALLOWED_SETTING_KEYS)[number];

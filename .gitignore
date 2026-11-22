@@ -1,5 +1,5 @@
 # Dependencies
-node_modules/
+node_modules
 vendor/
 
 # This project uses yarn (see packageManager in src/frontend/package.json).
@@ -52,8 +52,10 @@ temp/
 composer.phar
 composer.lock
 
-# Claude Code
-.claude/
+# Claude Code: everything is local, except the shared hooks and their settings
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 
 # graphify knowledge graph (rebuilt from source; graph.json is ~2 MB)
 graphify-out/

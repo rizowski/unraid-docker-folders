@@ -8,6 +8,10 @@
  */
 
 require_once __DIR__ . '/DockerStreamDemuxer.php';
+// pullDigestFromStatus() is called by pullImage(). include/config.php loads this
+// file too; require_once resolves both paths to one file, so it loads once. The
+// file only declares constants and functions and requires nothing.
+require_once dirname(__DIR__) . '/include/unraidUpdateStatus.php';
 
 class DockerClient
 {
@@ -18,6 +22,8 @@ class DockerClient
   private $lastErrorCode = 0;
   /** The daemon's own message behind the last HTTP failure, or ''. */
   private $lastErrorReason = '';
+  // The "Digest: sha256:..." line of the last pullImage() stream, or null.
+  private $lastPullDigest = null;
   private $imageInfoCache = [];
   /** Cached result of readHostMemoryTotal(), null until first read. */
   private $hostMemoryTotal = null;
@@ -86,6 +92,16 @@ class DockerClient
   public function getLastError()
   {
     return $this->lastError;
+  }
+
+  /**
+   * The digest the last pullImage() reported in its "Digest:" status line.
+   *
+   * @return string|null Bare `sha256:...`, or null when the stream had none
+   */
+  public function getLastPullDigest()
+  {
+    return $this->lastPullDigest;
   }
 
   /**
@@ -1582,6 +1598,36 @@ class DockerClient
     return $response['Descriptor']['digest'] ?? null;
   }
 
+  /** The bare "sha256:..." part of a RepoDigest "name@sha256:..."; the input when it has no '@'. */
+  public static function digestHash($digest)
+  {
+    $at = strpos($digest, '@');
+    return $at !== false ? substr($digest, $at + 1) : $digest;
+  }
+
+  /**
+   * Pick which of an image's RepoDigests to compare with the registry digest.
+   *
+   * An image that was re-pulled can carry more than one digest, and nothing
+   * guarantees the current one comes first. Prefer the digest that equals the
+   * registry's; otherwise fall back to the first, so a real update is still
+   * reported.
+   *
+   * @param string[] $repoDigests "name@sha256:..." entries from the image
+   * @param string|null $remoteDigest Bare "sha256:..." digest from the registry
+   * @return string|null The chosen entry, or null when the image has none
+   */
+  public static function pickLocalDigest(array $repoDigests, $remoteDigest)
+  {
+    if (empty($repoDigests)) return null;
+    if (is_string($remoteDigest) && $remoteDigest !== '') {
+      foreach ($repoDigests as $digest) {
+        if (self::digestHash($digest) === $remoteDigest) return $digest;
+      }
+    }
+    return $repoDigests[0];
+  }
+
   /**
    * Check if an image has an update available
    *
@@ -1601,17 +1647,17 @@ class DockerClient
 
     // Single lookup: pull digest and OCI source label from the same payload
     $info = $this->getImageInfo($localImageId);
-    $localDigest = null;
+    $digests = [];
     if ($info) {
       $digests = $info['RepoDigests'] ?? [];
-      $localDigest = !empty($digests) ? $digests[0] : null;
       $labels = $info['Config']['Labels'] ?? [];
       $src = $labels['org.opencontainers.image.source'] ?? null;
       if (is_string($src) && preg_match('#^https?://#i', $src)) {
         $result['source_url'] = rtrim($src, '/');
       }
     }
-    $result['local_digest'] = $localDigest;
+    // On a registry error the first digest is stored, as before the match logic.
+    $result['local_digest'] = $digests[0] ?? null;
 
     // Get remote digest
     $remoteDigest = $this->getRemoteImageDigest($imageName);
@@ -1621,12 +1667,15 @@ class DockerClient
     }
     $result['remote_digest'] = $remoteDigest;
 
+    // An image can carry several RepoDigests: the registry re-indexed a tag
+    // whose image did not change, or the same image was pulled under two tags.
+    // Compare against the one the registry reports, not just the first.
+    $localDigest = self::pickLocalDigest($digests, $remoteDigest);
+    $result['local_digest'] = $localDigest;
+
     // Compare: local RepoDigest format is "name@sha256:abc...", remote is just "sha256:abc..."
     if ($localDigest && $remoteDigest) {
-      $localHash = strpos($localDigest, '@') !== false
-        ? substr($localDigest, strpos($localDigest, '@') + 1)
-        : $localDigest;
-      $result['update_available'] = ($localHash !== $remoteDigest);
+      $result['update_available'] = (self::digestHash($localDigest) !== $remoteDigest);
     }
 
     return $result;
@@ -2066,6 +2115,7 @@ class DockerClient
     // This path does not go through request(), which is what resets it.
     $this->lastError = '';
     $this->lastErrorReason = '';
+    $this->lastPullDigest = null;
 
     if (!file_exists($this->socketPath)) {
       $this->lastError = "Docker socket not found: {$this->socketPath}";
@@ -2104,6 +2154,10 @@ class DockerClient
       if ($line === '') return;
       $decoded = json_decode($line, true);
       if (!is_array($decoded)) return;
+      $digest = pullDigestFromStatus($decoded['status'] ?? null);
+      if ($digest !== null) {
+        $this->lastPullDigest = $digest;
+      }
       if (isset($decoded['error']) && $streamError === '') {
         $streamError = (string) $decoded['error'];
       }

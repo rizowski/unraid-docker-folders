@@ -18,6 +18,8 @@ $distinguishHealthy = ($settings['distinguish_healthy'] ?? '1') === '1';
 $showStats = ($settings['show_stats'] ?? '1') === '1';
 $memoryCalculation = ($settings['memory_calculation'] ?? '') === 'raw' ? 'raw' : 'docker';
 $memoryCalculationOptions = ['docker' => 'Docker CLI (excludes page cache)', 'raw' => 'Raw cgroup (includes page cache)'];
+$memoryPercentBasis = ($settings['memory_percent_basis'] ?? '') === 'host' ? 'host' : 'limit';
+$memoryPercentBasisOptions = ['limit' => 'Container limit', 'host' => 'Total host memory'];
 $replaceDockerSection = ($settings['replace_docker_section'] ?? '1') === '1';
 $showLegacyContainers = ($settings['show_legacy_containers'] ?? '0') === '1';
 $showLegacyButtons = ($settings['show_legacy_buttons'] ?? '0') === '1';
@@ -718,6 +720,21 @@ if (file_exists($changelogPath)) {
 
     <div class="setting-row">
       <div class="setting-info">
+        <label for="memory-percent-basis">Memory percentage is of</label>
+        <div class="description">What the memory percentage on a container is measured against. Container limit is the container's own memory limit (<code>--memory</code>), as in <code>docker stats</code>; with no limit set it is the host's memory. Total host memory always uses the host's memory. A bar still turns red when a container nears its own limit. A folder's total is always a share of host memory. Applies to both backends. <strong>Default: Container limit</strong></div>
+      </div>
+      <div class="setting-control">
+        <select id="memory-percent-basis" onchange="saveSetting('memory_percent_basis', this.value)">
+          <?php foreach ($memoryPercentBasisOptions as $basisValue => $basisLabel): ?>
+          <option value="<?= $basisValue ?>" <?= $memoryPercentBasis === $basisValue ? 'selected' : '' ?>><?= $basisLabel ?></option>
+          <?php endforeach; ?>
+        </select>
+        <span id="save-status-memory-percent-basis" class="save-status">Saved</span>
+      </div>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
         <label for="show-inline-logs">Show inline logs</label>
         <div class="description">When enabled, expanding a running container shows a live log panel alongside resource stats. A stopped container always shows its last 200 log lines, so you can see why it stopped. <strong>Default: Off</strong></div>
       </div>
@@ -893,7 +910,7 @@ if (file_exists($changelogPath)) {
     <div class="setting-row">
       <div class="setting-info">
         <label for="compose-auto-install">Reinstall Docker Compose after a reboot</label>
-        <div class="description">Unraid keeps the Docker CLI plugins in RAM, so <code>docker compose</code> disappears at every reboot and compose stacks cannot autostart. When enabled, a verified copy of the Compose binary is kept on the flash drive (about 65 MB) and put back each time Docker starts, before stacks autostart. If no copy exists yet, it is downloaded once. <strong>Default: Off</strong></div>
+        <div class="description">Unraid keeps the Docker CLI plugins in RAM, so <code>docker compose</code> disappears at every reboot and compose stacks cannot autostart. When enabled, a verified copy of the Compose binary is kept on the flash drive (about 65 MB) and put back each time Docker starts, before stacks autostart. If no copy exists yet, it is downloaded once. Installing Compose from the setup banner on the Folders tab turns this on; turn it off here to keep Compose in RAM only. <strong>Default: Off</strong></div>
       </div>
       <div class="setting-control">
         <input type="checkbox" id="compose-auto-install" <?= $composeAutoInstall ? 'checked' : '' ?> onchange="saveSetting('compose_auto_install', this.checked ? '1' : '0')" />

@@ -35,6 +35,7 @@ import type {
 import type {
   ComposeFileVersion,
   ComposeFileVersionDetail,
+  ComposeRemoveResult,
   ComposeStack,
   ComposeStatus,
   ComposeValidationError,
@@ -215,7 +216,7 @@ export interface Backend {
   compose: {
     status(): Promise<BackendResult<ComposeStatus>>;
     list(): Promise<BackendResult<{ stacks?: ComposeStack[] }>>;
-    installBinary(): Promise<BackendResult<ErrorBody & { status?: ComposeStatus }>>;
+    installBinary(): Promise<BackendResult<ErrorBody & { status?: ComposeStatus; warning?: string; auto_install?: boolean }>>;
     stackAction(
       project: string,
       action: 'up' | 'down' | 'stop' | 'restart' | 'pull',
@@ -229,6 +230,8 @@ export interface Backend {
     setEnvPath(project: string, body: Record<string, unknown>): Promise<BackendResult<ErrorBody>>;
     setAutostart(project: string, body: Record<string, unknown>): Promise<BackendResult<ErrorBody>>;
     logs(project: string, tail: number): Promise<BackendResult<ComposeLogsBody>>;
+    /** Drop a stack from the plugin. Never touches a container; refused while they exist. */
+    remove(project: string, body: { delete_files: boolean }): Promise<BackendResult<ErrorBody & Partial<ComposeRemoveResult>>>;
     importStacks(body: Record<string, unknown>): Promise<BackendResult<ErrorBody & Record<string, unknown>>>;
     create(body: Record<string, unknown>): Promise<BackendResult<ErrorBody & Record<string, unknown>>>;
     fileVersions(

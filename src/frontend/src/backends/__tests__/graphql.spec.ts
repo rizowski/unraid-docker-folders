@@ -340,6 +340,66 @@ describe('graphql compose', () => {
     expect(data.content).toBeUndefined();
   });
 
+  describe('installBinary against an older API plugin', () => {
+    const STATUS = { composeAvailable: true, composeVersion: '2.0', composeManagementEnabled: true };
+    const unknownField = (field: string) =>
+      gqlResponse(
+        {
+          errors: [{ message: `Cannot query field "${field}" on type "DockerFoldersComposeInstallResult".` }],
+        },
+        400,
+      );
+    const queryOf = (call: number) =>
+      JSON.parse((vi.mocked(globalThis.fetch).mock.calls[call][1] as RequestInit).body as string).query as string;
+
+    it('asks again without the new fields and makes no claim about auto-install', async () => {
+      vi.mocked(globalThis.fetch)
+        .mockResolvedValueOnce(unknownField('autoInstall'))
+        .mockResolvedValueOnce(
+          gqlResponse({ data: { installDockerFoldersComposeBinary: { success: true, error: null, status: STATUS } } }),
+        );
+
+      const { ok, data } = await graphqlBackend.compose.installBinary();
+
+      expect(ok).toBe(true);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      expect(queryOf(0)).toContain('autoInstall');
+      expect(queryOf(1)).not.toContain('autoInstall');
+      expect(queryOf(1)).not.toContain('warning');
+      expect(data.auto_install).toBeUndefined();
+      expect(data.warning).toBeUndefined();
+    });
+
+    it('also retries when the plugin lacks only warning', async () => {
+      vi.mocked(globalThis.fetch)
+        .mockResolvedValueOnce(unknownField('warning'))
+        .mockResolvedValueOnce(
+          gqlResponse({ data: { installDockerFoldersComposeBinary: { success: true, error: null, status: STATUS } } }),
+        );
+      expect((await graphqlBackend.compose.installBinary()).ok).toBe(true);
+    });
+
+    it('does not retry for any other error', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(gqlResponse({ errors: [{ message: 'Invalid CSRF token' }], data: null }));
+      const { ok, error } = await graphqlBackend.compose.installBinary();
+      expect(ok).toBe(false);
+      expect(error).toBe('Invalid CSRF token');
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the value a current plugin reports, including false', async () => {
+      vi.mocked(globalThis.fetch).mockResolvedValue(
+        gqlResponse({
+          data: { installDockerFoldersComposeBinary: { success: true, error: null, warning: 'w', autoInstall: false, status: STATUS } },
+        }),
+      );
+      const { data } = await graphqlBackend.compose.installBinary();
+      expect(data.auto_install).toBe(false);
+      expect(data.warning).toBe('w');
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('maps force_recreate onto the forceRecreate argument for "up" only', async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       gqlResponse({ data: { bringUpDockerFoldersComposeStack: { success: true, output: 'done', error: null } } }),
@@ -396,6 +456,48 @@ describe('graphql compose', () => {
 
     expect(ok).toBe(false);
     expect(data.message).toBe("Stack 'media' already exists");
+  });
+
+  it('removes a stack through the mutation and maps the result to the PHP body shape', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      gqlResponse({
+        data: {
+          removeDockerFoldersComposeStack: {
+            success: true,
+            schedulesRemoved: 2,
+            folder: 'deleted',
+            filesRemoved: ['docker-compose.yml'],
+            directoryRemoved: true,
+            filesNote: null,
+          },
+        },
+      }),
+    );
+
+    const { ok, data } = await graphqlBackend.compose.remove('Immich', { delete_files: true });
+
+    const body = JSON.parse((vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit).body as string);
+    expect(body.variables).toEqual({ input: { project: 'Immich', deleteFiles: true } });
+    expect(ok).toBe(true);
+    expect(data).toEqual({
+      success: true,
+      schedules_removed: 2,
+      folder: 'deleted',
+      files_removed: ['docker-compose.yml'],
+      directory_removed: true,
+      files_note: null,
+    });
+  });
+
+  it('hands the store the refusal message when containers still exist', async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      gqlResponse({ errors: [{ message: 'Containers of "Immich" still exist. Run Stack Down first' }], data: null }),
+    );
+
+    const result = await graphqlBackend.compose.remove('Immich', { delete_files: false });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('Stack Down');
   });
 });
 

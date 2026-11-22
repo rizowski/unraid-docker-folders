@@ -284,6 +284,29 @@ describe('WidgetApp', () => {
       expect(bars[1].classes()).toContain('bg-error');
     });
 
+    it('follows the memory_percent_basis setting, and keeps the color on the container limit', async () => {
+      saveSettings({ startCollapsed: false, showStats: true });
+      const GB = 1024 ** 3;
+      // 3.8 GB of a 4 GB cap on a 32 GB host: 95% of the limit, 11.9% of the host.
+      const stats = { c1: { cpuPercent: 1, memoryUsage: 3.8 * GB, memoryLimit: 4 * GB, memoryPercent: 95, hostMemory: 32 * GB } };
+
+      const limit = await mountWidget(containers, [], { stats });
+      expect(rowText(limit.wrapper, 'plex')).toContain('95.0%');
+      limit.wrapper.unmount();
+
+      const stores = setup(containers, [], { stats });
+      useSettingsStore().memoryPercentBasis = 'host';
+      const wrapper = mount(WidgetApp, { global: { plugins: [stores.pinia] }, attachTo: document.body });
+      await flushPromises();
+      expect(rowText(wrapper, 'plex')).toContain('11.9%');
+      // Still red: the container is near its own limit.
+      expect(wrapper.find('.widget-row .text-error').text()).toBe('11.9%');
+      expect(wrapper.find('.widget-row .widget-stat .rounded-full.block.bg-error').exists()).toBe(true);
+      const title = wrapper.findAll('.widget-row').find((r) => r.find('span.truncate').text() === 'plex')!.find('[title*="Memory"]');
+      expect(title.attributes('title')).toContain('3.8 GB of 32.0 GB host memory');
+      expect(title.attributes('title')).toContain('container limit is 4.0 GB');
+    });
+
     it('shows every running container as a share of the host, including a collapsed folder', async () => {
       // The Media folder stays collapsed, so plex's row is not mounted.
       saveSettings({ startCollapsed: true, showStats: true });

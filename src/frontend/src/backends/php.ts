@@ -174,6 +174,7 @@ export const phpBackend: Backend = {
       post(`${API_BASE}/compose.php?project=${enc(project)}&action=autostart`, body),
     logs: (project, tail) =>
       request(`${API_BASE}/compose.php?project=${enc(project)}&action=logs&tail=${tail}`),
+    remove: (project, body) => post(`${API_BASE}/compose.php?project=${enc(project)}&action=remove`, body),
     importStacks: (body) => post(`${API_BASE}/compose.php?action=import`, body),
     create: (body) => post(`${API_BASE}/compose.php?action=create`, body),
     fileVersions: (project, fileType) =>

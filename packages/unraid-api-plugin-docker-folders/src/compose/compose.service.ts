@@ -10,7 +10,6 @@ import {
     readdirSync,
     readFileSync,
     renameSync,
-    rmdirSync,
     statSync,
     unlinkSync,
     writeFileSync,
@@ -37,6 +36,9 @@ import {
 } from './compose-config.js';
 import * as composeFiles from './compose-files.js';
 import { findComposeFile, parseComposeServiceNames, type StackFileFields } from './compose-files.js';
+import { isOwnStackPath, removeComposeStack, stackSource, type RemoveContainer, type RemoveStackResult } from './compose-remove.js';
+import { PIN_FILE, nameFromFolder, nameFromLabels, type LabelledContainer } from './compose-project-name.js';
+import { importedCopies, readMetadataFile, repairImportedStacks, sourceDirOf } from './compose-repair.js';
 import {
     COMPOSE_RUNNER_TOKEN,
     type ComposeExecResult,
@@ -73,22 +75,17 @@ interface ComposePsEntry {
 
 /**
  * One `compose_plugin` project queued for import, built by
- * `buildComposeImportPlan` and consumed by `commitComposeImportPlan` /
- * `cleanupFailedComposeImport`. `ComposeManager::importFromComposePlugin`'s
- * `$plans[]` entry shape (ComposeManager.php:1609-1619).
+ * `importFromComposePlugin` and consumed by `commitComposeImportPlan`.
  */
 interface ComposeImportPlan {
     project: string;
-    name: string | null;
+    /** The human name: the folder's `name` file, else its directory name. */
+    display: string;
     description: string | null;
     autostart: boolean;
+    /** The stack's own folder under the Compose Manager projects directory (or its indirect target). */
     workingDir: string;
     composeFile: string | null;
-    envFile: string | null;
-    /** Whether THIS run created `workingDir` (vs. it already existing). */
-    createdDir: boolean;
-    /** Files THIS run copied into `workingDir` that did not already exist there. */
-    copied: string[];
 }
 
 /**
@@ -137,6 +134,14 @@ const STACK_COMMAND_TIMEOUT_MS = 600_000;
 
 /** How often `ComposeService.logStream` flushes buffered `docker compose logs --follow` lines. */
 const LOG_STREAM_COALESCE_MS = 150;
+
+/** `ComposeManager::FLASH_COPY_WARNING`. */
+const FLASH_COPY_WARNING =
+    'Docker Compose is installed, but the copy on the flash drive failed, so it is downloaded again at boot.';
+
+/** `ComposeManager::SETTING_SAVE_WARNING`. */
+const SETTING_SAVE_WARNING =
+    'Docker Compose is installed, but the setting to reinstall it after a reboot could not be saved.';
 
 /**
  * The Compose read/write and process-execution path, ported from
@@ -205,8 +210,14 @@ export class ComposeService {
      * child process), but the binary it produces is later executed by every
      * other method in this class, so the hash check is the security boundary
      * for this one method.
+     *
+     * `persist` is true for an install the user started (the banner's
+     * button): a success then turns on `compose_auto_install` when the user
+     * never chose a value (no stored row), so the flash copy is kept and
+     * restored at boot. A stored off stays off and no flash copy is written.
+     * The default leaves the setting alone.
      */
-    async installComposeBinary(): Promise<{ success: boolean; error: string | null }> {
+    async installComposeBinary(options: { persist?: boolean } = {}): Promise<{ success: boolean; error: string | null; warning?: string }> {
         const url = `https://github.com/docker/compose/releases/download/v${this.paths.binaryVersion}/docker-compose-linux-x86_64`;
         const dir = dirname(this.paths.binaryPath);
 
@@ -258,11 +269,40 @@ export class ComposeService {
             return { success: false, error: 'Failed to move binary into place' };
         }
 
-        if (this.isAutoInstallEnabled()) {
+        // Only when the user never chose: a stored value, on or off, stays.
+        // The binary is already in place, so a settings failure must not fail
+        // the install: it becomes a warning (same as PHP).
+        const warnings: string[] = [];
+        let settingFailed = false;
+        let autoInstall = false;
+        try {
+            if (options.persist && !this.hasAutoInstallChoice()) {
+                this.enableAutoInstall();
+            }
+        } catch (error) {
+            this.logger.warn(`Could not save compose_auto_install: ${errorMessage(error)}`);
+            settingFailed = true;
+        }
+        try {
+            autoInstall = this.isAutoInstallEnabled();
+        } catch (error) {
+            this.logger.warn(`Could not read compose_auto_install: ${errorMessage(error)}`);
+            settingFailed = true;
+        }
+        if (settingFailed) warnings.push(SETTING_SAVE_WARNING);
+
+        if (autoInstall) {
             const cached = await this.cacheComposeBinary({ sourceVerified: true });
             if (!cached.success) {
                 this.logger.warn(`No flash copy of Docker Compose: ${cached.error}`);
+                // The install worked. Say that the copy did not (same wording
+                // as `ComposeManager::FLASH_COPY_WARNING`).
+                warnings.push(FLASH_COPY_WARNING);
             }
+        }
+
+        if (warnings.length > 0) {
+            return { success: true, error: null, warning: warnings.join(' ') };
         }
 
         return { success: true, error: null };
@@ -276,13 +316,33 @@ export class ComposeService {
 
     /** `ComposeManager::isAutoInstallEnabled`. */
     isAutoInstallEnabled(): boolean {
-        const row = this.db.read(
+        return this.readAutoInstallRow()?.value === '1';
+    }
+
+    private readAutoInstallRow(): { value: string } | undefined {
+        return this.db.read(
             (db) =>
                 db.prepare("SELECT value FROM settings WHERE key = 'compose_auto_install'").get() as
                     | { value: string }
                     | undefined
         );
-        return row?.value === '1';
+    }
+
+    /** `ComposeManager::hasAutoInstallChoice`: a stored row, on or off. */
+    hasAutoInstallChoice(): boolean {
+        return this.readAutoInstallRow() !== undefined;
+    }
+
+    /** `ComposeManager::enableAutoInstall`. */
+    enableAutoInstall(): void {
+        this.db.write((db) =>
+            db
+                .prepare(
+                    "INSERT INTO settings (key, value, updated_at) VALUES ('compose_auto_install', '1', ?) " +
+                        'ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at'
+                )
+                .run(nowSeconds())
+        );
     }
 
     /**
@@ -444,6 +504,8 @@ export class ComposeService {
         return {
             projectName: row.project_name,
             workingDir: row.working_dir,
+            ownFiles: isOwnStackPath(row.working_dir, this.paths.stacksDir),
+            source: stackSource(row.working_dir, this.paths.pluginProjectsDir),
             composeFile: row.compose_file,
             envFile: row.env_file,
             autostart: Number(row.autostart) === 1,
@@ -456,6 +518,15 @@ export class ComposeService {
             // the stack is fully down (no containers, so `ps` is empty).
             serviceNames: resolveServiceNames(row),
         };
+    }
+
+    /**
+     * `ComposeManager::removeStack`: drop a stack's row, its schedules and its
+     * stack folder, and with `deleteFiles` the plugin's own copy of its files.
+     * Never touches a container, and never publishes (the resolver does).
+     */
+    removeStack(projectName: string, deleteFiles: boolean, containers: readonly RemoveContainer[]): RemoveStackResult {
+        return removeComposeStack(this.db, projectName, deleteFiles, containers, this.paths.stacksDir);
     }
 
     /**
@@ -1194,24 +1265,33 @@ export class ComposeService {
     // ─── Migration from compose_plugin ───────────────────────────────────
 
     /**
-     * `ComposeManager::importFromComposePlugin`, two phases (ComposeManager.php:1514-1720,
-     * d2011ec/451a330/9020f94/31b04c2, all reported to the dev branch): file
-     * copies run first, outside any transaction (`buildComposeImportPlan`),
-     * and the `compose_stacks`/`folders` rows go in afterwards in one short
-     * transaction (`commitComposeImportPlan`). An earlier version of this
-     * port ran the copies INSIDE the transaction, matching an older PHP bug
-     * where a later row's failure rolled back the database but left
-     * already-copied files on disk for the projects processed before it —
-     * that bug is fixed on the dev branch and this now matches the fix, not
-     * the bug.
+     * `ComposeManager::importFromComposePlugin`. Adopts each project of
+     * dcflachs/compose_plugin or Compose Manager Plus in place. Nothing is
+     * copied: one `compose_stacks` row points at the stack's own Compose
+     * Manager folder, the same row the container-list sync makes from the
+     * labels of a running stack, so the two resolve to one row and one folder.
+     *
+     * The row's `project_name` is the name the stack runs under: the project
+     * label of containers whose working_dir label is the stack's folder, else
+     * Compose Manager's own rule (`compose-project-name.ts`). A stack whose
+     * name Compose would refuse, whose containers disagree on the name, or
+     * whose name is already a stack at another path is skipped, with an error.
+     *
+     * Not handled: Compose Manager's override file, its env path file, and a
+     * stack with several compose files. Only the first compose file found in
+     * the folder is used. A stack whose "indirect" target is missing is skipped.
+     *
+     * `containers` is what the resolver listed from Docker. It is a parameter
+     * because a failed listing must stop the import before it names anything.
      */
-    importFromComposePlugin(): {
+    importFromComposePlugin(containers: readonly LabelledContainer[]): {
         success: boolean;
         stacksImported: number;
         stacksSkipped: number;
         errors: string[];
     } {
-        if (!isDir(this.paths.pluginProjectsDir)) {
+        const projectsDir = this.paths.pluginProjectsDir;
+        if (!isDir(projectsDir)) {
             return {
                 success: false,
                 stacksImported: 0,
@@ -1222,7 +1302,7 @@ export class ComposeService {
 
         let entries: string[];
         try {
-            entries = readdirSync(this.paths.pluginProjectsDir);
+            entries = readdirSync(projectsDir);
         } catch {
             return {
                 success: false,
@@ -1234,9 +1314,98 @@ export class ComposeService {
 
         const result = { success: true, stacksImported: 0, stacksSkipped: 0, errors: [] as string[] };
 
+        // A copy an earlier version of this import made is merged into its
+        // running counterpart, or renamed, first. Whatever stays is left
+        // alone, and the loop below must not add a second row for it.
+        const copyDirs = this.db.write((db) => {
+            repairImportedStacks(db, this.paths);
+            return new Set(importedCopies(db, this.paths.stacksDir).map((copy) => copy.dir));
+        });
+
+        const legacyOrigin = isFile(`${dirname(projectsDir)}/legacy-origin`);
+        const plusInstalled = isFile(`${this.paths.pluginDir}/include/ProjectIdentity.php`);
+
         const plans: ComposeImportPlan[] = [];
+        const planned = new Map<string, string>();
         for (const entry of entries) {
-            this.buildComposeImportPlan(entry, result, plans);
+            const projectPath = `${projectsDir}/${entry}`;
+            if (!isDir(projectPath)) continue;
+
+            // Keeps hidden directories such as ".git" out, and any name that
+            // is not one path segment.
+            if (!isValidProjectName(entry)) {
+                result.errors.push(`${entry}: unsupported folder name, skipped`);
+                continue;
+            }
+            if (copyDirs.has(entry)) {
+                result.errors.push(
+                    `${entry}: an earlier import copied this stack and it could not be matched to the original, so it was left as it is`
+                );
+                continue;
+            }
+
+            const displayName = readMetadataFile(`${projectPath}/name`);
+            const description = readMetadataFile(`${projectPath}/description`);
+            const autostart = (readMetadataFile(`${projectPath}/autostart`) ?? '').toLowerCase() === 'true';
+
+            const sourceDir = sourceDirOf(projectPath);
+            if (sourceDir === null) {
+                result.errors.push(`${entry}: its folder is indirect and the target is missing, skipped`);
+                continue;
+            }
+
+            // (1) The name a running stack carries.
+            const fromLabels = nameFromLabels(containers, [projectPath, sourceDir]);
+            if (fromLabels.error !== null) {
+                result.errors.push(`${entry}: ${fromLabels.error}, skipped`);
+                continue;
+            }
+            let projectName = fromLabels.name;
+
+            // (2) Compose Manager's own rule.
+            if (projectName === null) {
+                const rule = nameFromFolder({
+                    dirName: entry,
+                    displayName,
+                    pinned: readMetadataFile(`${projectPath}/${PIN_FILE}`),
+                    plusInstalled,
+                    legacyOrigin,
+                });
+                if (rule.name === null) {
+                    result.errors.push(`${entry}: no project name Compose accepts (${rule.error}), skipped`);
+                    continue;
+                }
+                projectName = rule.name;
+            }
+
+            const plannedBy = planned.get(projectName);
+            if (plannedBy !== undefined) {
+                result.errors.push(
+                    `${entry}: project name "${projectName}" is already taken by the stack in "${plannedBy}", skipped`
+                );
+                continue;
+            }
+
+            const existing = this.db.read(
+                (db) =>
+                    db.prepare('SELECT working_dir FROM compose_stacks WHERE project_name = ?').get(projectName) as
+                        | { working_dir: string | null }
+                        | undefined
+            );
+            if (existing !== undefined && normalizePath(existing.working_dir) !== normalizePath(sourceDir)) {
+                result.errors.push(`${entry}: project name "${projectName}" is already a stack at another path, skipped`);
+                continue;
+            }
+
+            planned.set(projectName, entry);
+            plans.push({
+                project: projectName,
+                display: displayName || entry,
+                description,
+                autostart,
+                workingDir: sourceDir,
+                composeFile: findComposeFile(sourceDir),
+            });
         }
 
         if (plans.length === 0) {
@@ -1253,170 +1422,70 @@ export class ComposeService {
             result.success = false;
             result.stacksImported = 0;
             result.errors.push(errorMessage(error));
-            this.cleanupFailedComposeImport(plans);
         }
 
         return result;
     }
 
     /**
-     * Phase 1 of `importFromComposePlugin`: validate one `compose_plugin`
-     * project directory, copy its files into this plugin's own stacks
-     * directory, and queue a plan for phase 2 — everything ComposeManager.php
-     * does between `beginTransaction()`'s old position and the new one
-     * (ComposeManager.php:1519-1620). Runs with no open write transaction.
-     */
-    private buildComposeImportPlan(
-        entry: string,
-        result: { errors: string[]; stacksSkipped: number },
-        plans: ComposeImportPlan[]
-    ): void {
-        const projectPath = `${this.paths.pluginProjectsDir}/${entry}`;
-        if (!isDir(projectPath)) return;
-
-        // compose.php and compose-stream.php refuse any other name
-        // (`isValidProjectName`, ported from `safeComposeProjectParam` —
-        // ComposeManager.php:1525-1531, 31b04c2), so a stack imported under
-        // one could never be started, edited, or deleted. This also keeps
-        // hidden directories such as ".git" out.
-        if (!isValidProjectName(entry)) {
-            result.errors.push(`${entry}: unsupported project name, skipped`);
-            return;
-        }
-
-        const projectName = entry;
-
-        // Check if already imported.
-        const existing = this.db.read((db) =>
-            db.prepare('SELECT project_name FROM compose_stacks WHERE project_name = ?').get(projectName)
-        );
-        if (existing) {
-            result.stacksSkipped++;
-            return;
-        }
-
-        const name = readMetadataFile(`${projectPath}/name`);
-        const description = readMetadataFile(`${projectPath}/description`);
-        const autostart = (readMetadataFile(`${projectPath}/autostart`) ?? '').toLowerCase() === 'true';
-        const isIndirect = existsSync(`${projectPath}/indirect`);
-
-        let sourceDir: string | null = null;
-        if (isIndirect) {
-            const indirectPath = readMetadataFile(`${projectPath}/indirect`);
-            if (indirectPath && isDir(indirectPath)) sourceDir = indirectPath;
-        } else {
-            sourceDir = projectPath;
-        }
-
-        const sourceComposeFile = sourceDir ? findComposeFile(sourceDir) : null;
-
-        // Copy files into our own plugin directory so stacks are self-contained.
-        const destDir = `${this.paths.stacksDir}/${projectName}`;
-        let createdDir = false;
-        if (!existsSync(destDir)) {
-            try {
-                mkdirSync(destDir, { recursive: true });
-                createdDir = true;
-            } catch {
-                // Matches PHP's `@mkdir` — best effort, failure surfaces
-                // later as a failed file copy instead.
-            }
-        }
-
-        let composeFile: string | null = null;
-        let envFile: string | null = null;
-        // A file is recorded as copied only when this run created it. One
-        // that was already there is overwritten, but a rollback must not
-        // delete it (451a330, reported to the dev branch).
-        const copied: string[] = [];
-
-        if (sourceComposeFile && existsSync(sourceComposeFile)) {
-            const destFile = `${destDir}/${basename(sourceComposeFile)}`;
-            const existed = existsSync(destFile);
-            try {
-                copyFileSync(sourceComposeFile, destFile);
-                composeFile = destFile;
-                if (!existed) copied.push(destFile);
-            } catch {
-                result.errors.push(`${projectName}: failed to copy compose file`);
-            }
-        }
-
-        // Copy .env if it exists in source.
-        if (sourceDir && existsSync(`${sourceDir}/.env`)) {
-            const destEnv = `${destDir}/.env`;
-            const existed = existsSync(destEnv);
-            try {
-                copyFileSync(`${sourceDir}/.env`, destEnv);
-                envFile = destEnv;
-                if (!existed) copied.push(destEnv);
-            } catch {
-                // Matches PHP: a failed `.env` copy is silently skipped, not
-                // pushed onto `errors`.
-            }
-        }
-
-        plans.push({
-            project: projectName,
-            name,
-            description,
-            autostart,
-            workingDir: destDir,
-            composeFile,
-            envFile,
-            createdDir,
-            copied,
-        });
-    }
-
-    /**
-     * Phase 2 of `importFromComposePlugin`: insert one plan's
-     * `compose_stacks`/`folders` rows, inside the caller's write transaction.
-     * `ComposeManager.php`'s per-plan loop body (ComposeManager.php:1629-1684).
+     * Insert, or adopt, one plan's `compose_stacks` and `folders` rows, inside
+     * the caller's write transaction. Read inside it: the container-list sync
+     * can have added the row since the plan was made, and that row is adopted
+     * instead of getting a second one.
      */
     private commitComposeImportPlan(
         db: DatabaseSync,
         plan: ComposeImportPlan,
         result: { stacksImported: number; stacksSkipped: number }
     ): void {
-        // Checked again inside the transaction. An import that overlapped
-        // this one (a double click) can have committed the same project
-        // since the copy phase above. Its row points at the files this run
-        // copied over, so they must not be removed by the rollback cleanup
-        // below (d2011ec, reported to the dev branch).
-        const taken = db.prepare('SELECT project_name FROM compose_stacks WHERE project_name = ?').get(plan.project);
-        if (taken) {
-            plan.copied = [];
-            plan.createdDir = false;
-            result.stacksSkipped++;
-            return;
+        const now = nowSeconds();
+        const row = db.prepare('SELECT * FROM compose_stacks WHERE project_name = ?').get(plan.project) as
+            | ComposeStackRow
+            | undefined;
+
+        if (row !== undefined) {
+            const sets: string[] = [];
+            const values: (string | number)[] = [];
+            if (row.imported_from !== 'compose_plugin') sets.push("imported_from = 'compose_plugin'");
+            const description = plan.description || plan.display;
+            if (!row.description && description) {
+                sets.push('description = ?');
+                values.push(description);
+            }
+            if (!row.autostart && plan.autostart) sets.push('autostart = 1');
+            if (!row.compose_file && plan.composeFile) {
+                sets.push('compose_file = ?');
+                values.push(plan.composeFile);
+            }
+            if (sets.length === 0) {
+                result.stacksSkipped++;
+            } else {
+                db.prepare(`UPDATE compose_stacks SET ${sets.join(', ')}, updated_at = ? WHERE project_name = ?`).run(
+                    ...values,
+                    now,
+                    plan.project
+                );
+                result.stacksImported++;
+            }
+        } else {
+            db.prepare(
+                `INSERT INTO compose_stacks
+                    (project_name, working_dir, compose_file, env_file, autostart,
+                     autostart_force_recreate, description, imported_from, created_at, updated_at)
+                 VALUES (?, ?, ?, NULL, ?, 0, ?, 'compose_plugin', ?, ?)`
+            ).run(
+                plan.project,
+                plan.workingDir,
+                plan.composeFile,
+                plan.autostart ? 1 : 0,
+                plan.description || plan.display,
+                now,
+                now
+            );
+            result.stacksImported++;
         }
 
-        const now = nowSeconds();
-
-        // Insert compose_stacks row.
-        db.prepare(
-            `INSERT INTO compose_stacks
-                (project_name, working_dir, compose_file, env_file, autostart,
-                 autostart_force_recreate, description, imported_from, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, 0, ?, 'compose_plugin', ?, ?)`
-        ).run(
-            plan.project,
-            plan.workingDir,
-            plan.composeFile,
-            plan.envFile,
-            plan.autostart ? 1 : 0,
-            // PHP: `$description ?: ($name ?: null)`. PHP's `?:` treats the
-            // string "0" as falsy; JS's `||` does not — a metadata file
-            // containing the literal text "0" would keep "0" here but fall
-            // through to `$name`/null in PHP. Reported; not worth guarding
-            // against for a value no real compose_plugin install produces.
-            plan.description || plan.name || null,
-            now,
-            now
-        );
-
-        // Create a folder if one doesn't exist for this project.
+        // One folder per project name. The sync matches it by compose_project.
         const existingFolder = db.prepare('SELECT id FROM folders WHERE compose_project = ?').get(plan.project);
         if (!existingFolder) {
             const maxPositionRow = db.prepare('SELECT MAX(position) AS value FROM folders').get() as
@@ -1427,42 +1496,7 @@ export class ComposeService {
                 `INSERT INTO folders
                     (name, icon, color, position, collapsed, compose_project, sort_mode, created_at, updated_at)
                  VALUES (?, 'layer-group', NULL, ?, 0, ?, 'manual', ?, ?)`
-            ).run(plan.name || plan.project, position, plan.project, now, now);
-        }
-
-        result.stacksImported++;
-    }
-
-    /**
-     * `ComposeManager::importFromComposePlugin`'s catch block
-     * (ComposeManager.php:1693-1718, 9020f94, reported to the dev branch): a
-     * failed transaction means no row survived, so remove what THIS run
-     * copied — only files it wrote, and a directory only if it created it
-     * (`safeRmdir` only removes an empty one, silently, matching `@rmdir`).
-     * A racing import can have committed any of these projects between the
-     * copy phase and now, and its row points at these same files, so this
-     * looks again before deleting anything. If that lookup itself throws,
-     * the files are kept: an orphan is safer than deleting a live stack's
-     * compose file.
-     */
-    private cleanupFailedComposeImport(plans: ComposeImportPlan[]): void {
-        for (const plan of plans) {
-            let owned: unknown;
-            try {
-                owned = this.db.read((db) =>
-                    db.prepare('SELECT project_name FROM compose_stacks WHERE project_name = ?').get(plan.project)
-                );
-            } catch {
-                owned = true;
-            }
-            if (owned) continue;
-
-            for (const file of plan.copied) {
-                safeUnlink(file);
-            }
-            if (plan.createdDir) {
-                safeRmdir(plan.workingDir);
-            }
+            ).run(plan.display, position, plan.project, now, now);
         }
     }
 
@@ -1597,29 +1631,11 @@ function isFile(path: string): boolean {
     }
 }
 
-function readMetadataFile(path: string): string | null {
-    if (!existsSync(path)) return null;
-    try {
-        return readFileSync(path, 'utf8').trim();
-    } catch {
-        return null;
-    }
-}
-
 function safeUnlink(path: string): void {
     try {
         unlinkSync(path);
     } catch {
         // Matches PHP's `@unlink`.
-    }
-}
-
-/** Matches PHP's `@rmdir` — only removes an empty directory, silently doing nothing otherwise. */
-function safeRmdir(path: string): void {
-    try {
-        rmdirSync(path);
-    } catch {
-        // Not empty, already gone, or some other failure — same as PHP's `@rmdir`.
     }
 }
 

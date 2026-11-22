@@ -281,6 +281,17 @@ no stamps today because they load no external files.
 
 **API version**: v1.41 (configurable in `config.php`)
 
+**Unraid's own update flags**: Unraid's Docker tab and the Unraid API read
+`/var/lib/docker/unraid-update-status.json` (keyed by `ensureImageTag()`) and
+the tab's cache `docker.json`, not the plugin's `image_update_checks`. They
+are written only after a recreate, by `syncUnraidStatusAfterRecreate()` (PHP)
+and its plugin port, and only once every container on the tag runs the tag's
+image. A pull alone never writes them: Unraid tracks updates per tag, so with
+the default `pull_only` it would show "up-to-date" for a container still on
+the old build. A full update check repairs stale entries under the same rule.
+See `include/unraidUpdateStatus.php` (issue #23). Do not load Unraid's
+`DockerUpdate`: its file declares a global `DockerClient`, as the plugin does.
+
 **Key operations**:
 - List containers: `GET /containers.php`
 - Start/stop/restart: `POST /containers.php?action=<action>&id=<id>`
@@ -383,6 +394,45 @@ Note `apiFetch()` replaces `options.headers` wholesale, so callers cannot add an
 
 `DockerFolders.page` is a native Unraid page, not an iframe — it reads
 `window.csrf_token` directly and hand-builds the same body format.
+
+### Theme transport (URL first, then messages)
+
+The URL `theme` param is only the theme at load time. A theme that switches in
+place, such as the Neoraid plugin's day/night toggle (it flips `nr-dark` /
+`nr-light` on `<html>`, and `html.nr:root` maps the stock variables onto its
+palette), never reloads the frame, so the frame would keep the old colours.
+
+- `frameSrc.js` has one reader, `dockerFoldersReadTheme()`, used for the URL and
+  for updates. `dockerFoldersWatchTheme(getFrame)` observes `<html>` and
+  `<body>` (class, style, data-theme attributes) and the OS colour-scheme
+  preference, debounces, and posts `{type: 'docker-folders-theme', theme}` to
+  the frame only when the values changed. It returns a function; call it with
+  `true` on the frame's load or `docker-folders-widget-ready` so a frame that
+  missed an update catches up.
+- `utils/iframeHost.ts` `listenForThemeUpdates()` (wired in `main.ts` and
+  `widget/main.ts`) accepts the message only from `window.parent` on the page's
+  own origin, and applies it through `applyTheme()` (same path as
+  `applyThemeParam()`): known variable names only, string values up to 200
+  characters. A replacing update removes a known variable the parent no longer
+  defines. The variable list lives in two places, `DFM_THEME_VARS` in
+  `frameSrc.js` and `THEME_VARS` in `iframeHost.ts`. Keep them equal.
+- Four of the ten names (`--header-background`, `--button-hover`,
+  `--input-background`, `--input-border`) are defined by no stock Unraid theme
+  nor by Neoraid, so they stay empty and the app's fallbacks (the orange accent)
+  apply. That is intended. A stock theme change (Display Settings) reloads the
+  page, so only in-place switches need the messages.
+- `dev/iframe-test.html` (`MOCK_API=1 yarn dev`) simulates the Neoraid switch.
+- **Both iframes carry `color-scheme:normal`** (`#docker-folders-widget-frame`,
+  `#docker-folders-frame`). Neoraid sets `color-scheme: dark` on `<html>` at
+  night. The iframe element inherits it and the framed document has none, and
+  when the two differ the browser paints an opaque canvas of the embedded
+  document's scheme (white) behind the frame (CSS Color Adjustment 1, section
+  2.4). The widget is transparent, so its rows turned white with light text.
+  The Folders app hid the same mismatch only because its root paints a
+  background. A new iframe needs the rule too; `pageIframes.spec.ts` checks the
+  page sources. Do not remove it when the live update works: they fix
+  different causes.
+
 
 ### SQL
 
@@ -513,6 +563,24 @@ acceptable.
 
 ---
 
+## Claude Code hooks
+
+`.claude/settings.json` and `.claude/hooks/dfm-checks.sh` are checked in. The
+rest of `.claude/` stays local. The script exits with code 2 on a failure, so
+Claude gets the output and must fix it.
+
+- After each Edit or Write of a frontend file, it runs oxlint on that file.
+- When Claude or a subagent stops, it runs the checks of the release workflow
+  for each package the work changed: frontend `oxlint src dev --deny-warnings`
+  and `vue-tsc --noEmit`, and for the GraphQL plugin
+  `tsc --noEmit -p tsconfig.test.json`, which includes the test files.
+- A changed package with no `node_modules` also blocks, with a message that
+  the checks did not run.
+
+A stop hook blocks one time. It does not run PHP checks or the test suites.
+
+---
+
 ## Real-Time Updates
 
 **Architecture**:
@@ -557,6 +625,12 @@ contract and a fault there can take all of Unraid's GraphQL offline.
   passes a run id, and waits for the state line that carries it. Choosing PHP
   stores `php` at once and runs `remove`. The plugin's own `settings.set`
   refuses `backend_mode`.
+- An install that replaces backend code already in the API (the content hash
+  differs and `plugins install` succeeded) stops and starts the API once, even
+  though the old code still answers the probe, because the API keeps serving
+  the old plugin until then. A skipped install does not restart, and neither
+  does an API that is not online. `ApiPluginScriptTest` runs the script with
+  stubs for `unraid-api` and `curl` and counts the stops and starts.
 - `classes/BackendWatchdog.php` runs every minute from `run-schedules.php`.
   When the plugin's heartbeat has been stale for 5 minutes, and the API has
   run for 5 minutes, it switches to PHP, removes the backend and sends a
@@ -612,6 +686,56 @@ Rules that are easy to break:
 
 ---
 
+## Compose Manager import and Remove Stack
+
+Issue #25. Both backends do the same, in `ComposeManager.php` and in the
+plugin's `src/compose/`.
+
+- **Import adopts in place.** `importFromComposePlugin` copies no file. The
+  `compose_stacks` row points at the Compose Manager folder under
+  `/boot/config/plugins/compose.manager/projects/<Dir>` (or at the target of its
+  `indirect` file). The row is named after the Compose project its containers
+  run under: the label of containers whose `working_dir` label is that folder
+  (`ComposeProjectName::fromLabels`). With no such container the name comes from
+  a Compose Manager Plus `project_name` file, then the Plus rule (when Plus is
+  installed or `legacy-origin` exists), else the older dcflachs rule
+  (`ComposeProjectName::fromFolder`). A name Compose refuses, or containers that
+  disagree on it, skip the stack with an error. The import refuses to run when
+  the Docker request fails (503), because "no containers" would then pick a
+  name by rule. The two name rules and their test table are shared:
+  `src/compose/__tests__/project-name-cases.json`. Change both backends together.
+- **Repair of earlier imports.** `repairImportedStacks` runs at the end of the
+  container-list sync (`FolderManager::syncComposeStacks`, plugin
+  `FolderService.syncWithContainers`). It touches only rows with
+  `imported_from = compose_plugin` whose `working_dir` is a copy inside
+  `COMPOSE_STACKS_DIR`, and it writes nothing when none exists. It merges a
+  copy row into another row **only when that row's `working_dir` is the Compose
+  Manager source folder the copy came from** (or its indirect target). A name
+  match never merges: two stacks can sanitize to one name. Without such a row it
+  renames the copy row to the folder's name only when the copied compose file
+  and the `.env` are byte-identical to the source. Everything else stays as it
+  is. Schedules, version history and the folder move to the kept row. It never
+  deletes a file. A folder that holds containers is detached from the stack, not
+  deleted.
+- **Remove Stack** (`ComposeManager::removeStack`, `POST compose.php?action=remove`,
+  plugin mutation `removeDockerFoldersComposeStack`). It deletes the row, its
+  version history, its schedules and its stack folder. It never touches a
+  container or a Compose Manager folder. It is refused while containers of the
+  stack exist (409; run Stack Down first) and when Docker cannot be reached
+  (503). Files are deleted only with `delete_files`, only for a direct child of
+  `COMPOSE_STACKS_DIR` that no other stack uses, and never through a symlink.
+  Stack lists carry `own_files` (`ownFiles` in GraphQL), true for such a stack;
+  the dialog shows its delete-files checkbox only then. Stack lists also carry
+  `source`, `compose_manager` when the `working_dir` is inside the Compose
+  Manager projects folder and null otherwise, decided by path and not by
+  `imported_from` (`ComposeManager::stackSource`, `stackSource()` in
+  `compose-remove.ts`); the stacks pane lists those stacks together under a
+  "Compose Manager" sub-header. A container-list poll
+  adds a stack back while its containers still run, which is why removal needs
+  them gone.
+
+---
+
 ## Testing Strategy
 
 ### Frontend (Vitest)
@@ -632,8 +756,11 @@ added there, or it never runs.** PHPUnit gives no warning, and
 `--filter <Class>` reports "No tests executed".
 
 ### GraphQL plugin (Vitest)
-Lives in `packages/unraid-api-plugin-docker-folders`. Run `npx vitest run` and
-`npx tsc --noEmit -p .` in that directory. Several suites check the plugin
+Lives in `packages/unraid-api-plugin-docker-folders`. Run `npm test` and
+`npm run type-check` in that directory. These are the two commands CI runs.
+`npm run type-check` is `tsc --noEmit -p tsconfig.test.json`, which includes
+the test files. Do not use `npx tsc --noEmit -p .`: it skips the tests, so a
+stale constructor call in a spec passes locally and fails the release. Several suites check the plugin
 against PHP's own output: the fixtures under `src/schedules/__tests__/` come
 from PHP methods, run by the scripts in `scripts/*-oracle.php`.
 
@@ -715,6 +842,11 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
 - `DELETE /api/folders.php?id=<id>` - Delete folder
 - `GET /api/settings.php` - Get all plugin settings
 - `POST /api/settings.php` - Update setting (body: `{key, value}`)
+  `memory_percent_basis` (`limit` default, or `host`) picks what a container's
+  memory percent is of. Only the frontend reads it, through
+  `utils/memoryPercent.ts`; stats responses are unchanged and already carry
+  `hostMemory`. On `host` the bar color still follows the container's own limit.
+  A folder's memory is always a share of the host.
 - `GET /api/stats.php?ids=id1,id2` - Get live resource stats for containers
 - `GET /api/updates.php` - Image update availability
 - `POST /api/pull.php` - Pull updated images (supports batches). `containers=`
@@ -724,6 +856,11 @@ Page URLs are `/<menu section>/<filename without .page>`. They come from the
   because a second pull fails for a locally built image. The plugin takes
   `recreateOnly` on the same mutation and subscription.
 - `GET|POST /api/compose.php` - Read and apply Compose files
+- `POST /api/compose.php?action=remove&project=<name>` - Remove a stack from
+  the plugin (body: `{delete_files}`, default false). 409 while containers of the
+  stack exist, 503 when Docker fails, 404 for an unknown stack. Never touches a
+  container. Answers `{schedules_removed, folder, files_removed,
+  directory_removed, files_note}`.
 - `GET /api/compose-stream.php` - Stream Compose command output
 - `GET|POST /api/schedules.php` - Container action schedules. The list GET also
   returns `runner` (`last_tick`, `stale_after`, `cron_installed`, `repaired`).

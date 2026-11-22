@@ -62,6 +62,8 @@ export interface RecreateCandidate {
     name: string;
     /** The resolved image reference, as the container list shows it. */
     image: string;
+    /** The image ID the container runs. */
+    imageId?: string;
 }
 
 /**

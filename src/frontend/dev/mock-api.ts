@@ -8,6 +8,8 @@
  */
 
 import type { Plugin } from 'vite';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // --- Mock data ---
 
@@ -712,6 +714,7 @@ const settings: Record<string, string> = {
   distinguish_healthy: '1',
   enable_security_advisor: '1',
   memory_calculation: 'docker',
+  memory_percent_basis: 'limit',
   enable_update_checks: '1',
   update_check_schedule: 'disabled',
   notify_on_updates: '0',
@@ -753,7 +756,7 @@ const mockStatsProfiles: Record<string, { cpuBase: number; memBase: number; memL
   efg567hij890: { cpuBase: 2, memBase: 128, memLimit: 2048, pids: 4, restarts: 1, startedHoursAgo: 120, imageSizeMB: 55, logSizeMB: 3 },
   fgh678ijk901: { cpuBase: 3, memBase: 256, memLimit: 2048, pids: 15, restarts: 0, startedHoursAgo: 120, imageSizeMB: 420, logSizeMB: 120 },
   ijk901lmn234: { cpuBase: 12, memBase: 1024, memLimit: 4096, pids: 30, restarts: 2, startedHoursAgo: 24, imageSizeMB: 1200, logSizeMB: 1200 },
-  jkl012mno345: { cpuBase: 6, memBase: 384, memLimit: 2048, pids: 18, restarts: 0, startedHoursAgo: 96, imageSizeMB: 310, logSizeMB: 5 },
+  jkl012mno345: { cpuBase: 6, memBase: 384, memLimit: 65536, pids: 18, restarts: 0, startedHoursAgo: 96, imageSizeMB: 310, logSizeMB: 5 },
 };
 
 function generateMockStats(id: string) {
@@ -1063,6 +1066,7 @@ const mockComposeStacks = [
   {
     project_name: 'db-stack',
     working_dir: '/mnt/user/appdata/db-stack',
+    source: null,
     compose_file: '/mnt/user/appdata/db-stack/docker-compose.yml',
     env_file: null,
     autostart: true,
@@ -1071,6 +1075,59 @@ const mockComposeStacks = [
     imported_from: null,
     services_running: 4,
     services_total: 4,
+    created_at: Date.now() / 1000,
+    updated_at: Date.now() / 1000,
+  },
+  // A stack in the plugin's own folder (checkbox shown), no container.
+  {
+    project_name: 'own_stack',
+    working_dir: '/boot/config/plugins/unraid-docker-folders-modern/compose-stacks/own_stack',
+    own_files: true,
+    source: null,
+    compose_file: '/boot/config/plugins/unraid-docker-folders-modern/compose-stacks/own_stack/docker-compose.yml',
+    env_file: null,
+    autostart: false,
+    autostart_force_recreate: false,
+    description: 'Own folder',
+    imported_from: null,
+    services_running: 0,
+    services_total: 0,
+    created_at: Date.now() / 1000,
+    updated_at: Date.now() / 1000,
+  },
+  // A stack with no running container, as an import leaves it. Remove Stack
+  // works on this one; db-stack has containers and is refused (409).
+  {
+    project_name: 'nginx_test',
+    working_dir: '/boot/config/plugins/compose.manager/projects/Nginx.Test',
+    own_files: false,
+    source: 'compose_manager',
+    compose_file: '/boot/config/plugins/compose.manager/projects/Nginx.Test/docker-compose.yml',
+    env_file: null,
+    autostart: false,
+    autostart_force_recreate: false,
+    description: 'Nginx.Test',
+    imported_from: 'compose_plugin',
+    services_running: 0,
+    services_total: 0,
+    created_at: Date.now() / 1000,
+    updated_at: Date.now() / 1000,
+  },
+  // Another stack that runs from the Compose Manager folder, so the pane
+  // shows that group with more than one row.
+  {
+    project_name: 'media',
+    working_dir: '/boot/config/plugins/compose.manager/projects/Media',
+    own_files: false,
+    source: 'compose_manager',
+    compose_file: '/boot/config/plugins/compose.manager/projects/Media/docker-compose.yml',
+    env_file: null,
+    autostart: false,
+    autostart_force_recreate: false,
+    description: 'Media',
+    imported_from: 'compose_plugin',
+    services_running: 0,
+    services_total: 0,
     created_at: Date.now() / 1000,
     updated_at: Date.now() / 1000,
   },
@@ -1146,6 +1203,16 @@ function handleCompose(req: any, res: any, params: Record<string, string>) {
 
     if (action === 'import') {
       return json(res, { success: true, stacks_imported: 0, stacks_skipped: 0, errors: [] });
+    }
+
+    if (action === 'remove') {
+      const index = mockComposeStacks.findIndex((st) => st.project_name === project);
+      if (index < 0) return json(res, { error: true, message: 'Stack not found' }, 404);
+      if (project === 'db-stack') {
+        return json(res, { error: true, message: 'Containers of "db-stack" still exist. Run Stack Down first, or the stack comes back on the next refresh.' }, 409);
+      }
+      mockComposeStacks.splice(index, 1);
+      return json(res, { success: true, schedules_removed: 0, folder: 'none', files_removed: [], directory_removed: false, files_note: null });
     }
   }
 
@@ -1430,6 +1497,18 @@ export function mockApiPlugin(): Plugin {
     name: 'mock-api',
     configureServer(server) {
       const API_PREFIX = '/plugins/unraid-docker-folders-modern/api';
+
+      // The real include/frameSrc.js, so dev/iframe-test.html exercises the file
+      // that ships instead of a copy of it.
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?')[0] !== '/include/frameSrc.js') return next();
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end(
+          readFileSync(
+            resolve(__dirname, '../../backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/include/frameSrc.js'),
+          ),
+        );
+      });
 
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith(API_PREFIX)) return next();

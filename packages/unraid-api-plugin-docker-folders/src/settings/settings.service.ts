@@ -9,6 +9,13 @@ import { nowSeconds } from '../util/time.js';
 import { DockerFoldersSetting, isAllowedSettingKey } from './settings.model.js';
 
 /**
+ * The `memory_percent_basis` setting, `MEMORY_PERCENT_BASES` in config.php.
+ * Only the frontend reads it: `limit` is the container's own limit, `host` is
+ * total host memory.
+ */
+export const MEMORY_PERCENT_BASES = ['limit', 'host'] as const;
+
+/**
  * `settings.value` is a schemaless TEXT column, and `settings.php` caps a
  * string write at this many characters before it ever reaches SQLite.
  */
@@ -113,6 +120,10 @@ export class SettingsService {
 
         if (key === 'memory_calculation' && !(MEMORY_CALCULATION_MODES as readonly string[]).includes(value)) {
             throw new BadRequestException('Invalid memory_calculation');
+        }
+
+        if (key === 'memory_percent_basis' && !(MEMORY_PERCENT_BASES as readonly string[]).includes(value)) {
+            throw new BadRequestException('Invalid memory_percent_basis');
         }
 
         // A checkbox: '0' or '1' only, as in settings.php.

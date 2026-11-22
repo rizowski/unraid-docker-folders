@@ -9,9 +9,17 @@
          reset strips background and padding from a plain <button> (DESIGN.md
          §11), so the button carries no box of its own and its padding lives on
          the inner span. -->
+    <template v-for="(row, index) in rows" :key="row.project">
+    <!-- Stacks that run from the Compose Manager folder come last, under their
+         own header. -->
     <div
-      v-for="row in rows"
-      :key="row.project"
+      v-if="index === managerStart"
+      class="flex items-center justify-between px-2 pt-1.5 pb-1 mt-1 border-t border-border"
+    >
+      <h3 class="text-[11px] font-bold uppercase text-text-secondary">Compose Manager</h3>
+      <span class="text-[11px] text-text-secondary">{{ managerCount }}</span>
+    </div>
+    <div
       class="flex items-center gap-0.5 rounded transition-colors duration-150"
       :class="isSelected(row.project) ? 'bg-primary/15' : 'hover:bg-text/5'"
     >
@@ -46,6 +54,7 @@
         @select="(action) => handleSelect(row.project, action)"
       />
     </div>
+    </template>
   </nav>
 </template>
 
@@ -57,7 +66,7 @@ import { useFolderStore } from '@/stores/folders';
 import KebabMenu from '@/components/KebabMenu.vue';
 import type { KebabMenuItem } from '@/components/KebabMenu.vue';
 import { byLabel } from '@/utils/menu';
-import { STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
+import { CLOSE_ICON, STOPWATCH_ICON, TRASH_ICON } from '@/utils/menuIcons';
 import { stackActionItems } from '@/utils/stackMenu';
 import { naturalNameCompare } from '@/utils/sortMode';
 
@@ -66,6 +75,10 @@ interface StackRow {
   running: number;
   total: number;
   location: string;
+  /** Whether Docker Folders keeps a record of it. A project seen only on container labels has none to remove. */
+  stored: boolean;
+  /** `compose_manager` when the stack runs from the Compose Manager folder. */
+  source: 'compose_manager' | null;
 }
 
 const emit = defineEmits<{
@@ -74,6 +87,7 @@ const emit = defineEmits<{
   'compose-recompose': [project: string];
   'compose-down': [project: string];
   'compose-pull': [project: string];
+  'compose-remove': [project: string];
   schedules: [targetType: string, targetId: string];
 }>();
 
@@ -91,20 +105,37 @@ function isSelected(project: string): boolean {
 // Every known stack, plus any project seen only on container labels. Counts
 // come from docker state, not `services_running`, which goes stale after an
 // up or down (see useFolderRunningState).
-const rows = computed<StackRow[]>(() => {
-  const projects = new Set<string>(composeStore.stacks.map((s) => s.project_name));
+const grouped = computed(() => {
+  const stored = new Set<string>();
+  const fromManager = new Set<string>();
+  for (const s of composeStore.stacks) {
+    stored.add(s.project_name);
+    if (s.source === 'compose_manager') fromManager.add(s.project_name);
+  }
+  const projects = new Set<string>(stored);
   for (const project of dockerStore.containersByProject.keys()) projects.add(project);
 
-  return [...projects].sort(naturalNameCompare).map((project) => {
+  // Two groups, each in name order, because the projects are sorted first.
+  const own: StackRow[] = [];
+  const manager: StackRow[] = [];
+  for (const project of [...projects].sort(naturalNameCompare)) {
     const members = dockerStore.containersInStack(project);
-    return {
+    const source = fromManager.has(project) ? 'compose_manager' : null;
+    (source ? manager : own).push({
       project,
       running: members.filter((c) => c.state === 'running').length,
       total: members.length,
       location: locationText(members),
-    };
-  });
+      stored: stored.has(project),
+      source,
+    });
+  }
+  return { rows: [...own, ...manager], managerStart: manager.length > 0 ? own.length : -1 };
 });
+
+const rows = computed(() => grouped.value.rows);
+const managerStart = computed(() => grouped.value.managerStart);
+const managerCount = computed(() => (managerStart.value < 0 ? 0 : rows.value.length - managerStart.value));
 
 function locationText(members: Container[]): string {
   if (members.length === 0) return 'Not created';
@@ -144,6 +175,17 @@ function menuItems(row: StackRow): KebabMenuItem[] {
     ...byLabel(items),
     { divider: true },
     { label: 'Stack Down', icon: TRASH_ICON, action: 'compose-down', show: row.total > 0, disabled, title: reason, class: 'hover:text-error' },
+    // Needs no Compose binary and no management: it only edits the plugin's own
+    // records. It does wait for a stop, down or earlier removal still running.
+    {
+      label: 'Remove Stack',
+      icon: CLOSE_ICON,
+      action: 'compose-remove',
+      show: row.stored,
+      disabled: composeStore.isStackBusy(row.project),
+      title: composeStore.isStackBusy(row.project) ? reason : 'Delete the stack\'s record from Docker Folders',
+      class: 'hover:text-error',
+    },
   ];
 }
 
@@ -155,5 +197,6 @@ function handleSelect(project: string, action: string) {
   else if (action === 'schedules') emit('schedules', 'stack', project);
   else if (action === 'compose-stop') composeStore.runStackAction(project, 'stop');
   else if (action === 'compose-down') emit('compose-down', project);
+  else if (action === 'compose-remove') emit('compose-remove', project);
 }
 </script>

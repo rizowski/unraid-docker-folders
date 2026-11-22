@@ -527,8 +527,14 @@ class FolderManager
       $projects[$project][] = $container;
     }
 
+    // Rows an earlier import copied are merged into the row for the same
+    // stack, or repointed. It runs even with no compose container, because a
+    // stack that is not running is repaired by rename. It writes only when it
+    // finds a row to fix.
+    $composeManager = new ComposeManager();
+
     if (empty($projects)) {
-      return false;
+      return $composeManager->repairImportedStacks();
     }
 
     // Get existing compose folders keyed by project name
@@ -552,8 +558,6 @@ class FolderManager
     foreach ($this->db->fetchAll('SELECT container_name FROM compose_sync_exclusions') as $row) {
       $excluded[$row['container_name']] = true;
     }
-
-    $composeManager = new ComposeManager();
 
     foreach ($projects as $projectName => $projectContainers) {
       // Upsert compose_stacks metadata from Docker labels
@@ -601,7 +605,10 @@ class FolderManager
       }
     }
 
-    return $changed;
+    // After the loop, so the row the labels just made is there to merge into.
+    $repaired = $composeManager->repairImportedStacks();
+
+    return $changed || $repaired;
   }
 
   /**

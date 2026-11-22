@@ -63,6 +63,53 @@ describe('StacksPane', () => {
     expect(names).toEqual(['arr', 'monitoring', 'paperless']);
   });
 
+  describe('Compose Manager group', () => {
+    const fromManager = (name: string): ComposeStack => ({
+      ...makeStack(name),
+      working_dir: `/boot/config/plugins/compose.manager/projects/${name}`,
+      source: 'compose_manager',
+    });
+    const names = (wrapper: ReturnType<typeof mountPane>) =>
+      wrapper.findAll('button[aria-pressed] .text-sm').map((el) => el.text());
+    const subHeader = (wrapper: ReturnType<typeof mountPane>) =>
+      wrapper.findAll('h3').filter((h) => h.text() === 'Compose Manager');
+
+    it('shows no sub-header when no stack is from Compose Manager', () => {
+      expect(subHeader(mountPane())).toHaveLength(0);
+    });
+
+    it('lists those stacks last under a sub-header with their count', () => {
+      useComposeStore().stacks = [makeStack('arr'), makeStack('paperless'), fromManager('alpha'), fromManager('beta')];
+      const wrapper = mountPane();
+      expect(names(wrapper)).toEqual(['arr', 'monitoring', 'paperless', 'alpha', 'beta']);
+      expect(subHeader(wrapper)).toHaveLength(1);
+      expect(subHeader(wrapper)[0].element.parentElement!.textContent).toContain('2');
+      // The pane header still counts every stack.
+      expect(wrapper.find('h2').element.parentElement!.textContent).toContain('5');
+      // The sub-header sits between the two groups.
+      const text = wrapper.text();
+      expect(text.indexOf('paperless')).toBeLessThan(text.indexOf('Compose Manager'));
+      expect(text.indexOf('Compose Manager')).toBeLessThan(text.indexOf('alpha'));
+    });
+
+    it('shows the sub-header when every stack is from Compose Manager', () => {
+      useDockerStore().containers = [];
+      useComposeStore().stacks = [fromManager('alpha'), fromManager('beta')];
+      const wrapper = mountPane();
+      expect(names(wrapper)).toEqual(['alpha', 'beta']);
+      expect(subHeader(wrapper)).toHaveLength(1);
+    });
+
+    it('keeps the same kebab on a Compose Manager row', async () => {
+      useComposeStore().stacks = [fromManager('alpha')];
+      const wrapper = mountPane();
+      await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for alpha')!.trigger('click');
+      const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+      expect(labels).toContain('Remove Stack');
+      expect(labels).toContain('Schedules');
+    });
+  });
+
   it('counts running members from docker state', () => {
     expect(rowFor(mountPane(), 'arr').text()).toContain('2/3');
   });
@@ -124,5 +171,29 @@ describe('StacksPane', () => {
     const wrapper = mountPane();
     await flushPromises();
     expect(rowFor(wrapper, 'arr').text()).toContain('compose down failed');
+  });
+
+  it('offers Remove Stack for a stored stack, and emits it for App to confirm', async () => {
+    const wrapper = mountPane();
+    await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for paperless')!.trigger('click');
+    const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Remove Stack')!;
+    expect(item).toBeTruthy();
+    await item.trigger('click');
+    expect(wrapper.emitted('compose-remove')).toEqual([['paperless']]);
+  });
+
+  it('offers no Remove Stack for a project seen only on container labels', async () => {
+    const wrapper = mountPane();
+    await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for monitoring')!.trigger('click');
+    const labels = wrapper.findAll('.kebab-menu-item').map((el) => el.text().trim());
+    expect(labels).not.toContain('Remove Stack');
+  });
+
+  it('disables Remove Stack while another action runs on the stack', async () => {
+    useComposeStore().stackActionStatus.set('paperless', { kind: 'down' });
+    const wrapper = mountPane();
+    await wrapper.findAll('button').find((b) => b.attributes('title') === 'Actions for paperless')!.trigger('click');
+    const item = wrapper.findAll('.kebab-menu-item').find((el) => el.text().trim() === 'Remove Stack')!;
+    expect(item.attributes('disabled')).toBeDefined();
   });
 });

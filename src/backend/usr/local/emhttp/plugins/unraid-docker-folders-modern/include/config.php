@@ -38,6 +38,10 @@ define('BACKEND_MODES', ['php', 'graphql']);
 // memory_calculation: 'docker' subtracts inactive page cache as `docker stats`
 // does, 'raw' keeps it. See DockerClient::dockerMemoryUsage().
 define('MEMORY_CALCULATION_MODES', ['docker', 'raw']);
+// memory_percent_basis: what a container's memory percent is of. 'limit' is the
+// container's own limit, as `docker stats` shows it. 'host' is total host
+// memory. Only the frontend reads it. src/frontend/src/utils/memoryPercent.ts.
+define('MEMORY_PERCENT_BASES', ['limit', 'host']);
 define('GRAPHQL_PLUGIN_NAME', 'unraid-api-plugin-docker-folders');
 define('UNRAID_API_DIR', '/usr/local/unraid-api');
 define('UNRAID_API_SOCKET', '/var/run/unraid-api.sock');
@@ -160,6 +164,7 @@ function detectServerTimezone($identCfg = '/boot/config/ident.cfg', $localtime =
 date_default_timezone_set(detectServerTimezone());
 
 require_once __DIR__ . '/paths.php';
+require_once __DIR__ . '/unraidUpdateStatus.php';
 require_once dirname(__DIR__) . '/classes/ReleaseNotes.php';
 
 /**
@@ -441,6 +446,18 @@ function checkAllImageUpdates($dockerClient, $db, callable $log, $onlyImages = n
     }
   }
 
+  // Clear Unraid flags that pulls made before issue #23's fix left stale.
+  // Full checks only, like the cleanup above.
+  if ($onlyImages === null) {
+    try {
+      foreach (repairUnraidUpdateStatus($dockerClient, $containers) as $key) {
+        $log('UNRAID Repaired stale update flag for ' . $key);
+      }
+    } catch (\Throwable $e) {
+      $log('UNRAID WARN repair failed: ' . $e->getMessage());
+    }
+  }
+
   // Release notes are a nice-to-have layered on top of a complete check. Any
   // failure here — network, schema, anything — must leave the digest results
   // and the counters below exactly as they are.
@@ -529,27 +546,109 @@ function recreateOneContainer($dockerClient, $name, $id)
  * digest. An upsert that names only the columns a pull changes, so the
  * release-notes columns survive.
  *
+ * Unraid's own flags are left alone here: a pull alone does not change the
+ * build a container runs. See syncUnraidStatusAfterRecreate().
+ *
  * @param DockerClient $dockerClient Docker API client
  * @param Database $db Database instance
  * @param string $image Image reference, as the update check keys it
+ * @param string|null $pullDigest The pull's own "Digest:" line, when the caller
+ *   has it. The registry can move between the pull and a fresh lookup, so this
+ *   is the digest of the image that was pulled. Without it the registry is asked.
  */
-function recordImagePulled($dockerClient, $db, $image)
+function recordImagePulled($dockerClient, $db, $image, $pullDigest = null)
 {
-  $remoteDigest = $dockerClient->getRemoteImageDigest($image);
-  $localDigest = $dockerClient->getImageDigest($image);
+  $remoteDigest = (is_string($pullDigest) && $pullDigest !== '')
+    ? $pullDigest
+    : $dockerClient->getRemoteImageDigest($image);
+  // The digest the registry reports, as in checkImageUpdate(), so the stored
+  // local_digest matches the plugin's recordPulled for the same inputs.
+  $info = $dockerClient->getImageInfo($image);
+  $localDigest = DockerClient::pickLocalDigest($info['RepoDigests'] ?? [], $remoteDigest);
+
+  // A real comparison, as checkImageUpdate() makes it: a registry that moved on
+  // after the pull must not read as "up to date".
+  $updateAvailable = 0;
+  if ($localDigest !== null && is_string($remoteDigest) && $remoteDigest !== '') {
+    $updateAvailable = DockerClient::digestHash($localDigest) !== $remoteDigest ? 1 : 0;
+  }
 
   $db->query(
     'INSERT INTO image_update_checks (image, local_digest, remote_digest, update_available, checked_at, error)
-     VALUES (:image, :local, :remote, 0, :now, NULL)
+     VALUES (:image, :local, :remote, :avail, :now, NULL)
      ON CONFLICT(image) DO UPDATE SET
        local_digest = excluded.local_digest,
        remote_digest = excluded.remote_digest,
-       update_available = 0,
+       update_available = excluded.update_available,
        checked_at = excluded.checked_at,
        error = NULL',
-    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':now' => time()]
+    [':image' => $image, ':local' => $localDigest, ':remote' => $remoteDigest, ':avail' => $updateAvailable, ':now' => time()]
   );
   logUpdate("PULL DB updated {$image}: local={$localDigest}, remote={$remoteDigest}");
+}
+
+/**
+ * After a recreate, tell Unraid's Docker manager the image is current (#23).
+ *
+ * Unraid tracks updates per tag. It is marked current only once every
+ * container created from the tag runs the tag's image, so a pull-only run, or
+ * a recreate of some of the containers, still shows "update ready" in
+ * Unraid's Docker tab. Never throws.
+ *
+ * @param DockerClient $dockerClient The client that pulled, when this request
+ *   pulled: its "Digest:" line is the digest Unraid's updater records
+ * @param Database $db
+ * @param string $image Image reference the containers were recreated on
+ * @param string $statusPath
+ * @param string $webuiPath
+ */
+function syncUnraidStatusAfterRecreate(
+  $dockerClient,
+  $db,
+  $image,
+  $statusPath = UNRAID_UPDATE_STATUS_PATH,
+  $webuiPath = UNRAID_DOCKER_WEBUI_INFO_PATH
+) {
+  try {
+    $info = $dockerClient->getImageInfo($image);
+    if (!is_array($info) || empty($info['Id'])) {
+      logUpdate("RECREATE UNRAID skip {$image}: image not found");
+      return;
+    }
+
+    $containers = $dockerClient->listContainers(true);
+    $behind = containersBehindImage($containers, $image, $info['Id']);
+    if (!empty($behind)) {
+      logUpdate("RECREATE UNRAID skip {$image}: still on the old image: " . implode(', ', $behind));
+      return;
+    }
+
+    // The container list above is still needed: the rule that every container
+    // on the tag runs its image, and the names to drop from the Docker tab.
+    // The registry and the stored row are only fallbacks for a digest, so with
+    // the pull's own digest in hand they are not asked, which keeps the
+    // "complete" event from waiting on a registry round trip.
+    $pullDigest = $dockerClient->getLastPullDigest();
+    $candidates = [];
+    if (bareImageDigest($pullDigest) === null) {
+      $candidates[] = $dockerClient->getRemoteImageDigest($image);
+      $row = $db->fetchOne('SELECT remote_digest FROM image_update_checks WHERE image = ?', [$image]);
+      if ($row) {
+        $candidates[] = $row['remote_digest'] ?? null;
+      }
+    }
+    $digest = pickUnraidDigest($pullDigest, $info['RepoDigests'] ?? [], $candidates);
+
+    $names = containerNamesForImage($containers, $image);
+    if (markUnraidImageCurrent($image, $digest, $names, $statusPath, $webuiPath)) {
+      logUpdate('RECREATE UNRAID status updated ' . unraidImageKey($image) . ": {$digest}"
+        . (empty($names) ? '' : ' (' . implode(', ', $names) . ')'));
+    } else {
+      logUpdate("RECREATE UNRAID status not updated for {$image}: no digest, or the file could not be read");
+    }
+  } catch (\Throwable $e) {
+    logUpdate("RECREATE WARN {$image}: Unraid status update failed: " . $e->getMessage());
+  }
 }
 
 /**
@@ -874,6 +973,20 @@ function dfmAssetVersion($absolutePath)
  * transport. The page files pass the result to the iframe as a query param,
  * because a global set here belongs to the parent document.
  */
+/**
+ * Whether a submitted memory_percent_basis is one the app can show.
+ *
+ * Strict, so a JSON `true`, a number or an array is refused as well as an
+ * unknown string. api/settings.php rejects the request when this is false.
+ *
+ * @param mixed $value
+ * @return bool
+ */
+function dfmIsValidMemoryPercentBasis($value)
+{
+  return in_array($value, MEMORY_PERCENT_BASES, true);
+}
+
 /**
  * Reduce a stored or submitted backend mode to one we can serve.
  *

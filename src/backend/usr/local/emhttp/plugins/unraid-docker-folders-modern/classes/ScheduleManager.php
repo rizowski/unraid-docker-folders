@@ -817,7 +817,7 @@ class ScheduleManager
       }
       logUpdate("PULL OK {$image}");
       try {
-        recordImagePulled($docker, $this->db, $image);
+        recordImagePulled($docker, $this->db, $image, $docker->getLastPullDigest());
       } catch (\Throwable $e) {
         logUpdate("PULL WARN {$image}: DB update failed: " . $e->getMessage());
       }
@@ -835,6 +835,7 @@ class ScheduleManager
     if (!$recreated['success']) {
       return ['success' => false, 'message' => "Update failed for {$containerName}: {$recreated['error']}"];
     }
+    syncUnraidStatusAfterRecreate($docker, $this->db, $image);
     return ['success' => true, 'message' => "Updated {$containerName} to the latest {$image}"];
   }
 

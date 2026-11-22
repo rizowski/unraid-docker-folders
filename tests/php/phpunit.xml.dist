@@ -11,6 +11,9 @@
     <testsuite name="ApiVersion">
       <file>ApiVersionTest.php</file>
     </testsuite>
+    <testsuite name="ApiPluginScript">
+      <file>ApiPluginScriptTest.php</file>
+    </testsuite>
     <testsuite name="BackendWatchdog">
       <file>BackendWatchdogTest.php</file>
     </testsuite>
@@ -30,6 +33,14 @@
     </testsuite>
     <testsuite name="UpdateCheck">
       <file>UpdateCheckTest.php</file>
+      <file>PickLocalDigestTest.php</file>
+      <file>RecordImagePulledTest.php</file>
+      <file>UnraidUpdateStatusTest.php</file>
+    </testsuite>
+    <testsuite name="ComposeStacks">
+      <file>ComposeProjectNameTest.php</file>
+      <file>ComposeImportRepairTest.php</file>
+      <file>ComposeStackRemoveTest.php</file>
     </testsuite>
     <testsuite name="PathSafety">
       <file>PathSafetyTest.php</file>
@@ -81,8 +92,14 @@
     <testsuite name="SecurityAdvisor">
       <file>SecurityAdvisorTest.php</file>
     </testsuite>
+    <testsuite name="ComposeAutoInstall">
+      <file>ComposeAutoInstallTest.php</file>
+    </testsuite>
     <testsuite name="ComposeRestore">
       <file>ComposeRestoreTest.php</file>
+    </testsuite>
+    <testsuite name="MemoryPercentBasis">
+      <file>MemoryPercentBasisTest.php</file>
     </testsuite>
   </testsuites>
 </phpunit>

@@ -4,20 +4,33 @@
 
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeFileVersion, ComposeFileVersionDetail, ComposeValidationError } from '@/types/compose';
+import type { ComposeStack, ComposeStatus, ComposeImportResult, ComposeRemoveResult, ComposeFileVersion, ComposeFileVersionDetail, ComposeValidationError } from '@/types/compose';
 import { useBackend } from '@/backends';
 import { useDockerStore } from '@/stores/docker';
 import { useFolderStore } from '@/stores/folders';
 
 export interface StackActionStatus {
-  kind: 'stop' | 'down';
+  kind: 'stop' | 'down' | 'remove';
   /** Set once it fails. Until then the action is still running. */
   error?: string;
 }
 
+/** The action's name for a failure line. One entry per kind, so a new kind fails type-check here. */
+const STACK_ACTION_LABELS: Record<StackActionStatus['kind'], string> = {
+  stop: 'Stop All',
+  down: 'Stack Down',
+  remove: 'Remove Stack',
+};
+
+export function stackActionLabel(kind: StackActionStatus['kind']): string {
+  return STACK_ACTION_LABELS[kind];
+}
+
 /** What a stack's row or header says about a stop or down. */
 export function stackActionText(status: StackActionStatus): string {
-  return status.error ?? (status.kind === 'down' ? 'Removing…' : 'Stopping…');
+  if (status.error) return status.error;
+  if (status.kind === 'remove') return 'Deleting stack…';
+  return status.kind === 'down' ? 'Removing…' : 'Stopping…';
 }
 
 export const useComposeStore = defineStore('compose', () => {
@@ -33,6 +46,10 @@ export const useComposeStore = defineStore('compose', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const installingBinary = ref(false);
+  // Set when the install worked but the flash copy did not.
+  const installWarning = ref<string | null>(null);
+  // Whether Compose is reinstalled after a reboot, as the last install reported it. Null before an install.
+  const installAutoInstall = ref<boolean | null>(null);
   const statusChecked = ref(false);
   let lastFetchTime = 0;
   const FETCH_DEBOUNCE_MS = 500;
@@ -121,6 +138,8 @@ export const useComposeStore = defineStore('compose', () => {
 
   async function installBinary(): Promise<boolean> {
     installingBinary.value = true;
+    installWarning.value = null;
+    installAutoInstall.value = null;
     error.value = null;
 
     try {
@@ -131,6 +150,8 @@ export const useComposeStore = defineStore('compose', () => {
       }
 
       status.value = data.status as ComposeStatus;
+      installWarning.value = data.warning ?? null;
+      installAutoInstall.value = data.auto_install ?? null;
       return true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Unknown error';
@@ -233,6 +254,34 @@ export const useComposeStore = defineStore('compose', () => {
       if (result.success) stackActionStatus.value.delete(project);
       else stackActionStatus.value.set(project, { kind, error: result.error || 'Failed' });
     }
+  }
+
+  /**
+   * Remove a stack from the plugin. Containers are never touched, and the
+   * backend refuses while they exist. Progress and failure show on the stack's
+   * row, the way a stop or down does.
+   */
+  async function removeStack(project: string, deleteFiles: boolean): Promise<ComposeRemoveResult | null> {
+    if (isStackBusy(project)) return null;
+    stackActionStatus.value.set(project, { kind: 'remove' });
+    let result: ComposeRemoveResult | null = null;
+    let failure = 'Failed';
+    try {
+      const response = await useBackend().compose.remove(project, { delete_files: deleteFiles });
+      if (response.ok) {
+        result = response.data as ComposeRemoveResult;
+        await Promise.all([fetchStacks(true), useDockerStore().fetchContainers(), useFolderStore().fetchFolders()]);
+      } else {
+        failure = response.data?.message || response.error || failure;
+      }
+    } catch (e) {
+      failure = e instanceof Error ? e.message : failure;
+      console.error('Error removing stack:', e);
+    } finally {
+      if (result) stackActionStatus.value.delete(project);
+      else stackActionStatus.value.set(project, { kind: 'remove', error: failure });
+    }
+    return result;
   }
 
   async function stackRestart(project: string): Promise<{ success: boolean; output?: string; error?: string }> {
@@ -491,6 +540,8 @@ export const useComposeStore = defineStore('compose', () => {
     loading,
     error,
     installingBinary,
+    installWarning,
+    installAutoInstall,
 
     // Getters
     stackCount,
@@ -509,6 +560,7 @@ export const useComposeStore = defineStore('compose', () => {
     createStack,
     stackUp,
     stackDown,
+    removeStack,
     stackStop,
     stackActionStatus,
     isStackBusy,

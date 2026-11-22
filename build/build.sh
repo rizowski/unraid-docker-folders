@@ -535,11 +535,19 @@ EOF
 
         # Push tag to remote
         echo "Pushing tag to remote..."
-        if git push origin "$TAG_NAME" 2>&1; then
-          echo -e "${GREEN}✓${NC} Tag pushed to remote"
-          TAG_PUSHED=true
-        else
-          echo -e "${YELLOW}⚠${NC} Failed to push tag (you may need to push manually)"
+        # GitHub appears to answer "remote rejected (failed)" for a moment at times (run
+        # 44470207248), so try three times before giving up.
+        for ATTEMPT in 1 2 3; do
+          if git push origin "$TAG_NAME" 2>&1; then
+            echo -e "${GREEN}✓${NC} Tag pushed to remote"
+            TAG_PUSHED=true
+            break
+          fi
+          echo -e "${YELLOW}⚠${NC} Tag push failed (try ${ATTEMPT} of 3)"
+          [ "$ATTEMPT" -lt 3 ] && sleep $((ATTEMPT * 5))
+        done
+        if [ "$TAG_PUSHED" = false ]; then
+          echo -e "${RED}✗${NC} Failed to push tag. The PLG commit is already on the branch."
           echo "Run: git push origin ${TAG_NAME}"
         fi
       else
@@ -553,6 +561,9 @@ EOF
     # Only proceed if tag was pushed or already existed on remote
     if [ "$TAG_PUSHED" = false ] && [ "$TAG_EXISTS" -eq 0 ]; then
       echo -e "${RED}✗${NC} Skipping GitHub release (tag not pushed)"
+      # The PLG commit is already pushed and names a package that does not
+      # exist. Fail the run so that this is not mistaken for a good release.
+      exit 1
     elif command -v gh &> /dev/null; then
       # Check if gh is authenticated
       if ! gh auth status >/dev/null 2>&1; then
@@ -626,6 +637,8 @@ ${INSTALL_URL}
             echo -e "${RED}✗${NC} Failed to create GitHub release"
             echo "You can create it manually at:"
             echo "  https://github.com/rizowski/unraid-docker-folders/releases/new?tag=${TAG_NAME}"
+            # Same reason as the skipped release above: the PLG already points at it.
+            exit 1
           fi
         fi
       fi
