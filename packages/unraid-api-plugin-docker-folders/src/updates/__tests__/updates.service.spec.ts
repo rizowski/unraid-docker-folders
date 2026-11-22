@@ -14,6 +14,7 @@ import type {
 import { DatabaseService } from '../../db/database.service.js';
 import type { EventBusService } from '../../events/event-bus.service.js';
 import { createMigratedDatabase, type TempDatabase } from '../../folders/__tests__/migrate.js';
+import { resetPullRateLimitState } from '../pull-rate-limit.js';
 import type { RecreateResult, RecreateService } from '../recreate.service.js';
 import { ReleaseNotesService, type ReleaseFetcher } from '../release-notes.service.js';
 import { UpdateLogService } from '../update-log.service.js';
@@ -567,6 +568,23 @@ describe('UpdatesService', () => {
             const result = await service.pullImage(PLEX);
 
             expect(result).toEqual({ success: false, image: PLEX, error: 'Pull failed' });
+        });
+
+        it('waits and retries when the stream reports a registry rate limit, without failing the pull', async () => {
+            vi.useFakeTimers();
+            try {
+                resetPullRateLimitState();
+                const promise = service.pullImage(PLEX);
+                docker.streamFor(PLEX).end('{"error":"toomanyrequests: You have reached your pull rate limit"}\n');
+                await vi.advanceTimersByTimeAsync(30_000);
+                docker.streamFor(PLEX).end('{"status":"Pull complete"}\n');
+
+                await expect(promise).resolves.toEqual({ success: true, image: PLEX, error: null });
+                expect(docker.calls.filter((c) => c === `pullImage ${PLEX}`)).toHaveLength(2);
+            } finally {
+                vi.useRealTimers();
+                resetPullRateLimitState();
+            }
         });
 
         it('fails when the stream reports a mid-pull error, without writing the cache (deliberate PHP divergence)', async () => {
