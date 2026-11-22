@@ -56,19 +56,30 @@ describe('pull rate limit', () => {
         expect(other.slept).toEqual([]);
     });
 
-    it('reads Retry-After seconds and HTTP dates', () => {
+    it('reads durations, seconds and HTTP dates', () => {
         expect(parseRetryAfter('45')).toBe(45);
+        expect(parseRetryAfter('1m42s')).toBe(102);
+        expect(parseRetryAfter('1m42.5s')).toBeCloseTo(102.5, 9);
+        expect(parseRetryAfter('102.996µs')).toBeCloseTo(0.000102996, 12);
+        expect(parseRetryAfter('250ms')).toBeCloseTo(0.25, 9);
         expect(parseRetryAfter('Thu, 01 Jan 1970 00:17:40 GMT', 1_000_000)).toBe(60);
+        expect(parseRetryAfter('Thu, 01 Jan 1970 00:00:10 GMT', 1_000_000)).toBe(0);
         expect(parseRetryAfter('soon')).toBeNull();
         expect(parseRetryAfter('')).toBeNull();
     });
 
-    it('uses the message, then backoff, capped', () => {
+    it('waits the larger of the hint and the floor, capped', () => {
+        expect(pullRateLimitDelay('toomanyrequests: retry-after: 102.996µs, allowed: 44000/minute', 1)).toBe(5);
+        expect(pullRateLimitDelay('toomanyrequests: retry-after: 1m42s, allowed: 1/minute', 1)).toBe(102);
+        expect(pullRateLimitDelay('retry-after: 102s', 1)).toBe(102);
         expect(pullRateLimitDelay('Retry-After: 45', 1)).toBe(45);
-        expect(pullRateLimitDelay(LIMIT, 1)).toBe(30);
-        expect(pullRateLimitDelay(LIMIT, 3)).toBe(120);
-        expect(pullRateLimitDelay(LIMIT, 6)).toBe(300);
-        expect(pullRateLimitDelay('retry after 9999', 1)).toBe(300);
+        expect(pullRateLimitDelay('retry-after: 900s', 1)).toBe(300);
+        expect(pullRateLimitDelay(LIMIT, 1)).toBe(5);
+        expect(pullRateLimitDelay(LIMIT, 2)).toBe(15);
+        expect(pullRateLimitDelay(LIMIT, 3)).toBe(45);
+        expect(pullRateLimitDelay(LIMIT, 9)).toBe(45);
+        expect(pullRateLimitDelay('retry-after: 102.996µs', 2)).toBe(15);
+        expect(pullRateLimitDelay('manifest for app:v1.429 not found', 1)).toBe(5);
     });
 
     it('retries after a rate limit and reports it', async () => {
@@ -76,8 +87,8 @@ describe('pull rate limit', () => {
         const results = [LIMIT, null];
         const out = await runWithPullRateLimitRetry(async () => results.shift() ?? null, h.hooks);
         expect(out).toBeNull();
-        expect(h.slept).toEqual([30]);
-        expect(h.notes[0]).toContain('retrying in 30s');
+        expect(h.slept).toEqual([5]);
+        expect(h.notes[0]).toContain('retrying in 5s');
     });
 
     it('gives up after the attempt cap', async () => {
@@ -99,10 +110,10 @@ describe('pull rate limit', () => {
         // Pull A is rate limited once, then succeeds. It sets the shared deadline.
         const a = [LIMIT, null];
         await runWithPullRateLimitRetry(async () => a.shift() ?? null, first.hooks);
-        expect(first.slept).toEqual([30]);
+        expect(first.slept).toEqual([5]);
 
-        // Pull B starts at a clock that is 10s before the deadline A set.
-        let clock = 1_000_000 + 20_000;
+        // Pull B starts at a clock that is 3s before the deadline A set.
+        let clock = 1_000_000 + 2_000;
         const slept: number[] = [];
         const out = await runWithPullRateLimitRetry(async () => null, {
             notify: () => {},
@@ -113,6 +124,6 @@ describe('pull rate limit', () => {
             now: () => clock,
         });
         expect(out).toBeNull();
-        expect(slept).toEqual([10]);
+        expect(slept).toEqual([3]);
     });
 });

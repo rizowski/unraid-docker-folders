@@ -4,40 +4,68 @@
  *
  * A pull goes through the Docker daemon, which reports a 429 as error text
  * ("toomanyrequests: You have reached your pull rate limit ...") and does not
- * pass on the Retry-After header. So the wait is read from the text when the
- * text names one, and is a bounded backoff otherwise. `parseRetryAfter` reads
- * both header forms for a caller that does see the header.
+ * pass on the Retry-After header. Some registries (lscr.io, ghcr.io) put a wait
+ * in the text as a Go duration ("retry-after: 102.996µs"); Docker Hub's text
+ * has none. The wait is that hint when present, never below a floor that grows
+ * with each attempt.
  */
 
 /** Counts the first try: 4 means up to 3 retries. */
 export const PULL_RATE_LIMIT_MAX_ATTEMPTS = 4;
 const PULL_RATE_LIMIT_MAX_WAIT_SECONDS = 300;
-const PULL_RATE_LIMIT_BASE_WAIT_SECONDS = 30;
+/** Minimum wait before attempts 2, 3 and 4 (the retries). */
+const PULL_RATE_LIMIT_FLOORS = [5, 15, 45];
 
 export function isRateLimitMessage(message: string): boolean {
     return /toomanyrequests|too many requests|rate limit|http 429|status:? 429/i.test(message);
 }
 
-/** Seconds from a Retry-After value (seconds or HTTP-date); null if not understood. */
+const DURATION_UNITS: Record<string, number> = {
+    h: 3600,
+    m: 60,
+    s: 1,
+    ms: 1e-3,
+    us: 1e-6,
+    'µs': 1e-6,
+    'μs': 1e-6,
+    ns: 1e-9,
+};
+
+/**
+ * Seconds from a retry hint. Three forms: a Go duration such as "102.996µs" or
+ * "1m42.5s" (what a registry puts in the 429 text), a bare number of seconds,
+ * or an HTTP-date. Null when empty or not understood.
+ */
 export function parseRetryAfter(value: string, nowMs: number = Date.now()): number | null {
     const trimmed = value.trim();
     if (trimmed === '') return null;
-    if (/^\d+$/.test(trimmed)) return Number(trimmed);
+    if (/^\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed);
+    if (/^(?:\d+(?:\.\d+)?(?:ms|us|µs|μs|ns|h|m|s))+$/.test(trimmed)) {
+        let total = 0;
+        for (const part of trimmed.matchAll(/(\d+(?:\.\d+)?)(ms|us|µs|μs|ns|h|m|s)/g)) {
+            total += Number(part[1]) * DURATION_UNITS[part[2]];
+        }
+        return total;
+    }
     const time = Date.parse(trimmed);
     if (Number.isNaN(time)) return null;
-    return Math.max(0, Math.ceil((time - nowMs) / 1000));
+    return Math.max(0, (time - nowMs) / 1000);
 }
 
+const RETRY_HINT =
+    /retry[- ]after:?\s*(?:([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT)|(\d[^\s,;]*))/i;
+
 /**
- * Seconds to wait, capped. A "retry after 45" in the message wins; otherwise
- * 30s, 60s, 120s... by attempt number (1 for the first failure).
+ * Seconds to wait, capped. The larger of the registry's hint (when the message
+ * has one) and a floor for the attempt (1 for the first failure). A hint of a
+ * few microseconds means "now", but a batch that retries at once hits the
+ * per-minute limit again, so the floor still applies.
  */
 export function pullRateLimitDelay(message: string, attempt: number): number {
-    const named = /retry[- ]after:?\s*(\d+)/i.exec(message);
-    const seconds = named
-        ? Number(named[1])
-        : PULL_RATE_LIMIT_BASE_WAIT_SECONDS * 2 ** (attempt - 1);
-    return Math.max(1, Math.min(PULL_RATE_LIMIT_MAX_WAIT_SECONDS, seconds));
+    const floor = PULL_RATE_LIMIT_FLOORS[Math.min(Math.max(attempt, 1), PULL_RATE_LIMIT_FLOORS.length) - 1];
+    const m = RETRY_HINT.exec(message);
+    const hint = (m ? parseRetryAfter(m[1] ?? m[2]) : null) ?? 0;
+    return Math.min(PULL_RATE_LIMIT_MAX_WAIT_SECONDS, Math.ceil(Math.max(hint, floor)));
 }
 
 export interface PullRateLimitHooks {

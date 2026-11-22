@@ -4,10 +4,10 @@
  *
  * A pull goes through the Docker daemon, which talks to the registry. The
  * daemon reports a 429 as error text ("toomanyrequests: You have reached your
- * pull rate limit ...") and does not pass on the Retry-After header. So the
- * wait is read from the text when the text names one, and is a bounded
- * backoff otherwise. parseRetryAfter() reads both header forms for a caller
- * that does see the header.
+ * pull rate limit ...") and does not pass on the Retry-After header. Some
+ * registries (lscr.io, ghcr.io) put a wait in the text as a Go duration
+ * ("retry-after: 102.996µs"); Docker Hub's text has none. The wait is that
+ * hint when present, never below a floor that grows with each attempt.
  *
  * The file only declares constants and functions and requires nothing.
  */
@@ -16,7 +16,8 @@
 // hang. MAX_ATTEMPTS counts the first try: 4 means up to 3 retries.
 const DFM_PULL_RATE_LIMIT_MAX_ATTEMPTS = 4;
 const DFM_PULL_RATE_LIMIT_MAX_WAIT = 300;
-const DFM_PULL_RATE_LIMIT_BASE_WAIT = 30;
+// Minimum wait before attempts 2, 3 and 4 (the retries).
+const DFM_PULL_RATE_LIMIT_FLOORS = [5, 15, 45];
 
 /** True when a daemon or registry message reports a rate limit. */
 function dfmIsRateLimitMessage($message)
@@ -25,30 +26,42 @@ function dfmIsRateLimitMessage($message)
 }
 
 /**
- * Seconds from a Retry-After value: a number of seconds or an HTTP-date.
- * Null when the value is empty or not understood.
+ * Seconds (float) from a retry hint. Three forms: a Go duration such as
+ * "102.996µs" or "1m42.5s" (what a registry puts in the 429 text), a bare
+ * number of seconds, or an HTTP-date. Null when empty or not understood.
  */
-function parseRetryAfter($value, $now = null)
+function dfmParseRetryAfter($value, $now = null)
 {
   $value = trim((string) $value);
   if ($value === '') return null;
-  if (ctype_digit($value)) return (int) $value;
+  if (preg_match('/^\d+(?:\.\d+)?$/', $value)) return (float) $value;
+  $units = ['h' => 3600, 'm' => 60, 's' => 1, 'ms' => 1e-3, 'us' => 1e-6, 'µs' => 1e-6, 'μs' => 1e-6, 'ns' => 1e-9];
+  if (preg_match('/^(?:\d+(?:\.\d+)?(?:ms|us|µs|μs|ns|h|m|s))+$/u', $value)) {
+    preg_match_all('/(\d+(?:\.\d+)?)(ms|us|µs|μs|ns|h|m|s)/u', $value, $parts, PREG_SET_ORDER);
+    $total = 0.0;
+    foreach ($parts as $part) $total += (float) $part[1] * $units[$part[2]];
+    return $total;
+  }
   $time = strtotime($value);
   if ($time === false) return null;
-  return max(0, $time - ($now ?? time()));
+  return (float) max(0, $time - ($now ?? time()));
 }
 
 /**
  * Seconds to wait before the next try, capped at DFM_PULL_RATE_LIMIT_MAX_WAIT.
- * A "retry after 45" or "Retry-After: 45" in the message wins; otherwise
- * 30s, 60s, 120s... by attempt number (1 for the first failure).
+ * The wait is the larger of the registry's hint (when the message has one)
+ * and a floor for the attempt (1 for the first failure). A hint of a few
+ * microseconds means "now", but a batch that retries at once hits the
+ * per-minute limit again, so the floor still applies.
  */
 function dfmPullRateLimitDelay($message, $attempt)
 {
-  $seconds = preg_match('/retry[- ]after:?\s*(\d+)/i', (string) $message, $m)
-    ? (int) $m[1]
-    : DFM_PULL_RATE_LIMIT_BASE_WAIT * (2 ** ($attempt - 1));
-  return max(1, min(DFM_PULL_RATE_LIMIT_MAX_WAIT, $seconds));
+  $floor = DFM_PULL_RATE_LIMIT_FLOORS[min(max($attempt, 1), count(DFM_PULL_RATE_LIMIT_FLOORS)) - 1];
+  $hint = 0.0;
+  if (preg_match('/retry[- ]after:?\s*(?:([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT)|(\d[^\s,;]*))/i', (string) $message, $m)) {
+    $hint = dfmParseRetryAfter($m[1] !== '' ? $m[1] : $m[2]) ?? 0.0;
+  }
+  return (int) min(DFM_PULL_RATE_LIMIT_MAX_WAIT, ceil(max($hint, $floor)));
 }
 
 /** The registry host of an image reference. No host in the name means Docker Hub. */

@@ -69,31 +69,41 @@ final class PullRateLimitTest extends TestCase
     }
 
     #[Test]
-    public function retryAfterReadsSecondsAndHttpDates(): void
+    public function retryAfterReadsDurationsSecondsAndHttpDates(): void
     {
-        $this->assertSame(45, parseRetryAfter('45'));
-        $this->assertSame(60, parseRetryAfter('Thu, 01 Jan 1970 00:17:40 GMT', 1000));
-        $this->assertSame(0, parseRetryAfter('Thu, 01 Jan 1970 00:00:10 GMT', 1000));
-        $this->assertNull(parseRetryAfter('soon'));
-        $this->assertNull(parseRetryAfter(''));
+        $this->assertSame(45.0, dfmParseRetryAfter('45'));
+        $this->assertSame(102.0, dfmParseRetryAfter('1m42s'));
+        $this->assertEqualsWithDelta(102.5, dfmParseRetryAfter('1m42.5s'), 1e-9);
+        $this->assertEqualsWithDelta(0.000102996, dfmParseRetryAfter('102.996µs'), 1e-12);
+        $this->assertEqualsWithDelta(0.25, dfmParseRetryAfter('250ms'), 1e-9);
+        $this->assertSame(60.0, dfmParseRetryAfter('Thu, 01 Jan 1970 00:17:40 GMT', 1000));
+        $this->assertSame(0.0, dfmParseRetryAfter('Thu, 01 Jan 1970 00:00:10 GMT', 1000));
+        $this->assertNull(dfmParseRetryAfter('soon'));
+        $this->assertNull(dfmParseRetryAfter(''));
     }
 
     #[Test]
-    public function delayUsesTheMessageThenBackoffAndIsCapped(): void
+    public function delayIsTheLargerOfTheHintAndTheFloorAndIsCapped(): void
     {
+        $this->assertSame(5, dfmPullRateLimitDelay('toomanyrequests: retry-after: 102.996µs, allowed: 44000/minute', 1));
+        $this->assertSame(102, dfmPullRateLimitDelay('toomanyrequests: retry-after: 1m42s, allowed: 1/minute', 1));
+        $this->assertSame(102, dfmPullRateLimitDelay('retry-after: 102s', 1));
         $this->assertSame(45, dfmPullRateLimitDelay('rate limited, Retry-After: 45', 1));
-        $this->assertSame(30, dfmPullRateLimitDelay('toomanyrequests', 1));
-        $this->assertSame(120, dfmPullRateLimitDelay('toomanyrequests', 3));
-        $this->assertSame(300, dfmPullRateLimitDelay('toomanyrequests', 6));
-        $this->assertSame(300, dfmPullRateLimitDelay('retry after 9999', 1));
+        $this->assertSame(300, dfmPullRateLimitDelay('retry-after: 900s', 1));
+        $this->assertSame(5, dfmPullRateLimitDelay('toomanyrequests: You have reached your pull rate limit.', 1));
+        $this->assertSame(15, dfmPullRateLimitDelay('toomanyrequests', 2));
+        $this->assertSame(45, dfmPullRateLimitDelay('toomanyrequests', 3));
+        $this->assertSame(45, dfmPullRateLimitDelay('toomanyrequests', 9));
+        $this->assertSame(15, dfmPullRateLimitDelay('retry-after: 102.996µs', 2));
+        $this->assertSame(5, dfmPullRateLimitDelay('manifest for app:v1.429 not found', 1));
     }
 
     #[Test]
     public function retriesAfterARateLimitAndReportsProgress(): void
     {
         $this->assertTrue($this->run429([false, true]));
-        $this->assertSame([30], $this->slept);
-        $this->assertStringContainsString('retrying in 30s', $this->events[0]['status']);
+        $this->assertSame([5], $this->slept);
+        $this->assertStringContainsString('retrying in 5s', $this->events[0]['status']);
     }
 
     #[Test]
