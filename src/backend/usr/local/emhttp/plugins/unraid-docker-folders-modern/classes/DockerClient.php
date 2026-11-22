@@ -12,6 +12,8 @@ require_once __DIR__ . '/DockerStreamDemuxer.php';
 // file too; require_once resolves both paths to one file, so it loads once. The
 // file only declares constants and functions and requires nothing.
 require_once dirname(__DIR__) . '/include/unraidUpdateStatus.php';
+// Retry for a registry rate limit, used by pullImage(). Declares functions only.
+require_once dirname(__DIR__) . '/include/pullRateLimit.php';
 
 class DockerClient
 {
@@ -2112,6 +2114,25 @@ class DockerClient
    */
   public function pullImage($imageName, callable $onProgress)
   {
+    // A registry rate limit (429) is retried after a wait. Other errors are not.
+    return dfmRunPullWithRateLimitRetry(
+      function ($emit, $holdRateLimit) use ($imageName) {
+        return $this->pullImageOnce($imageName, $emit, $holdRateLimit);
+      },
+      function () {
+        return $this->lastError;
+      },
+      $onProgress
+    );
+  }
+
+  /**
+   * One pull attempt. With $holdRateLimit, a rate limit error line is kept
+   * from $onProgress, because pullImage() will retry and a caller must not
+   * see that line as the end of the pull.
+   */
+  private function pullImageOnce($imageName, callable $onProgress, $holdRateLimit = false)
+  {
     // This path does not go through request(), which is what resets it.
     $this->lastError = '';
     $this->lastErrorReason = '';
@@ -2149,7 +2170,7 @@ class DockerClient
     // nothing, and an "error" line lost like that made a failed pull look
     // like a success. Only whole lines are decoded; the rest waits.
     $pending = '';
-    $handleLine = function ($line) use ($onProgress, &$streamError, &$apiMessage) {
+    $handleLine = function ($line) use ($onProgress, $holdRateLimit, &$streamError, &$apiMessage) {
       $line = trim($line);
       if ($line === '') return;
       $decoded = json_decode($line, true);
@@ -2164,6 +2185,7 @@ class DockerClient
       if (isset($decoded['message']) && $apiMessage === '') {
         $apiMessage = (string) $decoded['message'];
       }
+      if ($holdRateLimit && isset($decoded['error']) && dfmIsRateLimitMessage($decoded['error'])) return;
       $onProgress($decoded);
     };
 
