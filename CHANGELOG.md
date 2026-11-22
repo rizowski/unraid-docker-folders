@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.22-dev2
+### Improved
+- Image updates now wait and retry automatically when a registry rate-limits pulls, instead of failing right away. (#44)
+
 ## 2026.11.22-dev1
 ### Fixed
 - Force Update no longer fails for containers that share another container's network. (#43, #45)
