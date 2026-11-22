@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.11.20-dev2">
-<!ENTITY md5 "80e635d29513e5c758d312a4b741a1e8">
+<!ENTITY version "2026.11.22-dev1">
+<!ENTITY md5 "f1aa7dedc1b6999a300c0cfc648905c4">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -161,6 +161,9 @@
 
 
 
+
+###2026.11.22-dev1
+- Fixed: Force Update no longer fails for containers that share another container's network. (#43, #45)
 ###2026.11.20-dev2
 - New: A Remove Stack item in the stack menu removes a stack from the plugin after a confirm dialog, and can also delete the plugin's own copy of the files. (#25, #28)
 - New: The stacks pane lists Compose Manager stacks together under their own "Compose Manager" sub-header with a count. (#25, #28)

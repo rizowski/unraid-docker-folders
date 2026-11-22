@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026.11.22-dev1
+### Fixed
+- Force Update no longer fails for containers that share another container's network. (#43, #45)
+
 ## 2026.11.20-dev2
 ### New
 - A Remove Stack item in the stack menu removes a stack from the plugin after a confirm dialog, and can also delete the plugin's own copy of the files. (#25, #28)
