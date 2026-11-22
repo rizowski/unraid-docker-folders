@@ -2,7 +2,7 @@ import type Dockerode from 'dockerode';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { DockerLifecycleClient } from '../../containers/docker-client.js';
-import { RecreateService } from '../recreate.service.js';
+import { buildCreateBody, RecreateService } from '../recreate.service.js';
 
 const OLD_ID = 'old-id';
 const NEW_ID = 'new-id';
@@ -129,6 +129,18 @@ describe('RecreateService', () => {
         expect(result.success).toBe(false);
         expect(result.error).toMatch(new RegExp(`^Failed to stop container ${NAME}:`));
         expect(docker.calls).toEqual([`inspect ${OLD_ID}`, `stop ${OLD_ID} t=30`]);
+    });
+
+    it('a container on container:<id> network mode is created without ExposedPorts (issue #43)', () => {
+        const inspect = {
+            ...runningInspect(),
+            Config: { Image: 'app:latest', ExposedPorts: { '8080/tcp': {} }, Labels: {} },
+            HostConfig: { NetworkMode: 'container:abc123' },
+        } as unknown as Dockerode.ContainerInspectInfo;
+        expect(buildCreateBody(inspect, NAME)).not.toHaveProperty('ExposedPorts');
+
+        const bridge = { ...inspect, HostConfig: { NetworkMode: 'bridge' } } as unknown as Dockerode.ContainerInspectInfo;
+        expect(buildCreateBody(bridge, NAME).ExposedPorts).toEqual({ '8080/tcp': {} });
     });
 
     it('a stopped container is never stopped or restarted', async () => {

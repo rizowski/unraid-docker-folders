@@ -25,6 +25,7 @@
       <file>DockerClientStatsTest.php</file>
       <file>DockerClientErrorReasonTest.php</file>
       <file>DockerClientOomPlanTest.php</file>
+      <file>DockerClientSharedNetworkTest.php</file>
       <file>DockerClientLogsTest.php</file>
     </testsuite>
     <testsuite name="ImageReference">
