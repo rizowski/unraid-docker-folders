@@ -80,6 +80,8 @@ describe('pull rate limit', () => {
         expect(pullRateLimitDelay(LIMIT, 9)).toBe(45);
         expect(pullRateLimitDelay('retry-after: 102.996µs', 2)).toBe(15);
         expect(pullRateLimitDelay('manifest for app:v1.429 not found', 1)).toBe(5);
+        expect(pullRateLimitDelay('retry-after: 120s.', 1)).toBe(120);
+        expect(pullRateLimitDelay('retry-after: 5min', 1)).toBe(5);
     });
 
     it('retries after a rate limit and reports it', async () => {

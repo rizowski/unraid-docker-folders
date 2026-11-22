@@ -42,6 +42,7 @@ function dfmParseRetryAfter($value, $now = null)
     foreach ($parts as $part) $total += (float) $part[1] * $units[$part[2]];
     return $total;
   }
+  if (!preg_match('/\d{2}:\d{2}:\d{2}/', $value)) return null; // a date has a clock time; strtotime reads "5min" as an offset
   $time = strtotime($value);
   if ($time === false) return null;
   return (float) max(0, $time - ($now ?? time()));
@@ -58,7 +59,7 @@ function dfmPullRateLimitDelay($message, $attempt)
 {
   $floor = DFM_PULL_RATE_LIMIT_FLOORS[min(max($attempt, 1), count(DFM_PULL_RATE_LIMIT_FLOORS)) - 1];
   $hint = 0.0;
-  if (preg_match('/retry[- ]after:?\s*(?:([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT)|(\d[^\s,;]*))/i', (string) $message, $m)) {
+  if (preg_match('/retry[- ]after:?\s*(?:([A-Za-z]{3},\s+\d{1,2}\s+[A-Za-z]{3}\s+\d{4}\s+\d{2}:\d{2}:\d{2}\s+GMT)|(\d(?:[^\s,;]*[^\s,;.)\]])?))/i', (string) $message, $m)) {
     $hint = dfmParseRetryAfter($m[1] !== '' ? $m[1] : $m[2]) ?? 0.0;
   }
   return (int) min(DFM_PULL_RATE_LIMIT_MAX_WAIT, ceil(max($hint, $floor)));

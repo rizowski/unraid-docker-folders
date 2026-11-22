@@ -96,6 +96,8 @@ final class PullRateLimitTest extends TestCase
         $this->assertSame(45, dfmPullRateLimitDelay('toomanyrequests', 9));
         $this->assertSame(15, dfmPullRateLimitDelay('retry-after: 102.996µs', 2));
         $this->assertSame(5, dfmPullRateLimitDelay('manifest for app:v1.429 not found', 1));
+        $this->assertSame(120, dfmPullRateLimitDelay('retry-after: 120s.', 1));
+        $this->assertSame(5, dfmPullRateLimitDelay('retry-after: 5min', 1));
     }
 
     #[Test]
