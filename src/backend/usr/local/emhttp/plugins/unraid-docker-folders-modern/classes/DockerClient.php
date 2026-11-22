@@ -1904,6 +1904,19 @@ class DockerClient
   }
 
   /**
+   * Remove ExposedPorts from a create body whose HostConfig.NetworkMode is
+   * `container:<id|name>`. Docker refuses that combination.
+   */
+  public static function dropExposedPortsForSharedNetwork(array $createBody): array
+  {
+    $mode = (string) ($createBody['HostConfig']['NetworkMode'] ?? '');
+    if (strncmp($mode, 'container:', 10) === 0) {
+      unset($createBody['ExposedPorts']);
+    }
+    return $createBody;
+  }
+
+  /**
    * Recreate a container with its current configuration but the latest image
    *
    * Safely: inspect → stop → rename → create → start → remove old
@@ -1990,6 +2003,12 @@ class DockerClient
         $createBody['HostConfig']['PortBindings'] = (object) $pb;
       }
     }
+
+    // A container that joins another's network namespace cannot declare ports.
+    // Docker answers 400 "conflicting options: port exposing and the container
+    // type network mode", yet inspect lists the image's EXPOSE ports in
+    // Config.ExposedPorts. Drop them (issue #43).
+    $createBody = self::dropExposedPortsForSharedNetwork($createBody);
 
     // Build NetworkingConfig from existing networks
     $networks = $inspect['NetworkSettings']['Networks'] ?? [];

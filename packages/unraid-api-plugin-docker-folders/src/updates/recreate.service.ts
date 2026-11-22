@@ -32,13 +32,21 @@ type RawConfig = Record<string, unknown>;
  * object, where `{}` and `[]` are already distinct, so there is nothing to
  * repair and that whole pass is intentionally not ported.
  */
-function buildCreateBody(inspect: Dockerode.ContainerInspectInfo, containerName: string): RawConfig {
+export function buildCreateBody(inspect: Dockerode.ContainerInspectInfo, containerName: string): RawConfig {
     const { Hostname: _hostname, ...configRest } = (inspect.Config ?? {}) as RawConfig;
     const image = resolveImageTag(String(configRest.Image ?? ''), containerName);
     const config: RawConfig = { ...configRest, Image: image };
 
     const { ContainerIDFile: _containerIdFile, ...hostConfigRest } = (inspect.HostConfig ?? {}) as RawConfig;
     const createBody: RawConfig = { ...config, HostConfig: hostConfigRest };
+
+    // A container that joins another's network namespace cannot declare
+    // ports, and Docker answers 400 "conflicting options: port exposing and
+    // the container type network mode". Inspect still lists the image's
+    // EXPOSE ports in Config.ExposedPorts, so drop them (issue #43).
+    if (String(hostConfigRest.NetworkMode ?? '').startsWith('container:')) {
+        delete createBody.ExposedPorts;
+    }
 
     const networks = inspect.NetworkSettings?.Networks ?? {};
     const networkNames = Object.keys(networks);
