@@ -2151,7 +2151,11 @@ class DockerClient
         }
       }
       if (!isset($targets[$target])) {
-        $mounts[] = ['Type' => 'volume', 'Source' => $name, 'Target' => $target];
+        $entry = ['Type' => 'volume', 'Source' => $name, 'Target' => $target];
+        if (($mount['RW'] ?? true) === false) {
+          $entry['ReadOnly'] = true;
+        }
+        $mounts[] = $entry;
       }
     }
 

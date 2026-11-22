@@ -185,6 +185,16 @@ final class DockerClientRecreateUserSettingsTest extends TestCase
     }
 
     #[Test]
+    public function readOnlyAnonymousVolumeStaysReadOnly(): void
+    {
+        $inspect = [
+            'HostConfig' => [],
+            'Mounts' => [['Type' => 'volume', 'Name' => self::VOL_A, 'Destination' => '/data', 'RW' => false]],
+        ];
+        $this->assertTrue(DockerClient::reuseAnonymousVolumes($inspect)[0]['ReadOnly']);
+    }
+
+    #[Test]
     public function noMountsGivesAnEmptyList(): void
     {
         $this->assertSame([], DockerClient::reuseAnonymousVolumes(['HostConfig' => [], 'Mounts' => []]));
