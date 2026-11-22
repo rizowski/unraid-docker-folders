@@ -2035,6 +2035,130 @@ class DockerClient
   }
 
   /**
+   * Reduce a container's inspect Config to what the user set.
+   *
+   * Inspect Config merges the image's own defaults with the user's
+   * overrides. Copying all of it onto the new image pins the old image's Env,
+   * Cmd, Entrypoint, WorkingDir, Healthcheck, Labels and so on. This keeps
+   * only what differs from the old image's Config, so the new image's
+   * defaults apply to the rest.
+   *
+   * Known gap: a user who set a variable to the same value as the old image's
+   * default looks the same as the default and is dropped. If the new image
+   * changes that default, the container silently takes the new value. The
+   * same holds for a Cmd or Label set equal to the old image's.
+   *
+   * With $imageConfig null (the old image could not be inspected) the whole
+   * Config is kept, apart from the Hostname rule.
+   *
+   * @param array $config inspect Config of the old container
+   * @param array|null $imageConfig inspect Config of the old image
+   * @param string $oldId id of the old container
+   * @param string $networkMode HostConfig.NetworkMode of the old container
+   */
+  public static function userSettingsConfig(array $config, ?array $imageConfig, string $oldId, string $networkMode = ''): array
+  {
+    // A generated hostname (the first 12 characters of the id) follows the new
+    // container. A user-set one stays. Docker refuses a hostname together with
+    // a shared network namespace, and inspect shows the host's name for the
+    // host network, so those two never carry one.
+    $hostname = (string) ($config['Hostname'] ?? '');
+    if (
+      $hostname === substr($oldId, 0, 12)
+      || strncmp($networkMode, 'container:', 10) === 0
+      || $networkMode === 'host'
+    ) {
+      unset($config['Hostname']);
+    }
+
+    if ($imageConfig === null) {
+      return $config;
+    }
+
+    if (isset($config['Env']) && is_array($config['Env'])) {
+      $config['Env'] = array_values(array_diff($config['Env'], (array) ($imageConfig['Env'] ?? [])));
+    }
+
+    if (isset($config['Labels']) && is_array($config['Labels'])) {
+      $imageLabels = (array) ($imageConfig['Labels'] ?? []);
+      foreach ($config['Labels'] as $key => $value) {
+        if (array_key_exists($key, $imageLabels) && $imageLabels[$key] === $value) {
+          unset($config['Labels'][$key]);
+        }
+      }
+    }
+    foreach (['ExposedPorts', 'Volumes'] as $field) {
+      if (isset($config[$field]) && is_array($config[$field])) {
+        $config[$field] = array_diff_key($config[$field], (array) ($imageConfig[$field] ?? []));
+      }
+    }
+
+    // Single values: copy only when they differ from the image's.
+    foreach (['Cmd', 'Entrypoint', 'WorkingDir', 'User', 'StopSignal', 'Healthcheck', 'Shell', 'OnBuild'] as $field) {
+      if (array_key_exists($field, $config) && $config[$field] == ($imageConfig[$field] ?? null)) {
+        unset($config[$field]);
+      }
+    }
+
+    return $config;
+  }
+
+  /**
+   * HostConfig.Mounts for a recreate that keeps the old anonymous volumes.
+   *
+   * A recreate would otherwise get a new empty volume for each one and
+   * orphan the old data. An anonymous volume is a volume mount with a
+   * 64-hex name that the user did not name: not the source of a bind
+   * ("name:/path") or of a HostConfig.Mounts entry.
+   *
+   * A declared mount with an empty Source gets the old volume name. A target
+   * already in Binds or Mounts is not added twice.
+   */
+  public static function reuseAnonymousVolumes(array $inspect): array
+  {
+    $hostConfig = $inspect['HostConfig'] ?? [];
+    $mounts = array_values((array) ($hostConfig['Mounts'] ?? []));
+
+    $named = [];
+    $targets = [];
+    foreach ((array) ($hostConfig['Binds'] ?? []) as $bind) {
+      $parts = explode(':', (string) $bind);
+      $named[$parts[0]] = true;
+      if (isset($parts[1])) {
+        $targets[$parts[1]] = true;
+      }
+    }
+    foreach ($mounts as $mount) {
+      if (!empty($mount['Source'])) {
+        $named[$mount['Source']] = true;
+      }
+      if (!empty($mount['Target'])) {
+        $targets[$mount['Target']] = true;
+      }
+    }
+
+    foreach ((array) ($inspect['Mounts'] ?? []) as $mount) {
+      $name = (string) ($mount['Name'] ?? '');
+      $target = (string) ($mount['Destination'] ?? '');
+      if (($mount['Type'] ?? '') !== 'volume' || $target === '' || !preg_match('/^[0-9a-f]{64}$/', $name) || isset($named[$name])) {
+        continue;
+      }
+      // A declared mount with an empty Source: fill in the old volume.
+      foreach ($mounts as $i => $declared) {
+        if (($declared['Type'] ?? '') === 'volume' && ($declared['Target'] ?? '') === $target && empty($declared['Source'])) {
+          $mounts[$i]['Source'] = $name;
+          continue 2;
+        }
+      }
+      if (!isset($targets[$target])) {
+        $mounts[] = ['Type' => 'volume', 'Source' => $name, 'Target' => $target];
+      }
+    }
+
+    return $mounts;
+  }
+
+  /**
    * Recreate a container with its current configuration but the latest image
    *
    * Safely: inspect → stop → rename → create → start → remove old
@@ -2061,10 +2185,22 @@ class DockerClient
     $newId = null;
 
     // 2. Build create body from inspect data
-    $config = $inspect['Config'] ?? [];
-
-    // Remove read-only fields that shouldn't be in create body
-    unset($config['Hostname']); // Let Docker assign based on container name
+    // Copy only what the user set. The old image is inspected by its id: the
+    // tag already points at the new image after the pull. It stays on disk
+    // while the old container exists. If the inspect fails, copy everything.
+    $imageInfo = $this->getImageInfo((string) ($inspect['Image'] ?? ''));
+    $imageConfig = is_array($imageInfo) && isset($imageInfo['Config']) && is_array($imageInfo['Config'])
+      ? $imageInfo['Config']
+      : null;
+    if ($imageConfig === null) {
+      error_log("recreateContainer {$containerName}: old image inspect failed, copying the whole container config");
+    }
+    $config = self::userSettingsConfig(
+      $inspect['Config'] ?? [],
+      $imageConfig,
+      (string) $oldId,
+      (string) ($inspect['HostConfig']['NetworkMode'] ?? '')
+    );
 
     // Ensure Image is a tag reference, not a SHA digest
     $config['Image'] = $this->resolveImageTag($config['Image'] ?? '', $containerName);
@@ -2074,6 +2210,12 @@ class DockerClient
 
     // Remove read-only HostConfig fields
     unset($createBody['HostConfig']['ContainerIDFile']);
+
+    // Keep anonymous volumes (and their data) across the recreate.
+    $mounts = self::reuseAnonymousVolumes($inspect);
+    if ($mounts !== []) {
+      $createBody['HostConfig']['Mounts'] = $mounts;
+    }
 
     $createBody = self::emptyMapsToObjects($createBody);
 
