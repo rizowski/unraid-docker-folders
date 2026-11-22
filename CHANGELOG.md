@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026.11.22
+### New
+- Stacks can be removed from the plugin with a new Remove Stack item in the stack menu, with a confirm dialog that says what goes and what stays and an optional box to delete the plugin's own copy of the files. (#25, #28)
+- A new Settings option chooses whether a container's memory percentage is a share of its limit or of the host, shown on the card, details, list row and dashboard widget. (#29, #34)
+
+### Improved
+- Importing Compose Manager stacks now adopts them where they are instead of copying files, and earlier imported copies are merged back into one stack. (#25, #28)
+- The stacks pane groups Compose Manager stacks together under their own sub-header with a count. (#25, #28)
+- The Compose setup banners explain why stacks are read-only while Compose Manager is installed and how to migrate. (#25, #28)
+- Folder totals for memory now show a tooltip explaining what they measure. (#29, #34)
+
+### Fixed
+- Compose installed from the setup banner now stays installed after a reboot, unless you turned automatic reinstall off in Settings. (#26, #30)
+- At boot, the Compose reinstall retries the download several times and sends an Unraid notification only if every try fails. (#26, #30)
+- The banner shows a warning when Compose installs but its flash copy or the reinstall setting cannot be saved. (#26, #30)
+- After a plugin update, the Unraid API reloads so the new backend is used without a reboot. (#30)
+- Unraid's Docker tab no longer keeps showing "update ready" after the plugin updates and recreates a container. (#23, #24, #36)
+- Update checks no longer report a pulled image as out of date when it has several local digests. (#32, #33, #36)
+- The Folders tab and dashboard widget follow the Unraid theme when it switches without a page reload, such as a day/night toggle. (#27, #35, #36)
+- The dashboard tile no longer shows white rows under a dark color scheme. (#27, #35)
+- The Update tag link in the widget now keeps its warning color. (#35)
+- Folder headers can now be expanded and collapsed with the keyboard and are announced correctly by screen readers. (#31, #36)
+- A container memory limit set above host memory is now shown as a limit instead of "no limit". (#29, #36)
+- Kebab menus and their submenus on rows near the bottom of the window now open on screen. (#25, #28, #38)
+- A failed stack action now names the right action on the folder header instead of always saying Stop All. (#25, #28)
+
+### Internal
+- Internal fixes and performance improvements.
+
 ## 2026.11.20-dev2
 ### New
 - A Remove Stack item in the stack menu removes a stack from the plugin after a confirm dialog, and can also delete the plugin's own copy of the files. (#25, #28)
