@@ -20,25 +20,151 @@ function isNotModified(error: unknown): boolean {
 
 type RawConfig = Record<string, unknown>;
 
+const isMap = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function omitKeys(map: Record<string, unknown>, remove: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(map).filter(([key]) => !(key in remove)));
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+    return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+}
+
+/**
+ * Reduce a container's inspect `Config` to what the user set, ported from
+ * `DockerClient::userSettingsConfig`. Inspect Config merges the image's own
+ * defaults with the user's overrides, so each field is kept only where it
+ * differs from the OLD image's Config; the new image's defaults fill the rest.
+ *
+ * Known gap (same as PHP): a user value equal to the old image's default looks
+ * like the default and is dropped.
+ *
+ * `imageConfig` null (the old image could not be inspected) keeps the whole
+ * Config, apart from the Hostname rule.
+ */
+export function userSettingsConfig(
+    config: RawConfig,
+    imageConfig: RawConfig | null,
+    oldId: string,
+    networkMode = '',
+): RawConfig {
+    const out: RawConfig = { ...config };
+
+    // A generated hostname (first 12 characters of the id) follows the new
+    // container. A user-set one stays. Docker refuses a hostname with a shared
+    // network namespace, and inspect shows the host's name for the host network.
+    if (out.Hostname === oldId.slice(0, 12) || networkMode.startsWith('container:') || networkMode === 'host') {
+        delete out.Hostname;
+    }
+    if (imageConfig === null) return out;
+
+    if (Array.isArray(out.Env)) {
+        const imageEnv = Array.isArray(imageConfig.Env) ? (imageConfig.Env as string[]) : [];
+        out.Env = out.Env.filter((entry) => !imageEnv.includes(entry as string));
+    }
+    if (isMap(out.Labels)) {
+        const imageLabels = isMap(imageConfig.Labels) ? imageConfig.Labels : {};
+        out.Labels = Object.fromEntries(
+            Object.entries(out.Labels).filter(([key, value]) => !(key in imageLabels && imageLabels[key] === value)),
+        );
+    }
+    for (const field of ['ExposedPorts', 'Volumes']) {
+        if (isMap(out[field])) {
+            out[field] = omitKeys(out[field], isMap(imageConfig[field]) ? imageConfig[field] : {});
+        }
+    }
+    // Single values: copy only when they differ from the image's.
+    for (const field of ['Cmd', 'Entrypoint', 'WorkingDir', 'User', 'StopSignal', 'Healthcheck', 'Shell', 'OnBuild']) {
+        if (field in out && sameJson(out[field], imageConfig[field])) delete out[field];
+    }
+    return out;
+}
+
+/**
+ * `HostConfig.Mounts` for a recreate that keeps the old anonymous volumes,
+ * ported from `DockerClient::reuseAnonymousVolumes`.
+ *
+ * An anonymous volume is a volume mount with a 64-hex name that no bind or
+ * HostConfig.Mounts entry names. One at a path the OLD image declared with
+ * VOLUME and the NEW image no longer declares is dropped (the old volume stays
+ * on disk, unattached). A path the old image did not declare is the user's own
+ * and is always kept; so is any declared mount. With either image Config
+ * unknown (null), nothing is dropped.
+ */
+export function reuseAnonymousVolumes(
+    inspect: RawConfig,
+    oldImageConfig: RawConfig | null = null,
+    newImageConfig: RawConfig | null = null,
+): RawConfig[] {
+    const hostConfig = (inspect.HostConfig ?? {}) as RawConfig;
+    const mounts = [...((hostConfig.Mounts as RawConfig[] | undefined) ?? [])].map((mount) => ({ ...mount }));
+    const removedByImage =
+        oldImageConfig !== null && newImageConfig !== null
+            ? omitKeys(isMap(oldImageConfig.Volumes) ? oldImageConfig.Volumes : {}, isMap(newImageConfig.Volumes) ? newImageConfig.Volumes : {})
+            : {};
+
+    const named = new Set<string>();
+    const targets = new Set<string>();
+    for (const bind of (hostConfig.Binds as string[] | undefined) ?? []) {
+        const [source, target] = bind.split(':');
+        named.add(source);
+        if (target !== undefined) targets.add(target);
+    }
+    for (const mount of mounts) {
+        if (mount.Source) named.add(String(mount.Source));
+        if (mount.Target) targets.add(String(mount.Target));
+    }
+
+    for (const mount of (inspect.Mounts as RawConfig[] | undefined) ?? []) {
+        const name = String(mount.Name ?? '');
+        const target = String(mount.Destination ?? '');
+        if (mount.Type !== 'volume' || target === '' || !/^[0-9a-f]{64}$/.test(name) || named.has(name)) continue;
+        // A declared mount with an empty Source: fill in the old volume.
+        const declared = mounts.find((m) => m.Type === 'volume' && m.Target === target && !m.Source);
+        if (declared) {
+            declared.Source = name;
+        } else if (!targets.has(target) && !(target in removedByImage)) {
+            mounts.push({ Type: 'volume', Source: name, Target: target, ...(mount.RW === false ? { ReadOnly: true } : {}) });
+        }
+    }
+    return mounts;
+}
+
 /**
  * Rebuild a `POST /containers/create` body from a running container's own
- * inspect data, ported from the config-building half of
- * `DockerClient::recreateContainer` (lines building `$config`/`$createBody`).
+ * inspect data, ported from `DockerClient::buildRecreateBody`.
  *
- * PHP does a second pass over `ExposedPorts`/`Volumes`/`PortBindings` to turn
- * `[]` back into `{}`, because `json_decode(..., true)` cannot tell an empty
- * JSON object from an empty JSON array and collapses both to a PHP empty
- * array. That problem is PHP-specific: `inspect()` here hands back a real JS
- * object, where `{}` and `[]` are already distinct, so there is nothing to
- * repair and that whole pass is intentionally not ported.
+ * PHP repairs `[]` back into `{}` for ExposedPorts/Volumes/PortBindings,
+ * because `json_decode(..., true)` collapses both. That problem is
+ * PHP-specific: `inspect()` here hands back real JS objects, so that pass is
+ * intentionally not ported.
+ *
+ * `oldImageConfig` is the Config of the image the container runs now (by id),
+ * `newImageConfig` the Config of the image it will be created from. Null means
+ * unknown, which keeps more (see `userSettingsConfig`, `reuseAnonymousVolumes`).
  */
-export function buildCreateBody(inspect: Dockerode.ContainerInspectInfo, containerName: string): RawConfig {
-    const { Hostname: _hostname, ...configRest } = (inspect.Config ?? {}) as RawConfig;
-    const image = resolveImageTag(String(configRest.Image ?? ''), containerName);
-    const config: RawConfig = { ...configRest, Image: image };
+export function buildCreateBody(
+    inspect: Dockerode.ContainerInspectInfo,
+    containerName: string,
+    oldImageConfig: RawConfig | null = null,
+    newImageConfig: RawConfig | null = null,
+): RawConfig {
+    const hostConfig = (inspect.HostConfig ?? {}) as RawConfig;
+    const config = userSettingsConfig(
+        (inspect.Config ?? {}) as RawConfig,
+        oldImageConfig,
+        inspect.Id ?? '',
+        String(hostConfig.NetworkMode ?? ''),
+    );
+    config.Image = resolveImageTag(String(config.Image ?? ''), containerName);
 
-    const { ContainerIDFile: _containerIdFile, ...hostConfigRest } = (inspect.HostConfig ?? {}) as RawConfig;
+    const { ContainerIDFile: _containerIdFile, ...hostConfigRest } = hostConfig;
     const createBody: RawConfig = { ...config, HostConfig: hostConfigRest };
+
+    // Keep anonymous volumes (and their data) across the recreate.
+    const mounts = reuseAnonymousVolumes(inspect as unknown as RawConfig, oldImageConfig, newImageConfig);
+    if (mounts.length > 0) hostConfigRest.Mounts = mounts;
 
     // A container that joins another's network namespace cannot declare
     // ports, and Docker answers 400 "conflicting options: port exposing and
@@ -103,7 +229,15 @@ export class RecreateService {
         const oldId = inspect.Id;
         // Same scheme as PHP: `{name}-recreating-{unix seconds}`.
         const tempName = `${containerName}-recreating-${Math.floor(Date.now() / 1000)}`;
-        const createBody = buildCreateBody(inspect, containerName);
+        // The old image by id (its tag may already point at the new one after the
+        // pull) and the new image by tag, right before the create. A failed
+        // inspect gives null, which keeps more rather than dropping data.
+        const oldImageConfig = await this.imageConfig(String(inspect.Image ?? ''));
+        const newImageConfig = await this.imageConfig(resolveImageTag(String(inspect.Config?.Image ?? ''), containerName));
+        if (oldImageConfig === null) {
+            this.logger.warn(`recreate ${containerName}: old image inspect failed, copying the whole container config`);
+        }
+        const createBody = buildCreateBody(inspect, containerName, oldImageConfig, newImageConfig);
 
         let newId: string | null = null;
 
@@ -170,6 +304,16 @@ export class RecreateService {
             await this.tryRename(oldId, containerName);
             if (wasRunning) await this.tryStart(oldId, containerName);
             return { success: false, newId: null, error: errorMessage(error) };
+        }
+    }
+
+    /** `Config` of an image, or null when it cannot be inspected. */
+    private async imageConfig(image: string): Promise<RawConfig | null> {
+        try {
+            const info = await this.docker.getImage(image).inspect();
+            return isMap(info.Config) ? info.Config : null;
+        } catch {
+            return null;
         }
     }
 

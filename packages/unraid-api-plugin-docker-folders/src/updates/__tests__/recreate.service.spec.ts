@@ -244,7 +244,9 @@ describe('RecreateService', () => {
             Name: `/${NAME}`,
             State: { Running: false },
             Config: {
-                Hostname: 'should-be-dropped',
+                // The generated hostname (the old id's first 12 characters) is
+                // dropped; a user-set one stays (see recreate-fixtures.spec.ts).
+                Hostname: OLD_ID,
                 Image: 'linuxserver/plex:latest',
                 Labels: {},
             },
