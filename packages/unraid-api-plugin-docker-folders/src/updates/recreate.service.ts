@@ -209,6 +209,9 @@ export function buildCreateBody(
             };
         }
         createBody.NetworkingConfig = { EndpointsConfig: endpointsConfig };
+        // The endpoints carry the MACs. Drop the deprecated Config.MacAddress,
+        // as PHP does from API 1.44, so the MAC is not sent twice.
+        delete createBody.MacAddress;
     }
 
     return createBody;

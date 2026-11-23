@@ -54,5 +54,6 @@ describe('recreate endpoint MACs: fixtures shared with PHP', () => {
             .EndpointsConfig;
         const macs = Object.fromEntries(Object.entries(endpoints).map(([n, e]) => [n, e.MacAddress ?? null]));
         expect(macs).toEqual(c.macs);
+        expect(body.MacAddress).toBeUndefined();
     });
 });
