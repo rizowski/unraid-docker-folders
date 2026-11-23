@@ -2,8 +2,8 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name "unraid-docker-folders-modern">
 <!ENTITY author "rizowski">
-<!ENTITY version "2026.11.22-dev2">
-<!ENTITY md5 "f9e2d573d03f59277b861618a5a504d7">
+<!ENTITY version "2026.11.23-dev1">
+<!ENTITY md5 "e684e5042f875f142a6251d256961ad2">
 <!ENTITY launch "Docker">
 <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
 <!ENTITY github "rizowski/unraid-docker-folders">
@@ -163,6 +163,10 @@
 
 
 
+
+###2026.11.23-dev1
+- Fixed: Updating a container that is connected to two or more networks no longer fails; the container is recreated with all its networks attached. (#46)
+- Fixed: Containers that use GPU device requests are recreated correctly during an update. (#46)
 ###2026.11.22-dev2
 - Improved: Image updates now wait and retry automatically when a registry rate-limits pulls, instead of failing right away. (#44)
 ###2026.11.22-dev1

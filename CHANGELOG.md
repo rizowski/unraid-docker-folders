@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026.11.23-dev1
+### Fixed
+- Updating a container that is connected to two or more networks no longer fails; the container is recreated with all its networks attached. (#46)
+- Containers that use GPU device requests are recreated correctly during an update. (#46)
+
 ## 2026.11.22-dev2
 ### Improved
 - Image updates now wait and retry automatically when a registry rate-limits pulls, instead of failing right away. (#44)
