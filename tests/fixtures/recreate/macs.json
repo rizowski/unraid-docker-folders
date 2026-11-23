@@ -1,0 +1,57 @@
+[
+  {
+    "name": "generated MACs on two networks are kept",
+    "inspect": {
+      "Config": { "Image": "app:latest" },
+      "HostConfig": { "NetworkMode": "net_a" },
+      "NetworkSettings": {
+        "Networks": {
+          "net_a": { "IPAMConfig": null, "MacAddress": "02:42:ac:11:00:02" },
+          "net_b": { "IPAMConfig": null, "MacAddress": "02:42:ac:12:00:02" }
+        }
+      }
+    },
+    "macs": { "net_a": "02:42:ac:11:00:02", "net_b": "02:42:ac:12:00:02" }
+  },
+  {
+    "name": "a user-set MAC and a generated MAC are both kept",
+    "inspect": {
+      "Config": { "Image": "app:latest", "MacAddress": "aa:bb:cc:dd:ee:01" },
+      "HostConfig": { "NetworkMode": "net_a" },
+      "NetworkSettings": {
+        "Networks": {
+          "net_a": { "IPAMConfig": null, "MacAddress": "aa:bb:cc:dd:ee:01" },
+          "net_b": { "IPAMConfig": { "IPv4Address": "10.9.0.5" }, "MacAddress": "02:42:ac:12:00:03" }
+        }
+      }
+    },
+    "macs": { "net_a": "aa:bb:cc:dd:ee:01", "net_b": "02:42:ac:12:00:03" }
+  },
+  {
+    "name": "a network with no MAC (host mode) sends none",
+    "inspect": {
+      "Config": { "Image": "app:latest" },
+      "HostConfig": { "NetworkMode": "host" },
+      "NetworkSettings": {
+        "Networks": {
+          "host": { "IPAMConfig": null, "MacAddress": "" }
+        }
+      }
+    },
+    "macs": { "host": null }
+  },
+  {
+    "name": "a stopped container's Config MAC goes on the primary endpoint",
+    "inspect": {
+      "Config": { "Image": "app:latest", "MacAddress": "02:42:ac:dd:ee:02" },
+      "HostConfig": { "NetworkMode": "net_a" },
+      "NetworkSettings": {
+        "Networks": {
+          "net_a": { "IPAMConfig": null, "MacAddress": "" },
+          "net_b": { "IPAMConfig": null, "MacAddress": "" }
+        }
+      }
+    },
+    "macs": { "net_a": "02:42:ac:dd:ee:02", "net_b": null }
+  }
+]

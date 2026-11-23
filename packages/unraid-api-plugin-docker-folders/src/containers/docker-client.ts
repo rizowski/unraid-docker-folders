@@ -81,7 +81,7 @@ export interface DockerImageHandle {
      */
     inspect(): Promise<{
         Id?: string;
-        Config?: { User?: unknown; Labels?: Record<string, string> | null } | null;
+        Config?: { User?: unknown; Labels?: Record<string, string> | null; [field: string]: unknown } | null;
         RepoDigests?: string[];
     }>;
 }

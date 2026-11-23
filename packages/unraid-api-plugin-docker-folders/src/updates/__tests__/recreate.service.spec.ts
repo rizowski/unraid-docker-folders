@@ -244,7 +244,9 @@ describe('RecreateService', () => {
             Name: `/${NAME}`,
             State: { Running: false },
             Config: {
-                Hostname: 'should-be-dropped',
+                // The generated hostname (the old id's first 12 characters) is
+                // dropped; a user-set one stays (see recreate-fixtures.spec.ts).
+                Hostname: OLD_ID,
                 Image: 'linuxserver/plex:latest',
                 Labels: {},
             },
@@ -282,5 +284,22 @@ describe('RecreateService', () => {
         const endpoints = (capturedConfig?.NetworkingConfig as { EndpointsConfig: Record<string, unknown> })
             .EndpointsConfig.bridge as Record<string, unknown>;
         expect(Object.keys(endpoints).sort()).toEqual(['Aliases', 'DriverOpts', 'IPAMConfig', 'Links']);
+    });
+
+    it('carries each network endpoint MacAddress into the create body', () => {
+        const inspect = {
+            ...runningInspect(),
+            NetworkSettings: {
+                Networks: {
+                    br0: { MacAddress: '02:42:ac:1f:2b:01' },
+                    none: { MacAddress: '' },
+                },
+            },
+        } as unknown as Dockerode.ContainerInspectInfo;
+
+        const endpoints = (buildCreateBody(inspect, NAME).NetworkingConfig as { EndpointsConfig: Record<string, Record<string, unknown>> })
+            .EndpointsConfig;
+        expect(endpoints.br0.MacAddress).toBe('02:42:ac:1f:2b:01');
+        expect(endpoints.none).not.toHaveProperty('MacAddress');
     });
 });
