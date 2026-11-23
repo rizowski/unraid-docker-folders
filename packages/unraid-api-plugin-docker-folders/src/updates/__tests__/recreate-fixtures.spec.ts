@@ -36,3 +36,22 @@ describe('recreate create body: fixtures shared with PHP', () => {
         expect(body).toEqual(c.expected);
     });
 });
+
+interface MacCase {
+    name: string;
+    inspect: Dockerode.ContainerInspectInfo;
+    macs: Record<string, string | null>;
+}
+
+const macPath = resolve(fileURLToPath(import.meta.url), '../../../../../../tests/fixtures/recreate/macs.json');
+const macCases = JSON.parse(readFileSync(macPath, 'utf8')) as MacCase[];
+
+describe('recreate endpoint MACs: fixtures shared with PHP', () => {
+    it.each(macCases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+        const body = buildCreateBody(c.inspect, 'app');
+        const endpoints = (body.NetworkingConfig as { EndpointsConfig: Record<string, { MacAddress?: string }> })
+            .EndpointsConfig;
+        const macs = Object.fromEntries(Object.entries(endpoints).map(([n, e]) => [n, e.MacAddress ?? null]));
+        expect(macs).toEqual(c.macs);
+    });
+});

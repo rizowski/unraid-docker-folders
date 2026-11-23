@@ -12,6 +12,7 @@ if (!defined('DOCKER_API_VERSION')) {
 require_once __DIR__ . '/../../src/backend/usr/local/emhttp/plugins/unraid-docker-folders-modern/classes/DockerClient.php';
 
 use PHPUnit\Framework\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 
 /**
@@ -139,5 +140,61 @@ JSON;
         $json = json_encode(DockerClient::emptyMapsToObjects($body), JSON_UNESCAPED_SLASHES);
         $this->assertStringContainsString('"Labels":{"a":"b"}', $json);
         $this->assertStringContainsString('"81/tcp":[]', $json);
+    }
+
+    public static function macCases(): array
+    {
+        $cases = json_decode((string) file_get_contents(__DIR__ . '/../fixtures/recreate/macs.json'), true);
+        $out = [];
+        foreach ($cases as $case) {
+            $out[$case['name']] = [$case];
+        }
+        return $out;
+    }
+
+    /** Same fixtures as the plugin's recreate-fixtures.spec.ts: both keep the same MACs. */
+    #[Test]
+    #[DataProvider('macCases')]
+    public function keepsEveryEndpointMacFromApi144(array $case): void
+    {
+        $plan = DockerClient::planNetworks($case['inspect'], true);
+        $macs = [];
+        foreach ($plan['endpoints'] as $name => $endpoint) {
+            $macs[$name] = ((array) $endpoint)['MacAddress'] ?? null;
+        }
+        $this->assertSame($case['macs'], $macs);
+    }
+
+    #[Test]
+    public function sendsNoEndpointMacBeforeApi144(): void
+    {
+        $inspect = self::inspect();
+        $inspect['NetworkSettings']['Networks']['bridge']['MacAddress'] = '02:42:ac:11:00:02';
+        $plan = DockerClient::planNetworks($inspect, false);
+        foreach ($plan['endpoints'] as $endpoint) {
+            $this->assertArrayNotHasKey('MacAddress', (array) $endpoint);
+        }
+    }
+
+    #[Test]
+    public function configMacIsDroppedOnlyWhenEndpointsCarryTheMacs(): void
+    {
+        $inspect = ['Config' => ['Image' => 'a', 'MacAddress' => 'aa:bb:cc:dd:ee:01'], 'HostConfig' => []];
+        $old = DockerClient::buildRecreateBody($inspect, null, null, 'a');
+        $new = DockerClient::buildRecreateBody($inspect, null, null, 'a', true);
+        $this->assertSame('aa:bb:cc:dd:ee:01', $old['MacAddress']);
+        $this->assertArrayNotHasKey('MacAddress', $new);
+    }
+
+    #[Test]
+    public function endpointMacsNeedApi144(): void
+    {
+        $this->assertTrue(DockerClient::endpointMacsSupported('1.44'));
+        $this->assertTrue(DockerClient::endpointMacsSupported('1.52'));
+        $this->assertTrue(DockerClient::endpointMacsSupported('v1.100'));
+        $this->assertFalse(DockerClient::endpointMacsSupported('1.43'));
+        $this->assertFalse(DockerClient::endpointMacsSupported('1.41'));
+        $this->assertFalse(DockerClient::endpointMacsSupported(''));
+        $this->assertFalse(DockerClient::endpointMacsSupported(null));
     }
 }
