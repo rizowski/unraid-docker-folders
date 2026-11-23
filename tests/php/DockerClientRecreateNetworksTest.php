@@ -98,6 +98,18 @@ JSON;
     }
 
     #[Test]
+    public function gpuDeviceRequestOptionsEncodeAsObject(): void
+    {
+        $body = json_decode(
+            '{"HostConfig":{"DeviceRequests":[{"Driver":"","Count":-1,"Capabilities":[["gpu"]],"Options":{}}]}}',
+            true
+        );
+        $json = json_encode(DockerClient::emptyMapsToObjects($body));
+        $this->assertStringContainsString('"Options":{}', $json);
+        $this->assertStringContainsString('"Capabilities":[["gpu"]]', $json);
+    }
+
+    #[Test]
     public function emptyListsStayListsWhileEmptyMapsBecomeObjects(): void
     {
         $body = json_decode(

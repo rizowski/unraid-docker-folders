@@ -1953,6 +1953,14 @@ class DockerClient
       if (isset($hc['LogConfig']['Config']) && $isEmpty($hc['LogConfig']['Config'])) {
         $hc['LogConfig']['Config'] = (object) [];
       }
+      // A `--gpus` container has DeviceRequests[].Options, a map that is `{}`.
+      if (isset($hc['DeviceRequests']) && is_array($hc['DeviceRequests'])) {
+        foreach ($hc['DeviceRequests'] as $i => $req) {
+          if (is_array($req) && isset($req['Options']) && $isEmpty($req['Options'])) {
+            $hc['DeviceRequests'][$i]['Options'] = (object) [];
+          }
+        }
+      }
       // PortBindings is a map. Each value is a list, so an empty one stays [].
       if (isset($hc['PortBindings']) && is_array($hc['PortBindings'])) {
         $hc['PortBindings'] = (object) $hc['PortBindings'];
