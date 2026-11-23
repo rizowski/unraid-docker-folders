@@ -10,8 +10,9 @@ import { buildCreateBody } from '../recreate.service.js';
 /**
  * The same fixtures `tests/php/DockerClientRecreateBodyTest.php` reads: for
  * the same inspect data, both backends must build the same create body.
- * NetworkingConfig is left out of the comparison: PHP creates with the primary
- * network only and connects the rest afterwards, the plugin sends them all.
+ * NetworkingConfig is left out of the comparison: PHP's depends on the daemon
+ * API version (below 1.44 it creates with the primary network and connects the
+ * rest). The endpoint MACs have their own fixtures below.
  */
 interface Case {
     name: string;
