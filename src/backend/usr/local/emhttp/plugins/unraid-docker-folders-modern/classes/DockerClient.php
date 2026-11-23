@@ -2028,6 +2028,14 @@ class DockerClient
       $mode = 'bridge';
     }
     $plan['primary'] = array_key_exists($mode, $networks) ? $mode : (string) array_key_first($networks);
+
+    // A stopped container that ran has its user-set MAC in Config.MacAddress
+    // only: its endpoints report an empty one. Hand it to the primary endpoint,
+    // or the recreate gets a random MAC.
+    $configMac = (string) ($inspect['Config']['MacAddress'] ?? '');
+    if ($keepMacs && $configMac !== '' && !isset($plan['endpoints'][$plan['primary']]->MacAddress)) {
+      $plan['endpoints'][$plan['primary']]->MacAddress = $configMac;
+    }
     return $plan;
   }
 
@@ -2098,18 +2106,21 @@ class DockerClient
    * @param array|null $imageConfig inspect Config of the old image
    * @param string $oldId id of the old container
    * @param string $networkMode HostConfig.NetworkMode of the old container
+   * @param string $utsMode HostConfig.UTSMode of the old container
    */
-  public static function userSettingsConfig(array $config, ?array $imageConfig, string $oldId, string $networkMode = ''): array
+  public static function userSettingsConfig(array $config, ?array $imageConfig, string $oldId, string $networkMode = '', string $utsMode = ''): array
   {
     // A generated hostname (the first 12 characters of the id) follows the new
     // container. A user-set one stays. Docker refuses a hostname together with
     // a shared network namespace, and inspect shows the host's name for the
-    // host network, so those two never carry one.
+    // host network, so those two never carry one. It refuses one with
+    // `--uts=host` too ("conflicting options: hostname and the UTS mode").
     $hostname = (string) ($config['Hostname'] ?? '');
     if (
       $hostname === substr($oldId, 0, 12)
       || strncmp($networkMode, 'container:', 10) === 0
       || $networkMode === 'host'
+      || $utsMode === 'host'
     ) {
       unset($config['Hostname']);
     }
@@ -2246,10 +2257,13 @@ class DockerClient
       $inspect['Config'] ?? [],
       $oldImageConfig,
       (string) ($inspect['Id'] ?? ''),
-      (string) ($inspect['HostConfig']['NetworkMode'] ?? '')
+      (string) ($inspect['HostConfig']['NetworkMode'] ?? ''),
+      (string) ($inspect['HostConfig']['UTSMode'] ?? '')
     );
     $config['Image'] = $image;
     if ($endpointMacs) {
+      // The primary endpoint carries it: planNetworks copies it there when
+      // the endpoint's own MAC is empty (a stopped container).
       unset($config['MacAddress']);
     }
 

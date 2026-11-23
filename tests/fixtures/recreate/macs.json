@@ -39,5 +39,19 @@
       }
     },
     "macs": { "host": null }
+  },
+  {
+    "name": "a stopped container's Config MAC goes on the primary endpoint",
+    "inspect": {
+      "Config": { "Image": "app:latest", "MacAddress": "02:42:ac:dd:ee:02" },
+      "HostConfig": { "NetworkMode": "net_a" },
+      "NetworkSettings": {
+        "Networks": {
+          "net_a": { "IPAMConfig": null, "MacAddress": "" },
+          "net_b": { "IPAMConfig": null, "MacAddress": "" }
+        }
+      }
+    },
+    "macs": { "net_a": "02:42:ac:dd:ee:02", "net_b": null }
   }
 ]

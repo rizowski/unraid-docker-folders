@@ -56,13 +56,15 @@ export function userSettingsConfig(
     imageConfig: RawConfig | null,
     oldId: string,
     networkMode = '',
+    utsMode = '',
 ): RawConfig {
     const out: RawConfig = { ...config };
 
     // A generated hostname (first 12 characters of the id) follows the new
     // container. A user-set one stays. Docker refuses a hostname with a shared
     // network namespace, and inspect shows the host's name for the host network.
-    if (out.Hostname === oldId.slice(0, 12) || networkMode.startsWith('container:') || networkMode === 'host') {
+    // It refuses one with `--uts=host` too.
+    if (out.Hostname === oldId.slice(0, 12) || networkMode.startsWith('container:') || networkMode === 'host' || utsMode === 'host') {
         delete out.Hostname;
     }
     if (imageConfig === null) return out;
@@ -168,6 +170,7 @@ export function buildCreateBody(
         oldImageConfig,
         inspect.Id ?? '',
         String(hostConfig.NetworkMode ?? ''),
+        String(hostConfig.UTSMode ?? ''),
     );
     config.Image = resolveImageTag(String(config.Image ?? ''), containerName);
 
@@ -192,6 +195,12 @@ export function buildCreateBody(
     const networkNames = Object.keys(networks);
     if (networkNames.length > 0) {
         const endpointsConfig: Record<string, unknown> = {};
+        const mode = String(hostConfig.NetworkMode ?? '');
+        const primary = mode === 'default' ? 'bridge' : mode;
+        const primaryName = primary in networks ? primary : networkNames[0];
+        // A stopped container that ran has its user-set MAC in Config.MacAddress
+        // only: its endpoints report an empty one. Hand it to the primary endpoint.
+        const configMac = typeof config.MacAddress === 'string' ? config.MacAddress : '';
         for (const [netName, netConfig] of Object.entries(networks)) {
             const raw = netConfig as RawConfig;
             endpointsConfig[netName] = {
@@ -205,7 +214,11 @@ export function buildCreateBody(
                 // reports it on the endpoint only, and a create without it
                 // assigns a new one. PHP does the same from API 1.44
                 // (DockerClient::planNetworks with $keepMacs).
-                ...(raw.MacAddress ? { MacAddress: raw.MacAddress } : {}),
+                ...(raw.MacAddress
+                    ? { MacAddress: raw.MacAddress }
+                    : netName === primaryName && configMac
+                      ? { MacAddress: configMac }
+                      : {}),
             };
         }
         createBody.NetworkingConfig = { EndpointsConfig: endpointsConfig };
