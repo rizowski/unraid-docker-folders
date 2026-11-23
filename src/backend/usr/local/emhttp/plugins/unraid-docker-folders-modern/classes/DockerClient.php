@@ -2033,7 +2033,10 @@ class DockerClient
     // only: its endpoints report an empty one. Hand it to the primary endpoint,
     // or the recreate gets a random MAC.
     $configMac = (string) ($inspect['Config']['MacAddress'] ?? '');
-    if ($keepMacs && $configMac !== '' && !isset($plan['endpoints'][$plan['primary']]->MacAddress)) {
+    if (
+      $keepMacs && $configMac !== '' && !in_array($plan['primary'], ['host', 'none'], true)
+      && empty($plan['endpoints'][$plan['primary']]->MacAddress)
+    ) {
       $plan['endpoints'][$plan['primary']]->MacAddress = $configMac;
     }
     return $plan;

@@ -205,7 +205,8 @@ export function buildCreateBody(
         const primaryName = primary in networks ? primary : networkNames[0];
         // A stopped container that ran has its user-set MAC in Config.MacAddress
         // only: its endpoints report an empty one. Hand it to the primary endpoint.
-        const configMac = typeof config.MacAddress === 'string' ? config.MacAddress : '';
+        const configMac =
+            typeof config.MacAddress === 'string' && primaryName !== 'host' && primaryName !== 'none' ? config.MacAddress : '';
         for (const [netName, netConfig] of Object.entries(networks)) {
             const raw = netConfig as RawConfig;
             endpointsConfig[netName] = {
