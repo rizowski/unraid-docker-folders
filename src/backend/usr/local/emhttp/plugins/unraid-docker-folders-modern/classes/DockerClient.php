@@ -1919,6 +1919,122 @@ class DockerClient
   }
 
   /**
+   * Make the empty maps of a create body encode as `{}`. PHP's json_decode
+   * turns an empty JSON object into `[]`, and Docker refuses an array where
+   * it wants a map ("cannot unmarshal array into ...").
+   */
+  public static function emptyMapsToObjects(array $createBody): array
+  {
+    $isEmpty = static fn($v) => is_array($v) && $v === [];
+
+    if (isset($createBody['Labels']) && $isEmpty($createBody['Labels'])) {
+      $createBody['Labels'] = (object) [];
+    }
+    // ExposedPorts and Volumes are maps whose values are empty objects too.
+    foreach (['ExposedPorts', 'Volumes'] as $field) {
+      if (!isset($createBody[$field]) || !is_array($createBody[$field])) {
+        continue;
+      }
+      foreach ($createBody[$field] as $key => $val) {
+        if ($isEmpty($val)) {
+          $createBody[$field][$key] = (object) [];
+        }
+      }
+      if ($createBody[$field] === []) {
+        $createBody[$field] = (object) [];
+      }
+    }
+
+    $hc = $createBody['HostConfig'] ?? null;
+    if (is_array($hc)) {
+      foreach (['Sysctls', 'StorageOpt', 'Tmpfs', 'Annotations'] as $field) {
+        if (isset($hc[$field]) && $isEmpty($hc[$field])) {
+          $hc[$field] = (object) [];
+        }
+      }
+      if (isset($hc['LogConfig']['Config']) && $isEmpty($hc['LogConfig']['Config'])) {
+        $hc['LogConfig']['Config'] = (object) [];
+      }
+      // A `--gpus` container has DeviceRequests[].Options, a map that is `{}`.
+      if (isset($hc['DeviceRequests']) && is_array($hc['DeviceRequests'])) {
+        foreach ($hc['DeviceRequests'] as $i => $req) {
+          if (is_array($req) && isset($req['Options']) && $isEmpty($req['Options'])) {
+            $hc['DeviceRequests'][$i]['Options'] = (object) [];
+          }
+        }
+      }
+      // PortBindings is a map. Each value is a list, so an empty one stays [].
+      if (isset($hc['PortBindings']) && is_array($hc['PortBindings'])) {
+        $hc['PortBindings'] = (object) $hc['PortBindings'];
+      }
+      if (isset($hc['Mounts']) && is_array($hc['Mounts'])) {
+        foreach ($hc['Mounts'] as $i => $mount) {
+          if (isset($mount['VolumeOptions']['Labels']) && $isEmpty($mount['VolumeOptions']['Labels'])) {
+            $hc['Mounts'][$i]['VolumeOptions']['Labels'] = (object) [];
+          }
+          if (isset($mount['VolumeOptions']['DriverConfig']['Options']) && $isEmpty($mount['VolumeOptions']['DriverConfig']['Options'])) {
+            $hc['Mounts'][$i]['VolumeOptions']['DriverConfig']['Options'] = (object) [];
+          }
+        }
+      }
+      $createBody['HostConfig'] = $hc;
+    }
+
+    return $createBody;
+  }
+
+  /**
+   * Work out which networks a recreated container joins.
+   *
+   * Returns the primary network (the one in HostConfig.NetworkMode, else the
+   * first) and, per network, the endpoint settings to send: only the fields a
+   * user sets (IPAMConfig, Aliases, Links, DriverOpts), and only when they
+   * hold something. Inspect gives `IPAMConfig: {}` for a network added with
+   * `docker network connect`, which PHP would send back as `[]`.
+   *
+   * @return array{primary: ?string, endpoints: array<string, object>}
+   */
+  public static function planNetworks(array $inspect): array
+  {
+    $networks = $inspect['NetworkSettings']['Networks'] ?? [];
+    $plan = ['primary' => null, 'endpoints' => []];
+    if (!is_array($networks) || $networks === []) {
+      return $plan;
+    }
+
+    foreach ($networks as $netName => $net) {
+      $endpoint = [];
+      foreach (['IPAMConfig', 'Aliases', 'Links', 'DriverOpts'] as $field) {
+        if (!empty($net[$field])) {
+          $endpoint[$field] = $net[$field];
+        }
+      }
+      $plan['endpoints'][$netName] = (object) $endpoint;
+    }
+
+    $mode = (string) ($inspect['HostConfig']['NetworkMode'] ?? '');
+    if ($mode === 'default') {
+      $mode = 'bridge';
+    }
+    $plan['primary'] = array_key_exists($mode, $networks) ? $mode : (string) array_key_first($networks);
+    return $plan;
+  }
+
+  /**
+   * Attach a container to a network with the given endpoint settings.
+   */
+  public function connectNetwork($containerId, $network, $endpoint)
+  {
+    $response = $this->request(
+      'POST',
+      '/networks/' . rawurlencode((string) $network) . '/connect',
+      ['Container' => $containerId, 'EndpointConfig' => $endpoint],
+      30
+    );
+    return $response !== false;
+  }
+
+  /**
    * Recreate a container with its current configuration but the latest image
    *
    * Safely: inspect → stop → rename → create → start → remove old
@@ -1953,58 +2069,13 @@ class DockerClient
     // Ensure Image is a tag reference, not a SHA digest
     $config['Image'] = $this->resolveImageTag($config['Image'] ?? '', $containerName);
 
-    // Fix empty-object fields: PHP json_decode turns {} into [] (empty array),
-    // but Docker expects {} (empty object) for ExposedPorts and Volumes values.
-    foreach (['ExposedPorts', 'Volumes'] as $field) {
-      if (isset($config[$field]) && is_array($config[$field])) {
-        if (empty($config[$field])) {
-          $config[$field] = (object) [];
-        } else {
-          foreach ($config[$field] as $key => $val) {
-            if (is_array($val) && empty($val)) {
-              $config[$field][$key] = (object) [];
-            }
-          }
-        }
-      }
-    }
-
     $createBody = $config;
     $createBody['HostConfig'] = $inspect['HostConfig'] ?? [];
 
     // Remove read-only HostConfig fields
     unset($createBody['HostConfig']['ContainerIDFile']);
 
-    // The same {} to [] problem for string maps. Docker refuses an array
-    // where it wants a map, so a container with no labels failed to recreate
-    // with "cannot unmarshal array into ... Config.Labels".
-    if (isset($createBody['Labels']) && $createBody['Labels'] === []) {
-      $createBody['Labels'] = (object) [];
-    }
-    foreach (['Sysctls', 'StorageOpt', 'Tmpfs', 'Annotations'] as $field) {
-      if (isset($createBody['HostConfig'][$field]) && $createBody['HostConfig'][$field] === []) {
-        $createBody['HostConfig'][$field] = (object) [];
-      }
-    }
-    if (isset($createBody['HostConfig']['LogConfig']['Config']) && $createBody['HostConfig']['LogConfig']['Config'] === []) {
-      $createBody['HostConfig']['LogConfig']['Config'] = (object) [];
-    }
-
-    // Fix PortBindings: PHP json_decode turns {} into [] (empty array),
-    // but Docker expects an object/map for PortBindings and each binding value.
-    if (isset($createBody['HostConfig']['PortBindings'])) {
-      $pb = $createBody['HostConfig']['PortBindings'];
-      if (is_array($pb) && empty($pb)) {
-        $createBody['HostConfig']['PortBindings'] = (object) [];
-      } elseif (is_array($pb)) {
-        foreach ($pb as $port => $bindings) {
-          if (is_array($bindings) && empty($bindings)) {
-            $pb[$port] = [];
-          }
-        }
-        $createBody['HostConfig']['PortBindings'] = (object) $pb;
-      }
-    }
+    $createBody = self::emptyMapsToObjects($createBody);
 
     // A container that joins another's network namespace cannot declare ports.
     // Docker answers 400 "conflicting options: port exposing and the container
@@ -2012,20 +2083,13 @@ class DockerClient
     // Config.ExposedPorts. Drop them (issue #43).
     $createBody = self::dropExposedPortsForSharedNetwork($createBody);
 
-    // Build NetworkingConfig from existing networks
-    $networks = $inspect['NetworkSettings']['Networks'] ?? [];
-    if (!empty($networks)) {
-      $endpointsConfig = [];
-      foreach ($networks as $netName => $netConfig) {
-        // Only keep user-configurable fields, not dynamic ones
-        $endpointsConfig[$netName] = [
-          'IPAMConfig' => $netConfig['IPAMConfig'] ?? null,
-          'Aliases' => $netConfig['Aliases'] ?? null,
-          'Links' => $netConfig['Links'] ?? null,
-          'DriverOpts' => $netConfig['DriverOpts'] ?? null,
-        ];
-      }
-      $createBody['NetworkingConfig'] = ['EndpointsConfig' => $endpointsConfig];
+    // Docker before API 1.44 refuses a create with more than one endpoint, so
+    // create with the primary network and connect the rest afterwards.
+    $networkPlan = self::planNetworks($inspect);
+    if ($networkPlan['primary'] !== null) {
+      $createBody['NetworkingConfig'] = [
+        'EndpointsConfig' => (object) [$networkPlan['primary'] => $networkPlan['endpoints'][$networkPlan['primary']]],
+      ];
     }
 
     try {
@@ -2058,6 +2122,23 @@ class DockerClient
         }
         $result['error'] = "Failed to create new container {$containerName}: {$createError}";
         return $result;
+      }
+
+      // 5b. Attach the other networks. A failure rolls back like a create failure.
+      foreach ($networkPlan['endpoints'] as $netName => $endpoint) {
+        if ($netName === $networkPlan['primary']) {
+          continue;
+        }
+        if (!$this->connectNetwork($newId, $netName, $endpoint)) {
+          $connectError = $this->lastError;
+          $this->removeContainer($newId, true);
+          $this->renameContainer($oldId, $containerName);
+          if ($wasRunning) {
+            $this->startContainer($oldId);
+          }
+          $result['error'] = "Failed to connect new container {$containerName} to network {$netName}: {$connectError}";
+          return $result;
+        }
       }
 
       // 6. Start new container if old was running
@@ -2758,6 +2839,11 @@ class DockerClient
         . ($this->lastErrorReason !== '' ? ": {$this->lastErrorReason}" : '');
       error_log($this->lastError);
       return false;
+    }
+
+    // A 2xx with no body (network connect answers 200 and nothing) is success.
+    if ($response === '') {
+      return true;
     }
 
     // Decode JSON response
