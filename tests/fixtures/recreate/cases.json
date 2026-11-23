@@ -1199,5 +1199,176 @@
       },
       "Hostname": "my-host"
     }
+  },
+  {
+    "name": "empty Entrypoint and User equal the old unset values and are dropped",
+    "inspect": {
+      "Id": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+      "Name": "/app",
+      "Config": {
+        "Hostname": "abcdef012345",
+        "Image": "app:latest",
+        "Tty": false,
+        "Env": [
+          "PATH=/usr/bin",
+          "MODE=v1",
+          "EXTRA=1"
+        ],
+        "Cmd": [
+          "serve",
+          "--v1"
+        ],
+        "Entrypoint": [],
+        "WorkingDir": "/v1",
+        "Labels": {
+          "org.image": "v1",
+          "mine": "yes"
+        },
+        "ExposedPorts": {
+          "80/tcp": {},
+          "9000/tcp": {}
+        },
+        "Volumes": {
+          "/keep": {},
+          "/gone": {},
+          "/mine": {}
+        },
+        "User": ""
+      },
+      "HostConfig": {
+        "NetworkMode": "bridge",
+        "ContainerIDFile": "",
+        "Binds": [
+          "/mnt/x:/x"
+        ],
+        "RestartPolicy": {
+          "Name": "always"
+        },
+        "PortBindings": {
+          "9000/tcp": [
+            {
+              "HostPort": "9000"
+            }
+          ]
+        }
+      },
+      "Mounts": [
+        {
+          "Type": "bind",
+          "Source": "/mnt/x",
+          "Destination": "/x",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "Destination": "/keep",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "Destination": "/gone",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Name": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "Destination": "/mine",
+          "RW": true
+        }
+      ]
+    },
+    "oldImageConfig": {
+      "Env": [
+        "PATH=/usr/bin",
+        "MODE=v1"
+      ],
+      "Cmd": [
+        "serve",
+        "--v1"
+      ],
+      "Entrypoint": null,
+      "WorkingDir": "/v1",
+      "Labels": {
+        "org.image": "v1"
+      },
+      "ExposedPorts": {
+        "80/tcp": {}
+      },
+      "Volumes": {
+        "/keep": {},
+        "/gone": {}
+      },
+      "User": null
+    },
+    "newImageConfig": {
+      "Env": [
+        "PATH=/usr/bin",
+        "MODE=v2"
+      ],
+      "Cmd": [
+        "serve",
+        "--v2"
+      ],
+      "Entrypoint": [
+        "/entry-v2"
+      ],
+      "WorkingDir": "/v2",
+      "Labels": {
+        "org.image": "v2"
+      },
+      "ExposedPorts": {
+        "81/tcp": {}
+      },
+      "Volumes": {
+        "/keep": {}
+      }
+    },
+    "image": "app:latest",
+    "expected": {
+      "Image": "app:latest",
+      "Tty": false,
+      "Env": [
+        "EXTRA=1"
+      ],
+      "Labels": {
+        "mine": "yes"
+      },
+      "ExposedPorts": {
+        "9000/tcp": {}
+      },
+      "Volumes": {
+        "/mine": {}
+      },
+      "HostConfig": {
+        "NetworkMode": "bridge",
+        "Binds": [
+          "/mnt/x:/x"
+        ],
+        "RestartPolicy": {
+          "Name": "always"
+        },
+        "PortBindings": {
+          "9000/tcp": [
+            {
+              "HostPort": "9000"
+            }
+          ]
+        },
+        "Mounts": [
+          {
+            "Type": "volume",
+            "Source": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "Target": "/keep"
+          },
+          {
+            "Type": "volume",
+            "Source": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "Target": "/mine"
+          }
+        ]
+      }
+    }
   }
 ]

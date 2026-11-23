@@ -28,8 +28,15 @@ function omitKeys(map: Record<string, unknown>, remove: Record<string, unknown>)
     return Object.fromEntries(Object.entries(map).filter(([key]) => !(key in remove)));
 }
 
+/**
+ * Same as PHP's loose `==` on these fields: null, a missing value, an empty
+ * list and an empty string all mean "unset". Docker reports an unset
+ * Entrypoint as null on one side and [] on the other.
+ */
 function sameJson(a: unknown, b: unknown): boolean {
-    return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+    const unset = (value: unknown) => value == null || value === '' || (Array.isArray(value) && value.length === 0);
+    if (unset(a) || unset(b)) return unset(a) && unset(b);
+    return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /**
