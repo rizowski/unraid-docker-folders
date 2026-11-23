@@ -64,7 +64,12 @@ export function userSettingsConfig(
     // container. A user-set one stays. Docker refuses a hostname with a shared
     // network namespace, and inspect shows the host's name for the host network.
     // It refuses one with `--uts=host` too.
-    if (out.Hostname === oldId.slice(0, 12) || networkMode.startsWith('container:') || networkMode === 'host' || utsMode === 'host') {
+    if (
+        out.Hostname === oldId.slice(0, 12) ||
+        networkMode.startsWith('container:') ||
+        networkMode === 'host' ||
+        utsMode === 'host'
+    ) {
         delete out.Hostname;
     }
     if (imageConfig === null) return out;
